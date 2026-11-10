@@ -211,12 +211,27 @@ object ShellClientProtocol {
             else -> null
         }
 
+    /**
+     * Razvrstitev napake povezave (N6). Zavrnjena povezava pomeni, da na vratih ni nikogar.
+     * Rok povezave (SocketTimeoutException) in vse drugo je zasedenost: Absent bi lupino
+     * razglasil za mrtvo in jo zagnal znova sredi klica.
+     */
     fun classify(e: Exception): RoundTrip = when (e) {
         is java.net.ConnectException -> RoundTrip.Absent
         else -> RoundTrip.Busy
     }
 
-    fun roundTrip(port: Int, token: String, command: String, timeoutMs: Int = ShellAuth.HANDSHAKE_TIMEOUT_MS): RoundTrip {
+    fun roundTrip(port: Int, token: String, command: String, timeoutMs: Int = ShellAuth.HANDSHAKE_TIMEOUT_MS): RoundTrip =
+        roundTrip(port, token, command, timeoutMs) { socket, address, wait -> socket.connect(address, wait) }
+
+    /** connect je zamenljiv, da preizkus sprozi rok povezave brez omrezja. */
+    internal fun roundTrip(
+        port: Int,
+        token: String,
+        command: String,
+        timeoutMs: Int,
+        connect: (Socket, InetSocketAddress, Int) -> Unit,
+    ): RoundTrip {
         if (command.length > ShellAuth.MAX_LINE_BYTES) return RoundTrip.Rejected
         if (ShellAuth.requestCarriesSecrets(command) || command.contains(token)) return RoundTrip.Rejected
         if (!slots.tryAcquire()) return RoundTrip.Busy
@@ -225,7 +240,7 @@ object ShellClientProtocol {
             val deadline = System.currentTimeMillis() + timeoutMs
             try {
                 val connectWait = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(1)
-                socket.connect(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), connectWait)
+                connect(socket, InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), connectWait)
             } catch (e: Exception) {
                 runCatching { socket.close() }
                 return classify(e)
