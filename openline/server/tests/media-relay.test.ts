@@ -3,8 +3,10 @@ import WebSocket from "ws";
 import { createGatewayServer, type GatewayServer } from "../src/server.js";
 import {
   CLIENT_MEDIA_MAX_PAYLOAD,
+  DEVICE_BACKLOG_MAX_BYTES,
   DEVICE_MEDIA_MAX_PAYLOAD,
   MEDIA_FRAME_BYTES,
+  forwardFramed,
 } from "../src/media-relay.js";
 import { DEVICE_CHANNEL_MAX_PAYLOAD } from "../src/device-channel.js";
 import type { AddressInfo } from "node:net";
@@ -196,5 +198,86 @@ describe("media relay", () => {
     expect(lines.join("\n")).not.toContain(DEVICE_ID);
     expect(lines.join("\n")).not.toContain(DEVICE_TOKEN);
     expect(await alive(port)).toBe(200);
+  });
+
+  for (const reason of ["user_took_call", undefined]) {
+    it(`N12-3 konec klica (${reason ?? "odlozen"}) zapre nogo telefona, ustavi poslusalce in zavrne novo nadgradnjo`, async () => {
+      const { gateway, port, callId } = await startGateway();
+      const client = await openClient(port, callId);
+      const monitor = await open(`ws://127.0.0.1:${port}/v1/calls/${callId}/media?mode=listen`, { "x-api-key": API_KEY });
+      const started = nextJson(monitor, "start");
+      const device = await openDevice(port, callId);
+      await started;
+      expect(gateway.media.isStreaming(callId)).toBe(true);
+
+      // Dokler klic zivi, poslusalec okvirje dobiva.
+      const heard = collectBinary(monitor, 5);
+      device.send(Buffer.from([1, 2, 3, 4]));
+      expect((await heard)[0]).toEqual(Buffer.from([0x01, 1, 2, 3, 4]));
+
+      const afterEnd: Buffer[] = [];
+      monitor.on("message", (data, isBinary) => {
+        if (isBinary) afterEnd.push(data as Buffer);
+      });
+      client.on("message", (data, isBinary) => {
+        if (isBinary) afterEnd.push(data as Buffer);
+      });
+      const clientStop = nextJson(client, "stop");
+      const monitorStop = nextJson(monitor, "stop");
+      const closing = closed(device);
+      // Telefon javi konec klica (ob rocnem prevzemu z razlogom user_took_call), lupina pa zvoka se ni ustavila.
+      await gateway.events.ingest(DEVICE_ID, {
+        type: "event",
+        eventId: "evt-konec",
+        callId,
+        event: "call.disconnected",
+        timestamp: new Date().toISOString(),
+        payload: reason ? { reason } : {},
+      });
+      expect(gateway.state.getCall(callId)?.state).toBe("ended");
+      // Okvir, ki ga telefon poslje se pred zaprtjem vticnice, ne sme do nikogar.
+      device.send(Buffer.from([9, 9, 9, 9]));
+      expect(await closing).toBe(4002);
+      expect(await clientStop).toMatchObject({ type: "stop", callId, reason: "call_ended" });
+      expect(await monitorStop).toMatchObject({ type: "stop", callId, reason: "call_ended" });
+      expect(gateway.media.isStreaming(callId)).toBe(false);
+
+      // Nova nadgradnja za koncan klic je zavrnjena, zato lupina zvoka ne more poslati znova.
+      await expect(openDevice(port, callId)).rejects.toThrow(/410/);
+      expect(gateway.media.isStreaming(callId)).toBe(false);
+      // Prehod cez streznik in nazaj: ce bi okvir po koncu sel naprej, bi bil do zdaj ze dostavljen.
+      const echo = nextJson(monitor, "clear");
+      client.send(JSON.stringify({ type: "clear" }));
+      await echo;
+      expect(afterEnd).toEqual([]);
+    });
+  }
+
+  it("N12-8 zvok za telefon se razreze samo, dokler vrsta proti telefonu ni prevelika", () => {
+    const sent: Buffer[] = [];
+    const target = {
+      readyState: WebSocket.OPEN,
+      bufferedAmount: 0,
+      send: (frame: Buffer) => {
+        sent.push(frame);
+      },
+    };
+    const audio = Buffer.alloc(3 * MEDIA_FRAME_BYTES + 10, 7);
+    expect(forwardFramed(target as never, audio)).toBe(true);
+    expect(sent.map((frame) => frame.length)).toEqual([640, 640, 640, 10]);
+
+    // Tik pod mejo gre, nad mejo se sporocilo zavrze v celoti (brez delnega zvoka).
+    sent.length = 0;
+    target.bufferedAmount = DEVICE_BACKLOG_MAX_BYTES - audio.length;
+    expect(forwardFramed(target as never, audio)).toBe(true);
+    expect(sent.length).toBe(4);
+    sent.length = 0;
+    target.bufferedAmount = DEVICE_BACKLOG_MAX_BYTES - audio.length + 1;
+    expect(forwardFramed(target as never, audio)).toBe(false);
+    expect(sent).toEqual([]);
+    expect(DEVICE_BACKLOG_MAX_BYTES).toBe(2 * 1024 * 1024);
+    // Zaprta noga ni zastoj.
+    expect(forwardFramed({ ...target, readyState: WebSocket.CLOSED } as never, audio)).toBe(true);
+    expect(forwardFramed(undefined, audio)).toBe(true);
   });
 });

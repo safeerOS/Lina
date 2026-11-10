@@ -28,7 +28,9 @@ You can connect before the call is answered. Audio starts when the phone starts 
   works; it's played in order. A larger message closes the socket with code 1009.
 - **Interrupt:** send `{"type":"clear"}` to drop audio that hasn't played yet.
 - **End:** `{"type":"stop","callId":"…","reason":"device_media_closed"}` when the phone stops
-  streaming. Hang up with `POST /v1/calls/{id}/hangup`.
+  streaming, or `"reason":"call_ended"` when the call is over or the person holding the phone took it.
+- **Too fast:** if more than about a minute of audio is already waiting for the phone, a message is
+  dropped whole and you get `{"type":"dropped","reason":"device_backlog"}`. Hang up with `POST /v1/calls/{id}/hangup`.
 
 Only one talking client per call; a new one replaces the old.
 

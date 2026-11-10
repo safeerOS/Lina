@@ -37,7 +37,7 @@ export interface AppDependencies {
   state: StateStore;
   deviceChannel: DeviceCommandChannel;
   events: DeviceEventService;
-  media?: { isStreaming(callId: string): boolean };
+  media?: { isStreaming(callId: string): boolean; endCall?(callId: string): void };
   agents?: AgentManager;
   streams?: StreamManager;
   pairing?: PairingService;
@@ -332,6 +332,7 @@ export function createApp(deps: AppDependencies) {
       return response.status(202).json({ call, command, media: mediaInfo(call.id) });
     } catch (error) {
       deps.state.setCallState(call.id, "failed");
+      deps.media?.endCall?.(call.id);
       if (error instanceof DeviceOfflineError) {
         return response.status(409).json(errorBody("DEVICE_OFFLINE", "device is offline"));
       }

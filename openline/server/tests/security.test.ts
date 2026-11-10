@@ -32,6 +32,8 @@ const selfsigned = require("selfsigned") as {
 };
 const serverDir = fileURLToPath(new URL("..", import.meta.url));
 const SECRET = "super-secret-lina-token-value";
+/** Rok za preizkusa, ki zaganjata procese. Drugi ostanejo na privzetih 5 s, da visenje odkrijejo hitro. */
+const SLOW_TEST_MS = 20_000;
 const cleanup: (() => void)[] = [];
 afterEach(() => cleanup.splice(0).forEach((fn) => fn()));
 
@@ -56,7 +58,9 @@ describe("zagon", () => {
       const code = await runIndex(tsx, env);
       expect(code).toBe(1);
     }
-  });
+    // Trije zagoni procesa (vsak do 4 s). Na zasedenem racunalniku je preizkus 10. 11. 2026 trajal
+    // 5,0 do 8,4 s in padal na privzetem roku 5 s. Rok samo tukaj, ne za vse preizkuse (N12-9).
+  }, SLOW_TEST_MS);
 });
 
 describe("LAN naslov", () => {
@@ -402,7 +406,8 @@ describe("meje streznika", () => {
     const line = await captureIndex(tsx, { HTTP_GATEWAY_API_KEY: "y".repeat(40), PORT: String(port) });
     expect(line).toMatch(new RegExp(`https://127\\.0\\.0\\.1:${port}`));
     expect(line).not.toContain("172.16.0.2");
-  });
+    // Kljuc RSA in dva zagona procesa: 10. 11. 2026 do 5,8 s na zasedenem racunalniku (N12-9).
+  }, SLOW_TEST_MS);
 
   it("zahteva in okolje ne prepiseta uporabnikovega odtisa Line", async () => {
     const user = "ab".repeat(32);

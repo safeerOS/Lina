@@ -10,6 +10,7 @@ import { openDatabase, SettingsStore, type Database } from "./db.js";
 import { DeviceWebSocketHub } from "./device-channel.js";
 import { DeviceEventService } from "./events.js";
 import { MediaRelay, ownMediaUrl } from "./media-relay.js";
+import { isEndedCallState } from "./state.js";
 import { listenHosts } from "./lan.js";
 import { StateStore } from "./state.js";
 import { StreamManager } from "./stream/stream-manager.js";
@@ -113,7 +114,10 @@ export function createGatewayServer(options: GatewayServerOptions): GatewayServe
   });
   events.onCallEvent = (call, event) => {
     const streamed = streams.onCallEvent(call, event);
-    agents.onCallEvent(state.getCall(call.id) ?? call, event, streamed);
+    const current = state.getCall(call.id) ?? call;
+    agents.onCallEvent(current, event, streamed);
+    // Koncan klic (tudi user_took_call): noga telefona se zapre, okvirji ne gredo vec nikomur (N12-3).
+    if (isEndedCallState(current.state)) media.endCall(call.id);
   };
   const app = createApp({
     auth,

@@ -57,6 +57,11 @@ export interface StoredCallEvent {
 
 const ENDED_STATES = new Set<CallState>(["ended", "rejected", "failed"]);
 
+/** Klic je koncan (tudi ko ga je prevzel uporabnik: telefon takrat javi call.disconnected). */
+export function isEndedCallState(state: CallState): boolean {
+  return ENDED_STATES.has(state);
+}
+
 /**
  * Phones, calls and call events, persisted in SQLite. Only the live socket state ("connected") is
  * kept in memory: after a restart every phone is offline until it reconnects.

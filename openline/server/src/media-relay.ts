@@ -2,7 +2,7 @@ import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import type { AuthService } from "./auth.js";
-import type { StateStore } from "./state.js";
+import { isEndedCallState, type StateStore } from "./state.js";
 import { hasSecretQuery } from "./lan-url.js";
 
 /**
@@ -44,6 +44,12 @@ export const DEVICE_MEDIA_MAX_PAYLOAD = 8 * 1024;
  */
 export const CLIENT_MEDIA_MAX_PAYLOAD = 1024 * 1024;
 
+/**
+ * Najvec bajtov, ki smejo cakati na posiljanje telefonu (N12-8). 2 MiB je 64 s zvoka. Odjemalec, ki
+ * posilja hitreje, kot telefon sprejema, bi sicer polnil pomnilnik streznika brez meje.
+ */
+export const DEVICE_BACKLOG_MAX_BYTES = 2 * CLIENT_MEDIA_MAX_PAYLOAD;
+
 export const DEVICE_MEDIA_PATH = "/v1/device-media";
 export const MONITOR_CHANNEL = { remote: 0x01, injected: 0x02 } as const;
 const CLIENT_MEDIA_PATH = /^\/v1\/calls\/([^/]+)\/media$/;
@@ -67,6 +73,8 @@ export function assertLoopbackMediaUrl(url: string): void {
 }
 
 interface MediaSession {
+  /** Zastoj proti telefonu je ze zapisan; vsako zavrzeno sporocilo ne sme v dnevnik. */
+  backlogLogged?: boolean;
   device?: WebSocket;
   client?: WebSocket;
   monitors: Set<WebSocket>;
@@ -94,6 +102,23 @@ export class MediaRelay {
     });
   }
 
+  /**
+   * Klic je koncan ali ga je prevzel uporabnik (N12-3): noga telefona se zapre takoj in okvirji ne
+   * gredo vec ne odjemalcu ne poslusalcem. Brez tega bi telefon, ki mu lupina se ni potrdila stopa,
+   * do izteka najema (8 s) posiljal glas s klica, ki je zdaj uporabnikov.
+   */
+  endCall(callId: string): void {
+    const session = this.sessions.get(callId);
+    const device = session?.device;
+    if (!session || !device) return;
+    session.device = undefined;
+    device.close(4002, "call ended");
+    const stop = { type: "stop", callId, reason: "call_ended" };
+    if (session.client) sendJson(session.client, stop);
+    for (const monitor of session.monitors) sendJson(monitor, stop);
+    this.dropIfEmpty(callId);
+  }
+
   /** True while the phone is streaming audio for this call. */
   isStreaming(callId: string): boolean {
     return this.sessions.get(callId)?.device?.readyState === WebSocket.OPEN;
@@ -108,8 +133,14 @@ export class MediaRelay {
       reject(socket, 401, "Unauthorized");
       return;
     }
-    if (!callId || this.state.getCall(callId)?.deviceId !== deviceId) {
+    const call = callId ? this.state.getCall(callId) : undefined;
+    if (!callId || call?.deviceId !== deviceId) {
       reject(socket, 404, "Not Found");
+      return;
+    }
+    // Koncan klic zvoka ne sprejema vec, tudi ce telefon poskusi znova (N12-3).
+    if (isEndedCallState(call.state)) {
+      reject(socket, 410, "Gone");
       return;
     }
 
@@ -167,7 +198,15 @@ export class MediaRelay {
       ws.on("message", (data, isBinary) => {
         if (session.client !== ws) return;
         if (isBinary) {
-          forwardFramed(session.device, data);
+          if (!forwardFramed(session.device, data)) {
+            // Telefon ne dohaja. Sporocilo zavrzemo v celoti in odjemalcu to povemo.
+            sendJson(ws, { type: "dropped", callId, reason: "device_backlog" });
+            if (!session.backlogLogged) {
+              session.backlogLogged = true;
+              console.error("media_backlog", "client-media");
+            }
+            return;
+          }
           forwardToMonitors(session, MONITOR_CHANNEL.injected, data);
           return;
         }
@@ -221,16 +260,22 @@ function forwardBinary(target: WebSocket | undefined, data: RawData): void {
  * Zvok odjemalca gre telefonu v okvirjih po 20 ms, ne glede na to, kako ga je odjemalec razrezal.
  * Telefon tako nikoli ne dobi sporocila, vecjega od okvirja, zaporedje bajtov pa ostane isto.
  */
-function forwardFramed(target: WebSocket | undefined, data: RawData): void {
-  if (target?.readyState !== WebSocket.OPEN) return;
+export function forwardFramed(
+  target: Pick<WebSocket, "readyState" | "bufferedAmount" | "send"> | undefined,
+  data: RawData,
+): boolean {
+  if (target?.readyState !== WebSocket.OPEN) return true;
   const pcm = Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as Buffer);
+  // Zastoj (N12-8): ce ze caka prevec, sporocila ne razrezemo v se 1639 okvirjev.
+  if (target.bufferedAmount + pcm.length > DEVICE_BACKLOG_MAX_BYTES) return false;
   if (pcm.length <= MEDIA_FRAME_BYTES) {
     target.send(pcm, { binary: true });
-    return;
+    return true;
   }
   for (let offset = 0; offset < pcm.length; offset += MEDIA_FRAME_BYTES) {
     target.send(pcm.subarray(offset, offset + MEDIA_FRAME_BYTES), { binary: true });
   }
+  return true;
 }
 
 /**
