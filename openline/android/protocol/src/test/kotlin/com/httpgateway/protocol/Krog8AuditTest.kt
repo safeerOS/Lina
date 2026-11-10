@@ -149,38 +149,47 @@ class Krog8AuditTest {
         val ok = AudioDrop.outcome(callPresent = true, exitOk = true)
         assertEquals("audio_returned", ok.message)
         assertTrue(ok.warn)
+        // Krog 12 (invarianta d): klica ni vec, zato »klic je ostal tih, dvignite ga« ne drzi.
+        // Opozorilo ostane, besedilo pove, da je klic koncan. Prej: audio_not_returned.
         val notPresent = AudioDrop.outcome(callPresent = false, exitOk = false)
-        assertEquals("audio_not_returned", notPresent.message)
+        assertEquals("call_disconnected", notPresent.message)
         assertTrue(notPresent.warn)
+        assertEquals("call_disconnected", AudioDrop.outcome(callPresent = false, exitOk = true).message)
     }
 
     @Test
     fun `ArmSlot ne raztrga expected in startInFlight`() {
-        val slot = ArmSlot()
-        val errors = AtomicInteger()
-        val start = CountDownLatch(1)
-        val threads = (0 until 8).map { n ->
-            Thread {
-                start.await()
-                repeat(1_500) {
-                    if (n % 2 == 0) {
-                        slot.set(CaptureOrder.beforeStart("klic"))
-                        slot.set(CaptureOrder.afterStart("klic", keep = true))
-                        slot.set(CaptureOrder.afterStart("klic", keep = false))
-                    } else {
-                        val view = slot.get()
-                        val valid = (view.expected == "klic" && view.startInFlight) ||
-                            (view.expected == "klic" && !view.startInFlight) ||
-                            (view.expected == null && !view.startInFlight)
-                        if (!valid) errors.incrementAndGet()
-                    }
+        // Krog 12: ArmSlot je odstranjen, stanje je en nespremenljiv objekt avtomata. Namesto osmih niti,
+        // ki napake niso zanesljivo ujele, preizkus preisce vsa stanja, dosegljiva z istimi pisanji
+        // (start, uspeh, neuspeh, preklic) v vseh vrstnih redih do dolzine 6, in preveri iste tri veljavne pare.
+        val valid = setOf(
+            CaptureOrder.beforeStart("klic"),
+            CaptureOrder.afterStart("klic", keep = true),
+            CaptureOrder.afterStart("klic", keep = false),
+        )
+        var frontier = setOf(CaptureMachine.State())
+        val seen = HashSet(frontier)
+        repeat(6) {
+            val next = HashSet<CaptureMachine.State>()
+            for (state in frontier) {
+                val events = listOf(
+                    CaptureMachine.Event.CallActive("klic"),
+                    CaptureMachine.Event.Prepared("klic", state.generation, ok = true),
+                    CaptureMachine.Event.StartResult("klic", state.generation, started = true, permitted = true),
+                    CaptureMachine.Event.StartResult("klic", state.generation, started = false, permitted = true),
+                    CaptureMachine.Event.RetryDue("klic", state.generation),
+                    CaptureMachine.Event.CallEnded("klic"),
+                    CaptureMachine.Event.UnsafeDownlink,
+                )
+                for (event in events) {
+                    val reached = CaptureMachine.reduce(state, event).state
+                    assertTrue(reached.view in valid, "$reached")
+                    if (seen.add(reached)) next += reached
                 }
             }
+            frontier = next
         }
-        threads.forEach { it.start() }
-        start.countDown()
-        threads.forEach { it.join() }
-        assertEquals(0, errors.get())
+        assertEquals(valid, seen.map { it.view }.toSet())
     }
 
     @Test

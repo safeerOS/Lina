@@ -3,70 +3,69 @@ package com.httpgateway.protocol
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class Krog9AuditTest {
 
     @Test
     fun testStartLoop() {
-        var startCount = 0
-        var isOwned = true
-        var sleepCount = 0
-        
-        // Pade po prvem, poskusi drugič
-        val success2 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
-            startCount++
-            startCount == 2
+        // Krog 12: CapturePermit.startLoop je odstranjen, ker je zanka poskusov zdaj v avtomatu (drugi poskus
+        // je dogodek z generacijo, da ga preklic ustavi - N11-4). Istih pet primerov tece skozi pravi
+        // izvajalec in avtomat; "sleep" je casovnik izvajalca, lastnistvo je dejstvo linije.
+        fun started(sim: CaptureSim) = sim.calls.count { it == "start:${CaptureSim.X}" }
+        fun fresh(): CaptureSim = CaptureSim().also {
+            it.activate()
+            it.runPrep()
         }
-        assertTrue(success2)
-        assertEquals(2, startCount)
-        assertEquals(1, sleepCount)
-        
-        // Ne poskusi če ni lastnik
-        startCount = 0
-        isOwned = false
-        val success3 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
-            startCount++
-            true
-        }
-        assertFalse(success3)
-        assertEquals(0, startCount)
 
-        // Ne poskusi drugič, če izgubi lastništvo vmes
-        startCount = 0
-        isOwned = true
-        sleepCount = 0
-        val success4 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
-            startCount++
-            isOwned = false
-            false
-        }
-        assertFalse(success4)
-        assertEquals(1, startCount)
-        assertEquals(0, sleepCount)
+        // Pade po prvem, poskusi drugic
+        val second = fresh()
+        second.runOps(ok = false)
+        assertEquals(1, second.timerLabels.size)
+        assertEquals(CaptureMachine.RETRY_DELAY_MS, (second.timerLabels.first() as CaptureMachine.Effect.ScheduleRetry).delayMs)
+        second.fireTimer()
+        second.runOps()
+        assertEquals(CaptureMachine.Phase.CAPTURING, second.state.phase)
+        assertEquals(2, started(second))
+        assertTrue(second.timerLabels.isEmpty())
 
-        // Če po uspešnem startu izgubi lastništvo preden preveri, vrne false in se ne izvaja naprej
-        startCount = 0
-        isOwned = true
-        val success5 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
-            startCount++
-            isOwned = false
-            true
-        }
-        assertFalse(success5)
-        assertEquals(1, startCount)
+        // Ne poskusi, ce ni lastnik
+        val notOwned = fresh()
+        notOwned.xOwned = false
+        notOwned.runOps()
+        assertEquals(0, started(notOwned))
+        assertFalse(notOwned.state.sessionWanted)
+
+        // Ne poskusi drugic, ce izgubi lastnistvo vmes
+        val lostBetween = fresh()
+        lostBetween.runOps(ok = false)
+        assertEquals(1, lostBetween.timerLabels.size)
+        lostBetween.userTakesX()
+        lostBetween.fireTimer()
+        assertTrue(lostBetween.settle())
+        assertEquals(1, started(lostBetween))
+        assertNull(lostBetween.session)
+
+        // Ce po uspesnem startu izgubi lastnistvo, preden preveri, zajem ne ostane
+        val lostAfter = fresh()
+        lostAfter.runOps(true) { lostAfter.xOwned = false }
+        assertEquals(1, started(lostAfter))
+        assertFalse(lostAfter.state.sessionWanted)
+        lostAfter.runOps()
+        assertNull(lostAfter.session)
 
         // Tretjega poskusa ni
-        startCount = 0
-        isOwned = true
-        sleepCount = 0
-        val success6 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
-            startCount++
-            false
-        }
-        assertFalse(success6)
-        assertEquals(2, startCount)
-        assertEquals(1, sleepCount)
+        val never = fresh()
+        never.runOps(ok = false)
+        never.fireTimer()
+        never.runOps(ok = false)
+        assertEquals(2, started(never))
+        assertTrue(never.timerLabels.isEmpty())
+        assertEquals(CaptureMachine.Phase.IDLE, never.state.phase)
+        assertTrue(never.settle())
+        assertEquals(2, started(never))
+        assertTrue(never.gaveBack)
     }
 
     @Test

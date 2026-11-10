@@ -214,7 +214,9 @@ class InCallActivity : Activity(), CallRegistry.Listener {
         CallAudioBridge.onCallEnded(entry.callId)
         GatewayRuntime.notifyCallEnded(entry.callId)
         val returned = CallBackgroundAudio.exit(entry.call)
-        if (AudioReturn.shouldWarn(!returned)) {
+        // API 29 izhoda nima: klic je ACTIVE in slisen, opozorilo »tih« bi bilo napacno (N11-5).
+        val audible = CallRegistry.androidState(entry.call) == Call.STATE_ACTIVE
+        if (AudioReturn.shouldWarn(exitFailed = !returned, audible = audible)) {
             Toast.makeText(this, getString(R.string.audio_not_returned), Toast.LENGTH_LONG).show()
         }
         render()

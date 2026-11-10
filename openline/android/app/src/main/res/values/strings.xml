@@ -139,6 +139,6 @@
     <string name="secret_in_argv">Refused to put a secret on the command line.</string>
     <string name="shell_did_not_start">Call audio didn\'t start.</string>
     <string name="audio_not_returned">The call stayed silent. Answer it on the phone.</string>
-    <string name="call_disconnected">The call was disconnected.</string>
+    <string name="call_disconnected">Call audio stopped. The call was ended.</string>
     <string name="empty_device_id">Device ID cannot be empty.</string>
 </resources>

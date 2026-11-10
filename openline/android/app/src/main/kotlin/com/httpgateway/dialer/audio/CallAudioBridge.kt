@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import com.httpgateway.dialer.DialerActivity
 import com.httpgateway.dialer.R
@@ -13,23 +14,19 @@ import com.httpgateway.dialer.config.GatewayConfigStore
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.dialer.shell.ShellLauncher
 import com.httpgateway.dialer.telecom.CallBackgroundAudio
+import com.httpgateway.dialer.telecom.CallLine
 import com.httpgateway.dialer.telecom.CallRegistry
 import com.httpgateway.dialer.telecom.LinaCallGate
 import com.httpgateway.dialer.transport.DeviceHealth
 import com.httpgateway.dialer.transport.GatewayRuntime
-import com.httpgateway.protocol.ArmSlot
-import com.httpgateway.protocol.AudioDrop
-import com.httpgateway.protocol.AudioPing
-import com.httpgateway.protocol.CaptureOrder
-import com.httpgateway.protocol.CapturePermit
+import com.httpgateway.protocol.CaptureDriver
+import com.httpgateway.protocol.CaptureMachine
+import com.httpgateway.protocol.CapturePorts
 import com.httpgateway.protocol.GatewayUrl
-import com.httpgateway.protocol.LeaseRound
 import com.httpgateway.protocol.MediaStream
+import com.httpgateway.protocol.ReturnNotice
 import com.httpgateway.protocol.ShellCleanup
-import com.httpgateway.protocol.ShellLoss
-import com.httpgateway.protocol.ShellNotice
 import com.httpgateway.protocol.TlsPin
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -38,39 +35,44 @@ import java.util.concurrent.TimeUnit
  * App side of call audio: tells the shell server which call to stream. Audio itself flows
  * directly between the shell server and the gateway; it never passes through this process.
  * Odtis je isti kot pri nadzorni povezavi. Brez njega se zvok ne zacne.
+ *
+ * Razred ne odloca nicesar: dogodke odda v vrsto, odlocitve sprejme CaptureMachine,
+ * ucinke izvede CaptureDriver prek vrat [Ports]. Stanja zajema tu ni.
  */
 object CallAudioBridge {
     private const val TAG = "CallAudioBridge"
 
     enum class Status { SETUP_REQUIRED, STOPPED, READY }
 
-    private val worker = Executors.newSingleThreadExecutor { Thread(it, "callaudio-bridge") }
-    private val stopExecutor = Executors.newSingleThreadExecutor { Thread(it, "callaudio-stop") }
+    /** Ena nit za vse prehode avtomata. Nikoli ne caka na lupino. */
+    private val queue = Executors.newSingleThreadExecutor { Thread(it, "callaudio-machine") }
+
+    /** start, stop in izhod iz ozadja v vrstnem redu izdaje. */
+    private val shellOps = Executors.newSingleThreadExecutor { Thread(it, "callaudio-shell") }
+
+    /** Priprava in zagon lupine trajata sekunde, zato ne smeta zadrzati stopa. */
+    private val prep = Executors.newSingleThreadExecutor { Thread(it, "callaudio-bridge") }
     private val lease: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { Thread(it, "callaudio-lease") }
-    private val arm = ArmSlot()
-    private val armLock = Any()
-    private var epoch: Long = 0
-    private val handedBack = ConcurrentHashMap.newKeySet<String>()
-
-    @Volatile
-    private var misses = 0
-
-    @Volatile
-    private var shellNoticeState = ShellNotice.State(false, 0)
-
-    @Volatile
-    private var seenWifi = false
-
-    @Volatile
-    private var wifiWasUp = false
 
     @Volatile
     private var appContext: Context? = null
 
+    @Volatile
+    private var lineRecheck: ((String) -> Unit)? = null
+
+    private val driver = CaptureDriver(
+        ports = Ports,
+        queue = queue,
+        shellOps = shellOps,
+        prep = prep,
+        lease = lease,
+        later = { delayMs, task -> lease.schedule(task, delayMs, TimeUnit.MILLISECONDS) },
+    )
+
     fun initialize(context: Context) {
         appContext = context.applicationContext
-        worker.execute { ShellLauncher.ensureRunning(context.applicationContext) }
-        lease.scheduleWithFixedDelay({ confirmLease() }, 3, 3, TimeUnit.SECONDS)
+        prep.execute { ShellLauncher.ensureRunning(context.applicationContext) }
+        lease.scheduleWithFixedDelay({ driver.post(CaptureMachine.Event.LeaseDue) }, 3, 3, TimeUnit.SECONDS)
     }
 
     /** Blocking (local socket); call off the main thread. */
@@ -81,7 +83,7 @@ object CallAudioBridge {
     }
 
     fun restart(context: Context, onResult: (ShellLauncher.Result) -> Unit) {
-        worker.execute {
+        prep.execute {
             val client = ShellClient(context)
             client.exit()
             ShellCleanup.waitUntilDown(
@@ -94,200 +96,131 @@ object CallAudioBridge {
     }
 
     /** Klic je ACTIVE in ga ima Lina: zazeni zvok samo s pripetim odtisom. */
-    fun onCallActive(callId: String) {
-        val context = appContext ?: return
-        handedBack.remove(callId)
-        worker.execute {
+    fun onCallActive(callId: String) = driver.post(CaptureMachine.Event.CallActive(callId))
+
+    /** Linin klic je na cakanju ali je na liniji uporabnikov klic: zajem se zadrzi. */
+    fun onCallSuspended(callId: String) = driver.post(CaptureMachine.Event.CallSuspended(callId))
+
+    /** Klic je odstranjen ali ga je prevzel uporabnik. Klice se za vsak klic, ne le Linin. */
+    fun onCallEnded(callId: String) = driver.post(CaptureMachine.Event.CallEnded(callId))
+
+    /** Na liniji je klic, ki ga Lina nima. Zajem ustavimo, ne glede na id seje. */
+    fun onUnsafeDownlink() = driver.post(CaptureMachine.Event.UnsafeDownlink)
+
+    /** Storitev klicev pove, kako znova oceniti linijo. Klic ne sme blokirati. */
+    fun setLineRecheck(hook: ((String) -> Unit)?) {
+        lineRecheck = hook
+    }
+
+    /** Vrata do Androida in lupine. Brez odlocitev: vsaka metoda naredi eno stvar in vrne izid. */
+    private object Ports : CapturePorts {
+        override fun prepare(callId: String): Boolean {
+            val context = appContext ?: return false
             val config = GatewayConfigStore(context).load()
-            if (config.wsUrl.isBlank() || config.deviceToken.isBlank()) return@execute
+            if (config.wsUrl.isBlank() || config.deviceToken.isBlank()) {
+                Log.w(TAG, "zvok se ne zacne za $callId: prehod ni nastavljen")
+                return false
+            }
             if (!GatewayUrl.accept(config.wsUrl, config.deviceToken)) {
                 Log.w(TAG, "zvok se ne zacne za $callId: neveljaven naslov")
-                giveBack(callId, warn = true)
-                return@execute
+                return false
             }
             val mediaUrl = runCatching { MediaStream.deviceMediaUrl(config.wsUrl, callId) }.getOrElse {
                 Log.w(TAG, "zvok se ne zacne za $callId: neveljaven naslov")
-                giveBack(callId, warn = true)
-                return@execute
+                return false
             }
             if (runCatching { TlsPin.requireMediaPin(mediaUrl, config.certSha256) }.isFailure) {
                 Log.w(TAG, "zvok se ne zacne za $callId: ni wss ali odtisa")
-                giveBack(callId, warn = true)
-                return@execute
+                return false
             }
             val launch = ShellLauncher.ensureRunning(context)
             if (launch !is ShellLauncher.Result.Running && launch !is ShellLauncher.Result.Held) {
                 Log.w(TAG, "call audio unavailable for $callId: $launch")
-                giveBack(callId, warn = true)
-                return@execute
+                return false
             }
-            val ownedBefore = LinaCallGate.isOwned(callId)
-            if (!ownedBefore) {
-                ShellClient(context).stop(callId)
-                return@execute
-            }
-            val epochBefore = synchronized(armLock) { epoch }
-            synchronized(armLock) { arm.set(CaptureOrder.beforeStart(callId)) }
-            var reply: org.json.JSONObject? = null
-            val success = CapturePermit.startLoop(
-                callId = callId,
-                isOwned = { LinaCallGate.isOwned(it) },
-                sleep = { Thread.sleep(200) }
-            ) {
-                reply = ShellClient(context).start(it)
-                reply?.optBoolean("ok") == true
-            }
-            val after = CaptureOrder.afterStart(callId, success)
-            val decision = synchronized(armLock) {
-                val evaluated = CaptureOrder.evaluateStart(epochBefore, epoch, after)
-                if (evaluated.writeArm) arm.set(after)
-                evaluated
-            }
-            if (decision.immediateStop) {
-                ShellClient(context).stop(callId)
-            } else if (after.expected == null) {
-                Log.w(TAG, "start $callId failed -> $reply")
-                giveBack(callId, warn = true)
-            } else {
-                Log.i(TAG, "start $callId -> $reply")
-            }
+            return true
         }
-    }
 
-    fun onCallEnded(callId: String) {
-        handedBack.remove(callId)
-        synchronized(armLock) {
-            epoch++
-            if (arm.get().expected == callId) arm.set(CaptureOrder.Armed(null, false))
-            misses = 0
-        }
-        val context = appContext ?: return
-        stopExecutor.execute { stopUntil(ShellClient(context), callId) }
-    }
+        override fun linePermits(callId: String): Boolean = CallLine.permitsCapture(callId)
 
-    /** Na liniji je klic, ki ga Lina nima. Zajem ustavimo, ne glede na id seje. */
-    fun onUnsafeDownlink() {
-        synchronized(armLock) {
-            epoch++
-            arm.set(CaptureOrder.Armed(null, false))
-            misses = 0
+        override fun start(callId: String): Boolean {
+            val context = appContext ?: return false
+            val reply = ShellClient(context).start(callId)
+            val ok = reply?.optBoolean("ok") == true
+            if (ok) Log.i(TAG, "start $callId -> $reply") else Log.w(TAG, "start $callId failed -> $reply")
+            return ok
         }
-        val context = appContext ?: return
-        stopExecutor.execute { stopUntil(ShellClient(context), null) }
-    }
 
-    private fun confirmLease() {
-        try {
-            confirmLeaseBody()
-        } catch (t: Throwable) {
-            Log.w(TAG, "lease", t)
+        override fun stop(callId: String?, timeoutMs: Int): Boolean {
+            val context = appContext ?: return false
+            return ShellClient(context).stop(callId, timeoutMs)?.optBoolean("ok") == true
         }
-    }
 
-    private fun confirmLeaseBody() {
-        val context = appContext ?: return
-        val client = ShellClient(context)
-        val viewBefore = synchronized(armLock) { arm.get() }
-        val ping = client.ping()
-        val up = ping != null
-        val paired = ShellLauncher.isPaired(context)
-        val notice = ShellNotice.next(paired, up, shellNoticeState)
-        shellNoticeState = notice.state
-        if (notice.publish) notifyLost(context)
-        if (notice.cancel) cancelLost(context)
-        val wifi = DeviceHealth.isOnWifi(context)
-        val retry = ShellLoss.nextWifi(paired, up, wifi, seenWifi, wifiWasUp)
-        seenWifi = retry.seen
-        wifiWasUp = retry.wifiWasUp
-        if (retry.shouldRetry) runCatching { ShellLauncher.ensureRunning(context) }
-        val reported = ping?.optString("callId")?.takeIf { up && it.isNotEmpty() }
-        val evaluated = synchronized(armLock) {
-            val viewAfter = arm.get()
-            val round = LeaseRound.evaluate(viewBefore, viewAfter, pingOk = up, reported = reported, misses = misses)
-            misses = round.misses
-            round to viewAfter.expected
+        override fun markManual(callId: String) {
+            LinaCallGate.markManual(callId)
         }
-        val (round, expected) = evaluated
-        round.plan.confirmCallId?.let { client.confirm(it) }
-        when {
-            (round.giveBackSilence || round.plan.notifyDropped) && !expected.isNullOrEmpty() ->
-                giveBack(expected, warn = true)
-            else -> {
-                if (round.plan.clearExpected) {
-                    synchronized(armLock) {
-                        if (!arm.get().startInFlight) arm.set(CaptureOrder.Armed(null, false))
-                    }
-                }
-                if (round.plan.stop) stopUntil(client, null)
-            }
-        }
-    }
 
-    /** stop, dokler lupina ne potrdi. Naslednji krog poskusi znova. */
-    private fun stopUntil(client: ShellClient, callId: String?, maxDurationMs: Int = 1000): Boolean {
-        val start = android.os.SystemClock.elapsedRealtime()
-        while (android.os.SystemClock.elapsedRealtime() - start < maxDurationMs) {
-            val expectedNow = synchronized(armLock) { arm.get().expected }
-            if (callId == null && expectedNow != null) return true
-            val reply = client.stop(callId, timeoutMs = maxDurationMs)
-            if (AudioPing.stopSettled(reply?.optBoolean("ok") == true)) return true
-            Thread.sleep(50)
+        override fun notifyServerEnded(callId: String) {
+            GatewayRuntime.notifyCallEnded(callId)
         }
-        return false
-    }
 
-    private fun giveBack(callId: String, warn: Boolean) {
-        if (!handedBack.add(callId)) return
-        val proceed = synchronized(armLock) {
-            val view = arm.get()
-            val blocked = (view.startInFlight && view.expected == callId) ||
-                (view.expected != null && view.expected != callId)
-            if (blocked) {
-                handedBack.remove(callId)
-                false
-            } else {
-                arm.set(CaptureOrder.Armed(null, false))
-                misses = 0
-                true
-            }
+        override fun exitBackgroundAudio(callId: String, attemptExit: Boolean): CapturePorts.ExitFacts {
+            val call = CallRegistry.get(callId)
+                ?: return CapturePorts.ExitFacts(callPresent = false, exitOk = false, callState = 0)
+            val exitOk = attemptExit && CallBackgroundAudio.exit(call)
+            // Stanje po poskusu izhoda in iz istega vira kot drugod (API 31+ bere details.state).
+            return CapturePorts.ExitFacts(callPresent = true, exitOk = exitOk, callState = CallRegistry.androidState(call))
         }
-        if (!proceed) return
-        val context = appContext
-        val drop = AudioDrop.plan(true)
-        val call = CallRegistry.get(callId)
-        var exitOk = false
-        val order = AudioDrop.giveBackOrder()
-        for (step in order) {
-            when (step) {
-                AudioDrop.Step.MARK_MANUAL -> LinaCallGate.markManual(callId)
-                AudioDrop.Step.NOTIFY_SERVER -> GatewayRuntime.notifyCallEnded(callId)
-                AudioDrop.Step.EXIT_BACKGROUND_AUDIO -> {
-                    var disconnected = false
-                    exitOk = if (call != null && drop.returnToHandset && !AudioDrop.simulatedRinging()) {
-                        CallBackgroundAudio.exit(call)
-                    } else {
-                        false
-                    }
-                    if (call != null && drop.returnToHandset) {
-                        val decision = AudioDrop.shouldDisconnect(call.state, exitOk)
-                        if (decision == AudioDrop.DisconnectDecision.DISCONNECT) {
-                            runCatching { call.disconnect() }
-                            disconnected = true
-                        }
-                    }
-                    val outcome = AudioDrop.outcome(callPresent = call != null, exitOk = exitOk, disconnected = disconnected)
-                    if (warn && outcome.warn && context != null) notifyReturned(context, outcome.message)
-                }
-                AudioDrop.Step.STOP_CAPTURE -> {
-                    if (context != null && drop.stopCapture) {
-                        val ok = stopUntil(ShellClient(context), null, maxDurationMs = 300)
-                        if (!ok) {
-                            stopExecutor.execute { stopUntil(ShellClient(context), null) }
-                        }
-                    }
-                }
-            }
+
+        override fun disconnect(callId: String): Boolean {
+            val call = CallRegistry.get(callId) ?: return false
+            return runCatching { call.disconnect() }.isSuccess
         }
+
+        override fun ping(): CapturePorts.PingFacts {
+            val context = appContext
+                ?: return CapturePorts.PingFacts(ok = false, reported = null, paired = false, wifi = false)
+            val reply = ShellClient(context).ping()
+            return CapturePorts.PingFacts(
+                ok = reply != null,
+                reported = reply?.optString("callId")?.takeIf { it.isNotEmpty() },
+                paired = ShellLauncher.isPaired(context),
+                wifi = DeviceHealth.isOnWifi(context),
+            )
+        }
+
+        override fun confirm(callId: String) {
+            val context = appContext ?: return
+            ShellClient(context).confirm(callId)
+        }
+
+        override fun showNotice(notice: ReturnNotice) {
+            val context = appContext ?: return
+            notifyReturned(context, notice)
+        }
+
+        override fun publishShellLost() {
+            val context = appContext ?: return
+            notifyLost(context)
+        }
+
+        override fun cancelShellLost() {
+            val context = appContext ?: return
+            cancelLost(context)
+        }
+
+        override fun relaunchShell() {
+            val context = appContext ?: return
+            ShellLauncher.ensureRunning(context)
+        }
+
+        override fun recheckLine(callId: String) {
+            lineRecheck?.invoke(callId)
+        }
+
+        override fun nowMs(): Long = SystemClock.elapsedRealtime()
+
+        override fun sleep(ms: Long) = Thread.sleep(ms)
     }
 
     private fun notifyLost(context: Context) {
@@ -317,14 +250,19 @@ object CallAudioBridge {
         context.getSystemService(NotificationManager::class.java)?.cancel(7003)
     }
 
-    private fun notifyReturned(context: Context, messageKey: String) {
+    private fun notifyReturned(context: Context, notice: ReturnNotice) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val channelId = "shell"
         manager.createNotificationChannel(
             NotificationChannel(channelId, context.getString(R.string.shell_channel), NotificationManager.IMPORTANCE_DEFAULT),
         )
-        val id = context.resources.getIdentifier(messageKey, "string", context.packageName)
-        val text = if (id != 0) context.getString(id) else context.getString(R.string.audio_not_returned)
+        val text = context.getString(
+            when (notice) {
+                ReturnNotice.RETURNED -> R.string.audio_returned
+                ReturnNotice.NOT_RETURNED -> R.string.audio_not_returned
+                ReturnNotice.DISCONNECTED -> R.string.call_disconnected
+            },
+        )
         val notification = Notification.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle(context.getString(R.string.app_name))

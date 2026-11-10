@@ -18,10 +18,8 @@ import com.httpgateway.dialer.transport.GatewayRuntime
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.protocol.EmergencyLock
 import com.httpgateway.protocol.EmergencyNote
-import com.httpgateway.protocol.AudioCallState
 import com.httpgateway.protocol.CallAudioAction
 import com.httpgateway.protocol.CallAudioPolicy
-import com.httpgateway.protocol.CallCommandPolicy
 import com.httpgateway.protocol.CallLifecycle
 import com.httpgateway.protocol.RingTimeoutGate
 import com.httpgateway.protocol.TakeoverDirection
@@ -53,9 +51,14 @@ class GatewayInCallService : InCallService() {
             val call = CallRegistry.get(callId) ?: return@setOwnedListener
             syncCallAudio(callId, call)
         }
+        // Po koncu tujega klica zajem zadrzanega Lininega klica oceni ista politika na glavni niti.
+        CallAudioBridge.setLineRecheck { callId ->
+            handler.post { CallRegistry.get(callId)?.let { syncCallAudio(callId, it) } }
+        }
     }
 
     override fun onDestroy() {
+        CallAudioBridge.setLineRecheck(null)
         LinaCallGate.setOwnedListener(null)
         super.onDestroy()
     }
@@ -187,7 +190,7 @@ class GatewayInCallService : InCallService() {
                 allowlist = settings.allowlist,
                 allowlistEnabled = settings.allowlistEnabled,
                 carrierEmergency = carrierEmergency(number),
-                userCallActive = userHasOwnActiveCall(callId),
+                userCallActive = CallLine.userHasOtherLiveCall(callId),
                 emergencyCallback = emergencyCallback(call),
                 emergencyCooldown = TakeoverPolicy.inEmergencyCooldown(emergencyAt(), System.currentTimeMillis()),
                 externalPickup = RouteGuard.externalPickup,
@@ -195,26 +198,17 @@ class GatewayInCallService : InCallService() {
         )
     }
 
-    /** Drug klic, ki ni Linin in ni koncan, tudi ce se se klica. */
-    private fun userHasOwnActiveCall(exceptCallId: String): Boolean =
-        CallRegistry.snapshot().any { entry ->
-            entry.callId != exceptCallId &&
-                CallCommandPolicy.countsAsOtherUserCall(
-                    LinaCallGate.isOwned(entry.callId),
-                    phaseOf(entry.call),
-                )
-        }
-
     /**
      * Zvocno obdelavo v ozadju zazene samo prevzet klic. Ob HOLDING in ob tujem
      * aktivnem klicu se zajem ustavi, da zvok klica B ne gre na streznik.
      */
     private fun syncCallAudio(callId: String, call: Call) {
-        val otherLive = userHasOwnActiveCall(callId)
-        when (CallAudioPolicy.action(LinaCallGate.isOwned(callId), audioStateOf(call), otherLive)) {
+        val otherLive = CallLine.userHasOtherLiveCall(callId)
+        when (CallAudioPolicy.action(LinaCallGate.isOwned(callId), CallLine.audioState(call), otherLive)) {
             CallAudioAction.START -> startOwnedAudio(callId, call)
             CallAudioAction.STOP -> {
-                if (LinaCallGate.isOwned(callId)) CallAudioBridge.onCallEnded(callId)
+                // Linin klic ostane Linin (cakanje, uporabnikov klic): zajem se zadrzi, ne konca.
+                if (LinaCallGate.isOwned(callId)) CallAudioBridge.onCallSuspended(callId)
                 else CallAudioBridge.onUnsafeDownlink()
             }
             CallAudioAction.LEAVE -> Unit
@@ -262,14 +256,6 @@ class GatewayInCallService : InCallService() {
             Intent(this, InCallActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
-    }
-
-    private fun audioStateOf(call: Call): AudioCallState = when (CallRegistry.androidState(call)) {
-        Call.STATE_ACTIVE -> AudioCallState.ACTIVE
-        Call.STATE_HOLDING -> AudioCallState.HOLDING
-        Call.STATE_AUDIO_PROCESSING -> AudioCallState.AUDIO_PROCESSING
-        Call.STATE_DISCONNECTING, Call.STATE_DISCONNECTED -> AudioCallState.ENDING
-        else -> AudioCallState.OTHER
     }
 
     override fun onCallAudioStateChanged(audioState: CallAudioState) {

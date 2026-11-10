@@ -81,9 +81,12 @@ object FailureMessages {
     fun resourceName(code: String?): String = if (code != null && code in known) code else "didnt_work"
 }
 
-/** Izhod iz ozadja ni uspel: uporabnik mora to videti. */
+/**
+ * Izhod iz ozadja ni uspel: uporabnik mora to videti. Razen ko je klic ACTIVE in slisen
+ * na slusalki (API 29 izhoda nima): »klic je ostal tih« bi bilo takrat napacno (N11-5).
+ */
 object AudioReturn {
-    fun shouldWarn(exitFailed: Boolean): Boolean = exitFailed
+    fun shouldWarn(exitFailed: Boolean, audible: Boolean = false): Boolean = exitFailed && !audible
 }
 
 /** Obvestilo povezave sledi stanju. Nikoli ni vedno »Povezan«. */

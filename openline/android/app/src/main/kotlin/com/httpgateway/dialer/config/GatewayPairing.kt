@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import com.httpgateway.dialer.transport.TlsPin
+import com.httpgateway.protocol.GatewayDeviceId
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -16,6 +17,9 @@ import java.util.concurrent.TimeUnit
  */
 object GatewayPairing {
     data class Invite(val serverUrl: String, val code: String, val certSha256: String)
+
+    /** Zavrnitev z imenom niza. Zaslon pokaze niz, ne besedila izjeme (N11-7). */
+    class Refused(val resource: String) : IllegalStateException(resource)
 
     fun parse(text: String): Invite? {
         val uri = runCatching { Uri.parse(text.trim()) }.getOrNull() ?: return null
@@ -53,13 +57,7 @@ object GatewayPairing {
         val wsUrl = "wss://" + invite.serverUrl.removePrefix("https://") +
             json.optString("deviceChannelPath", "/v1/device-channel")
         val deviceId = json.getJSONObject("device").getString("id")
-        val idCheck = com.httpgateway.protocol.GatewayDeviceId.check(deviceId)
-        if (idCheck == com.httpgateway.protocol.GatewayDeviceId.Problem.EMPTY) {
-            throw IllegalStateException(context.getString(com.httpgateway.dialer.R.string.empty_device_id))
-        }
-        if (idCheck == com.httpgateway.protocol.GatewayDeviceId.Problem.NOT_ASCII) {
-            throw IllegalStateException(context.getString(com.httpgateway.dialer.R.string.need_ascii_device_id))
-        }
+        GatewayDeviceId.resourceName(GatewayDeviceId.check(deviceId))?.let { throw Refused(it) }
         val config = GatewayConfig(
             wsUrl = wsUrl,
             deviceId = deviceId,

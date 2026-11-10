@@ -558,7 +558,8 @@ class DialerActivity : Activity() {
                     CallAudioBridge.restart(this) { }
                     toast(getString(R.string.connected))
                 }.onFailure { error ->
-                    toast(stringByKey(ShownError.resource("couldnt_connect", error.message)))
+                    val key = (error as? GatewayPairing.Refused)?.resource ?: "couldnt_connect"
+                    toast(stringByKey(ShownError.resource(key, error.message)))
                 }
                 renderConnection()
             }

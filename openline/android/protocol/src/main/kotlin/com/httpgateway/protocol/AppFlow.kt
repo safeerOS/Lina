@@ -16,7 +16,8 @@ object CaptureOrder {
 
     data class StartDecision(val writeArm: Boolean, val immediateStop: Boolean)
 
-    fun evaluateStart(epochBefore: Long, epochNow: Long, after: Armed): StartDecision {
+    /** Izid starta velja samo v generaciji, v kateri je bil narocen (N10-1). */
+    fun evaluateStart(epochBefore: Long, epochNow: Long): StartDecision {
         if (epochBefore != epochNow) {
             return StartDecision(writeArm = false, immediateStop = true)
         }
@@ -35,19 +36,6 @@ object CaptureOrder {
         }
         return AudioPing.tick(expected, reported)
     }
-}
-
-/**
- * Ena atomarna slika najema. Branje dveh polj posebej vidi expected=null in startInFlight=true.
- */
-class ArmSlot {
-    private val ref = java.util.concurrent.atomic.AtomicReference(CaptureOrder.Armed(null, false))
-
-    fun set(next: CaptureOrder.Armed) {
-        ref.set(next)
-    }
-
-    fun get(): CaptureOrder.Armed = ref.get()
 }
 
 /**
@@ -91,21 +79,13 @@ object LeaseRound {
     )
 }
 
-/** Start sme zaceti in ostati samo, ce je klic Linin pred klicem in po njem. */
+/**
+ * Start sme zaceti in ostati samo, ce je klic Linin in linija prosta pred klicem in po njem.
+ * Pogoj je isti kot CallAudioPolicy START; zanko poskusov vodi CaptureMachine.
+ */
 object CapturePermit {
-    fun startLoop(
-        callId: String,
-        isOwned: (String) -> Boolean,
-        sleep: () -> Unit = { Thread.sleep(50) },
-        start: (String) -> Boolean
-    ): Boolean {
-        for (i in 1..2) {
-            if (!isOwned(callId)) return false
-            if (i > 1) sleep()
-            if (start(callId)) return isOwned(callId)
-        }
-        return false
-    }
+    fun allowed(ownedByLina: Boolean, state: AudioCallState?, otherLiveNotLina: Boolean): Boolean =
+        state != null && CallAudioPolicy.action(ownedByLina, state, otherLiveNotLina) == CallAudioAction.START
 }
 
 /**
@@ -135,17 +115,24 @@ object AudioDrop {
 
     data class Outcome(val warn: Boolean, val message: String)
 
-    fun outcome(callPresent: Boolean, exitOk: Boolean, disconnected: Boolean = false): Outcome = when {
+    /** audible: klic je ACTIVE in slisen na slusalki, ceprav izhoda iz ozadja ni bilo (API 29). */
+    fun outcome(
+        callPresent: Boolean,
+        exitOk: Boolean,
+        disconnected: Boolean = false,
+        audible: Boolean = false,
+    ): Outcome = when {
         disconnected -> Outcome(warn = true, message = "call_disconnected")
-        callPresent && exitOk -> Outcome(warn = true, message = "audio_returned")
-        callPresent && !exitOk -> Outcome(warn = true, message = "audio_not_returned")
+        // Klica ni vec: ni tih klic, ki bi ga uporabnik lahko dvignil.
+        !callPresent -> Outcome(warn = true, message = "call_disconnected")
+        exitOk || audible -> Outcome(warn = true, message = "audio_returned")
         else -> Outcome(warn = true, message = "audio_not_returned")
     }
 
     enum class DisconnectDecision { DISCONNECT, KEEP }
 
     fun shouldDisconnect(callState: Int, exitOk: Boolean): DisconnectDecision {
-        return if (callState == 12 && !exitOk) DisconnectDecision.DISCONNECT else DisconnectDecision.KEEP
+        return if (callState == TelecomPhase.STATE_AUDIO_PROCESSING && !exitOk) DisconnectDecision.DISCONNECT else DisconnectDecision.KEEP
     }
 }
 
@@ -187,6 +174,13 @@ object GatewayDeviceId {
         if (deviceId.isBlank()) return Problem.EMPTY
         if (deviceId.any { it.code !in 32..126 }) return Problem.NOT_ASCII
         return Problem.NONE
+    }
+
+    /** Ime niza za zaslon. Tudi parjenje pokaze vzrok, ne splosnega »ni se povezalo«. */
+    fun resourceName(problem: Problem): String? = when (problem) {
+        Problem.NONE -> null
+        Problem.EMPTY -> "empty_device_id"
+        Problem.NOT_ASCII -> "need_ascii_device_id"
     }
 }
 
