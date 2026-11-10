@@ -1,0 +1,36 @@
+{
+  "name": "openline-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenLine server: self-hosted voice API that turns an Android phone's SIM into a programmable phone line",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --disable-warning=ExperimentalWarning dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest",
+    "test:allowlist": "node --experimental-strip-types --test src/allowlist.node-test.ts"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "qrcode": "1.5.4",
+    "selfsigned": "2.4.1",
+    "ws": "8.21.3",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "@types/qrcode": "1.5.6",
+    "@types/supertest": "6.0.3",
+    "@types/ws": "8.18.1",
+    "supertest": "7.2.2",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
