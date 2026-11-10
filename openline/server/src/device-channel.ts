@@ -28,7 +28,7 @@ export class DeviceOfflineError extends Error {
 const PING_INTERVAL_MS = 20_000;
 
 export class DeviceWebSocketHub implements DeviceCommandChannel {
-  private readonly server = new WebSocketServer({ noServer: true });
+  private readonly server = new WebSocketServer({ noServer: true, maxPayload: 65536 });
   private readonly sockets = new Map<string, WebSocket>();
 
   constructor(

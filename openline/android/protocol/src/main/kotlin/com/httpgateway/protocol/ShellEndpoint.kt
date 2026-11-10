@@ -221,9 +221,12 @@ object ShellClientProtocol {
             try {
                 val connectWait = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(1)
                 socket.connect(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), connectWait)
-            } catch (_: Exception) {
+            } catch (e: java.net.ConnectException) {
                 runCatching { socket.close() }
                 return RoundTrip.Absent
+            } catch (_: Exception) {
+                runCatching { socket.close() }
+                return RoundTrip.Busy
             }
             try {
                 socket.use { sock ->

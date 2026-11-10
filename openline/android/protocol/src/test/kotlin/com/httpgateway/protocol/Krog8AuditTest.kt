@@ -32,22 +32,22 @@ class Krog8AuditTest {
     @Test
     fun `en Busy med dvema Ok ne vrne slusalke dva zaporedna jo`() {
         val view = CaptureOrder.Armed("klic", startInFlight = false)
-        val firstMiss = LeaseRound.evaluate(view, pingOk = false, reported = null, misses = 0)
+        val firstMiss = LeaseRound.evaluate(view, view, pingOk = false, reported = null, misses = 0)
         assertFalse(firstMiss.giveBackSilence)
         assertFalse(firstMiss.plan.notifyDropped)
         assertEquals(1, firstMiss.misses)
-        val recovered = LeaseRound.evaluate(view, pingOk = true, reported = "klic", misses = firstMiss.misses)
+        val recovered = LeaseRound.evaluate(view, view, pingOk = true, reported = "klic", misses = firstMiss.misses)
         assertFalse(recovered.giveBackSilence)
         assertEquals(0, recovered.misses)
         assertEquals("klic", recovered.plan.confirmCallId)
-        val again = LeaseRound.evaluate(view, pingOk = false, reported = null, misses = 0)
-        val second = LeaseRound.evaluate(view, pingOk = false, reported = null, misses = again.misses)
+        val again = LeaseRound.evaluate(view, view, pingOk = false, reported = null, misses = 0)
+        val second = LeaseRound.evaluate(view, view, pingOk = false, reported = null, misses = again.misses)
         assertTrue(second.giveBackSilence)
         assertFalse(second.plan.notifyDropped)
-        val foreign = LeaseRound.evaluate(view, pingOk = true, reported = "drug", misses = 0)
+        val foreign = LeaseRound.evaluate(view, view, pingOk = true, reported = "drug", misses = 0)
         assertTrue(foreign.plan.notifyDropped)
         assertFalse(foreign.giveBackSilence)
-        val flying = LeaseRound.evaluate(CaptureOrder.Armed("klic", true), pingOk = false, reported = null, misses = 0)
+        val flying = LeaseRound.evaluate(CaptureOrder.Armed("klic", true), CaptureOrder.Armed("klic", true), pingOk = false, reported = null, misses = 0)
         assertFalse(flying.giveBackSilence)
         assertFalse(CaptureOrder.lease(null, "klic", startInFlight = true).stop)
         assertTrue(CaptureOrder.lease("klic", null, startInFlight = false).notifyDropped)
@@ -55,23 +55,23 @@ class Krog8AuditTest {
 
     @Test
     fun `sto krogov lupina ne dela je ena objava`() {
-        var armed = false
+        var state = ShellNotice.State(false, 0)
         var posts = 0
         var cancels = 0
         repeat(100) {
-            val next = ShellNotice.next(paired = true, up = false, armed = armed)
+            val next = ShellNotice.next(paired = true, up = false, state = state)
             if (next.publish) posts += 1
             if (next.cancel) cancels += 1
-            armed = next.armed
+            state = next.state
         }
         assertEquals(1, posts)
         assertEquals(0, cancels)
-        assertTrue(armed)
-        val back = ShellNotice.next(paired = true, up = true, armed = armed)
+        assertTrue(state.armed)
+        val back = ShellNotice.next(paired = true, up = true, state = state)
         assertFalse(back.publish)
         assertTrue(back.cancel)
-        assertFalse(back.armed)
-        assertFalse(ShellNotice.next(paired = false, up = false, armed = false).publish)
+        assertFalse(back.state.armed)
+        assertFalse(ShellNotice.next(paired = false, up = false, state = ShellNotice.State(false, 0)).publish)
     }
 
     @Test
@@ -127,13 +127,13 @@ class Krog8AuditTest {
 
     @Test
     fun `wss naslov zahteva gostitelja`() {
-        assertFalse(GatewayUrl.accept("wss://"))
-        assertFalse(GatewayUrl.accept("wss:// a"))
-        assertFalse(GatewayUrl.accept("wss://["))
-        assertFalse(GatewayUrl.accept("ws://example.com/v1/device-channel"))
-        assertFalse(GatewayUrl.accept(""))
-        assertTrue(GatewayUrl.accept("wss://example.com/v1/device-channel"))
-        assertTrue(GatewayUrl.accept("wss://127.0.0.1:8787/v1/device-channel"))
+        assertFalse(GatewayUrl.accept("wss://", "token"))
+        assertFalse(GatewayUrl.accept("wss:// a", "token"))
+        assertFalse(GatewayUrl.accept("wss://[", "token"))
+        assertFalse(GatewayUrl.accept("ws://example.com/v1/device-channel", "token"))
+        assertFalse(GatewayUrl.accept("", "token"))
+        assertTrue(GatewayUrl.accept("wss://example.com/v1/device-channel", "token"))
+        assertTrue(GatewayUrl.accept("wss://127.0.0.1:8787/v1/device-channel", "token"))
     }
 
     @Test
@@ -141,8 +141,8 @@ class Krog8AuditTest {
         val failed = AudioDrop.outcome(callPresent = true, exitOk = false)
         assertEquals("audio_not_returned", failed.message)
         assertTrue(failed.warn)
-        assertFalse(failed.markManual)
-        assertFalse(failed.endOnServer)
+        assertTrue(failed.markManual)
+        assertTrue(failed.endOnServer)
         val ok = AudioDrop.outcome(callPresent = true, exitOk = true)
         assertEquals("audio_returned", ok.message)
         assertTrue(ok.markManual)

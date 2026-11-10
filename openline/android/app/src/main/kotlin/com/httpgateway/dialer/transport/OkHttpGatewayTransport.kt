@@ -34,7 +34,7 @@ class OkHttpGatewayTransport(
     override fun connect() {
         if (socket != null) return
         val pinned = client
-        if (pinned == null || !GatewayUrl.accept(config.wsUrl)) {
+        if (pinned == null || !GatewayUrl.accept(config.wsUrl, config.deviceToken)) {
             listener?.onFailure()
             return
         }

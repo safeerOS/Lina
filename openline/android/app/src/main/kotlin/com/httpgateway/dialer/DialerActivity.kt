@@ -567,8 +567,9 @@ class DialerActivity : Activity() {
 
     private fun saveGatewayConfig() {
         val wsUrl = wsUrlInput.text.toString().trim()
+        val deviceToken = deviceTokenInput.text.toString().trim()
         val fingerprint = certInput.text.toString().trim()
-        if (!GatewayUrl.accept(wsUrl)) {
+        if (!GatewayUrl.accept(wsUrl, deviceToken)) {
             toast(getString(R.string.need_wss))
             return
         }

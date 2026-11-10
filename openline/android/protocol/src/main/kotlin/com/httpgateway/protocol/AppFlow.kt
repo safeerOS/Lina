@@ -22,6 +22,7 @@ object CaptureOrder {
                 stop = false,
                 clearExpected = false,
                 notifyDropped = false,
+                stopTarget = null,
             )
         }
         return AudioPing.tick(expected, reported)
@@ -54,7 +55,11 @@ object LeaseRound {
         val plan: AudioPing.Tick,
     )
 
-    fun evaluate(view: CaptureOrder.Armed, pingOk: Boolean, reported: String?, misses: Int): Result {
+    fun evaluate(viewBefore: CaptureOrder.Armed, viewAfter: CaptureOrder.Armed, pingOk: Boolean, reported: String?, misses: Int): Result {
+        if (viewBefore != viewAfter) {
+            return Result(misses, false, quiet())
+        }
+        val view = viewAfter
         if (view.startInFlight) {
             return Result(misses = if (pingOk) 0 else misses, giveBackSilence = false, plan = quiet())
         }
@@ -75,11 +80,14 @@ object LeaseRound {
         stop = false,
         clearExpected = false,
         notifyDropped = false,
+        stopTarget = null,
     )
 }
 
 /** Start sme zaceti in ostati samo, ce je klic Linin pred klicem in po njem. */
 object CapturePermit {
+    fun startAttempts(): Int = 2
+
     fun begin(owned: Boolean): Boolean = owned
 
     fun keep(ownedBefore: Boolean, startOk: Boolean, ownedAfter: Boolean): Boolean =
@@ -100,6 +108,15 @@ object AudioDrop {
         Plan(stopCapture = true, returnToHandset = true, warn = true)
     }
 
+    enum class Step { MARK_MANUAL, NOTIFY_SERVER, EXIT_BACKGROUND_AUDIO, STOP_CAPTURE }
+
+    fun giveBackOrder(): List<Step> = listOf(
+        Step.MARK_MANUAL,
+        Step.NOTIFY_SERVER,
+        Step.EXIT_BACKGROUND_AUDIO,
+        Step.STOP_CAPTURE
+    )
+
     fun simulatedRinging(): Boolean = false
 
     data class Outcome(val warn: Boolean, val markManual: Boolean, val endOnServer: Boolean, val message: String)
@@ -110,7 +127,7 @@ object AudioDrop {
      */
     fun outcome(callPresent: Boolean, exitOk: Boolean): Outcome = when {
         callPresent && exitOk -> Outcome(warn = true, markManual = true, endOnServer = true, message = "audio_returned")
-        callPresent && !exitOk -> Outcome(warn = true, markManual = false, endOnServer = false, message = "audio_not_returned")
+        callPresent && !exitOk -> Outcome(warn = true, markManual = true, endOnServer = true, message = "audio_not_returned")
         else -> Outcome(warn = true, markManual = true, endOnServer = true, message = "audio_not_returned")
     }
 }
@@ -130,14 +147,20 @@ object RingTimeoutGate {
 
 /** Naslov prehoda. Predpona wss:// ni dovolj: prazen, presledek ali odprt oklepaj sesuje OkHttp. */
 object GatewayUrl {
-    fun accept(raw: String): Boolean {
+    fun accept(raw: String, token: String): Boolean {
         val url = raw.trim()
         if (!url.startsWith("wss://")) return false
         if (url.any { it.isWhitespace() }) return false
+        if (token.any { it.code !in 32..126 }) return false
         val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
         if (uri.scheme != "wss") return false
         val host = uri.host ?: return false
-        return host.isNotBlank()
+        if (host.isBlank()) return false
+        val port = uri.port
+        if (port != -1 && port !in 1..65535) return false
+        val authority = uri.authority ?: return false
+        if (authority.startsWith(":")) return false
+        return true
     }
 }
 
@@ -146,15 +169,19 @@ object GatewayUrl {
  * Sto krogov molka je ena objava, ne sto piskov.
  */
 object ShellNotice {
-    data class Post(val publish: Boolean, val cancel: Boolean, val armed: Boolean)
+    data class State(val armed: Boolean, val misses: Int)
+    data class Post(val publish: Boolean, val cancel: Boolean, val state: State)
 
-    fun next(paired: Boolean, up: Boolean, armed: Boolean): Post {
+    fun next(paired: Boolean, up: Boolean, state: State): Post {
         val show = ShellLoss.showWhileDown(paired, up)
-        return when {
-            show && !armed -> Post(publish = true, cancel = false, armed = true)
-            !show && armed -> Post(publish = false, cancel = true, armed = false)
-            else -> Post(publish = false, cancel = false, armed = armed)
+        if (!show) {
+            return Post(publish = false, cancel = state.armed, state = State(false, 0))
         }
+        val nextMisses = state.misses + 1
+        if (nextMisses >= 2 && !state.armed) {
+            return Post(publish = true, cancel = false, state = State(true, nextMisses))
+        }
+        return Post(publish = false, cancel = false, state = State(state.armed, nextMisses))
     }
 }
 object ConfigPrivacy {

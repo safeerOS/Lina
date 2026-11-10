@@ -77,7 +77,14 @@ class CallAudioEngine(private val context: Context?) {
             client = TlsPin.client(pin)
             clientPin = pin
         }
-        session = Session(target, checkNotNull(client)).also(Session::start)
+        val s = Session(target, checkNotNull(client))
+        session = s
+        try {
+            s.start()
+        } catch (t: Throwable) {
+            dropSession(s)
+            throw t
+        }
         return true
     }
 

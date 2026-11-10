@@ -96,20 +96,20 @@ class ShellClient(context: Context) {
     fun confirm(callId: String): JSONObject? =
         request(JSONObject().put("op", "confirm").put("callId", callId))
 
-    fun stop(callId: String?): JSONObject? {
+    fun stop(callId: String?, timeoutMs: Int = ShellAuth.HANDSHAKE_TIMEOUT_MS): JSONObject? {
         val body = JSONObject().put("op", "stop")
         if (!callId.isNullOrEmpty()) body.put("callId", callId)
-        return request(body)
+        return request(body, timeoutMs)
     }
 
     fun exit(): JSONObject? = request(JSONObject().put("op", "exit"))
 
-    private fun request(body: JSONObject): JSONObject? {
+    private fun request(body: JSONObject, timeoutMs: Int = ShellAuth.HANDSHAKE_TIMEOUT_MS): JSONObject? {
         val current = port
         if (current <= 0) return null
         val line = body.toString()
         if (ShellAuth.requestCarriesSecrets(line) || line.contains(token)) return null
-        val reply = ShellClientProtocol.exchange(current, token, line) ?: return null
+        val reply = ShellClientProtocol.exchange(current, token, line, timeoutMs) ?: return null
         return runCatching { JSONObject(reply) }.getOrNull()
     }
 
