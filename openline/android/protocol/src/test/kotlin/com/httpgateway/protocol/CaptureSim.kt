@@ -45,6 +45,12 @@ internal class CaptureSim(private val api29: Boolean = false) {
     var xHeld = false
     var xState = 0
     var wLive = false
+
+    /** Cakajoci klic W zvoni. Storitev zanj NE poslje dogodka (politika LEAVE), linija pa ga steje (N12-2). */
+    var wRinging = false
+
+    /** Lupina je za sejo odprla povezavo na streznik. Samo takrat tecejo okvirji. */
+    var gateOpen = false
     var gaveBack = false
     val notices = mutableListOf<ReturnNotice>()
     var lastExit: CapturePorts.ExitFacts? = null
@@ -57,9 +63,17 @@ internal class CaptureSim(private val api29: Boolean = false) {
     var exitOk = true
     var disconnectOk = true
     var disconnectThrows = false
+    var openOk = true
     var pingOk = true
+    var exitThrows = false
     var duringStart: (() -> Unit)? = null
     var duringPing: (() -> Unit)? = null
+
+    /** Po branju linije na niti priprave ali lupine, preden izid pride v vrsto (N12-4). */
+    var afterPermit: (() -> Unit)? = null
+
+    /** Med pripravo, preden se prebere linija (N12-7). */
+    var duringPrepare: (() -> Unit)? = null
 
     /** Stevilo izzvanih napak (priprava, lupina, ping). Brez napake se klic ne sme vrniti. */
     var faults = 0
@@ -70,12 +84,14 @@ internal class CaptureSim(private val api29: Boolean = false) {
 
     val queue = ManualExecutor()
     val ops = ManualExecutor()
+    val urgent = ManualExecutor()
     val prep = ManualExecutor()
     val lease = ManualExecutor()
-    val timers = ArrayDeque<Pair<Long, Runnable>>()
+    val timers = ArrayDeque<Runnable>()
 
     // Oznake cakajocih opravil. Preizkus z njimi ve, kaj je na vrsti, in preveri ozicenje.
     val opsLabels = ArrayDeque<Effect>()
+    val urgentLabels = ArrayDeque<Effect>()
     val prepLabels = ArrayDeque<Effect>()
     val leaseLabels = ArrayDeque<Effect>()
     val timerLabels = ArrayDeque<Effect>()
@@ -87,15 +103,28 @@ internal class CaptureSim(private val api29: Boolean = false) {
     private val ports = object : CapturePorts {
         override fun prepare(callId: String): Boolean {
             calls += "prepare:$callId"
+            duringPrepare?.let {
+                duringPrepare = null
+                it()
+            }
             return prepOk
         }
 
-        override fun linePermits(callId: String): Boolean = permits(callId)
+        override fun linePermits(callId: String): Boolean {
+            val allowed = permits(callId)
+            afterPermit?.let {
+                afterPermit = null
+                it()
+            }
+            return allowed
+        }
 
         override fun start(callId: String): Boolean {
             calls += "start:$callId"
             if (!permits(callId)) violations += "start brez dovoljenja linije"
             if (!startOk) return false
+            // Lupina obstojeco sejo istega klica uporabi znova (tudi ze odprto); nova je zaprta.
+            if (session != callId) gateOpen = false
             session = callId
             duringStart?.let {
                 duringStart = null
@@ -107,7 +136,10 @@ internal class CaptureSim(private val api29: Boolean = false) {
         override fun stop(callId: String?, timeoutMs: Int): Boolean {
             calls += "stop:${callId ?: "*"}"
             if (!stopOk) return false
-            if (callId == null || session == callId) session = null
+            if (callId == null || session == callId) {
+                session = null
+                gateOpen = false
+            }
             return true
         }
 
@@ -127,10 +159,11 @@ internal class CaptureSim(private val api29: Boolean = false) {
         override fun exitBackgroundAudio(callId: String, attemptExit: Boolean): CapturePorts.ExitFacts {
             calls += "exit:$callId"
             if (!gaveBack) violations += "izhod iz ozadja pred markManual"
-            // Vrstni red A1: pred izhodom mora biti vsaj en poskus stop (uspesen ali ne).
-            if (!calls.dropLast(1).takeLastWhile { !it.startsWith("markManual") }.any { it.startsWith("stop:") }) {
-                violations += "izhod iz ozadja brez poskusa stop"
-            }
+            // Vrstni red A1: pred izhodom mora biti vsaj en poskus stop (uspesen ali ne). Izjema je
+            // rok starta: tam povezava na streznik ni bila odprta, zato izhod ne caka na urejeno nit.
+            val stopTried = calls.dropLast(1).takeLastWhile { !it.startsWith("markManual") }.any { it.startsWith("stop:") }
+            if (!stopTried && session != null && gateOpen) violations += "izhod iz ozadja ob odprti seji brez poskusa stop"
+            if (exitThrows) throw IllegalStateException("telecom")
             val facts = if (!xPresent) {
                 CapturePorts.ExitFacts(callPresent = false, exitOk = false, callState = 0)
             } else {
@@ -153,7 +186,8 @@ internal class CaptureSim(private val api29: Boolean = false) {
                 lastDisconnect = false
                 throw IllegalStateException("telecom")
             }
-            val ok = disconnectOk && xPresent
+            // Klica ni vec: vrata vrnejo true (ni tihega klica), kot Ports.disconnect v aplikaciji.
+            val ok = !xPresent || disconnectOk
             if (ok) xPresent = false
             lastDisconnect = ok
             return ok
@@ -171,6 +205,19 @@ internal class CaptureSim(private val api29: Boolean = false) {
 
         override fun confirm(callId: String) {
             calls += "confirm:$callId"
+        }
+
+        override fun openUplink(callId: String): Boolean {
+            calls += "open:$callId"
+            if (!openOk) return false
+            if (!safe(callId)) violations += "povezava na streznik odprta za klic, ki ni varen"
+            if (state.phase != Phase.CAPTURING || state.callId != callId) {
+                // Dovoljeno samo, ce je preklic ze v vrsti lupine tik za tem ukazom.
+                if (opsLabels.none { it is Effect.StopCapture }) violations += "povezava odprta brez potrjenega zajema"
+            }
+            if (session != callId) return false
+            gateOpen = true
+            return true
         }
 
         override fun showNotice(notice: ReturnNotice) {
@@ -211,7 +258,8 @@ internal class CaptureSim(private val api29: Boolean = false) {
         shellOps = ops,
         prep = prep,
         lease = lease,
-        later = { delay, task -> timers.addLast(delay to task) },
+        urgent = urgent,
+        later = { _, task -> timers.addLast(task) },
         observer = { before, event, step ->
             state = step.state
             trace += Triple(before, event, step)
@@ -222,12 +270,12 @@ internal class CaptureSim(private val api29: Boolean = false) {
     private fun label(effect: Effect) {
         when (effect) {
             is Effect.Prepare, Effect.RelaunchShell -> prepLabels.addLast(effect)
-            is Effect.StartCapture, is Effect.StopCapture,
-            is Effect.ExitBackgroundAudio, is Effect.Disconnect, is Effect.ShowNotice,
-            -> opsLabels.addLast(effect)
+            is Effect.ExitBackgroundAudio -> (if (effect.urgent) urgentLabels else opsLabels).addLast(effect)
+            is Effect.StartCapture, is Effect.StopCapture, is Effect.OpenUplink -> opsLabels.addLast(effect)
+            is Effect.UrgentStop, is Effect.Disconnect, is Effect.ShowNotice -> urgentLabels.addLast(effect)
             is Effect.PingShell, is Effect.ConfirmLease, Effect.PublishShellLost, Effect.CancelShellLost,
             -> leaseLabels.addLast(effect)
-            is Effect.ScheduleRetry -> timerLabels.addLast(effect)
+            is Effect.ScheduleRetry, is Effect.ScheduleStartDeadline -> timerLabels.addLast(effect)
             is Effect.MarkManual, is Effect.NotifyServerEnded, is Effect.RecheckLine -> Unit
         }
     }
@@ -237,17 +285,29 @@ internal class CaptureSim(private val api29: Boolean = false) {
         val exit = lastExit ?: return null
         return when {
             lastDisconnect == true -> ReturnNotice.DISCONNECTED
+            lastDisconnect == false -> ReturnNotice.NOT_RETURNED
             !exit.callPresent -> ReturnNotice.DISCONNECTED
             exit.exitOk || exit.callState == ACTIVE -> ReturnNotice.RETURNED
             else -> ReturnNotice.NOT_RETURNED
         }
     }
 
-    fun permits(callId: String?): Boolean = callId == X && xPresent && xOwned && !xHeld && !wLive
+    /** Posnetek klicev, kot ga CallLine prebere iz registra. */
+    fun lineCalls(): List<LineCall> = buildList {
+        if (xPresent) add(LineCall(X, xOwned, if (xHeld) TelecomPhase.STATE_HOLDING else xState))
+        if (wLive) add(LineCall(W, ownedByLina = false, androidState = ACTIVE))
+        else if (wRinging) add(LineCall(W, ownedByLina = false, androidState = TelecomPhase.STATE_RINGING))
+    }
+
+    /** Kar vrne CallLine.permitsCapture: PRAVA politika nad posnetkom, tudi za cakajoci klic, ki zvoni. */
+    fun permits(callId: String?): Boolean = callId != null && CallLineFacts.permitsCapture(lineCalls(), callId)
+
+    /** Zasebnost: na liniji je Linin klic in noben uporabnikov klic ni ZIV. Zvonjenje ni zvok na liniji. */
+    fun safe(callId: String?): Boolean = callId == X && xPresent && xOwned && !xHeld && !wLive
 
     fun post(event: Event) {
         driver.post(event)
-        queue.runAll()
+        settleQueue()
     }
 
     /** Isto kot GatewayInCallService.syncCallAudio za Linin klic. */
@@ -258,7 +318,7 @@ internal class CaptureSim(private val api29: Boolean = false) {
     // Zunanji dogodki, kot jih poslje storitev klicev.
 
     /** Nov Linin klic z istim id ni mogoc, dokler se vrnitev prejsnjega se izvaja. */
-    fun canActivate(): Boolean = (xPresent && xOwned) || opsLabels.none {
+    fun canActivate(): Boolean = (xPresent && xOwned) || (opsLabels + urgentLabels).none {
         it is Effect.ExitBackgroundAudio || it is Effect.Disconnect || it is Effect.ShowNotice
     }
 
@@ -278,7 +338,7 @@ internal class CaptureSim(private val api29: Boolean = false) {
         }
         xHeld = false
         postPolicy()
-        queue.runAll()
+        settleQueue()
     }
 
     /** Uporabnik dvigne ali zacne svoj klic W. */
@@ -290,7 +350,13 @@ internal class CaptureSim(private val api29: Boolean = false) {
     /** Tuj klic W je odstranjen (tudi cakajoci klic, ki ni bil nikoli aktiven). */
     fun foreignCallRemoved() {
         wLive = false
+        wRinging = false
         post(Event.CallEnded(W))
+    }
+
+    /** Cakajoci klic W zazvoni. Storitev zanj ne poslje nobenega dogodka. */
+    fun foreignCallRings() {
+        wRinging = true
     }
 
     fun xRemoved() {
@@ -317,39 +383,93 @@ internal class CaptureSim(private val api29: Boolean = false) {
     /** Lupina izgubi sejo sama (padec procesa zvoka). To je napaka, po kateri se klic sme vrniti. */
     fun shellLosesSession() {
         session = null
+        gateOpen = false
         faults++
     }
 
     // Koraki niti.
 
-    fun runPrep(ok: Boolean = true): Boolean {
+    fun runPrep(ok: Boolean = true, afterPermit: (() -> Unit)? = null, duringPrepare: (() -> Unit)? = null): Boolean {
         if (prep.tasks.isEmpty()) return false
         prepLabels.removeFirst()
         if (!ok) faults++
         prepOk = ok
+        this.afterPermit = afterPermit
+        this.duringPrepare = duringPrepare
         prep.runNext()
+        this.afterPermit = null
+        this.duringPrepare = null
         prepOk = true
-        queue.runAll()
+        settleQueue()
         return true
     }
 
-    fun runOps(ok: Boolean = true, during: (() -> Unit)? = null): Boolean {
+    /** Nujna nit: nujni stop, izhod po roku, prekinitev, obvestilo. */
+    fun runUrgent(ok: Boolean = true): Boolean {
+        if (urgent.tasks.isEmpty()) return false
+        urgentLabels.removeFirst()
+        if (!ok) faults++
+        stopOk = ok
+        exitOk = ok
+        disconnectOk = ok
+        urgent.runNext()
+        stopOk = true
+        exitOk = true
+        disconnectOk = true
+        settleQueue()
+        return true
+    }
+
+    /**
+     * Vrsta dogodkov do konca. Nujni stop, pred katerim ni izhoda iz ozadja, stece takoj: nit je prosta
+     * in zunaj starta izvajalec ukaza lupini sploh ne poslje. Zastareli casovniki se zavrzejo (avtomat
+     * jih prezre), da stanj ni neomejeno.
+     */
+    fun settleQueue() {
+        while (true) {
+            queue.runAll()
+            if ((urgentLabels.firstOrNull() as? Effect.UrgentStop)?.force == false) {
+                urgentLabels.removeFirst()
+                urgent.runNext()
+                continue
+            }
+            break
+        }
+        val keep = timerLabels.indices.filter { !staleTimer(timerLabels[it]) }
+        if (keep.size != timerLabels.size) {
+            val labels = keep.map { timerLabels[it] }
+            val tasks = keep.map { timers[it] }
+            timerLabels.clear(); timerLabels.addAll(labels)
+            timers.clear(); timers.addAll(tasks)
+        }
+    }
+
+    private fun staleTimer(label: Effect): Boolean = when (label) {
+        is Effect.ScheduleRetry -> label.generation != state.generation || state.phase != Phase.RETRY_WAIT
+        is Effect.ScheduleStartDeadline -> label.generation != state.generation ||
+            !(state.phase == Phase.PREPARING || state.phase == Phase.STARTING || state.phase == Phase.RETRY_WAIT)
+        else -> false
+    }
+
+    fun runOps(ok: Boolean = true, afterPermit: (() -> Unit)? = null, during: (() -> Unit)? = null): Boolean {
         if (ops.tasks.isEmpty()) return false
         opsLabels.removeFirst()
         if (!ok) faults++
         startOk = ok
         stopOk = ok
         exitOk = ok
-        disconnectOk = ok
+        openOk = ok
+        this.afterPermit = afterPermit
         duringStart = during
         clock = 0
         ops.runNext()
         duringStart = null
+        this.afterPermit = null
         startOk = true
         stopOk = true
         exitOk = true
-        disconnectOk = true
-        queue.runAll()
+        openOk = true
+        settleQueue()
         return true
     }
 
@@ -362,15 +482,19 @@ internal class CaptureSim(private val api29: Boolean = false) {
         lease.runNext()
         duringPing = null
         pingOk = true
-        queue.runAll()
+        settleQueue()
         return true
     }
 
-    fun fireTimer(): Boolean {
-        val (_, task) = timers.removeFirstOrNull() ?: return false
-        timerLabels.removeFirst()
+    /** Sprozi prvi casovnik dane vrste. Rok starta, ki potece pred potrjenim zajemom, je napaka (pocasnost). */
+    fun fireTimer(deadline: Boolean = false): Boolean {
+        val at = timerLabels.indexOfFirst { (it is Effect.ScheduleStartDeadline) == deadline }
+        if (at < 0) return false
+        if (deadline) faults++
+        timerLabels.removeAt(at)
+        val task = timers.removeAt(at)
         task.run()
-        queue.runAll()
+        settleQueue()
         return true
     }
 
@@ -380,7 +504,7 @@ internal class CaptureSim(private val api29: Boolean = false) {
         fun drain(): Boolean {
             while (true) {
                 if (++steps > maxSteps) return false
-                if (runPrep() || runOps() || runLease() || fireTimer()) continue
+                if (runPrep() || runOps() || runUrgent() || runLease() || fireTimer()) continue
                 return true
             }
         }
@@ -404,14 +528,16 @@ internal class CaptureSim(private val api29: Boolean = false) {
             is Effect.Prepare -> effect.copy(generation = gen(effect.generation))
             is Effect.StartCapture -> effect.copy(generation = gen(effect.generation))
             is Effect.ScheduleRetry -> effect.copy(generation = gen(effect.generation))
+            is Effect.ScheduleStartDeadline -> effect.copy(generation = gen(effect.generation))
+            is Effect.UrgentStop -> effect.copy(generation = gen(effect.generation))
             is Effect.StopCapture -> effect.copy(seq = if (effect.seq == 0L) 1L else seq(effect.seq))
             is Effect.PingShell -> effect.copy(generation = gen(effect.generation), stopSeq = seq(effect.stopSeq))
             else -> effect
         }
         return listOf(
             state.copy(generation = 0, stopSeq = 0, shell = CaptureMachine.ShellHealth()),
-            session, xPresent, xOwned, xHeld, xState, wLive, gaveBack, notices.toSet(), lastExit, lastDisconnect,
-            faults > 0, opsLabels.map(::norm), prepLabels.map(::norm), leaseLabels.map(::norm), timerLabels.map(::norm),
+            session, xPresent, xOwned, xHeld, xState, wLive, wRinging, gateOpen, gaveBack, notices.toSet(),
+            lastExit, lastDisconnect, faults > 0, urgentLabels.map(::norm), opsLabels.map(::norm), prepLabels.map(::norm), leaseLabels.map(::norm), timerLabels.map(::norm),
         )
     }
 
@@ -419,18 +545,26 @@ internal class CaptureSim(private val api29: Boolean = false) {
     fun stableViolations(): List<String> {
         val found = violations.toMutableList()
         if (queue.tasks.isNotEmpty()) found += "vrsta dogodkov ni prazna"
-        if (opsLabels.size != ops.tasks.size || prepLabels.size != prep.tasks.size ||
+        if (opsLabels.size != ops.tasks.size || urgentLabels.size != urgent.tasks.size || prepLabels.size != prep.tasks.size ||
             leaseLabels.size != lease.tasks.size || timerLabels.size != timers.size
         ) {
             found += "ucinek ni sel na pricakovano nit"
         }
         if (state.view.expected == null && state.view.startInFlight) found += "razbit pogled najema"
-        if (state.phase == Phase.CAPTURING && !permits(state.callId)) found += "potrjen zajem, ki ga linija ne dovoli"
+        if (state.phase == Phase.CAPTURING && !safe(state.callId)) found += "potrjen zajem, ki ga linija ne dovoli"
         val running = session
-        if (running != null && !permits(running)) {
-            val stopOnWay = opsLabels.any { it is Effect.StopCapture && (it.callId == null || it.callId == running) }
-            if (!stopOnWay && state.stop != StopDebt.OWED) found += "zajem tece brez dovoljenja in brez izdanega stop"
+        if (running != null && !safe(running)) {
+            val stopAt = opsLabels.indexOfFirst { it is Effect.StopCapture && (it.callId == null || it.callId == running) }
+            if (stopAt < 0 && state.stop != StopDebt.OWED) found += "zajem tece brez dovoljenja in brez izdanega stop"
+            // N12-1: okvirji tecejo samo ob odprti povezavi. Takrat stop ne sme cakati za startom.
+            if (gateOpen && faults == 0) {
+                val startAt = opsLabels.indexOfFirst { it is Effect.StartCapture }
+                if (stopAt < 0 || (startAt in 0 until stopAt)) found += "okvirji tecejo, stop pa caka za startom"
+            }
         }
+        if (gateOpen && session == null) found += "odprta povezava brez seje"
+        // Odlocitev lastnika: dohodni klic, ki zvoni, Lininemu klicu ne vzame linije (N12-2).
+        if (permits(X) != safe(X)) found += "zvonjenje cakajocega klica je spremenilo dovoljenje zajema"
         if (state.stop != StopDebt.SETTLED && state.sessionWanted) found += "dolg stop med zelenim zajemom"
         // Samo prepletanje niti, brez ene same napake lupine, ne sme vzeti klica Lini (K19, N10-3).
         if (gaveBack && faults == 0) found += "klic vrnjen uporabniku brez napake"
@@ -441,10 +575,10 @@ internal class CaptureSim(private val api29: Boolean = false) {
     fun settledViolations(): List<String> {
         val found = stableViolations().toMutableList()
         val running = session
-        if (running != null && !(permits(running) && state.phase == Phase.CAPTURING && state.callId == running)) {
+        if (running != null && !(safe(running) && state.phase == Phase.CAPTURING && state.callId == running)) {
             found += "po umiritvi tece zajem, ki ga avtomat ne pricakuje ali linija ne dovoli"
         }
-        if (permits(X) && running != X) found += "Linin klic je tih: zajema ni in klic ni vrnjen"
+        if (permits(X) && (running != X || !gateOpen)) found += "Linin klic je tih: zajema ni in klic ni vrnjen"
         if (state.phase == Phase.PREPARING || state.phase == Phase.STARTING || state.phase == Phase.RETRY_WAIT) {
             found += "avtomat je obtical v ${state.phase}"
         }

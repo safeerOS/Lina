@@ -30,6 +30,7 @@ import com.httpgateway.protocol.TlsPin
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * App side of call audio: tells the shell server which call to stream. Audio itself flows
@@ -50,6 +51,12 @@ object CallAudioBridge {
     /** start, stop in izhod iz ozadja v vrstnem redu izdaje. */
     private val shellOps = Executors.newSingleThreadExecutor { Thread(it, "callaudio-shell") }
 
+    /** Kar ne sme cakati na start, ki visi pri lupini: nujni stop, izhod po roku, prekinitev, obvestilo. */
+    private val urgent = Executors.newSingleThreadExecutor { Thread(it, "callaudio-urgent") }
+
+    /** Casovnika (drugi poskus, rok starta) samo oddata dogodek. Na niti najema bi ju zadrzal ping. */
+    private val timer: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { Thread(it, "callaudio-timer") }
+
     /** Priprava in zagon lupine trajata sekunde, zato ne smeta zadrzati stopa. */
     private val prep = Executors.newSingleThreadExecutor { Thread(it, "callaudio-bridge") }
     private val lease: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { Thread(it, "callaudio-lease") }
@@ -57,16 +64,16 @@ object CallAudioBridge {
     @Volatile
     private var appContext: Context? = null
 
-    @Volatile
-    private var lineRecheck: ((String) -> Unit)? = null
+    private val lineRecheck = AtomicReference<((String) -> Unit)?>(null)
 
     private val driver = CaptureDriver(
         ports = Ports,
         queue = queue,
         shellOps = shellOps,
+        urgent = urgent,
         prep = prep,
         lease = lease,
-        later = { delayMs, task -> lease.schedule(task, delayMs, TimeUnit.MILLISECONDS) },
+        later = { delayMs, task -> timer.schedule(task, delayMs, TimeUnit.MILLISECONDS) },
     )
 
     fun initialize(context: Context) {
@@ -108,8 +115,13 @@ object CallAudioBridge {
     fun onUnsafeDownlink() = driver.post(CaptureMachine.Event.UnsafeDownlink)
 
     /** Storitev klicev pove, kako znova oceniti linijo. Klic ne sme blokirati. */
-    fun setLineRecheck(hook: ((String) -> Unit)?) {
-        lineRecheck = hook
+    fun setLineRecheck(hook: (String) -> Unit) {
+        lineRecheck.set(hook)
+    }
+
+    /** Pobrise samo SVOJ kavelj: onDestroy stare storitve ne sme odstraniti kavlja nove (N12-10). */
+    fun clearLineRecheck(hook: (String) -> Unit) {
+        lineRecheck.compareAndSet(hook, null)
     }
 
     /** Vrata do Androida in lupine. Brez odlocitev: vsaka metoda naredi eno stvar in vrne izid. */
@@ -173,14 +185,21 @@ object CallAudioBridge {
         }
 
         override fun disconnect(callId: String): Boolean {
-            val call = CallRegistry.get(callId) ?: return false
+            // Klica ni vec v registru: je ze koncan, torej ni tih klic, ki bi ga bilo treba dvigniti.
+            val call = CallRegistry.get(callId) ?: return true
             return runCatching { call.disconnect() }.isSuccess
         }
 
         override fun ping(): CapturePorts.PingFacts {
             val context = appContext
                 ?: return CapturePorts.PingFacts(ok = false, reported = null, paired = false, wifi = false)
-            val reply = ShellClient(context).ping()
+            val reply = try {
+                ShellClient(context).ping()
+            } catch (t: Throwable) {
+                // Samo vrsta napake: sporocilo izjeme lahko nosi pot ali vsebino odgovora (N12-10).
+                Log.w(TAG, "lease: ${t.javaClass.simpleName}")
+                throw t
+            }
             return CapturePorts.PingFacts(
                 ok = reply != null,
                 reported = reply?.optString("callId")?.takeIf { it.isNotEmpty() },
@@ -192,6 +211,13 @@ object CallAudioBridge {
         override fun confirm(callId: String) {
             val context = appContext ?: return
             ShellClient(context).confirm(callId)
+        }
+
+        override fun openUplink(callId: String): Boolean {
+            val context = appContext ?: return false
+            val ok = ShellClient(context).open(callId)?.optBoolean("ok") == true
+            if (!ok) Log.w(TAG, "open $callId failed")
+            return ok
         }
 
         override fun showNotice(notice: ReturnNotice) {
@@ -215,7 +241,7 @@ object CallAudioBridge {
         }
 
         override fun recheckLine(callId: String) {
-            lineRecheck?.invoke(callId)
+            lineRecheck.get()?.invoke(callId)
         }
 
         override fun nowMs(): Long = SystemClock.elapsedRealtime()

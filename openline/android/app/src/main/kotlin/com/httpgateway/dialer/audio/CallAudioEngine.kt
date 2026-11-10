@@ -17,6 +17,7 @@ import com.httpgateway.protocol.AudioArm
 import com.httpgateway.protocol.AudioWatchdog
 import com.httpgateway.protocol.MediaStream
 import com.httpgateway.protocol.ShellLease
+import com.httpgateway.protocol.UplinkGate
 import com.httpgateway.protocol.TlsPin as MediaPin
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,6 +34,7 @@ import java.util.concurrent.TimeUnit
  * Vticnica je samo TlsPin.client. Brez odtisa ali brez wss se zvok ne zacne.
  * Naslov in odtis sta tista, ki sta prisla ob zagonu, ne iz zahteve start.
  * Brez potrditve aplikacije se zajem sam ustavi.
+ * Na streznik se seja poveze sele po ukazu open (N12-1): start samo pripravi zajem.
  */
 class CallAudioEngine(private val context: Context?) {
     data class Target(
@@ -101,6 +103,12 @@ class CallAudioEngine(private val context: Context?) {
         session?.confirm()
     }
 
+    /** Aplikacija potrdi, da je zajem dovoljen: sele zdaj se seja poveze na streznik. */
+    @Synchronized
+    fun open() {
+        session?.open()
+    }
+
     @Synchronized
     fun activeCallId(): String? = session?.target?.callId
 
@@ -126,7 +134,9 @@ class CallAudioEngine(private val context: Context?) {
             record = built
             track = played
         }
-        private val playbackQueue = LinkedBlockingQueue<ByteArray>()
+        // Omejena vrsta: polna vrsta okvir zavrze, namesto da raste brez meje (N12-8).
+        private val playbackQueue = LinkedBlockingQueue<ByteArray>(MediaStream.MAX_PLAYBACK_FRAMES)
+        private val uplink = UplinkGate()
 
         @Volatile
         private var running = true
@@ -152,7 +162,12 @@ class CallAudioEngine(private val context: Context?) {
             Log.i(TAG, "audio started for ${target.callId}")
             thread("capture", ::captureLoop)
             thread("playback", ::playbackLoop)
-            connect()
+            // Brez connect(): do ukaza open ni vticnice, zato ne gre noben okvir v nobeno smer.
+        }
+
+        fun open() {
+            confirm()
+            if (uplink.open()) connect()
         }
 
         fun close() {
@@ -178,7 +193,7 @@ class CallAudioEngine(private val context: Context?) {
         }
 
         private fun connect() {
-            if (!running) return
+            if (!running || !uplink.isOpen) return
             val request = Request.Builder()
                 .url(target.mediaUrl)
                 .header("X-Device-Id", target.deviceId)

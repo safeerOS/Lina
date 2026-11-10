@@ -73,6 +73,12 @@ object ShellServerMain {
                 }
                 engine.confirm()
             }
+            "open" -> {
+                if (!ShellAuth.acceptConfirm(engine.activeCallId(), op["callId"])) {
+                    return JSONObject().put("ok", false).put("error", "open")
+                }
+                engine.open()
+            }
             "start" -> {
                 val callId = op["callId"] ?: return JSONObject().put("ok", false).put("error", "callId")
                 val gate = ShellAuth.targetForStart(config, callId, raw)

@@ -18,6 +18,9 @@ import com.httpgateway.dialer.transport.GatewayRuntime
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.protocol.EmergencyLock
 import com.httpgateway.protocol.EmergencyNote
+import com.httpgateway.protocol.LineCall
+import com.httpgateway.protocol.LineRecheck
+import com.httpgateway.protocol.SecondCallPolicy
 import com.httpgateway.protocol.CallAudioAction
 import com.httpgateway.protocol.CallAudioPolicy
 import com.httpgateway.protocol.CallLifecycle
@@ -45,20 +48,32 @@ class GatewayInCallService : InCallService() {
     private val handler = Handler(Looper.getMainLooper())
     private val timers = mutableMapOf<String, Runnable>()
 
+    /** Klici, zavrnjeni z zasedenim znakom, dokler jih Telecom ne odstrani. Samo glavna nit. */
+    private val busyRejected = mutableSetOf<String>()
+
+    /**
+     * Zajem zadrzanega Lininega klica oceni ista politika na glavni niti (po koncu tujega klica in
+     * v vsakem krogu najema). Klica, ki ni vec Linin, ne ocenjujemo: zanj bi politika vsakic
+     * poslala onUnsafeDownlink, ceprav se ni nic spremenilo.
+     */
+    private val lineRecheck: (String) -> Unit = { callId ->
+        handler.post {
+            val call = CallRegistry.get(callId)
+            if (call != null && LineRecheck.shouldSync(LinaCallGate.isOwned(callId))) syncCallAudio(callId, call)
+        }
+    }
+
     init {
         // Po uspesnem answer je klic ze lahko ACTIVE. Zvok se sprozi sele, ko je owned.
         LinaCallGate.setOwnedListener { callId ->
             val call = CallRegistry.get(callId) ?: return@setOwnedListener
             syncCallAudio(callId, call)
         }
-        // Po koncu tujega klica zajem zadrzanega Lininega klica oceni ista politika na glavni niti.
-        CallAudioBridge.setLineRecheck { callId ->
-            handler.post { CallRegistry.get(callId)?.let { syncCallAudio(callId, it) } }
-        }
+        CallAudioBridge.setLineRecheck(lineRecheck)
     }
 
     override fun onDestroy() {
-        CallAudioBridge.setLineRecheck(null)
+        CallAudioBridge.clearLineRecheck(lineRecheck)
         LinaCallGate.setOwnedListener(null)
         super.onDestroy()
     }
@@ -81,13 +96,15 @@ class GatewayInCallService : InCallService() {
         callbacks[call] = callback
         call.registerCallback(callback)
         onCallUpdated(entry.callId, call)
-        showInCallUi()
+        // Klic, zavrnjen z zasedenim znakom, se uporabniku ne pokaze kot dohodni klic.
+        if (entry.callId !in busyRejected) showInCallUi()
     }
 
     override fun onCallRemoved(call: Call) {
         val callId = CallRegistry.callIdFor(call)
         callbacks.remove(call)?.let(call::unregisterCallback)
         if (callId != null) {
+            busyRejected.remove(callId)
             cancelTimer(callId)
             ringStartedAt.remove(callId)
             // Vedno, tudi ce je markManual owned ze pobrisal.
@@ -105,7 +122,34 @@ class GatewayInCallService : InCallService() {
         super.onCallRemoved(call)
     }
 
+    /**
+     * Odlocitev lastnika (10. 11. 2026): telefon zmore en klic naenkrat. Dokler Lina govori, drug dohodni
+     * klic dobi zaseden znak in ne zvoni. Uporabnik ga vidi v obvestilu kot zgresen klic.
+     */
+    private fun rejectIfLinaBusy(callId: String, call: Call): Boolean {
+        if (callId in busyRejected) return true
+        val number = numberOf(call)
+        val emergency = emergencyCallback(call) || carrierEmergency(number) || TakeoverPolicy.isEmergency(number) ||
+            TakeoverPolicy.inEmergencyCooldown(emergencyAt(), System.currentTimeMillis())
+        val candidate = LineCall(callId, LinaCallGate.isOwned(callId), CallRegistry.androidState(call))
+        val incoming = directionOf(call) == TakeoverDirection.INCOMING
+        if (!SecondCallPolicy.rejectAsBusy(candidate, incoming, emergency, CallLine.snapshot())) return false
+        // Oznaka pred Telecomom: Lina tega klica ne sme vec prevzeti, tudi ce zavrnitev ne uspe.
+        LinaCallGate.markManual(callId)
+        if (runCatching { call.reject(false, null) }.isFailure) {
+            Log.w(TAG, "zaseden znak za $callId ni uspel; klic zvoni kot obicajno")
+            return false
+        }
+        busyRejected += callId
+        MissedCallNotice.show(this, callId, number)
+        return true
+    }
+
     private fun onCallUpdated(callId: String, call: Call) {
+        if (rejectIfLinaBusy(callId, call)) {
+            CallRegistry.notifyChanged()
+            return
+        }
         val phase = phaseOf(call)
         if (EmergencyNote.record(
                 outgoing = directionOf(call) == TakeoverDirection.OUTGOING,
@@ -203,7 +247,7 @@ class GatewayInCallService : InCallService() {
      * aktivnem klicu se zajem ustavi, da zvok klica B ne gre na streznik.
      */
     private fun syncCallAudio(callId: String, call: Call) {
-        val otherLive = CallLine.userHasOtherLiveCall(callId)
+        val otherLive = CallLine.blocksCapture(callId)
         when (CallAudioPolicy.action(LinaCallGate.isOwned(callId), CallLine.audioState(call), otherLive)) {
             CallAudioAction.START -> startOwnedAudio(callId, call)
             CallAudioAction.STOP -> {

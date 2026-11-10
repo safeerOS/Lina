@@ -24,9 +24,16 @@ interface CapturePorts {
     /** Ne sme blokirati: tece na niti vrste dogodkov. */
     fun notifyServerEnded(callId: String)
     fun exitBackgroundAudio(callId: String, attemptExit: Boolean): ExitFacts
+
+    /** True: klic je prekinjen ali ga ni vec. False: klic je se tu (in tih). */
     fun disconnect(callId: String): Boolean
     fun ping(): PingFacts
+
+    /** Podaljsa najem seje. Povezave na streznik NE odpre. */
     fun confirm(callId: String)
+
+    /** Lupini dovoli odpreti povezavo na streznik za to sejo. Do tega ukaza ne gre noben okvir. */
+    fun openUplink(callId: String): Boolean
     fun showNotice(notice: ReturnNotice)
     fun publishShellLost()
     fun cancelShellLost()
@@ -45,11 +52,15 @@ interface CapturePorts {
  *
  * start, stop in izhod iz ozadja tecejo na [shellOps] v vrstnem redu izdaje. Stop,
  * izdan po startu, zato pride do lupine za njim in ne pred njim, kjer ne bi ustavil nicesar.
+ *
+ * [urgent] je locena nit za tisto, kar ne sme cakati na start, ki visi pri lupini (do 5 s):
+ * nujni stop ob preklicu (N12-1), izhod iz ozadja po roku starta (N12-6), prekinitev in obvestilo.
  */
 class CaptureDriver(
     private val ports: CapturePorts,
     private val queue: Executor,
     private val shellOps: Executor,
+    private val urgent: Executor,
     private val prep: Executor,
     private val lease: Executor,
     private val later: (delayMs: Long, task: Runnable) -> Unit,
@@ -58,6 +69,13 @@ class CaptureDriver(
 ) {
     /** Bere in pise samo nit vrste. */
     private var state = initial
+
+    /**
+     * Generacija starta, ki je ta hip pri lupini, ali NO_START. Pise nit lupine, bere nujna nit.
+     * Ni stanje zajema (o nicemer ne odloca avtomat): pove samo, ali ima nujni stop kaj prehiteti.
+     */
+    @Volatile
+    private var startInFlight = NO_START
 
     fun post(event: CaptureMachine.Event) {
         queue.execute { step(event) }
@@ -83,6 +101,24 @@ class CaptureDriver(
             is CaptureMachine.Effect.ScheduleRetry -> later(effect.delayMs) {
                 post(CaptureMachine.Event.RetryDue(effect.callId, effect.generation))
             }
+            is CaptureMachine.Effect.ScheduleStartDeadline -> later(effect.delayMs) {
+                // Branje registra ne blokira. Brez njega bi rok vrnil klic, ki ga uporabnik ze ima.
+                val permitted = attempt { ports.linePermits(effect.callId) }
+                post(CaptureMachine.Event.StartDue(effect.callId, effect.generation, permitted))
+            }
+            is CaptureMachine.Effect.UrgentStop -> urgent.execute {
+                // Samo mimo starta, izdanega pred preklicem. Start novejse generacije je zeljen:
+                // zakasnel nujni stop ga ne sme ustaviti. Brez starta v teku urejeni stop ne caka.
+                val flying = startInFlight
+                if (effect.force || (flying != NO_START && flying < effect.generation)) {
+                    attempt { ports.stop(effect.callId, MIN_STOP_TIMEOUT_MS) }
+                }
+            }
+            is CaptureMachine.Effect.OpenUplink -> shellOps.execute {
+                // Linija se preveri se tik pred odprtjem: do sem ni sel noben okvir.
+                val opened = attempt { ports.linePermits(effect.callId) } && attempt { ports.openUplink(effect.callId) }
+                post(CaptureMachine.Event.UplinkResult(effect.callId, effect.generation, opened))
+            }
             is CaptureMachine.Effect.StopCapture -> shellOps.execute {
                 val ok = stopUntil(effect.callId, effect.budgetMs)
                 if (effect.seq != 0L) post(CaptureMachine.Event.StopResult(effect.seq, ok))
@@ -91,18 +127,27 @@ class CaptureDriver(
             // in oddaljeni ukaz ga se doseze. Oba klica samo zapiseta in ne cakata.
             is CaptureMachine.Effect.MarkManual -> quiet { ports.markManual(effect.callId) }
             is CaptureMachine.Effect.NotifyServerEnded -> quiet { ports.notifyServerEnded(effect.callId) }
-            is CaptureMachine.Effect.ExitBackgroundAudio -> shellOps.execute {
+            is CaptureMachine.Effect.ExitBackgroundAudio -> (if (effect.urgent) urgent else shellOps).execute {
+                // Izjema ne pove, kje je klic. Varna domneva je najslabsa: klic je tu, izhod ni uspel
+                // in klic je tih. Avtomat zato poskusi prekinitev, obvestilo pa sledi njenemu izidu (N12-5).
                 val facts = runCatching { ports.exitBackgroundAudio(effect.callId, effect.attemptExit) }
-                    .getOrDefault(CapturePorts.ExitFacts(callPresent = false, exitOk = false, callState = 0))
+                    .getOrDefault(
+                        CapturePorts.ExitFacts(
+                            callPresent = true,
+                            exitOk = false,
+                            callState = TelecomPhase.STATE_AUDIO_PROCESSING,
+                        ),
+                    )
                 post(
                     CaptureMachine.Event.ExitResult(effect.callId, facts.callPresent, facts.exitOk, facts.callState),
                 )
             }
-            is CaptureMachine.Effect.Disconnect -> shellOps.execute {
+            // Prekinitev in obvestilo sledita izidu izhoda kot dogodka; na urejeno nit ju ne veze nic.
+            is CaptureMachine.Effect.Disconnect -> urgent.execute {
                 val ok = attempt { ports.disconnect(effect.callId) }
                 post(CaptureMachine.Event.DisconnectResult(effect.callId, ok))
             }
-            is CaptureMachine.Effect.ShowNotice -> shellOps.execute { quiet { ports.showNotice(effect.notice) } }
+            is CaptureMachine.Effect.ShowNotice -> urgent.execute { quiet { ports.showNotice(effect.notice) } }
             is CaptureMachine.Effect.PingShell -> lease.execute {
                 val facts = runCatching { ports.ping() }
                     .getOrDefault(CapturePorts.PingFacts(ok = false, reported = null, paired = false, wifi = false))
@@ -132,7 +177,12 @@ class CaptureDriver(
      */
     private fun start(effect: CaptureMachine.Effect.StartCapture) {
         val before = attempt { ports.linePermits(effect.callId) }
-        val started = before && attempt { ports.start(effect.callId) }
+        startInFlight = effect.generation
+        val started = try {
+            before && attempt { ports.start(effect.callId) }
+        } finally {
+            startInFlight = NO_START
+        }
         val permitted = before && attempt { ports.linePermits(effect.callId) }
         post(CaptureMachine.Event.StartResult(effect.callId, effect.generation, started, permitted))
     }
@@ -157,5 +207,6 @@ class CaptureDriver(
     private companion object {
         const val STOP_PAUSE_MS = 50L
         const val MIN_STOP_TIMEOUT_MS = 300
+        const val NO_START = -1L
     }
 }

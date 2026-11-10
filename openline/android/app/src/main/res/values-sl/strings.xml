@@ -141,4 +141,7 @@
     <string name="call_disconnected">Zvok klica je ugasnil. Klic je bil prekinjen.</string>
     <string name="need_ascii_device_id">Ime telefona sme vsebovati samo osnovne črke, številke in vezaje.</string>
     <string name="empty_device_id">Ime telefona ne sme biti prazno.</string>
+    <string name="missed_channel">Zgrešeni klici</string>
+    <string name="missed_title">Zgrešen klic</string>
+    <string name="missed_while_lina">%1$s je klical, medtem ko je Lina govorila z drugim klicateljem.</string>
 </resources>

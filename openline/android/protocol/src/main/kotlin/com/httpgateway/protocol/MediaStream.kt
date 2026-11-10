@@ -14,6 +14,12 @@ object MediaStream {
     /** 16-bit mono PCM, little-endian. */
     const val FRAME_BYTES = SAMPLE_RATE / 1000 * FRAME_MS * 2
 
+    /**
+     * Najvec okvirjev v vrsti predvajanja na telefonu: 60 s zvoka (N12-8). Vrsta je bila neomejena;
+     * odjemalec, ki posilja hitreje od predvajanja, bi lupini zapolnil pomnilnik.
+     */
+    const val MAX_PLAYBACK_FRAMES = 60_000 / FRAME_MS
+
     private const val DEVICE_CHANNEL_PATH = "/v1/device-channel"
     private const val DEVICE_MEDIA_PATH = "/v1/device-media"
 

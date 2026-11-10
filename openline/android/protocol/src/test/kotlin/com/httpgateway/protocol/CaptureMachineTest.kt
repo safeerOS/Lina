@@ -83,6 +83,12 @@ class CaptureMachineTest {
             out += Event.StartResult(id, g - 1, started = false, permitted = true)
             out += Event.RetryDue(id, g)
             out += Event.RetryDue(id, g - 1)
+            out += Event.StartDue(id, g)
+            out += Event.StartDue(id, g, permitted = false)
+            out += Event.StartDue(id, g - 1)
+            out += Event.UplinkResult(id, g, opened = false)
+            out += Event.UplinkResult(id, g, opened = true)
+            out += Event.UplinkResult(id, g - 1, opened = false)
         }
         return out
     }
@@ -121,6 +127,7 @@ class CaptureMachineTest {
                 is Effect.StartCapture -> e.callId
                 is Effect.ScheduleRetry -> e.callId
                 is Effect.ConfirmLease -> e.callId
+                is Effect.OpenUplink -> e.callId
                 else -> null
             }
             if (id != null && id !in grantedAfter) broken("(a) ucinek zajema brez dovoljenja")
@@ -132,11 +139,56 @@ class CaptureMachineTest {
         val revokes = event == Event.UnsafeDownlink ||
             (event is Event.CallEnded && event.callId == target) ||
             (event is Event.CallSuspended && event.callId == target)
-        if (revokes) {
+        // Ponovljen CallSuspended za ze zadrzan klic je odgovor na ponovno oceno, ne nov preklic (N12-4).
+        val repeated = event is Event.CallSuspended && s.phase == Phase.SUSPENDED
+        if (revokes && repeated && (n != s || fx.isNotEmpty())) broken("ponovljeno zadrzanje je spremenilo stanje")
+        if (revokes && !repeated) {
             if (n.generation <= s.generation) broken("(a) preklic ni povecal generacije")
             if (n.view.expected != null) broken("(a) po preklicu se pricakuje seja")
             if (fx.stops().none { it.seq != 0L && (it.callId == null || it.callId == target) }) broken("(a) preklic brez StopCapture")
+            // N12-1: urejeni stop caka za startom, zato vsak preklic izda se nujnega z NOVO generacijo.
+            val urgent = fx.filterIsInstance<Effect.UrgentStop>()
+            if (urgent.size != 1 || urgent[0].generation != n.generation || (urgent[0].callId != null && urgent[0].callId != target)) {
+                broken("(a) preklic brez nujnega stopa")
+            }
         }
+        // N12-1: povezava na streznik se odpre samo ob prehodu v CAPTURING, v isti generaciji.
+        val opens = fx.filterIsInstance<Effect.OpenUplink>()
+        val entered = s.phase != Phase.CAPTURING && n.phase == Phase.CAPTURING
+        if (entered != (opens.size == 1)) broken("(a) OpenUplink ne sledi prehodu v CAPTURING")
+        if (opens.any { it.callId != n.callId || it.generation != n.generation }) broken("(a) OpenUplink za tuj klic ali generacijo")
+        // Seja, ki se ni odprla, ne sme ostati potrjen zajem.
+        if (event is Event.UplinkResult && !event.opened && s.phase == Phase.CAPTURING &&
+            event.generation == s.generation && event.callId == s.callId
+        ) {
+            if (n.phase != Phase.SUSPENDED || fx.stops().none { it.callId == event.callId }) broken("neodprta seja ostane potrjena")
+        } else if (event is Event.UplinkResult && (n != s || fx.isNotEmpty())) {
+            broken("zastarel ali uspesen izid odprtja je spremenil stanje")
+        }
+        // N12-6: rok starta vrne klic samo, ce zajem te generacije se ni potrjen; izhod ne caka urejene niti.
+        if (event is Event.StartDue) {
+            val pending = s.phase == Phase.PREPARING || s.phase == Phase.STARTING || s.phase == Phase.RETRY_WAIT
+            val due = pending && event.generation == s.generation && event.callId == s.callId
+            if (!due && (n != s || fx.isNotEmpty())) broken("rok starta je ukrepal brez razloga")
+            if (due && !event.permitted) {
+                if (n.phase != Phase.SUSPENDED || fx.any { it is Effect.MarkManual } || fx.stops().none { it.callId == event.callId }) {
+                    broken("rok starta je vrnil klic, ki ni vec Linin")
+                }
+            }
+            if (due && event.permitted) {
+                if (n.phase != Phase.IDLE || Effect.MarkManual(event.callId) !in fx) broken("rok starta ni vrnil klica")
+                if (fx.filterIsInstance<Effect.ExitBackgroundAudio>().singleOrNull()?.urgent != true) broken("izhod po roku caka urejeno nit")
+                if (fx.none { it is Effect.UrgentStop }) broken("rok starta brez nujnega stopa")
+                if (fx.none { it is Effect.UrgentStop && it.force }) broken("izhod po roku brez prisilnega nujnega stopa")
+            }
+        } else if (fx.any { it is Effect.ExitBackgroundAudio && it.urgent }) {
+            broken("nujni izhod zunaj roka starta")
+        }
+        // N12-4: zadrzan klic se oceni znova v vsakem krogu najema.
+        if (event is Event.LeasePinged && s.phase == Phase.SUSPENDED && Effect.RecheckLine(s.callId!!) !in fx) {
+            broken("zadrzan klic brez ponovne ocene v krogu najema")
+        }
+        if (fx.any { it is Effect.Prepare } != fx.any { it is Effect.ScheduleStartDeadline }) broken("priprava brez roka starta")
         // V CAPTURING vodi samo svez, uspesen in dovoljen izid starta.
         if (s.phase != Phase.CAPTURING && n.phase == Phase.CAPTURING) {
             val ok = event is Event.StartResult && event.started && event.permitted &&
@@ -279,13 +331,19 @@ class CaptureMachineTest {
         assertTrue(Effect.RecheckLine(X) in fx.single())
         val (restarted, again) = run(Event.CallActive(X), from = after)
         assertEquals(Phase.PREPARING, restarted.phase)
-        assertEquals(listOf<Effect>(Effect.Prepare(X, restarted.generation)), again.single())
+        assertEquals(
+            listOf(
+                Effect.Prepare(X, restarted.generation),
+                Effect.ScheduleStartDeadline(X, restarted.generation, CaptureMachine.START_DEADLINE_MS),
+            ),
+            again.single(),
+        )
     }
 
     @Test
     fun `N11-2 uporabnikov klic pred zacetkom starta zavrze pripravo`() {
         val (preparing, fx) = run(Event.CallActive(X))
-        val granted = (fx.single().single() as Effect.Prepare).generation
+        val granted = (fx.single().first() as Effect.Prepare).generation
         val (cancelled, stop) = run(Event.UnsafeDownlink, from = preparing)
         assertEquals(1, stop.single().stops().size)
         // Priprava se konca sele zdaj. Start se ne sme izdati.
@@ -438,6 +496,120 @@ class CaptureMachineTest {
     fun `ponovljen CallActive med zajemom ne zacne znova`() {
         for (state in listOf(run(Event.CallActive(X)).first, starting(), capturing())) {
             val (after, fx) = run(Event.CallActive(X), from = state)
+            assertEquals(state, after)
+            assertTrue(fx.single().isEmpty())
+        }
+    }
+
+    // ---- Krog 13 ------------------------------------------------------------------------
+
+    @Test
+    fun `N12-1 preklic izda nujni stop in povezava se odpre sele ob potrjenem zajemu`() {
+        val before = starting()
+        for (event in listOf(Event.UnsafeDownlink, Event.CallSuspended(X), Event.CallEnded(X))) {
+            val (after, fx) = run(event, from = before)
+            val urgent = fx.single().filterIsInstance<Effect.UrgentStop>().single()
+            assertEquals(after.generation, urgent.generation)
+            assertTrue(urgent.generation > before.generation)
+            assertTrue(fx.single().none { it is Effect.OpenUplink })
+        }
+        // Priprava in start sama povezave ne odpreta.
+        val (preparing, begin) = run(Event.CallActive(X))
+        assertTrue(begin.single().none { it is Effect.OpenUplink })
+        val (_, started) = run(Event.Prepared(X, preparing.generation, ok = true), from = preparing)
+        assertTrue(started.single().none { it is Effect.OpenUplink })
+        val (capturing, open) = run(Event.StartResult(X, before.generation, started = true, permitted = true), from = before)
+        assertEquals(Phase.CAPTURING, capturing.phase)
+        assertEquals(listOf<Effect>(Effect.OpenUplink(X, before.generation)), open.single())
+        // Zastarel izid starta povezave ne odpre.
+        val (cancelled, _) = run(Event.UnsafeDownlink, from = before)
+        val (_, late) = run(Event.StartResult(X, before.generation, started = true, permitted = true), from = cancelled)
+        assertTrue(late.single().none { it is Effect.OpenUplink })
+    }
+
+    @Test
+    fun `zastarel izid starta ne ustavi seje novejse generacije istega klica`() {
+        // Mutacija M40 je v krogu 13 prezivela (v k12 jo je ujela globlja preiskava prepletanj).
+        val first = starting()
+        val (again, _) = run(Event.CallSuspended(X), Event.CallActive(X), from = first)
+        val (second, _) = run(Event.Prepared(X, again.generation, ok = true), from = again)
+        assertEquals(Phase.STARTING, second.phase)
+        // Prvi start se konca sele zdaj. Lupina bo isto sejo uporabila za drugi start: stop bi jo ustavil za njim.
+        for (started in listOf(true, false)) {
+            val (after, fx) = run(Event.StartResult(X, first.generation, started, permitted = true), from = second)
+            assertEquals(second, after)
+            assertTrue(fx.single().isEmpty(), "started=$started: ${fx.single()}")
+        }
+        val (capturing, _) = run(Event.StartResult(X, second.generation, started = true, permitted = true), from = second)
+        val (kept, none) = run(Event.StartResult(X, first.generation, started = true, permitted = true), from = capturing)
+        assertEquals(capturing, kept)
+        assertTrue(none.single().isEmpty())
+    }
+
+    @Test
+    fun `N12-1 seja ki se ni odprla ne ostane potrjen zajem`() {
+        val state = capturing()
+        val (after, fx) = run(Event.UplinkResult(X, state.generation, opened = false), from = state)
+        assertEquals(Phase.SUSPENDED, after.phase)
+        assertEquals(X, fx.single().stops().single().callId)
+        val (same, none) = run(Event.UplinkResult(X, state.generation, opened = true), from = state)
+        assertEquals(state, same)
+        assertTrue(none.single().isEmpty())
+    }
+
+    @Test
+    fun `N12-4 zadrzan klic se oceni znova v vsakem krogu najema in ponovljeno zadrzanje ne izda stopa`() {
+        val (suspended, _) = run(Event.UnsafeDownlink, from = capturing())
+        val settled = suspended.copy(stop = StopDebt.SETTLED)
+        var state = settled
+        repeat(3) {
+            val step = CaptureMachine.reduce(state, pinged(state, pingOk = true, reported = null))
+            assertEquals(listOf<Effect>(Effect.RecheckLine(X)), step.effects)
+            state = step.state
+            // Storitev odgovori »se vedno zadrzan«: brez stopa, brez nove generacije.
+            val again = CaptureMachine.reduce(state, Event.CallSuspended(X))
+            assertEquals(state, again.state)
+            assertTrue(again.effects.isEmpty())
+        }
+        // V drugih fazah ponovne ocene ni.
+        for (other in listOf(State(), starting(), capturing())) {
+            val step = CaptureMachine.reduce(other, pinged(other, pingOk = true, reported = other.view.expected))
+            assertTrue(step.effects.none { it is Effect.RecheckLine }, "${other.phase}")
+        }
+    }
+
+    @Test
+    fun `N12-6 rok starta vrne klic po loceni niti in zastarel rok ne naredi nic`() {
+        val (preparing, begin) = run(Event.CallActive(X))
+        assertEquals(
+            Effect.ScheduleStartDeadline(X, preparing.generation, CaptureMachine.START_DEADLINE_MS),
+            begin.single().last(),
+        )
+        assertEquals(6_000L, CaptureMachine.START_DEADLINE_MS)
+        val first = starting()
+        val waiting = run(Event.StartResult(X, first.generation, started = false, permitted = true), from = first).first
+        for (pending in listOf(preparing, first, waiting)) {
+            val (after, fx) = run(Event.StartDue(X, pending.generation), from = pending)
+            assertEquals(Phase.IDLE, after.phase, "${pending.phase}")
+            val effects = fx.single()
+            assertEquals(Effect.MarkManual(X), effects[0])
+            assertEquals(Effect.NotifyServerEnded(X), effects[1])
+            assertTrue(effects[2] is Effect.StopCapture)
+            assertEquals(Effect.UrgentStop(null, after.generation, force = true), effects[3])
+            assertEquals(Effect.ExitBackgroundAudio(X, attemptExit = true, urgent = true), effects[4])
+            // Zastarel izid starta, ki pride po roku, sejo ustavi.
+            val (_, late) = run(Event.StartResult(X, pending.generation, started = true, permitted = true), from = after)
+            assertEquals(1, late.single().stops().size)
+            assertTrue(late.single().none { it is Effect.OpenUplink })
+        }
+        // Klic, ki ob roku ni vec Linin, se ne vraca: uporabnik ga ze ima.
+        val (kept, quiet) = run(Event.StartDue(X, first.generation, permitted = false), from = first)
+        assertEquals(Phase.SUSPENDED, kept.phase)
+        assertTrue(quiet.single().none { it is Effect.MarkManual || it is Effect.ExitBackgroundAudio })
+        assertEquals(X, quiet.single().stops().single().callId)
+        // Potrjen zajem in rok prejsnje generacije: nic.
+        for ((state, generation) in listOf(capturing() to capturing().generation, first to first.generation - 1)) {
+            val (after, fx) = run(Event.StartDue(X, generation), from = state)
             assertEquals(state, after)
             assertTrue(fx.single().isEmpty())
         }

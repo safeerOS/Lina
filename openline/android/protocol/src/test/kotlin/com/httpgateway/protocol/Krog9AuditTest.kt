@@ -22,8 +22,10 @@ class Krog9AuditTest {
         // Pade po prvem, poskusi drugic
         val second = fresh()
         second.runOps(ok = false)
-        assertEquals(1, second.timerLabels.size)
-        assertEquals(CaptureMachine.RETRY_DELAY_MS, (second.timerLabels.first() as CaptureMachine.Effect.ScheduleRetry).delayMs)
+        // Krog 13: poleg casovnika drugega poskusa caka se rok starta (N12-6).
+        val retries = second.timerLabels.filterIsInstance<CaptureMachine.Effect.ScheduleRetry>()
+        assertEquals(1, retries.size)
+        assertEquals(CaptureMachine.RETRY_DELAY_MS, retries.single().delayMs)
         second.fireTimer()
         second.runOps()
         assertEquals(CaptureMachine.Phase.CAPTURING, second.state.phase)
@@ -40,7 +42,7 @@ class Krog9AuditTest {
         // Ne poskusi drugic, ce izgubi lastnistvo vmes
         val lostBetween = fresh()
         lostBetween.runOps(ok = false)
-        assertEquals(1, lostBetween.timerLabels.size)
+        assertEquals(1, lostBetween.timerLabels.count { it is CaptureMachine.Effect.ScheduleRetry })
         lostBetween.userTakesX()
         lostBetween.fireTimer()
         assertTrue(lostBetween.settle())

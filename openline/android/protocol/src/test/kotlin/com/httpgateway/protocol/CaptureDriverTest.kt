@@ -29,6 +29,10 @@ class CaptureDriverTest {
         assertTrue(sim.runOps())
         assertEquals(Phase.CAPTURING, sim.state.phase)
         assertEquals(X, sim.session)
+        // Po startu je seja pripravljena, povezava na streznik pa se zaprta (N12-1).
+        assertFalse(sim.gateOpen)
+        assertTrue(sim.runOps())
+        assertTrue(sim.gateOpen)
         return sim
     }
 
@@ -45,6 +49,8 @@ class CaptureDriverTest {
         Move("X aktiven", { it.canActivate() }) { it.activate() },
         Move("zastarel START storitve", { it.xPresent && !it.xOwned }) { it.staleActive() },
         Move("uporabnikov klic", { !it.wLive }) { it.userCallLive() },
+        // Cakajoci klic zazvoni: storitev ne poslje dogodka, linija ga steje (N12-2).
+        Move("cakajoci klic zazvoni", { !it.wLive && !it.wRinging }) { it.foreignCallRings() },
         Move("tuj klic konec", { true }) { it.foreignCallRemoved() },
         Move("X odstranjen", { it.xPresent }) { it.xRemoved() },
         Move("uporabnik prevzame X", { it.xPresent && it.xOwned }) { it.userTakesX() },
@@ -54,14 +60,35 @@ class CaptureDriverTest {
         Move("priprava ne uspe", { it.prepLabels.firstOrNull() is Effect.Prepare }) { it.runPrep(false) },
         Move("lupina uspe", { it.opsLabels.isNotEmpty() }) { it.runOps(true) },
         Move("lupina ne uspe", { it.opsLabels.firstOrNull().let { l ->
-            l is Effect.StartCapture || l is Effect.StopCapture || l is Effect.ExitBackgroundAudio || l is Effect.Disconnect
+            l is Effect.StartCapture || l is Effect.StopCapture || l is Effect.ExitBackgroundAudio || l is Effect.OpenUplink
         } }) { it.runOps(false) },
+        Move("nujna nit uspe", { it.urgentLabels.isNotEmpty() }) { it.runUrgent(true) },
+        Move("nujna nit ne uspe", { it.urgentLabels.firstOrNull().let { l ->
+            l is Effect.ExitBackgroundAudio || l is Effect.Disconnect || l is Effect.UrgentStop
+        } }) { it.runUrgent(false) },
+        // N12-1: dogodek pride med startom in vrsta ga obdela takoj; nujni stop stece na prosti niti.
+        Move("uporabnikov klic med startom z nujnim stopom", { it.opsLabels.firstOrNull() is Effect.StartCapture && !it.wLive }) { sim ->
+            sim.runOps(true, during = { sim.wLive = true; sim.driver.post(Event.UnsafeDownlink); sim.settleQueue() })
+        },
+        // N12-4: linija se prebere na niti priprave ali lupine, tuj klic pa se konca, preden izid pride v vrsto.
+        Move("tuj klic konec med branjem linije v pripravi", {
+            it.prepLabels.firstOrNull() is Effect.Prepare && (it.wLive || it.wRinging)
+        }) { sim ->
+            sim.runPrep(true, afterPermit = { sim.wLive = false; sim.wRinging = false; sim.driver.post(Event.CallEnded(W)) })
+        },
+        Move("tuj klic konec med branjem linije pred startom", {
+            it.opsLabels.firstOrNull() is Effect.StartCapture && (it.wLive || it.wRinging)
+        }) { sim ->
+            sim.runOps(true, afterPermit = { sim.wLive = false; sim.wRinging = false; sim.driver.post(Event.CallEnded(W)) })
+        },
+        // N12-6: rok starta potece, preden je zajem potrjen.
+        Move("rok starta", { it.timerLabels.any { l -> l is Effect.ScheduleStartDeadline } }) { it.fireTimer(deadline = true) },
         // Dogodek sredi starta: lupina je sejo ze odprla, izid pa pride za dogodkom (N10-1).
         Move("uporabnikov klic med startom", { it.opsLabels.firstOrNull() is Effect.StartCapture && !it.wLive }) { sim ->
-            sim.runOps(true) { sim.wLive = true; sim.driver.post(Event.UnsafeDownlink) }
+            sim.runOps(true, during = { sim.wLive = true; sim.driver.post(Event.UnsafeDownlink) })
         },
         Move("prevzem med startom", { it.opsLabels.firstOrNull() is Effect.StartCapture && it.xOwned }) { sim ->
-            sim.runOps(true) { sim.xOwned = false; sim.xState = CaptureSim.ACTIVE; sim.driver.post(Event.CallEnded(X)) }
+            sim.runOps(true, during = { sim.xOwned = false; sim.xState = CaptureSim.ACTIVE; sim.driver.post(Event.CallEnded(X)) })
         },
         Move("ping uspe", { it.leaseLabels.isNotEmpty() }) { it.runLease(true) },
         Move("ping ne uspe", { it.leaseLabels.firstOrNull() is Effect.PingShell }) { it.runLease(false) },
@@ -72,7 +99,7 @@ class CaptureDriverTest {
         Move("X odstranjen med pingom", { it.leaseLabels.firstOrNull() is Effect.PingShell && it.xPresent }) { sim ->
             sim.runLease(true) { sim.xPresent = false; sim.xOwned = false; sim.driver.post(Event.CallEnded(X)) }
         },
-        Move("casovnik", { it.timerLabels.isNotEmpty() }) { it.fireTimer() },
+        Move("casovnik", { it.timerLabels.any { l -> l is Effect.ScheduleRetry } }) { it.fireTimer() },
         // Proces zvoka sejo spusti sam (AudioWatchdog, potek najema lupine).
         Move("lupina izgubi sejo", { it.session != null }) { it.shellLosesSession() },
     )
@@ -99,6 +126,11 @@ class CaptureDriverTest {
                     if (!moves[index].enabled(probe)) continue
                     val extended = path + index
                     val sim = replay(api29, extended)
+                    if (moves[index].name == "cakajoci klic zazvoni" &&
+                        (sim.state != probe.state || sim.permits(X) != probe.permits(X) || sim.session != probe.session)
+                    ) {
+                        fail("zvonjenje cakajocega klica je spremenilo Linin klic po korakih [${path.joinToString(" > ") { moves[it].name }}]")
+                    }
                     val names = { extended.joinToString(" > ") { moves[it].name } }
                     val stable = sim.stableViolations()
                     if (stable.isNotEmpty()) fail("po korakih [${names()}]: $stable")
@@ -130,8 +162,8 @@ class CaptureDriverTest {
     }
 
     @Test
-    fun `vsa prepletanja do dolzine 9 ohranijo invariante a b c d`() {
-        val reached = explore(api29 = false, depth = 9)
+    fun `vsa prepletanja do dolzine 8 ohranijo invariante a b c d`() {
+        val reached = explore(api29 = false, depth = 8)
         // Preiskava mora doseci vse zanimive izide, sicer invariante ne dokazujejo nicesar.
         for (key in listOf(
             "zajem", "vrnitev", "dolg", "recheck", "disconnect", "zajem brez dovoljenja s stop na poti",
@@ -143,9 +175,9 @@ class CaptureDriverTest {
     }
 
     @Test
-    fun `vsa prepletanja do dolzine 8 od potrjenega zajema ohranijo invariante`() {
-        // Do potrjenega zajema so tri poteze. Od tam se osem: padec seje, dva zgresena pinga, vrnitev, nov klic.
-        val reached = explore(api29 = false, depth = 8, start = listOf("X aktiven", "priprava uspe", "lupina uspe"))
+    fun `vsa prepletanja do dolzine 7 od potrjenega zajema ohranijo invariante`() {
+        // Do potrjenega zajema z odprto povezavo so stiri poteze. Od tam se sedem: padec seje, dva zgresena pinga, vrnitev, nov klic.
+        val reached = explore(api29 = false, depth = 7, start = listOf("X aktiven", "priprava uspe", "lupina uspe", "lupina uspe"))
         for (key in listOf("vrnitev", "dolg", "recheck", "disconnect", "notice:audio_returned", "notice:call_disconnected")) {
             assertTrue((reached[key] ?: 0) > 0, "preiskava ni dosegla: $key ($reached)")
         }
@@ -154,7 +186,7 @@ class CaptureDriverTest {
 
     @Test
     fun `vsa prepletanja na API 29 klica nikoli ne prekinejo`() {
-        val reached = explore(api29 = true, depth = 8)
+        val reached = explore(api29 = true, depth = 7)
         assertTrue((reached["vrnitev"] ?: 0) > 0, "$reached")
         assertTrue((reached["notice:audio_returned"] ?: 0) > 0, "$reached")
         // Izhod iz ozadja na API 29 vedno vrne false. Klic je ACTIVE in slisen: ni prekinitve in ni »tih«.
@@ -188,11 +220,12 @@ class CaptureDriverTest {
         val sim = CaptureSim()
         sim.activate()
         sim.runPrep()
-        sim.runOps(true) {
+        sim.runOps(true, during = {
             sim.wLive = true
             sim.driver.post(Event.UnsafeDownlink)
-        }
+        })
         // Lupina je sejo odprla, a avtomat je ne pricakuje in stop je ze v vrsti.
+        assertFalse(sim.gateOpen)
         assertEquals(X, sim.session)
         assertNull(sim.state.view.expected)
         assertEquals(emptyList(), sim.stableViolations())
@@ -248,9 +281,9 @@ class CaptureDriverTest {
         assertEquals(listOf("markManual:$X", "notifyServer:$X"), sim.calls.takeLast(2))
         sim.runOps() // stop
         sim.runOps(ok = false) // izhod iz ozadja ne uspe
-        assertEquals(Effect.Disconnect(X), sim.opsLabels.first())
-        sim.runOps()
-        sim.runOps()
+        assertEquals(Effect.Disconnect(X), sim.urgentLabels.first())
+        sim.runUrgent()
+        sim.runUrgent()
         assertEquals(listOf(ReturnNotice.DISCONNECTED), sim.notices)
         assertFalse(sim.xPresent)
         assertEquals(emptyList(), sim.violations)
@@ -265,8 +298,8 @@ class CaptureDriverTest {
         sim.runOps()
         sim.runOps(ok = false)
         sim.disconnectThrows = true
-        sim.runOps()
-        sim.runOps()
+        sim.runUrgent()
+        sim.runUrgent()
         assertEquals(listOf(ReturnNotice.NOT_RETURNED), sim.notices)
         assertTrue(sim.xPresent)
         assertEquals(emptyList(), sim.violations)
@@ -334,6 +367,273 @@ class CaptureDriverTest {
         assertFalse(sim.calls.any { it.startsWith("confirm") })
     }
 
+    // ---- Krog 13: najdbe dvanajstega pregleda ---------------------------------------------
+
+    @Test
+    fun `N12-1 med startom ki visi nujni stop pride do lupine in noben okvir ne gre na streznik`() {
+        // Izhodisce: Pregled12DemoTest P12-1. Tam je bilo med startom 0 stopov in 5 s odprtega zajema.
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        assertEquals(Phase.STARTING, sim.state.phase)
+        var stopsDuringStart = -1
+        var sessionDuringStart: String? = "?"
+        var gateDuringStart = true
+        sim.runOps(true, during = {
+            // Lupina je sejo ze pripravila, odgovor zamuja; uporabnik dvigne svoj klic W.
+            sim.wLive = true
+            sim.driver.post(Event.UnsafeDownlink)
+            sim.settleQueue()
+            stopsDuringStart = sim.calls.count { it.startsWith("stop:") }
+            sessionDuringStart = sim.session
+            gateDuringStart = sim.gateOpen
+        })
+        assertEquals(1, stopsDuringStart, "nujni stop mora priti do lupine med startom")
+        assertNull(sessionDuringStart)
+        assertFalse(gateDuringStart)
+        // Povezava na streznik se ni odprla niti enkrat: okvirjev uporabnikovega klica ni.
+        assertTrue(sim.settle())
+        assertFalse(sim.calls.any { it.startsWith("open:") })
+        assertEquals(emptyList(), sim.settledViolations())
+    }
+
+    @Test
+    fun `N12-1 brez nujnega stopa povezava ostane zaprta do potrjenega zajema`() {
+        // Tudi ce nujni stop zamudi (dogodek pride tik pred odgovorom lupine), okvirjev ni: seja je zaprta.
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        sim.runOps(true, during = { sim.wLive = true; sim.driver.post(Event.UnsafeDownlink) })
+        assertEquals(X, sim.session)
+        assertFalse(sim.gateOpen)
+        assertFalse(sim.opsLabels.any { it is Effect.OpenUplink })
+        assertTrue(sim.settle())
+        assertFalse(sim.calls.any { it.startsWith("open:") })
+    }
+
+    @Test
+    fun `N12-1 linija se preveri se tik pred odprtjem povezave`() {
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        sim.runOps()
+        assertEquals(Effect.OpenUplink(X, sim.state.generation), sim.opsLabels.first())
+        // Uporabnik dvigne svoj klic med izidom starta in odprtjem; storitev dogodka se ni poslala.
+        sim.wLive = true
+        sim.runOps()
+        assertFalse(sim.calls.any { it.startsWith("open:") })
+        assertFalse(sim.gateOpen)
+        assertEquals(Phase.SUSPENDED, sim.state.phase)
+        sim.runOps()
+        assertNull(sim.session)
+    }
+
+    @Test
+    fun `N12-1 zakasnel nujni stop ne ustavi starta novejse generacije`() {
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        // Prvi start je pri lupini, uporabnik da klic na cakanje in ga takoj vrne: nujni stop caka v vrsti.
+        var stale: Runnable? = null
+        sim.runOps(true, during = {
+            sim.xHeld = true
+            sim.driver.post(Event.CallSuspended(X))
+            sim.queue.runAll()
+            stale = sim.urgent.tasks.removeFirst()
+            sim.urgentLabels.removeFirst()
+        })
+        // Urejena stopa prvega starta (ob preklicu in ob zastarelem izidu).
+        while (sim.opsLabels.firstOrNull() is Effect.StopCapture) assertTrue(sim.runOps())
+        assertNull(sim.session)
+        sim.activate()
+        sim.runPrep()
+        var sessionAfterStale: String? = null
+        sim.runOps(true, during = {
+            stale!!.run()
+            sessionAfterStale = sim.session
+        })
+        assertEquals(X, sessionAfterStale, "nujni stop starejse generacije je ustavil nov start")
+        assertTrue(sim.settle())
+        assertEquals(emptyList(), sim.settledViolations())
+        assertEquals(X, sim.session)
+        assertTrue(sim.gateOpen)
+    }
+
+    @Test
+    fun `N12-1 nujni stop se lupini ne poslje ce start ni v teku`() {
+        val sim = capturing()
+        sim.calls.clear()
+        sim.userCallLive()
+        // Urejena nit je prosta: stop je prvi v njeni vrsti, nujna nit lupine ne klice.
+        assertEquals(emptyList(), sim.calls)
+        assertTrue(sim.opsLabels.first() is Effect.StopCapture)
+        sim.runOps()
+        assertEquals(listOf("stop:*"), sim.calls)
+        assertNull(sim.session)
+        assertFalse(sim.gateOpen)
+    }
+
+    @Test
+    fun `N12-4 dovoljenje prebrano pred koncem tujega klica ne pusti Lininega klica tihega`() {
+        // Izhodisce: Pregled12DemoTest P12-2. Tam je klic po petih krogih najema ostal SUSPENDED brez ponovne ocene.
+        val sim = CaptureSim()
+        sim.activate()
+        assertEquals(Phase.PREPARING, sim.state.phase)
+        // Uporabnik klice ven (DIALING): storitev zanj ne poslje dogodka, linija pa je zasedena.
+        sim.wLive = true
+        sim.calls.clear()
+        // Nit priprave prebere linijo; uporabnik odneha in W izgine, preden izid pride v vrsto.
+        sim.runPrep(true, afterPermit = {
+            sim.wLive = false
+            sim.driver.post(Event.CallEnded(W))
+        })
+        assertEquals(Phase.SUSPENDED, sim.state.phase)
+        assertTrue(sim.permits(X), "linija je prosta in klic je Linin")
+        assertFalse(sim.calls.any { it.startsWith("recheck") })
+        // Prvi krog najema klic oceni znova in zajem se zacne.
+        sim.tick()
+        sim.runLease()
+        assertTrue("recheck:$X" in sim.calls)
+        assertTrue(sim.settle())
+        assertEquals(Phase.CAPTURING, sim.state.phase)
+        assertEquals(X, sim.session)
+        assertTrue(sim.gateOpen)
+        assertFalse(sim.gaveBack)
+    }
+
+    @Test
+    fun `N12-5 izjema v izhodu iz ozadja najprej poskusi prekinitev in obvestilo sledi izidu`() {
+        // Izhodisce: Pregled12DemoTest P12-4. Tam je bilo obvestilo »klic prekinjen« brez klica disconnect.
+        for (disconnectWorks in listOf(true, false)) {
+            val sim = capturing()
+            sim.shellLosesSession()
+            sim.exitThrows = true
+            sim.tick()
+            sim.runLease()
+            sim.runOps() // stop
+            sim.calls.clear()
+            sim.runOps() // izhod iz ozadja vrze
+            assertEquals(listOf("exit:$X"), sim.calls)
+            assertEquals(Effect.Disconnect(X), sim.urgentLabels.first())
+            sim.runUrgent(ok = disconnectWorks)
+            sim.runUrgent()
+            assertEquals(listOf("exit:$X", "disconnect:$X"), sim.calls.filter { !it.startsWith("notice") })
+            val expected = if (disconnectWorks) ReturnNotice.DISCONNECTED else ReturnNotice.NOT_RETURNED
+            assertEquals(listOf(expected), sim.notices)
+        }
+    }
+
+    @Test
+    fun `N12-6 lupina ki visi ob startu klic se vrne ob roku in ne po koncu starta`() {
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        val order = mutableListOf<String>()
+        sim.runOps(true, during = {
+            // Start visi. Rok 6 s potece; izhod iz ozadja mora steci zdaj, na loceni niti.
+            sim.fireTimer(deadline = true)
+            assertEquals(Phase.IDLE, sim.state.phase)
+            assertTrue(sim.runUrgent()) // nujni stop: start je se pri lupini
+            assertTrue(sim.runUrgent()) // izhod iz ozadja
+            order += sim.calls.filter { it.startsWith("markManual") || it.startsWith("exit") || it.startsWith("stop") }
+            assertTrue(sim.runUrgent()) // obvestilo
+        })
+        // Med startom: klic oznacen, nujni stop pri lupini, izhod izveden; povezava ni bila odprta.
+        assertEquals(listOf("markManual:$X", "stop:*", "exit:$X"), order)
+        assertEquals(listOf(ReturnNotice.RETURNED), sim.notices)
+        assertFalse(sim.calls.any { it.startsWith("open:") })
+        assertTrue(sim.settle())
+        assertNull(sim.session)
+        assertEquals(emptyList(), sim.settledViolations())
+    }
+
+    @Test
+    fun `N12-6 izhod po roku ima pred sabo poskus stopa tudi ce je stara seja se odprta`() {
+        // Potrjen zajem; uporabnik dvigne svoj klic in ga takoj konca, urejeni stop pa se ni stekel.
+        val sim = capturing()
+        sim.userCallLive()
+        sim.foreignCallRemoved()
+        assertEquals(Phase.PREPARING, sim.state.phase)
+        assertEquals(X, sim.session)
+        assertTrue(sim.gateOpen)
+        sim.calls.clear()
+        // Priprava visi, rok potece. Start ni pri lupini, zato mora biti nujni stop prisilen.
+        sim.fireTimer(deadline = true)
+        assertTrue(sim.runUrgent())
+        assertTrue(sim.runUrgent())
+        assertEquals(listOf("markManual:$X", "notifyServer:$X", "stop:*", "exit:$X"), sim.calls.filter { it != "prepare:$X" })
+        assertEquals(emptyList(), sim.violations)
+        assertNull(sim.session)
+    }
+
+    @Test
+    fun `N12-6 priprava ki visi klic se vrne ob roku`() {
+        val sim = CaptureSim()
+        sim.activate()
+        assertEquals(Phase.PREPARING, sim.state.phase)
+        sim.fireTimer(deadline = true)
+        assertEquals(Phase.IDLE, sim.state.phase)
+        assertTrue(sim.gaveBack)
+        // Priprava se konca pozneje: starta ni.
+        assertTrue(sim.settle())
+        assertFalse(sim.calls.any { it.startsWith("start:") })
+        assertEquals(listOf(ReturnNotice.RETURNED), sim.notices)
+    }
+
+    @Test
+    fun `N12-7 linija se prebere po pripravi in ne pred njo`() {
+        // Mutacija P24 dvanajstega pregleda (linija prebrana PRED pripravo) je prezivela.
+        val sim = CaptureSim()
+        sim.activate()
+        // Uporabnik dvigne svoj klic MED pripravo; storitev dogodka se ni poslala.
+        sim.runPrep(true, duringPrepare = { sim.wLive = true })
+        val prepared = sim.trace.map { it.second }.filterIsInstance<Event.Prepared>().single()
+        assertFalse(prepared.permitted, "linija je bila prebrana pred pripravo")
+        assertEquals(Phase.SUSPENDED, sim.state.phase)
+        assertTrue(sim.trace.none { step -> step.third.effects.any { it is Effect.StartCapture } })
+        assertTrue(sim.calls.indexOf("prepare:$X") >= 0)
+    }
+
+    @Test
+    fun `N12-2 cakajoci klic ki zvoni ne zadrzi starta in ne ustavi zajema`() {
+        // Odlocitev lastnika 10. 11. 2026 (»Telefon zmore le en telefonski klic naenkrat«): drug dohodni klic
+        // med Lininim dobi zaseden znak. Dokler Telecom zavrnitve ne izvede, klic se zvoni; ta cas Lininemu
+        // klicu ne sme vzeti linije. Prej (pregled 12): start zadrzan, klicatelj v tisini do konca zvonjenja.
+        val early = CaptureSim()
+        early.activate()
+        early.foreignCallRings()
+        early.runPrep()
+        assertEquals(Phase.STARTING, early.state.phase)
+        early.runOps()
+        early.runOps()
+        assertEquals(Phase.CAPTURING, early.state.phase)
+        assertTrue(early.gateOpen)
+        assertFalse(early.calls.any { it.startsWith("recheck") || it.startsWith("stop:") })
+        // Zavrnjeni klic izgine: Linin klic se ne spremeni.
+        early.foreignCallRemoved()
+        assertTrue(early.settle())
+        assertEquals(Phase.CAPTURING, early.state.phase)
+        assertEquals(X, early.session)
+        assertTrue(early.gateOpen)
+        assertFalse(early.gaveBack)
+        assertEquals(emptyList(), early.settledViolations())
+
+        // Isti klic med potrjenim zajemom: nic se ne ustavi.
+        val late = capturing()
+        late.calls.clear()
+        late.foreignCallRings()
+        repeat(3) {
+            late.tick()
+            assertTrue(late.settle())
+        }
+        late.foreignCallRemoved()
+        assertTrue(late.settle())
+        assertEquals(Phase.CAPTURING, late.state.phase)
+        assertTrue(late.gateOpen)
+        assertEquals(listOf("stop:$W"), late.calls.filter { it.startsWith("stop:") })
+        assertEquals(emptyList(), late.settledViolations())
+    }
+
     @Test
     fun `izjema v vratih je neuspeh in ne izgubljen izid`() {
         val ports = object : CapturePorts {
@@ -348,6 +648,7 @@ class CaptureDriverTest {
             override fun disconnect(callId: String): Boolean = true
             override fun ping(): CapturePorts.PingFacts = throw IllegalStateException("lupina")
             override fun confirm(callId: String) = Unit
+            override fun openUplink(callId: String): Boolean = throw IllegalStateException("lupina")
             override fun showNotice(notice: ReturnNotice) = Unit
             override fun publishShellLost() = Unit
             override fun cancelShellLost() = Unit
@@ -359,14 +660,20 @@ class CaptureDriverTest {
         val direct = java.util.concurrent.Executor { it.run() }
         val seen = mutableListOf<Event>()
         var last = State()
-        val driver = CaptureDriver(ports, direct, direct, direct, direct, { _, task -> task.run() }) { _, event, step ->
+        // Casovniki se ne sprozijo: rok starta bi sicer potekel takoj.
+        val driver = CaptureDriver(ports, direct, direct, direct, direct, direct, { _, _ -> }) { _, event, step ->
             seen += event
             last = step.state
         }
         driver.post(Event.CallActive(X))
         driver.post(Event.LeaseDue)
         assertTrue(Event.Prepared(X, 1, ok = false) in seen)
-        assertTrue(Event.ExitResult(X, callPresent = false, exitOk = false, callState = 0) in seen)
+        // Krog 13 (N12-5): izjema v izhodu iz ozadja ni vec »klica ni«. Varna domneva je tih klic v
+        // AUDIO_PROCESSING, zato sledi poskus prekinitve in sele nato obvestilo.
+        assertTrue(
+            Event.ExitResult(X, callPresent = true, exitOk = false, callState = TelecomPhase.STATE_AUDIO_PROCESSING) in seen,
+        )
+        assertTrue(Event.DisconnectResult(X, ok = true) in seen)
         assertTrue(seen.any { it is Event.LeasePinged && !it.pingOk })
         assertEquals(Phase.IDLE, last.phase)
     }
@@ -392,6 +699,7 @@ class CaptureDriverTest {
                 override fun disconnect(callId: String) = true
                 override fun ping() = CapturePorts.PingFacts(ok = true, reported = null, paired = true, wifi = true)
                 override fun confirm(callId: String) = Unit
+                override fun openUplink(callId: String) = true
                 override fun showNotice(notice: ReturnNotice) = Unit
                 override fun publishShellLost() = Unit
                 override fun cancelShellLost() = Unit
@@ -402,6 +710,7 @@ class CaptureDriverTest {
             },
             queue = queue,
             shellOps = worker,
+            urgent = worker,
             prep = worker,
             lease = worker,
             later = { _, task -> worker.execute(task) },

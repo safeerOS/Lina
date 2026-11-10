@@ -20,6 +20,13 @@ object CaptureMachine {
     /** En sam poskus: krog najema ne sme viseti na lupini, ki ne odgovarja. */
     const val SINGLE_STOP_MS = 0
 
+    /**
+     * Rok od CallActive do potrjenega zajema (N12-6). Brez njega lupina, ki visi ob startu,
+     * pomeni 5 + 0,2 + 5 s tisine, priprava z zagonom lupine pa nima meje. Obicajen start
+     * traja pod sekundo; po 6 s klic vrnemo uporabniku. Vrednost potrdi meritev na telefonu.
+     */
+    const val START_DEADLINE_MS = 6_000L
+
     enum class Phase {
         /** Nobenega Lininega klica. */
         IDLE,
@@ -108,6 +115,12 @@ object CaptureMachine {
         ) : Event
 
         data class RetryDue(val callId: String, val generation: Long) : Event
+
+        /** opened false: linija tik pred odprtjem ni bila prosta ali lupina ukaza ni potrdila. */
+        data class UplinkResult(val callId: String, val generation: Long, val opened: Boolean) : Event
+
+        /** Rok starta je potekel. Velja samo, ce zajem te generacije se ni potrjen. */
+        data class StartDue(val callId: String, val generation: Long, val permitted: Boolean = true) : Event
         data class StopResult(val seq: Long, val ok: Boolean) : Event
         data class ExitResult(
             val callId: String,
@@ -133,12 +146,27 @@ object CaptureMachine {
         data class Prepare(val callId: String, val generation: Long) : Effect
         data class StartCapture(val callId: String, val generation: Long, val attempt: Int) : Effect
         data class ScheduleRetry(val callId: String, val generation: Long, val delayMs: Long) : Effect
+        data class ScheduleStartDeadline(val callId: String, val generation: Long, val delayMs: Long) : Effect
+
+        /**
+         * Takojsen stop na loceni niti (N12-1). Urejeni stop caka za startom, ki je ze pri lupini;
+         * ta ga prehiti. Izvajalec ga poslje samo, ce je pri lupini start, izdan PRED to generacijo.
+         */
+        data class UrgentStop(val callId: String?, val generation: Long, val force: Boolean = false) : Effect
+
+        /** Lupina do tega ukaza ne odpre povezave na streznik: brez njega ni nobenega okvirja (N12-1). */
+        data class OpenUplink(val callId: String, val generation: Long) : Effect
 
         /** callId null ustavi vsako sejo. seq 0: izid se ne vrne (ciljan stop tujega klica). */
         data class StopCapture(val callId: String?, val budgetMs: Int, val seq: Long) : Effect
         data class MarkManual(val callId: String) : Effect
         data class NotifyServerEnded(val callId: String) : Effect
-        data class ExitBackgroundAudio(val callId: String, val attemptExit: Boolean) : Effect
+        /** urgent: na loceni niti, ker urejena nit se caka na start, ki visi (N12-6). */
+        data class ExitBackgroundAudio(
+            val callId: String,
+            val attemptExit: Boolean,
+            val urgent: Boolean = false,
+        ) : Effect
         data class Disconnect(val callId: String) : Effect
         data class ShowNotice(val notice: ReturnNotice) : Effect
         data class PingShell(val view: CaptureOrder.Armed, val generation: Long, val stopSeq: Long) : Effect
@@ -163,6 +191,8 @@ object CaptureMachine {
         is Event.Prepared -> onPrepared(state, event)
         is Event.StartResult -> onStartResult(state, event)
         is Event.RetryDue -> onRetryDue(state, event)
+        is Event.StartDue -> onStartDue(state, event)
+        is Event.UplinkResult -> onUplinkResult(state, event)
         is Event.StopResult -> onStopResult(state, event)
         is Event.ExitResult -> onExitResult(state, event)
         is Event.DisconnectResult -> onDisconnectResult(state, event)
@@ -182,9 +212,13 @@ object CaptureMachine {
             attempt = 0,
             misses = 0,
         )
-        if (previous == null) return Step(next, listOf(Effect.Prepare(callId, next.generation)))
+        val begin = listOf(
+            Effect.Prepare(callId, next.generation),
+            Effect.ScheduleStartDeadline(callId, next.generation, START_DEADLINE_MS),
+        )
+        if (previous == null) return Step(next, begin)
         val stopped = stop(next, previous, STOP_BUDGET_MS)
-        return Step(stopped.state, stopped.effects + Effect.Prepare(callId, next.generation))
+        return Step(stopped.state, stopped.effects + begin)
     }
 
     private fun onCallSuspended(s: State, callId: String): Step {
@@ -192,14 +226,13 @@ object CaptureMachine {
             // Drug Linin klic. Cilja ne spreminjamo, sicer bi utihnil (N11-1).
             return Step(s, listOf(Effect.StopCapture(callId, SINGLE_STOP_MS, 0)))
         }
-        val next = cancelled(s, Phase.SUSPENDED, callId)
-        return stop(next, callId, STOP_BUDGET_MS)
+        // Ponovna ocena v vsakem krogu najema vrne isti odgovor; ta ne sme vsakic izdati stopa.
+        if (s.phase == Phase.SUSPENDED && s.callId == callId) return Step(s)
+        return revoke(cancelled(s, Phase.SUSPENDED, callId), callId)
     }
 
     private fun onCallEnded(s: State, callId: String): Step {
-        if (s.callId == callId) {
-            return stop(cancelled(s, Phase.IDLE, null), callId, STOP_BUDGET_MS)
-        }
+        if (s.callId == callId) return revoke(cancelled(s, Phase.IDLE, null), callId)
         // Tuj klic W: stanje in generacija Lininega klica X ostaneta (N11-1).
         // Ciljan stop ne more ustaviti seje X; lupina ga za drug id prezre.
         val effects = mutableListOf<Effect>(Effect.StopCapture(callId, SINGLE_STOP_MS, 0))
@@ -210,7 +243,13 @@ object CaptureMachine {
 
     private fun onUnsafeDownlink(s: State): Step {
         val phase = if (s.callId == null) Phase.IDLE else Phase.SUSPENDED
-        return stop(cancelled(s, phase, s.callId), null, STOP_BUDGET_MS)
+        return revoke(cancelled(s, phase, s.callId), null)
+    }
+
+    /** Preklic z dogodkom storitve: urejen spremljan stop in nujni stop mimo starta, ki se tece. */
+    private fun revoke(next: State, callId: String?): Step {
+        val stopped = stop(next, callId, STOP_BUDGET_MS)
+        return Step(stopped.state, stopped.effects + Effect.UrgentStop(callId, next.generation))
     }
 
     private fun onPrepared(s: State, e: Event.Prepared): Step {
@@ -235,7 +274,8 @@ object CaptureMachine {
             // Klic ni vec Linin ali je na liniji uporabnikov klic. Ne vracamo ga: uporabnik ga ze ima.
             return stop(cancelled(s, Phase.SUSPENDED, e.callId), e.callId, STOP_BUDGET_MS)
         }
-        if (e.started) return Step(s.copy(phase = Phase.CAPTURING, misses = 0))
+        // Sele zdaj sme lupina odpreti povezavo: start je svez, uspesen in linija prosta.
+        if (e.started) return Step(s.copy(phase = Phase.CAPTURING, misses = 0), listOf(Effect.OpenUplink(e.callId, e.generation)))
         if (s.attempt < MAX_START_ATTEMPTS) {
             return Step(
                 s.copy(phase = Phase.RETRY_WAIT),
@@ -250,6 +290,20 @@ object CaptureMachine {
         if (s.phase != Phase.RETRY_WAIT || s.generation != e.generation || s.callId != e.callId) return Step(s)
         val next = s.copy(phase = Phase.STARTING, attempt = s.attempt + 1)
         return Step(next, listOf(Effect.StartCapture(e.callId, e.generation, next.attempt)))
+    }
+
+    private fun onUplinkResult(s: State, e: Event.UplinkResult): Step {
+        if (e.opened || s.phase != Phase.CAPTURING || s.generation != e.generation || s.callId != e.callId) return Step(s)
+        // Seja brez povezave bi bila potrjen zajem, ki ga Lina ne slisi. Zadrzimo; krog najema oceni znova.
+        return stop(cancelled(s, Phase.SUSPENDED, e.callId), e.callId, STOP_BUDGET_MS)
+    }
+
+    private fun onStartDue(s: State, e: Event.StartDue): Step {
+        val pending = s.phase == Phase.PREPARING || s.phase == Phase.STARTING || s.phase == Phase.RETRY_WAIT
+        if (!pending || s.generation != e.generation || s.callId != e.callId) return Step(s)
+        // Klic ni vec Linin ali linija ni prosta: uporabnik ga ze ima, zato ga ne vracamo (kot pri pripravi).
+        if (!e.permitted) return stop(cancelled(s, Phase.SUSPENDED, e.callId), e.callId, STOP_BUDGET_MS)
+        return giveBack(s, e.callId, urgent = true)
     }
 
     private fun onStopResult(s: State, e: Event.StopResult): Step {
@@ -295,6 +349,9 @@ object CaptureMachine {
         val wifi = ShellLoss.nextWifi(e.paired, e.pingOk, e.wifi, s.shell.seenWifi, s.shell.wifiWasUp)
         if (wifi.shouldRetry) effects += Effect.RelaunchShell
         var next = s.copy(shell = ShellHealth(posted.state, wifi.seen, wifi.wifiWasUp))
+        // Zadrzan klic nima drugega izhoda kot ponovno oceno. Dovoljenje se bere na drugi niti in
+        // lahko zastara, preden izid pride v vrsto; brez tega bi klic ostal tih (N12-4).
+        if (s.phase == Phase.SUSPENDED && s.callId != null) effects += Effect.RecheckLine(s.callId)
         val reported = e.reported?.takeIf { e.pingOk && it.isNotEmpty() }
 
         // Ping iz prejsnje generacije opisuje sejo, ki je ni vec. Odlocitev iz njega bi vrnila zdrav klic.
@@ -346,8 +403,12 @@ object CaptureMachine {
         return Step(s.copy(stop = debt, stopSeq = seq), listOf(Effect.StopCapture(callId, budgetMs, seq)))
     }
 
-    /** Klic vrne uporabniku. Vrstni red doloca AudioDrop.giveBackOrder: stop pred izhodom iz ozadja. */
-    private fun giveBack(s: State, callId: String): Step {
+    /**
+     * Klic vrne uporabniku. Vrstni red doloca AudioDrop.giveBackOrder: stop pred izhodom iz ozadja.
+     * urgent (rok starta): urejena nit morda se caka na start, zato gresta nujni stop in izhod na
+     * loceno nit. Povezava na streznik v tej generaciji se ni bila odprta, zato izhod ne caka stopa.
+     */
+    private fun giveBack(s: State, callId: String, urgent: Boolean = false): Step {
         val plan = AudioDrop.plan(dropped = true)
         var next = cancelled(s, Phase.IDLE, null)
         val effects = mutableListOf<Effect>()
@@ -359,9 +420,11 @@ object CaptureMachine {
                     val stopped = stop(next, null, QUICK_STOP_BUDGET_MS)
                     next = stopped.state
                     effects += stopped.effects
+                    // force: pred izhodom mora biti poskus stopa, tudi ce start ni vec pri lupini.
+                    if (urgent) effects += Effect.UrgentStop(null, next.generation, force = true)
                 }
                 AudioDrop.Step.EXIT_BACKGROUND_AUDIO -> if (plan.returnToHandset) {
-                    effects += Effect.ExitBackgroundAudio(callId, attemptExit = !AudioDrop.simulatedRinging())
+                    effects += Effect.ExitBackgroundAudio(callId, attemptExit = !AudioDrop.simulatedRinging(), urgent = urgent)
                 }
             }
         }

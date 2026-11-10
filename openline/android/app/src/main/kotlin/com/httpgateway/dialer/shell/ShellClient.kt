@@ -96,6 +96,10 @@ class ShellClient(context: Context) {
     fun confirm(callId: String): JSONObject? =
         request(JSONObject().put("op", "confirm").put("callId", callId))
 
+    /** Seja se sme povezati na streznik. Brez tega ukaza lupina ne poslje nobenega okvirja. */
+    fun open(callId: String): JSONObject? =
+        request(JSONObject().put("op", "open").put("callId", callId))
+
     fun stop(callId: String?, timeoutMs: Int = ShellAuth.HANDSHAKE_TIMEOUT_MS): JSONObject? {
         val body = JSONObject().put("op", "stop")
         if (!callId.isNullOrEmpty()) body.put("callId", callId)
