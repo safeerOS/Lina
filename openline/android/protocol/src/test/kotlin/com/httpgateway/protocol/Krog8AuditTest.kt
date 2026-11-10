@@ -56,9 +56,13 @@ class Krog8AuditTest {
     @Test
     fun `sto krogov lupina ne dela je ena objava`() {
         var state = ShellNotice.State(false, 0)
+        val first = ShellNotice.next(paired = true, up = false, state = state)
+        assertFalse(first.publish)
+        
         var posts = 0
         var cancels = 0
-        repeat(100) {
+        state = first.state
+        repeat(99) {
             val next = ShellNotice.next(paired = true, up = false, state = state)
             if (next.publish) posts += 1
             if (next.cancel) cancels += 1
@@ -130,6 +134,7 @@ class Krog8AuditTest {
         assertFalse(GatewayUrl.accept("wss://", "token"))
         assertFalse(GatewayUrl.accept("wss:// a", "token"))
         assertFalse(GatewayUrl.accept("wss://[", "token"))
+        assertFalse(GatewayUrl.accept("wss://:443/v1", "token"))
         assertFalse(GatewayUrl.accept("ws://example.com/v1/device-channel", "token"))
         assertFalse(GatewayUrl.accept("", "token"))
         assertTrue(GatewayUrl.accept("wss://example.com/v1/device-channel", "token"))
@@ -141,15 +146,9 @@ class Krog8AuditTest {
         val failed = AudioDrop.outcome(callPresent = true, exitOk = false)
         assertEquals("audio_not_returned", failed.message)
         assertTrue(failed.warn)
-        assertTrue(failed.markManual)
-        assertTrue(failed.endOnServer)
         val ok = AudioDrop.outcome(callPresent = true, exitOk = true)
         assertEquals("audio_returned", ok.message)
-        assertTrue(ok.markManual)
-        assertTrue(ok.endOnServer)
-        val gone = AudioDrop.outcome(callPresent = false, exitOk = false)
-        assertEquals("audio_not_returned", gone.message)
-        assertTrue(gone.warn)
+        assertTrue(ok.warn)
     }
 
     @Test

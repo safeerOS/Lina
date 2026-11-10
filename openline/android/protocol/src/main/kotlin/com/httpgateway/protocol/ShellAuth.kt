@@ -254,13 +254,11 @@ object AudioPing {
         val dropped = dropped(expectedCallId, reportedCallId)
         val confirm = if (!dropped && shouldConfirm(expectedCallId)) expectedCallId else null
         val notify = dropped && !expectedCallId.isNullOrEmpty()
-        val stopTarget = if (dropped && expectedCallId != reportedCallId) null else expectedCallId
         return Tick(
             confirmCallId = confirm,
             stop = dropped,
             clearExpected = notify,
             notifyDropped = notify,
-            stopTarget = stopTarget,
         )
     }
 
@@ -269,6 +267,5 @@ object AudioPing {
         val stop: Boolean,
         val clearExpected: Boolean,
         val notifyDropped: Boolean,
-        val stopTarget: String?,
     )
 }

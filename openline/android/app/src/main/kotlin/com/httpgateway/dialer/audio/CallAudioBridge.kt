@@ -45,6 +45,7 @@ object CallAudioBridge {
     enum class Status { SETUP_REQUIRED, STOPPED, READY }
 
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "callaudio-bridge") }
+    private val stopExecutor = Executors.newSingleThreadExecutor { Thread(it, "callaudio-stop") }
     private val lease: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { Thread(it, "callaudio-lease") }
     private val arm = ArmSlot()
     private val armLock = Any()
@@ -120,20 +121,21 @@ object CallAudioBridge {
                 return@execute
             }
             val ownedBefore = LinaCallGate.isOwned(callId)
-            if (!CapturePermit.begin(ownedBefore)) {
+            if (!ownedBefore) {
                 ShellClient(context).stop(callId)
                 return@execute
             }
             synchronized(armLock) { arm.set(CaptureOrder.beforeStart(callId)) }
             var reply: org.json.JSONObject? = null
-            for (i in 1..CapturePermit.startAttempts()) {
-                reply = ShellClient(context).start(callId)
-                if (reply?.optBoolean("ok") == true) break
+            val success = CapturePermit.startLoop(
+                callId = callId,
+                isOwned = { LinaCallGate.isOwned(it) },
+                onRetry = { confirmLease() }
+            ) {
+                reply = ShellClient(context).start(it)
+                reply?.optBoolean("ok") == true
             }
-            val after = CaptureOrder.afterStart(
-                callId,
-                CapturePermit.keep(ownedBefore, reply?.optBoolean("ok") == true, LinaCallGate.isOwned(callId)),
-            )
+            val after = CaptureOrder.afterStart(callId, success)
             synchronized(armLock) { arm.set(after) }
             if (after.expected == null) {
                 Log.w(TAG, "start $callId failed -> $reply")
@@ -150,7 +152,7 @@ object CallAudioBridge {
             misses = 0
         }
         val context = appContext ?: return
-        Thread { stopUntil(ShellClient(context), callId) }.start()
+        stopExecutor.execute { stopUntil(ShellClient(context), callId) }
     }
 
     /** Na liniji je klic, ki ga Lina nima. Zajem ustavimo, ne glede na id seje. */
@@ -160,7 +162,7 @@ object CallAudioBridge {
             misses = 0
         }
         val context = appContext ?: return
-        Thread { stopUntil(ShellClient(context), null) }.start()
+        stopExecutor.execute { stopUntil(ShellClient(context), null) }
     }
 
     private fun confirmLease() {
@@ -198,29 +200,31 @@ object CallAudioBridge {
         round.plan.confirmCallId?.let { client.confirm(it) }
         when {
             (round.giveBackSilence || round.plan.notifyDropped) && !expected.isNullOrEmpty() ->
-                giveBack(expected, warn = true, stopTarget = round.plan.stopTarget)
+                giveBack(expected, warn = true)
             else -> {
                 if (round.plan.clearExpected) {
                     synchronized(armLock) {
                         if (!arm.get().startInFlight) arm.set(CaptureOrder.Armed(null, false))
                     }
                 }
-                if (round.plan.stop) stopUntil(client, round.plan.stopTarget)
+                if (round.plan.stop) stopUntil(client, null)
             }
         }
     }
 
     /** stop, dokler lupina ne potrdi. Naslednji krog poskusi znova. */
-    private fun stopUntil(client: ShellClient, callId: String?) {
+    private fun stopUntil(client: ShellClient, callId: String?, maxDurationMs: Int = 1000) {
         val start = android.os.SystemClock.elapsedRealtime()
-        while (android.os.SystemClock.elapsedRealtime() - start < 1000) {
-            val reply = client.stop(callId, timeoutMs = 1000)
+        while (android.os.SystemClock.elapsedRealtime() - start < maxDurationMs) {
+            val expectedNow = synchronized(armLock) { arm.get().expected }
+            if (expectedNow != null && expectedNow != callId) return
+            val reply = client.stop(callId, timeoutMs = maxDurationMs)
             if (AudioPing.stopSettled(reply?.optBoolean("ok") == true)) return
             Thread.sleep(50)
         }
     }
 
-    private fun giveBack(callId: String, warn: Boolean, stopTarget: String? = callId) {
+    private fun giveBack(callId: String, warn: Boolean) {
         if (!handedBack.add(callId)) return
         val proceed = synchronized(armLock) {
             val view = arm.get()
@@ -251,12 +255,15 @@ object CallAudioBridge {
                     } else {
                         false
                     }
+                    if (call != null && drop.returnToHandset && !exitOk) {
+                        call.disconnect()
+                    }
                     val outcome = AudioDrop.outcome(callPresent = call != null, exitOk = exitOk)
                     if (warn && outcome.warn && context != null) notifyReturned(context, outcome.message)
                 }
                 AudioDrop.Step.STOP_CAPTURE -> {
                     if (context != null && drop.stopCapture) {
-                        Thread { stopUntil(ShellClient(context), stopTarget) }.start()
+                        stopUntil(ShellClient(context), null, maxDurationMs = 300)
                     }
                 }
             }

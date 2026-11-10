@@ -56,7 +56,7 @@ interface MediaSession {
 }
 
 export class MediaRelay {
-  private readonly server = new WebSocketServer({ noServer: true });
+  private readonly server = new WebSocketServer({ noServer: true, maxPayload: 65536 });
   private readonly sessions = new Map<string, MediaSession>();
 
   constructor(
@@ -96,6 +96,7 @@ export class MediaRelay {
     }
 
     this.server.handleUpgrade(request, socket, head, (ws) => {
+      ws.on("error", () => {}); // Prepreči sesutje ob prevelikem sporočilu
       const session = this.session(callId);
       session.device?.close(4000, "replaced by newer connection");
       session.device = ws;
@@ -135,6 +136,7 @@ export class MediaRelay {
     }
 
     this.server.handleUpgrade(request, socket, head, (ws) => {
+      ws.on("error", () => {}); // Prepreči sesutje ob prevelikem sporočilu
       const session = this.session(callId);
       if (url.searchParams.get("mode") === "listen") {
         this.addMonitor(session, callId, ws);

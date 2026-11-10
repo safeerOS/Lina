@@ -63,6 +63,10 @@ export class DeviceWebSocketHub implements DeviceCommandChannel {
       this.sockets.set(deviceId, socket);
       this.state.setDeviceConnected(deviceId, true);
 
+      socket.on("error", () => {
+        // Ignoriraj neujete napake na vtičnici (npr. preveliko sporočilo)
+      });
+
       // A phone that misses two pings in a row is gone (network switch, frozen app): drop it so it
       // shows offline at once instead of whenever TCP notices.
       let pingSentAt = 0;

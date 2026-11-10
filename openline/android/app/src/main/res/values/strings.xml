@@ -72,6 +72,7 @@
     <string name="connected">Connected to your gateway</string>
     <string name="couldnt_connect">Couldn\'t connect</string>
     <string name="need_wss">Enter a full wss:// address with a host. Empty addresses, spaces, and broken brackets are not saved.</string>
+    <string name="need_ascii_device_id">Device ID must contain only ASCII characters.</string>
     <string name="need_pin">SHA-256 fingerprint is missing</string>
     <string name="saved_reconnecting">Saved. Reconnecting.</string>
     <string name="server_address">Server address</string>

@@ -156,6 +156,37 @@ describe("gateway REST API", () => {
 });
 
 describe("Android device WebSocket channel", () => {
+
+  it("survives 70kB message on device channel", async () => {
+    liveGateway = createGatewayServer({ apiKey: API_KEY });
+    await listen(liveGateway);
+    const baseUrl = serverBaseUrl(liveGateway);
+
+    const registration = await fetch(`${baseUrl}/v1/devices`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": API_KEY },
+      body: JSON.stringify({ deviceId: "large-phone", name: "Mock Android" }),
+    });
+    const { deviceToken } = await registration.json();
+
+    const ws = new WebSocket(`${baseUrl.replace("http://", "ws://")}/v1/device-channel`, {
+      headers: { "x-device-id": "large-phone", "x-device-token": deviceToken },
+    });
+    liveSocket = ws;
+    await onceOpen(ws);
+
+    const largeMessage = "A".repeat(70 * 1024);
+    
+    // We expect the server to close the connection due to maxPayload
+    const closePromise = new Promise((resolve) => ws.on("close", resolve));
+    ws.send(largeMessage);
+    await closePromise;
+    
+    // Server should still be alive
+    const res = await fetch(`${baseUrl}/health`);
+    expect(res.status).toBe(200);
+  });
+
   it("delivers call commands, ingests state events, and supports DTMF actions end-to-end", async () => {
     const dispatcher = new RecordingWebhookDispatcher();
     liveGateway = createGatewayServer({ apiKey: API_KEY, webhookDispatcher: dispatcher });

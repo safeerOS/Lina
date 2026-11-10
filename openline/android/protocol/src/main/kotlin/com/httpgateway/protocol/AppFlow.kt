@@ -17,13 +17,12 @@ object CaptureOrder {
     fun lease(expected: String?, reported: String?, startInFlight: Boolean): AudioPing.Tick {
         // Med startom se polja ne smejo raziti: tudi ce je expected se null, ne ustavljamo.
         if (startInFlight) {
-            return AudioPing.Tick(
-                confirmCallId = null,
-                stop = false,
-                clearExpected = false,
-                notifyDropped = false,
-                stopTarget = null,
-            )
+    return AudioPing.Tick(
+        confirmCallId = null,
+        stop = false,
+        clearExpected = false,
+        notifyDropped = false,
+    )
         }
         return AudioPing.tick(expected, reported)
     }
@@ -80,18 +79,29 @@ object LeaseRound {
         stop = false,
         clearExpected = false,
         notifyDropped = false,
-        stopTarget = null,
     )
 }
 
 /** Start sme zaceti in ostati samo, ce je klic Linin pred klicem in po njem. */
 object CapturePermit {
-    fun startAttempts(): Int = 2
+    fun keep(ownedBefore: Boolean, startOk: Boolean, ownedAfter: Boolean): Boolean =
+        ownedBefore && startOk && ownedAfter
 
     fun begin(owned: Boolean): Boolean = owned
 
-    fun keep(ownedBefore: Boolean, startOk: Boolean, ownedAfter: Boolean): Boolean =
-        ownedBefore && startOk && ownedAfter
+    fun startLoop(
+        callId: String,
+        isOwned: (String) -> Boolean,
+        onRetry: () -> Unit = {},
+        start: (String) -> Boolean
+    ): Boolean {
+        for (i in 1..2) {
+            if (!isOwned(callId)) return false
+            if (i > 1) onRetry()
+            if (start(callId)) return isOwned(callId)
+        }
+        return false
+    }
 }
 
 /**
@@ -113,22 +123,18 @@ object AudioDrop {
     fun giveBackOrder(): List<Step> = listOf(
         Step.MARK_MANUAL,
         Step.NOTIFY_SERVER,
-        Step.EXIT_BACKGROUND_AUDIO,
-        Step.STOP_CAPTURE
+        Step.STOP_CAPTURE,
+        Step.EXIT_BACKGROUND_AUDIO
     )
 
     fun simulatedRinging(): Boolean = false
 
-    data class Outcome(val warn: Boolean, val markManual: Boolean, val endOnServer: Boolean, val message: String)
+    data class Outcome(val warn: Boolean, val message: String)
 
-    /**
-     * Vedno opozorimo. Ce izhod iz ozadja ne uspe, ne trdimo da je klic na slusalki
-     * in ga ne oznacimo kot rocnega: Lina ga se lahko prekine. Sicer ostane tih.
-     */
     fun outcome(callPresent: Boolean, exitOk: Boolean): Outcome = when {
-        callPresent && exitOk -> Outcome(warn = true, markManual = true, endOnServer = true, message = "audio_returned")
-        callPresent && !exitOk -> Outcome(warn = true, markManual = true, endOnServer = true, message = "audio_not_returned")
-        else -> Outcome(warn = true, markManual = true, endOnServer = true, message = "audio_not_returned")
+        callPresent && exitOk -> Outcome(warn = true, message = "audio_returned")
+        callPresent && !exitOk -> Outcome(warn = true, message = "audio_not_returned")
+        else -> Outcome(warn = true, message = "audio_not_returned")
     }
 }
 
@@ -159,7 +165,6 @@ object GatewayUrl {
         val port = uri.port
         if (port != -1 && port !in 1..65535) return false
         val authority = uri.authority ?: return false
-        if (authority.startsWith(":")) return false
         return true
     }
 }

@@ -211,6 +211,11 @@ object ShellClientProtocol {
             else -> null
         }
 
+    fun classify(e: Exception): RoundTrip = when (e) {
+        is java.net.ConnectException -> RoundTrip.Absent
+        else -> RoundTrip.Busy
+    }
+
     fun roundTrip(port: Int, token: String, command: String, timeoutMs: Int = ShellAuth.HANDSHAKE_TIMEOUT_MS): RoundTrip {
         if (command.length > ShellAuth.MAX_LINE_BYTES) return RoundTrip.Rejected
         if (ShellAuth.requestCarriesSecrets(command) || command.contains(token)) return RoundTrip.Rejected
@@ -221,12 +226,9 @@ object ShellClientProtocol {
             try {
                 val connectWait = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(1)
                 socket.connect(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), connectWait)
-            } catch (e: java.net.ConnectException) {
+            } catch (e: Exception) {
                 runCatching { socket.close() }
-                return RoundTrip.Absent
-            } catch (_: Exception) {
-                runCatching { socket.close() }
-                return RoundTrip.Busy
+                return classify(e)
             }
             try {
                 socket.use { sock ->

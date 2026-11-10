@@ -1,19 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { AgentManager } from "../src/agent/agent-manager.js";
+import { StreamManager } from "../src/stream/stream-manager.js";
 
 describe("redact logs", () => {
   it("does not log full number on takeover denied", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     
-    const am = new AgentManager({ 
-      state: {} as any, 
+    const sm = new StreamManager({ 
       allowlistMode: "allowlist", 
       allowlist: [], 
-      settings: { get: () => ({}) } as any, 
       deviceChannel: {} as any 
     });
     
-    (am as any).command({ id: "c1", remoteNumber: "+38640111222" }, "answer");
+    (sm as any).command({ id: "c1", remoteNumber: "+38640111222" }, "answer");
 
     expect(errorSpy).toHaveBeenCalled();
     const calls = errorSpy.mock.calls.map(c => c.join(" ")).join(" ");

@@ -569,8 +569,13 @@ class DialerActivity : Activity() {
         val wsUrl = wsUrlInput.text.toString().trim()
         val deviceToken = deviceTokenInput.text.toString().trim()
         val fingerprint = certInput.text.toString().trim()
+        val deviceId = deviceIdInput.text.toString().trim()
         if (!GatewayUrl.accept(wsUrl, deviceToken)) {
             toast(getString(R.string.need_wss))
+            return
+        }
+        if (!deviceId.matches(Regex("^[\\x20-\\x7E]+$"))) {
+            toast(getString(R.string.need_ascii_device_id))
             return
         }
         if (TlsPin.normalize(fingerprint).length != 64) {
