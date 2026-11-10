@@ -24,11 +24,14 @@ export class DeviceOfflineError extends Error {
   }
 }
 
+/** Dogodki in ukazi so kratek JSON. 64 KiB je dovolj za najdaljse porocilo o zdravju naprave. */
+export const DEVICE_CHANNEL_MAX_PAYLOAD = 64 * 1024;
+
 /** Server pings each phone this often: measures latency, keeps tunnels from idling the socket out. */
 const PING_INTERVAL_MS = 20_000;
 
 export class DeviceWebSocketHub implements DeviceCommandChannel {
-  private readonly server = new WebSocketServer({ noServer: true, maxPayload: 65536 });
+  private readonly server = new WebSocketServer({ noServer: true, maxPayload: DEVICE_CHANNEL_MAX_PAYLOAD });
   private readonly sockets = new Map<string, WebSocket>();
 
   constructor(
@@ -63,8 +66,9 @@ export class DeviceWebSocketHub implements DeviceCommandChannel {
       this.sockets.set(deviceId, socket);
       this.state.setDeviceConnected(deviceId, true);
 
+      // Samo noga in koda. Vsebina sporocila in id naprave ne gresta v dnevnik.
       socket.on("error", (e: Error & { code?: string }) => {
-        console.error("ws_error", e.code);
+        console.error("ws_error", "device-channel", e.code ?? "unknown");
       });
 
       // A phone that misses two pings in a row is gone (network switch, frozen app): drop it so it

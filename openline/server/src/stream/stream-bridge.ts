@@ -1,6 +1,6 @@
 import tls from "node:tls";
 import { WebSocket, type ClientOptions, type RawData } from "ws";
-import { MEDIA_FORMAT, assertLoopbackMediaUrl } from "../media-relay.js";
+import { MEDIA_FORMAT, MEDIA_FRAME_BYTES, assertLoopbackMediaUrl } from "../media-relay.js";
 import type { CallRecord, StreamConfig } from "../types.js";
 import { stripSecretQuery } from "../lan-url.js";
 import { mediaTlsOptions, pinnedWsOptions, resolveStreamPin } from "../tls-pin.js";
@@ -27,7 +27,7 @@ export interface StreamBridgeOptions {
   onEnded(): void;
 }
 
-const FRAME_BYTES = 640; // 20 ms at 16 kHz mono s16le
+const FRAME_BYTES = MEDIA_FRAME_BYTES; // 20 ms at 16 kHz mono s16le
 
 /**
  * ws v resnici poklice createConnection s predmetom moznosti, ne s stevilko vrat.

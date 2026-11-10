@@ -24,7 +24,8 @@ You can connect before the call is answered. Audio starts when the phone starts 
 
 - **From the gateway:** binary frames of the other person's voice, 16 kHz mono 16-bit
   little-endian PCM, 20 ms (640 bytes) each.
-- **To the gateway:** binary PCM in the same format. Any length works; it's played in order.
+- **To the gateway:** binary PCM in the same format. Any length up to 1 MiB per message (about 32 s)
+  works; it's played in order. A larger message closes the socket with code 1009.
 - **Interrupt:** send `{"type":"clear"}` to drop audio that hasn't played yet.
 - **End:** `{"type":"stop","callId":"…","reason":"device_media_closed"}` when the phone stops
   streaming. Hang up with `POST /v1/calls/{id}/hangup`.

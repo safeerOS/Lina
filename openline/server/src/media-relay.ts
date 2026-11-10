@@ -27,6 +27,23 @@ export const MEDIA_FORMAT = {
   frameMs: 20,
 } as const;
 
+/** En okvir: 20 ms pri 16 kHz mono s16le. Toliko poslje telefon in lastni most (stream-bridge.ts). */
+export const MEDIA_FRAME_BYTES =
+  (MEDIA_FORMAT.sampleRate / 1000) * MEDIA_FORMAT.frameMs * MEDIA_FORMAT.channels * 2;
+
+/**
+ * Najvecje sporocilo noge telefona. Telefon poslje okvirje po 640 B; 8 KiB pusti zalogo
+ * za daljsi okvir. Vec od tega je napaka ali zloraba zetona naprave.
+ */
+export const DEVICE_MEDIA_MAX_PAYLOAD = 8 * 1024;
+
+/**
+ * Najvecje sporocilo noge odjemalca. Zunanji odjemalec sme poslati cel stavek TTS naenkrat:
+ * 64 KiB sta le 2 s zvoka in sta sredi stavka prekinila povezavo, klic pa je utihnil (N10-7).
+ * 1 MiB je 32 s zvoka in se vedno omeji pomnilnik na povezavo. Telefonu gre razrezano na okvirje.
+ */
+export const CLIENT_MEDIA_MAX_PAYLOAD = 1024 * 1024;
+
 export const DEVICE_MEDIA_PATH = "/v1/device-media";
 export const MONITOR_CHANNEL = { remote: 0x01, injected: 0x02 } as const;
 const CLIENT_MEDIA_PATH = /^\/v1\/calls\/([^/]+)\/media$/;
@@ -56,7 +73,8 @@ interface MediaSession {
 }
 
 export class MediaRelay {
-  private readonly server = new WebSocketServer({ noServer: true, maxPayload: 65536 });
+  private readonly deviceServer = new WebSocketServer({ noServer: true, maxPayload: DEVICE_MEDIA_MAX_PAYLOAD });
+  private readonly clientServer = new WebSocketServer({ noServer: true, maxPayload: CLIENT_MEDIA_MAX_PAYLOAD });
   private readonly sessions = new Map<string, MediaSession>();
 
   constructor(
@@ -95,8 +113,8 @@ export class MediaRelay {
       return;
     }
 
-    this.server.handleUpgrade(request, socket, head, (ws) => {
-      ws.on("error", (e: Error & { code?: string }) => { console.error("ws_error", e.code); }); // Prepreči sesutje ob prevelikem sporočilu
+    this.deviceServer.handleUpgrade(request, socket, head, (ws) => {
+      logSocketErrors(ws, "device-media");
       const session = this.session(callId);
       session.device?.close(4000, "replaced by newer connection");
       session.device = ws;
@@ -135,8 +153,8 @@ export class MediaRelay {
       return;
     }
 
-    this.server.handleUpgrade(request, socket, head, (ws) => {
-      ws.on("error", (e: Error & { code?: string }) => { console.error("ws_error", e.code); }); // Prepreči sesutje ob prevelikem sporočilu
+    this.clientServer.handleUpgrade(request, socket, head, (ws) => {
+      logSocketErrors(ws, "client-media");
       const session = this.session(callId);
       if (url.searchParams.get("mode") === "listen") {
         this.addMonitor(session, callId, ws);
@@ -149,7 +167,7 @@ export class MediaRelay {
       ws.on("message", (data, isBinary) => {
         if (session.client !== ws) return;
         if (isBinary) {
-          forwardBinary(session.device, data);
+          forwardFramed(session.device, data);
           forwardToMonitors(session, MONITOR_CHANNEL.injected, data);
           return;
         }
@@ -197,6 +215,32 @@ function startMessage(callId: string) {
 
 function forwardBinary(target: WebSocket | undefined, data: RawData): void {
   if (target?.readyState === WebSocket.OPEN) target.send(data, { binary: true });
+}
+
+/**
+ * Zvok odjemalca gre telefonu v okvirjih po 20 ms, ne glede na to, kako ga je odjemalec razrezal.
+ * Telefon tako nikoli ne dobi sporocila, vecjega od okvirja, zaporedje bajtov pa ostane isto.
+ */
+function forwardFramed(target: WebSocket | undefined, data: RawData): void {
+  if (target?.readyState !== WebSocket.OPEN) return;
+  const pcm = Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as Buffer);
+  if (pcm.length <= MEDIA_FRAME_BYTES) {
+    target.send(pcm, { binary: true });
+    return;
+  }
+  for (let offset = 0; offset < pcm.length; offset += MEDIA_FRAME_BYTES) {
+    target.send(pcm.subarray(offset, offset + MEDIA_FRAME_BYTES), { binary: true });
+  }
+}
+
+/**
+ * Brez poslusalca napaka vticnice (npr. preveliko sporocilo) sesuje proces.
+ * V dnevnik gresta samo noga in koda napake, nikoli vsebina sporocila ali id.
+ */
+function logSocketErrors(ws: WebSocket, leg: string): void {
+  ws.on("error", (error: Error & { code?: string }) => {
+    console.error("ws_error", leg, error.code ?? "unknown");
+  });
 }
 
 function forwardToMonitors(session: MediaSession, channel: number, data: RawData): void {
