@@ -14,15 +14,24 @@ object CaptureOrder {
     fun afterStart(callId: String, keep: Boolean): Armed =
         if (keep) Armed(callId, startInFlight = false) else Armed(null, startInFlight = false)
 
+    data class StartDecision(val writeArm: Boolean, val immediateStop: Boolean)
+
+    fun evaluateStart(epochBefore: Long, epochNow: Long, after: Armed): StartDecision {
+        if (epochBefore != epochNow) {
+            return StartDecision(writeArm = false, immediateStop = true)
+        }
+        return StartDecision(writeArm = true, immediateStop = false)
+    }
+
     fun lease(expected: String?, reported: String?, startInFlight: Boolean): AudioPing.Tick {
         // Med startom se polja ne smejo raziti: tudi ce je expected se null, ne ustavljamo.
         if (startInFlight) {
-    return AudioPing.Tick(
-        confirmCallId = null,
-        stop = false,
-        clearExpected = false,
-        notifyDropped = false,
-    )
+            return AudioPing.Tick(
+                confirmCallId = null,
+                stop = false,
+                clearExpected = false,
+                notifyDropped = false,
+            )
         }
         return AudioPing.tick(expected, reported)
     }
@@ -84,20 +93,15 @@ object LeaseRound {
 
 /** Start sme zaceti in ostati samo, ce je klic Linin pred klicem in po njem. */
 object CapturePermit {
-    fun keep(ownedBefore: Boolean, startOk: Boolean, ownedAfter: Boolean): Boolean =
-        ownedBefore && startOk && ownedAfter
-
-    fun begin(owned: Boolean): Boolean = owned
-
     fun startLoop(
         callId: String,
         isOwned: (String) -> Boolean,
-        onRetry: () -> Unit = {},
+        sleep: () -> Unit = { Thread.sleep(50) },
         start: (String) -> Boolean
     ): Boolean {
         for (i in 1..2) {
             if (!isOwned(callId)) return false
-            if (i > 1) onRetry()
+            if (i > 1) sleep()
             if (start(callId)) return isOwned(callId)
         }
         return false
@@ -131,10 +135,17 @@ object AudioDrop {
 
     data class Outcome(val warn: Boolean, val message: String)
 
-    fun outcome(callPresent: Boolean, exitOk: Boolean): Outcome = when {
+    fun outcome(callPresent: Boolean, exitOk: Boolean, disconnected: Boolean = false): Outcome = when {
+        disconnected -> Outcome(warn = true, message = "call_disconnected")
         callPresent && exitOk -> Outcome(warn = true, message = "audio_returned")
         callPresent && !exitOk -> Outcome(warn = true, message = "audio_not_returned")
         else -> Outcome(warn = true, message = "audio_not_returned")
+    }
+
+    enum class DisconnectDecision { DISCONNECT, KEEP }
+
+    fun shouldDisconnect(callState: Int, exitOk: Boolean): DisconnectDecision {
+        return if (callState == 12 && !exitOk) DisconnectDecision.DISCONNECT else DisconnectDecision.KEEP
     }
 }
 
@@ -166,6 +177,16 @@ object GatewayUrl {
         if (port != -1 && port !in 1..65535) return false
         val authority = uri.authority ?: return false
         return true
+    }
+}
+
+object GatewayDeviceId {
+    enum class Problem { NONE, EMPTY, NOT_ASCII }
+
+    fun check(deviceId: String): Problem {
+        if (deviceId.isBlank()) return Problem.EMPTY
+        if (deviceId.any { it.code !in 32..126 }) return Problem.NOT_ASCII
+        return Problem.NONE
     }
 }
 

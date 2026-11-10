@@ -149,6 +149,9 @@ class Krog8AuditTest {
         val ok = AudioDrop.outcome(callPresent = true, exitOk = true)
         assertEquals("audio_returned", ok.message)
         assertTrue(ok.warn)
+        val notPresent = AudioDrop.outcome(callPresent = false, exitOk = false)
+        assertEquals("audio_not_returned", notPresent.message)
+        assertTrue(notPresent.warn)
     }
 
     @Test

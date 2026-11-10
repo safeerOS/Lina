@@ -96,7 +96,7 @@ export class MediaRelay {
     }
 
     this.server.handleUpgrade(request, socket, head, (ws) => {
-      ws.on("error", () => {}); // Prepreči sesutje ob prevelikem sporočilu
+      ws.on("error", (e: Error & { code?: string }) => { console.error("ws_error", e.code); }); // Prepreči sesutje ob prevelikem sporočilu
       const session = this.session(callId);
       session.device?.close(4000, "replaced by newer connection");
       session.device = ws;
@@ -136,7 +136,7 @@ export class MediaRelay {
     }
 
     this.server.handleUpgrade(request, socket, head, (ws) => {
-      ws.on("error", () => {}); // Prepreči sesutje ob prevelikem sporočilu
+      ws.on("error", (e: Error & { code?: string }) => { console.error("ws_error", e.code); }); // Prepreči sesutje ob prevelikem sporočilu
       const session = this.session(callId);
       if (url.searchParams.get("mode") === "listen") {
         this.addMonitor(session, callId, ws);

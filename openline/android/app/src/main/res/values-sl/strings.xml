@@ -138,4 +138,7 @@
     <string name="secret_in_argv">Skrivnost ne gre v ukazno vrstico.</string>
     <string name="shell_did_not_start">Zvok klica se ni zagnal.</string>
     <string name="audio_not_returned">Klic je ostal tih. Dvignite ga na telefonu.</string>
+    <string name="call_disconnected">Klic je bil prekinjen.</string>
+    <string name="need_ascii_device_id">Ime telefona sme vsebovati samo osnovne črke, številke in vezaje.</string>
+    <string name="empty_device_id">Ime telefona ne sme biti prazno.</string>
 </resources>

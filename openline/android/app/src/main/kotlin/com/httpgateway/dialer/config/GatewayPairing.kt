@@ -52,9 +52,17 @@ object GatewayPairing {
         }
         val wsUrl = "wss://" + invite.serverUrl.removePrefix("https://") +
             json.optString("deviceChannelPath", "/v1/device-channel")
+        val deviceId = json.getJSONObject("device").getString("id")
+        val idCheck = com.httpgateway.protocol.GatewayDeviceId.check(deviceId)
+        if (idCheck == com.httpgateway.protocol.GatewayDeviceId.Problem.EMPTY) {
+            throw IllegalStateException(context.getString(com.httpgateway.dialer.R.string.empty_device_id))
+        }
+        if (idCheck == com.httpgateway.protocol.GatewayDeviceId.Problem.NOT_ASCII) {
+            throw IllegalStateException(context.getString(com.httpgateway.dialer.R.string.need_ascii_device_id))
+        }
         val config = GatewayConfig(
             wsUrl = wsUrl,
-            deviceId = json.getJSONObject("device").getString("id"),
+            deviceId = deviceId,
             deviceToken = json.getString("deviceToken"),
             certSha256 = invite.certSha256,
         )

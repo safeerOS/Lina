@@ -319,5 +319,5 @@ object GatewayRuntime {
     }
 
     private fun GatewayConfig.isConnectable(): Boolean =
-        GatewayUrl.accept(wsUrl, deviceToken) && certSha256.isNotBlank() && deviceId.isNotBlank() && deviceToken.isNotBlank()
+        GatewayUrl.accept(wsUrl, deviceToken) && certSha256.isNotBlank() && com.httpgateway.protocol.GatewayDeviceId.check(deviceId) == com.httpgateway.protocol.GatewayDeviceId.Problem.NONE && deviceToken.isNotBlank()
 }

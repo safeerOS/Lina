@@ -574,7 +574,12 @@ class DialerActivity : Activity() {
             toast(getString(R.string.need_wss))
             return
         }
-        if (!deviceId.matches(Regex("^[\\x20-\\x7E]+$"))) {
+        val idCheck = com.httpgateway.protocol.GatewayDeviceId.check(deviceId)
+        if (idCheck == com.httpgateway.protocol.GatewayDeviceId.Problem.EMPTY) {
+            toast(getString(R.string.empty_device_id))
+            return
+        }
+        if (idCheck == com.httpgateway.protocol.GatewayDeviceId.Problem.NOT_ASCII) {
             toast(getString(R.string.need_ascii_device_id))
             return
         }

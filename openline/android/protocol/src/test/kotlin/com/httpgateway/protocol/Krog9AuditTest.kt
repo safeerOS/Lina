@@ -11,19 +11,21 @@ class Krog9AuditTest {
     fun testStartLoop() {
         var startCount = 0
         var isOwned = true
+        var sleepCount = 0
         
         // Pade po prvem, poskusi drugič
-        val success2 = CapturePermit.startLoop("call1", { isOwned }) {
+        val success2 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
             startCount++
             startCount == 2
         }
         assertTrue(success2)
         assertEquals(2, startCount)
+        assertEquals(1, sleepCount)
         
         // Ne poskusi če ni lastnik
         startCount = 0
         isOwned = false
-        val success3 = CapturePermit.startLoop("call1", { isOwned }) {
+        val success3 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
             startCount++
             true
         }
@@ -33,13 +35,38 @@ class Krog9AuditTest {
         // Ne poskusi drugič, če izgubi lastništvo vmes
         startCount = 0
         isOwned = true
-        val success4 = CapturePermit.startLoop("call1", { isOwned }) {
+        sleepCount = 0
+        val success4 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
             startCount++
             isOwned = false
             false
         }
         assertFalse(success4)
         assertEquals(1, startCount)
+        assertEquals(0, sleepCount)
+
+        // Če po uspešnem startu izgubi lastništvo preden preveri, vrne false in se ne izvaja naprej
+        startCount = 0
+        isOwned = true
+        val success5 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
+            startCount++
+            isOwned = false
+            true
+        }
+        assertFalse(success5)
+        assertEquals(1, startCount)
+
+        // Tretjega poskusa ni
+        startCount = 0
+        isOwned = true
+        sleepCount = 0
+        val success6 = CapturePermit.startLoop("call1", { isOwned }, { sleepCount++ }) {
+            startCount++
+            false
+        }
+        assertFalse(success6)
+        assertEquals(2, startCount)
+        assertEquals(1, sleepCount)
     }
 
     @Test

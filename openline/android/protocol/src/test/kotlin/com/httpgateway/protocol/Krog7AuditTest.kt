@@ -260,13 +260,11 @@ class Krog7AuditTest {
         assertTrue(CaptureOrder.lease(null, "klic", startInFlight = false).stop)
         assertTrue(AudioPing.tick(null, "klic").stop)
         assertFalse(AudioPing.tick("klic", "klic").stop)
-        val kept = CaptureOrder.afterStart("klic", CapturePermit.keep(ownedBefore = true, startOk = true, ownedAfter = true))
+        val kept = CaptureOrder.afterStart("klic", keep = true)
         assertEquals("klic", kept.expected)
         assertFalse(kept.startInFlight)
         assertEquals("klic", CaptureOrder.lease(kept.expected, "klic", kept.startInFlight).confirmCallId)
-        assertNull(CaptureOrder.afterStart("klic", CapturePermit.keep(true, startOk = false, ownedAfter = true)).expected)
-        assertFalse(CapturePermit.keep(ownedBefore = true, startOk = true, ownedAfter = false))
-        assertFalse(CapturePermit.begin(owned = false))
+        assertNull(CaptureOrder.afterStart("klic", keep = false).expected)
     }
 
     @Test
