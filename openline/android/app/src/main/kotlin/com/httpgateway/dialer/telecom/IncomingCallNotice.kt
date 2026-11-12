@@ -58,6 +58,7 @@ object IncomingCallNotice {
             .setAutoCancel(false)
             .setTimeoutAfter(TIMEOUT_MS)
             .setContentIntent(ui)
+            .setOnlyAlertOnce(true)
             .setFullScreenIntent(ui, true)
             .addAction(Notification.Action.Builder(Icon.createWithResource(context, android.R.drawable.ic_menu_close_clear_cancel), context.getString(R.string.decline), decline).build())
             .addAction(Notification.Action.Builder(Icon.createWithResource(context, android.R.drawable.ic_menu_call), context.getString(R.string.answer), answer).build())
