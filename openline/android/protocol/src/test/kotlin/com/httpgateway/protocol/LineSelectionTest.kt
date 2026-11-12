@@ -119,4 +119,16 @@ class LineSelectionTest {
         assertEquals(result1, result2)
         assertEquals(LineSelectionResult.Use("2"), result1)
     }
+
+    @Test
+    fun `id linije je stabilen, razlicen za razlicne racune in ne vsebuje ICCID`() {
+        val component = "com.android.phone/com.android.services.telephony.TelephonyConnectionService"
+        val iccid = "8938601234567890123"
+        val id = LineIdCodec.encode(component, iccid)
+        assertEquals(id, LineIdCodec.encode(component, iccid))
+        assertEquals(64, id.length)
+        assertEquals(false, id.contains(iccid))
+        assertEquals(false, id == LineIdCodec.encode(component, "8938601234567890124"))
+        assertEquals(false, id == LineIdCodec.encode("druga.komponenta", iccid))
+    }
 }

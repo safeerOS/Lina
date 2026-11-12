@@ -7,6 +7,16 @@ data class Line(
     val active: Boolean
 )
 
+object LineIdCodec {
+    // Neprozoren, stabilen identifikator linije. PhoneAccountHandle.id je pri SIM pogosto ICCID: ta se ne sme shraniti ali
+    // pokazati, zato je id samo SHA-256 (vrnitev ni mogoca); izbrano linijo najdemo tako, da znova preberemo seznam in primerjamo.
+    fun encode(component: String, accountId: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$component\n$accountId".toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+}
+
 sealed class LineSelectionResult {
     data class Use(val id: String) : LineSelectionResult()
     object Ambiguous : LineSelectionResult()
