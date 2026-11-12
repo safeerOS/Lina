@@ -49,6 +49,12 @@ internal class CaptureSim(private val api29: Boolean = false) {
     /** Cakajoci klic W zvoni. Storitev zanj NE poslje dogodka (politika LEAVE), linija pa ga steje (N12-2). */
     var wRinging = false
 
+    /** Storitev je zvoneci klic zavrnila z zasedenim znakom (privzeto). False: klic v sili ali neuspela zavrnitev (N13-2). */
+    var wRejected = true
+
+    /** Med odprtjem povezave pri lupini (N13-4). */
+    var duringOpen: (() -> Unit)? = null
+
     /** Lupina je za sejo odprla povezavo na streznik. Samo takrat tecejo okvirji. */
     var gateOpen = false
     var gaveBack = false
@@ -215,6 +221,10 @@ internal class CaptureSim(private val api29: Boolean = false) {
                 // Dovoljeno samo, ce je preklic ze v vrsti lupine tik za tem ukazom.
                 if (opsLabels.none { it is Effect.StopCapture }) violations += "povezava odprta brez potrjenega zajema"
             }
+            duringOpen?.let {
+                duringOpen = null
+                it()
+            }
             if (session != callId) return false
             gateOpen = true
             return true
@@ -296,14 +306,14 @@ internal class CaptureSim(private val api29: Boolean = false) {
     fun lineCalls(): List<LineCall> = buildList {
         if (xPresent) add(LineCall(X, xOwned, if (xHeld) TelecomPhase.STATE_HOLDING else xState))
         if (wLive) add(LineCall(W, ownedByLina = false, androidState = ACTIVE))
-        else if (wRinging) add(LineCall(W, ownedByLina = false, androidState = TelecomPhase.STATE_RINGING))
+        else if (wRinging) add(LineCall(W, ownedByLina = false, androidState = TelecomPhase.STATE_RINGING, rejectedBusy = wRejected))
     }
 
     /** Kar vrne CallLine.permitsCapture: PRAVA politika nad posnetkom, tudi za cakajoci klic, ki zvoni. */
     fun permits(callId: String?): Boolean = callId != null && CallLineFacts.permitsCapture(lineCalls(), callId)
 
     /** Zasebnost: na liniji je Linin klic in noben uporabnikov klic ni ZIV. Zvonjenje ni zvok na liniji. */
-    fun safe(callId: String?): Boolean = callId == X && xPresent && xOwned && !xHeld && !wLive
+    fun safe(callId: String?): Boolean = callId == X && xPresent && xOwned && !xHeld && !wLive && !(wRinging && !wRejected)
 
     fun post(event: Event) {
         driver.post(event)
@@ -351,12 +361,19 @@ internal class CaptureSim(private val api29: Boolean = false) {
     fun foreignCallRemoved() {
         wLive = false
         wRinging = false
+        wRejected = true
         post(Event.CallEnded(W))
     }
 
     /** Cakajoci klic W zazvoni. Storitev zanj ne poslje nobenega dogodka. */
-    fun foreignCallRings() {
+    fun foreignCallRings(rejected: Boolean = true) {
         wRinging = true
+        wRejected = rejected
+        // N13-2: klic, ki ni zavrnjen, zasede linijo; storitev za Linin klic ponovno oceni politiko.
+        if (!rejected && xPresent && xOwned) {
+            postPolicy()
+            settleQueue()
+        }
     }
 
     fun xRemoved() {
@@ -451,14 +468,14 @@ internal class CaptureSim(private val api29: Boolean = false) {
         else -> false
     }
 
-    fun runOps(ok: Boolean = true, afterPermit: (() -> Unit)? = null, during: (() -> Unit)? = null): Boolean {
+    fun runOps(ok: Boolean = true, afterPermit: (() -> Unit)? = null, openFails: Boolean = false, during: (() -> Unit)? = null): Boolean {
         if (ops.tasks.isEmpty()) return false
         opsLabels.removeFirst()
-        if (!ok) faults++
+        if (!ok || openFails) faults++
         startOk = ok
         stopOk = ok
         exitOk = ok
-        openOk = ok
+        openOk = ok && !openFails
         this.afterPermit = afterPermit
         duringStart = during
         clock = 0
@@ -536,7 +553,7 @@ internal class CaptureSim(private val api29: Boolean = false) {
         }
         return listOf(
             state.copy(generation = 0, stopSeq = 0, shell = CaptureMachine.ShellHealth()),
-            session, xPresent, xOwned, xHeld, xState, wLive, wRinging, gateOpen, gaveBack, notices.toSet(),
+            session, xPresent, xOwned, xHeld, xState, wLive, wRinging, wRinging && wRejected, gateOpen, gaveBack, notices.toSet(),
             lastExit, lastDisconnect, faults > 0, urgentLabels.map(::norm), opsLabels.map(::norm), prepLabels.map(::norm), leaseLabels.map(::norm), timerLabels.map(::norm),
         )
     }

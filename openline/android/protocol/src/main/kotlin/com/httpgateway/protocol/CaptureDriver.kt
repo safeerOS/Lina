@@ -116,7 +116,15 @@ class CaptureDriver(
             }
             is CaptureMachine.Effect.OpenUplink -> shellOps.execute {
                 // Linija se preveri se tik pred odprtjem: do sem ni sel noben okvir.
-                val opened = attempt { ports.linePermits(effect.callId) } && attempt { ports.openUplink(effect.callId) }
+                val permitted = attempt { ports.linePermits(effect.callId) }
+                // N13-4: tudi med odprtjem je pri lupini ukaz v teku, zato nujni stop (ob preklicu) ne sme cakati
+                // za urejenim stopom, ki bi cakal za open do 5 s, medtem ko zajem ze tece na odprti povezavi.
+                if (permitted) startInFlight = effect.generation
+                val opened = try {
+                    permitted && attempt { ports.openUplink(effect.callId) }
+                } finally {
+                    if (permitted) startInFlight = NO_START
+                }
                 post(CaptureMachine.Event.UplinkResult(effect.callId, effect.generation, opened))
             }
             is CaptureMachine.Effect.StopCapture -> shellOps.execute {

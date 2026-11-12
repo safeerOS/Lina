@@ -51,6 +51,8 @@ class CaptureDriverTest {
         Move("uporabnikov klic", { !it.wLive }) { it.userCallLive() },
         // Cakajoci klic zazvoni: storitev ne poslje dogodka, linija ga steje (N12-2).
         Move("cakajoci klic zazvoni", { !it.wLive && !it.wRinging }) { it.foreignCallRings() },
+        // N13-2: klic v sili ali neuspela zavrnitev: klic zvoni in zasede linijo, Linin klic se zadrzi.
+        Move("zvoneci klic brez zavrnitve zazvoni", { !it.wLive && !it.wRinging }) { it.foreignCallRings(rejected = false) },
         Move("tuj klic konec", { true }) { it.foreignCallRemoved() },
         Move("X odstranjen", { it.xPresent }) { it.xRemoved() },
         Move("uporabnik prevzame X", { it.xPresent && it.xOwned }) { it.userTakesX() },
@@ -632,6 +634,85 @@ class CaptureDriverTest {
         assertTrue(late.gateOpen)
         assertEquals(listOf("stop:$W"), late.calls.filter { it.startsWith("stop:") })
         assertEquals(emptyList(), late.settledViolations())
+    }
+
+    // ---- Krog 14: najdbe 13. pregleda -----------------------------------------------------
+
+    @Test
+    fun `N13-1 open ki vztrajno ne uspe klic se vrne uporabniku po omejenem stevilu poskusov`() {
+        val sim = CaptureSim()
+        sim.activate()
+        var rounds = 0
+        while (!sim.gaveBack && rounds++ < 12) {
+            sim.runPrep()
+            while (sim.ops.tasks.isNotEmpty()) {
+                val next = sim.opsLabels.first()
+                sim.runOps(openFails = next is Effect.OpenUplink)
+            }
+            sim.runUrgent()
+            // Krog najema: storitev klic zadrzan ponovno oceni in znova poslje START.
+            sim.tick()
+            sim.runLease()
+        }
+        assertTrue(sim.gaveBack, "po $rounds krogih klic ni vrnjen: klicatelj bi bil tih do konca klica")
+        assertEquals(2, sim.calls.count { it.startsWith("open:") })
+        assertTrue(sim.settle())
+        assertEquals(emptyList(), sim.settledViolations().filterNot { it.startsWith("Linin klic je tih") })
+    }
+
+    @Test
+    fun `N13-4 nujni stop pride do lupine tudi med odprtjem povezave`() {
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        sim.runOps()
+        assertTrue(sim.opsLabels.first() is Effect.OpenUplink)
+        var stopsDuringOpen = -1
+        sim.duringOpen = {
+            // Uporabnik dvigne svoj klic, medtem ko lupina odpira povezavo; urejeni stop bi cakal za open.
+            sim.wLive = true
+            sim.driver.post(Event.UnsafeDownlink)
+            sim.settleQueue()
+            stopsDuringOpen = sim.calls.count { it.startsWith("stop:") }
+        }
+        sim.runOps()
+        assertEquals(1, stopsDuringOpen, "nujni stop mora priti do lupine med odprtjem")
+        assertFalse(sim.gateOpen)
+        assertNull(sim.session)
+        assertTrue(sim.settle())
+        assertEquals(emptyList(), sim.settledViolations())
+    }
+
+    @Test
+    fun `N13-2 klic ki zvoni in ni zavrnjen ustavi zajem takoj in ga po koncu zvonjenja nadaljuje`() {
+        val sim = capturing()
+        sim.calls.clear()
+        // Klic v sili ali neuspela zavrnitev: zvoni, uporabnik ga lahko dvigne ali pa zvok klica gre kam drugam.
+        sim.foreignCallRings(rejected = false)
+        assertEquals(Phase.SUSPENDED, sim.state.phase)
+        assertTrue(sim.calls.contains("stop:$X") || sim.opsLabels.any { it is Effect.StopCapture })
+        assertTrue(sim.settle())
+        assertNull(sim.session)
+        assertFalse(sim.gateOpen)
+        assertFalse(sim.gaveBack, "Linin klic ostane Linin, samo brez zajema")
+        // Zvonjenje se konca: zajem se po krogu najema nadaljuje.
+        sim.foreignCallRemoved()
+        assertTrue(sim.settle())
+        assertEquals(Phase.CAPTURING, sim.state.phase)
+        assertEquals(X, sim.session)
+        assertTrue(sim.gateOpen)
+        assertEquals(emptyList(), sim.settledViolations())
+    }
+
+    @Test
+    fun `N13-2 zavrnjen klic ki se zvoni zajema ne ustavi`() {
+        val sim = capturing()
+        sim.calls.clear()
+        sim.foreignCallRings(rejected = true)
+        assertTrue(sim.settle())
+        assertEquals(Phase.CAPTURING, sim.state.phase)
+        assertTrue(sim.calls.none { it.startsWith("stop:") && it != "stop:$W" })
+        assertEquals(emptyList(), sim.settledViolations())
     }
 
     @Test

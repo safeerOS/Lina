@@ -12,7 +12,12 @@ import com.httpgateway.protocol.LineCall
 object CallLine {
     /** Posnetek registra. Vse odlocitve nad njim so v CallLineFacts (protocol, s preizkusi). */
     fun snapshot(): List<LineCall> = CallRegistry.snapshot().map { entry ->
-        LineCall(entry.callId, LinaCallGate.isOwned(entry.callId), CallRegistry.androidState(entry.call))
+        LineCall(
+            entry.callId,
+            LinaCallGate.isOwned(entry.callId),
+            CallRegistry.androidState(entry.call),
+            rejectedBusy = CallRegistry.wasBusyRejected(entry.callId),
+        )
     }
 
     fun audioState(call: Call): AudioCallState = CallLineFacts.audioState(CallRegistry.androidState(call))

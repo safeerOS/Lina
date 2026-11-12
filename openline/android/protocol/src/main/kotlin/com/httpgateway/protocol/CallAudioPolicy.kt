@@ -35,7 +35,13 @@ object CallAudioPolicy {
 }
 
 /** Klic, kot ga vidi Telecom, brez razredov Android: id, ali ga ima Lina, stanje android.telecom.Call. */
-data class LineCall(val callId: String, val ownedByLina: Boolean, val androidState: Int)
+data class LineCall(
+    val callId: String,
+    val ownedByLina: Boolean,
+    val androidState: Int,
+    /** Storitev je ta dohodni klic zavrnila z zasedenim znakom; Telecom ga se odstranjuje (N13-2). */
+    val rejectedBusy: Boolean = false,
+)
 
 /**
  * Dejstva o liniji iz posnetka klicev. Cista funkcija, da jo preizkus zazene: v modulu app je
@@ -58,14 +64,16 @@ object CallLineFacts {
         }
 
     /**
-     * Klic, ki Lininemu klicu zasede linijo. Dohodni klic, ki samo ZVONI, je ne zasede: zvonjenje ni
-     * zvok na liniji, in dokler Lina govori, se tak klic zavrne (SecondCallPolicy, odlocitev lastnika
-     * 10. 11. 2026). Prej je zvonjenje zadrzalo start in klicatelj je poslusal tisino (N12-2).
+     * Klic, ki Lininemu klicu zasede linijo. Dohodni klic, ki ga je storitev ze zavrnila (zaseden znak),
+     * je ne zasede, dokler ga Telecom odstranjuje: sicer bi klicatelj poslusal tisino (N12-2, odlocitev
+     * lastnika 10. 11. 2026). Klic, ki zvoni in ga NI zavrnila (klic v sili, neuspela zavrnitev, klic, ki je
+     * zazvonil pred Lininim ACTIVE), linijo zasede: zasebnost pred tisino (N13-2, predlog pregleda 13;
+     * odlocitev lastnika se caka). Uporabnik ga lahko dvigne in zvok bi sel na streznik.
      */
     fun blocksCapture(calls: List<LineCall>, exceptCallId: String): Boolean =
         calls.any {
             val phase = TelecomPhase.phase(it.androidState)
-            it.callId != exceptCallId && phase != TakeoverPhase.RINGING &&
+            it.callId != exceptCallId && !(phase == TakeoverPhase.RINGING && it.rejectedBusy) &&
                 CallCommandPolicy.countsAsOtherUserCall(it.ownedByLina, phase)
         }
 

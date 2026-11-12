@@ -161,9 +161,23 @@ class CaptureMachineTest {
         if (event is Event.UplinkResult && !event.opened && s.phase == Phase.CAPTURING &&
             event.generation == s.generation && event.callId == s.callId
         ) {
-            if (n.phase != Phase.SUSPENDED || fx.stops().none { it.callId == event.callId }) broken("neodprta seja ostane potrjena")
-        } else if (event is Event.UplinkResult && (n != s || fx.isNotEmpty())) {
-            broken("zastarel ali uspesen izid odprtja je spremenil stanje")
+            if (s.openFailures + 1 >= CaptureMachine.MAX_OPEN_FAILURES) {
+                // N13-1: vztrajen neuspeh open vrne klic uporabniku (rok starta se ob novi generaciji ne sprozi nikoli).
+                if (n.phase != Phase.IDLE || fx.none { it is Effect.MarkManual && it.callId == event.callId } ||
+                    fx.stops().isEmpty() || n.openFailures != 0
+                ) {
+                    broken("N13-1 vztrajen neuspeh open ne vrne klica")
+                }
+            } else if (n.phase != Phase.SUSPENDED || fx.stops().none { it.callId == event.callId } ||
+                n.openFailures != s.openFailures + 1
+            ) {
+                broken("neodprta seja ostane potrjena")
+            }
+        } else if (event is Event.UplinkResult) {
+            // Uspesen izid za svezo sejo samo pobrise stevec neuspehov; vse drugo ne spremeni nicesar.
+            val fresh = s.phase == Phase.CAPTURING && event.generation == s.generation && event.callId == s.callId
+            val same = if (event.opened && fresh) s.copy(openFailures = 0) else s
+            if (n != same || fx.isNotEmpty()) broken("zastarel ali uspesen izid odprtja je spremenil stanje")
         }
         // N12-6: rok starta vrne klic samo, ce zajem te generacije se ni potrjen; izhod ne caka urejene niti.
         if (event is Event.StartDue) {
@@ -554,6 +568,76 @@ class CaptureMachineTest {
         assertEquals(X, fx.single().stops().single().callId)
         val (same, none) = run(Event.UplinkResult(X, state.generation, opened = true), from = state)
         assertEquals(state, same)
+        assertTrue(none.single().isEmpty())
+    }
+
+    /** Klic X v CAPTURING, kjer je `open` neuspel `fails` krat zapored (vsak neuspeh in ponovna priprava = nova generacija). */
+    private fun afterOpenFailures(fails: Int): Pair<State, List<Effect>> {
+        var state = capturing()
+        var last: List<Effect> = emptyList()
+        repeat(fails) { index ->
+            val (failed, fx) = run(Event.UplinkResult(X, state.generation, opened = false), from = state)
+            last = fx.single()
+            if (index == fails - 1) return failed to last
+            assertEquals(Phase.SUSPENDED, failed.phase)
+            // Krog najema: storitev klic ponovno oceni in Linin klic je znova aktiven.
+            val (prepared, _) = run(Event.CallActive(X), from = failed)
+            state = run(
+                Event.Prepared(X, prepared.generation, ok = true),
+                Event.StartResult(X, prepared.generation, started = true, permitted = true),
+                from = prepared,
+            ).first
+            assertEquals(Phase.CAPTURING, state.phase)
+        }
+        return state to last
+    }
+
+    @Test
+    fun `N13-1 open ki vztrajno ne uspe vrne klic ob drugem neuspehu in ne cez generacije`() {
+        val (first, fxFirst) = afterOpenFailures(1)
+        assertEquals(Phase.SUSPENDED, first.phase)
+        assertEquals(1, first.openFailures)
+        assertTrue(fxFirst.none { it is Effect.MarkManual })
+        // Dobesedno 2, ne konstanta: preizkus mora pasti, ce kdo mejo poveca (klicatelj bi bil dlje tih).
+        assertEquals(2, CaptureMachine.MAX_OPEN_FAILURES)
+        val (second, fx) = afterOpenFailures(2)
+        assertEquals(Phase.IDLE, second.phase)
+        assertNull(second.callId)
+        assertEquals(0, second.openFailures, "stevec se po vrnitvi pobrise")
+        assertEquals(Effect.MarkManual(X), fx[0])
+        assertEquals(Effect.NotifyServerEnded(X), fx[1])
+        // Open je ze koncan, urejena nit je prosta: stop (kratek) pred izhodom iz ozadja, brez nujne niti.
+        assertTrue(fx[2] is Effect.StopCapture)
+        assertEquals(Effect.ExitBackgroundAudio(X, attemptExit = true, urgent = false), fx[3])
+        assertTrue(fx.none { it is Effect.UrgentStop })
+    }
+
+    @Test
+    fun `N13-1 stevec neuspelih open velja za en klic uspeh in konec klica ga pobrisejo`() {
+        // Isti klic: stevec prezivi novo generacijo (CallActive po SUSPENDED).
+        val (once, _) = afterOpenFailures(1)
+        val (again, _) = run(Event.CallActive(X), from = once)
+        assertEquals(1, again.openFailures)
+        assertTrue(again.generation > once.generation)
+        // Nov klic zacne z 0.
+        assertEquals(0, run(Event.CallActive(Y), from = once).first.openFailures)
+        // Konec klica pobrise stevec.
+        assertEquals(0, run(Event.CallEnded(X), from = once).first.openFailures)
+        // Uspesen open pobrise stevec: naslednji en sam neuspeh klica ne vrne.
+        val (preparedAgain, _) = run(Event.CallActive(X), from = once)
+        val capturingAgain = run(
+            Event.Prepared(X, preparedAgain.generation, ok = true),
+            Event.StartResult(X, preparedAgain.generation, started = true, permitted = true),
+            from = preparedAgain,
+        ).first
+        val (ok, _) = run(Event.UplinkResult(X, capturingAgain.generation, opened = true), from = capturingAgain)
+        assertEquals(0, ok.openFailures)
+        val (failedOnce, fx) = run(Event.UplinkResult(X, ok.generation, opened = false), from = ok)
+        assertEquals(Phase.SUSPENDED, failedOnce.phase)
+        assertTrue(fx.single().none { it is Effect.MarkManual })
+        // Zastarel izid (druga generacija) stevca ne poveca.
+        val (stale, none) = run(Event.UplinkResult(X, once.generation - 1, opened = false), from = capturingAgain)
+        assertEquals(capturingAgain, stale)
         assertTrue(none.single().isEmpty())
     }
 

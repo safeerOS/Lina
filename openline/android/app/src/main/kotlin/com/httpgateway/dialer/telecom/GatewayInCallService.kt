@@ -66,8 +66,11 @@ class GatewayInCallService : InCallService() {
     init {
         // Po uspesnem answer je klic ze lahko ACTIVE. Zvok se sprozi sele, ko je owned.
         LinaCallGate.setOwnedListener { callId ->
-            val call = CallRegistry.get(callId) ?: return@setOwnedListener
-            syncCallAudio(callId, call)
+            // Glavna nit: najprej zavrni klice, ki ze zvonijo (N13-2), sele nato oceni linijo.
+            handler.post {
+                rejectRingingOthers(callId)
+                CallRegistry.get(callId)?.let { syncCallAudio(callId, it) }
+            }
         }
         CallAudioBridge.setLineRecheck(lineRecheck)
     }
@@ -141,8 +144,27 @@ class GatewayInCallService : InCallService() {
             return false
         }
         busyRejected += callId
+        CallRegistry.markBusyRejected(callId)
         MissedCallNotice.show(this, callId, number)
         return true
+    }
+
+    /**
+     * N13-2: klic, ki je zazvonil PRED Lininim ACTIVE, ob njegovem dogodku ni bil ocenjen. Ko Lina govori,
+     * ga ocenimo zdaj (zaseden znak, razen klica v sili). Samo glavna nit.
+     */
+    private fun rejectRingingOthers(exceptCallId: String) {
+        for (entry in CallRegistry.snapshot()) {
+            if (entry.callId == exceptCallId || entry.callId in busyRejected) continue
+            if (phaseOf(entry.call) == TakeoverPhase.RINGING) rejectIfLinaBusy(entry.callId, entry.call)
+        }
+    }
+
+    /** Linijo ponovno oceni za vsak Linin klic (po dogodku tujega klica, ki ga politika sicer ne vidi). */
+    private fun resyncOwnedCalls() {
+        for (entry in CallRegistry.snapshot()) {
+            if (LinaCallGate.isOwned(entry.callId)) syncCallAudio(entry.callId, entry.call)
+        }
     }
 
     private fun onCallUpdated(callId: String, call: Call) {
@@ -151,6 +173,8 @@ class GatewayInCallService : InCallService() {
             return
         }
         val phase = phaseOf(call)
+        // N13-2: Linin klic je aktiven, drugi klici pa ze zvonijo: oceni jih (ob napaki ostanejo na liniji).
+        if (LinaCallGate.isOwned(callId) && phase == TakeoverPhase.ACTIVE) rejectRingingOthers(callId)
         if (EmergencyNote.record(
                 outgoing = directionOf(call) == TakeoverDirection.OUTGOING,
                 listedEmergency = TakeoverPolicy.isEmergency(numberOf(call)),
@@ -180,6 +204,8 @@ class GatewayInCallService : InCallService() {
             GatewayRuntime.emitCallState(callId, call)
         }
         syncCallAudio(callId, call)
+        // N13-2: tuj klic, ki zvoni in ni zavrnjen, zasede linijo Lininemu klicu (politika ga zanj ne vidi).
+        if (phase == TakeoverPhase.RINGING && !LinaCallGate.isOwned(callId)) resyncOwnedCalls()
         CallRegistry.notifyChanged()
     }
 

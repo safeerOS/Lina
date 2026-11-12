@@ -144,4 +144,5 @@
     <string name="missed_channel">Zgrešeni klici</string>
     <string name="missed_title">Zgrešen klic</string>
     <string name="missed_while_lina">%1$s je klical, medtem ko je Lina govorila z drugim klicateljem.</string>
+    <string name="missed_unseen">Zgrešenih klicev, medtem ko je Lina govorila: %1$d. Obvestila so izklopljena, zato jih ne vidite v seznamu obvestil. Dovolite obvestila za OpenLine.</string>
 </resources>

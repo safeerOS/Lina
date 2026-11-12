@@ -144,4 +144,5 @@
     <string name="missed_channel">Missed calls</string>
     <string name="missed_title">Missed call</string>
     <string name="missed_while_lina">%1$s called while Lina was on another call.</string>
+    <string name="missed_unseen">Calls missed while Lina was busy: %1$d. Notifications are off, so they are not shown in the notification list. Allow notifications for OpenLine.</string>
 </resources>

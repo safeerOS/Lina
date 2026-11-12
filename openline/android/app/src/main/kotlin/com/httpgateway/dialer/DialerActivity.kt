@@ -41,11 +41,13 @@ import com.httpgateway.dialer.shell.PairingService
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.dialer.shell.ShellLauncher
 import com.httpgateway.dialer.telecom.CallCommandController
+import com.httpgateway.dialer.telecom.MissedCallNotice
 import com.httpgateway.dialer.transport.DeviceHealth
 import com.httpgateway.dialer.transport.GatewayRuntime
 import com.httpgateway.dialer.transport.TlsPin
 import com.httpgateway.protocol.FailureMessages
 import com.httpgateway.protocol.GatewayUrl
+import com.httpgateway.protocol.NoticePermission
 import com.httpgateway.protocol.ShellLoss
 import com.httpgateway.protocol.ShownError
 import java.util.UUID
@@ -86,6 +88,7 @@ class DialerActivity : Activity() {
     private lateinit var deviceTokenInput: EditText
     private lateinit var certInput: EditText
     private lateinit var ringTimeoutInput: EditText
+    private var notificationAsked = false
     private lateinit var allowlistInput: EditText
     private lateinit var allowlistEnabled: CheckBox
     private lateinit var stopCleanButton: Button
@@ -147,6 +150,7 @@ class DialerActivity : Activity() {
     override fun onResume() {
         super.onResume()
         wifiPromptShown = false
+        notifyMissedWithoutPermission()
         renderSteps()
         refreshAudioStatus()
         handler.post(ticker)
@@ -447,6 +451,21 @@ class DialerActivity : Activity() {
         }
     }
 
+    /**
+     * N13-5: zavrnjen klic (zaseden znak) brez dovoljenja za obvestila ni viden. Prosimo za dovoljenje in
+     * povemo, koliko klicev je bilo zgresenih. Dovoljenje zahtevamo najvec enkrat na zagon zaslona.
+     */
+    private fun notifyMissedWithoutPermission() {
+        val granted = Build.VERSION.SDK_INT < NoticePermission.API_NOTIFICATION_PERMISSION ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val unseen = MissedCallNotice.takeUnseen(this)
+        if (unseen > 0) toast(getString(R.string.missed_unseen, unseen))
+        if (NoticePermission.mustAsk(Build.VERSION.SDK_INT, granted) && !notificationAsked) {
+            notificationAsked = true
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS_MISSED)
+        }
+    }
+
     // ---- Actions --------------------------------------------------------------------------
 
     private fun requestDialerRole() {
@@ -624,5 +643,6 @@ class DialerActivity : Activity() {
         const val REQUEST_DIALER_ROLE = 1001
         const val REQUEST_CALL_PHONE = 1002
         const val REQUEST_NOTIFICATIONS = 1003
+        const val REQUEST_NOTIFICATIONS_MISSED = 1004
     }
 }

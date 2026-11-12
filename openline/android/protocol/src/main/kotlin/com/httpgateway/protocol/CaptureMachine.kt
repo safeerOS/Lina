@@ -27,6 +27,15 @@ object CaptureMachine {
      */
     const val START_DEADLINE_MS = 6_000L
 
+    /**
+     * N13-1: najvec zaporednih neuspelih odprtij povezave (UplinkResult opened=false) za isti klic.
+     * Vsak neuspeh zamenja generacijo, zato rok starta (ki velja za eno generacijo) nikoli ne potece in
+     * bi klicatelj ob vztrajno neuspelem open poslusal tisino do konca klica. Pri drugem neuspehu klic
+     * vrnemo uporabniku. Stevec se NE ponastavi ob novi generaciji istega klica, samo ob novem klicu,
+     * uspehu ali koncu klica.
+     */
+    const val MAX_OPEN_FAILURES = 2
+
     enum class Phase {
         /** Nobenega Lininega klica. */
         IDLE,
@@ -70,6 +79,8 @@ object CaptureMachine {
         val stop: StopDebt = StopDebt.SETTLED,
         val stopSeq: Long = 0,
         val shell: ShellHealth = ShellHealth(),
+        /** Zaporedni neuspeli open za isti klic (N13-1). Preziveti mora preklic med poskusi. */
+        val openFailures: Int = 0,
     ) {
         /** Pogled najema: katero sejo pricakujemo in ali start se tece. */
         val view: CaptureOrder.Armed
@@ -211,6 +222,8 @@ object CaptureMachine {
             generation = s.generation + 1,
             attempt = 0,
             misses = 0,
+            // Isti klic po neuspelem open: stevec ostane (N13-1). Nov klic zacne z 0.
+            openFailures = if (s.callId == callId) s.openFailures else 0,
         )
         val begin = listOf(
             Effect.Prepare(callId, next.generation),
@@ -293,9 +306,14 @@ object CaptureMachine {
     }
 
     private fun onUplinkResult(s: State, e: Event.UplinkResult): Step {
-        if (e.opened || s.phase != Phase.CAPTURING || s.generation != e.generation || s.callId != e.callId) return Step(s)
+        if (s.phase != Phase.CAPTURING || s.generation != e.generation || s.callId != e.callId) return Step(s)
+        if (e.opened) return Step(if (s.openFailures == 0) s else s.copy(openFailures = 0))
+        // N13-1: vztrajen neuspeh open bi sicer klic zadrzal za vedno (vsak neuspeh = nova generacija = nov rok).
+        val failures = s.openFailures + 1
+        // Ukaz open je ze koncan (izid je prisel), urejena nit lupine je prosta: stop pred izhodom ostane v vrstnem redu.
+        if (failures >= MAX_OPEN_FAILURES) return giveBack(s.copy(openFailures = failures), e.callId)
         // Seja brez povezave bi bila potrjen zajem, ki ga Lina ne slisi. Zadrzimo; krog najema oceni znova.
-        return stop(cancelled(s, Phase.SUSPENDED, e.callId), e.callId, STOP_BUDGET_MS)
+        return stop(cancelled(s.copy(openFailures = failures), Phase.SUSPENDED, e.callId), e.callId, STOP_BUDGET_MS)
     }
 
     private fun onStartDue(s: State, e: Event.StartDue): Step {
@@ -390,6 +408,8 @@ object CaptureMachine {
         generation = s.generation + 1,
         attempt = 0,
         misses = 0,
+        // Stevec neuspelih open velja za en klic: konec ali vrnitev klica ga pobrise (N13-1).
+        openFailures = if (callId != null && callId == s.callId) s.openFailures else 0,
     )
 
     /**

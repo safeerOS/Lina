@@ -60,10 +60,16 @@ class Krog13AuditTest {
 
     @Test
     fun `N12-2 klic ki zvoni Lininemu klicu ne zasede linije`() {
-        val ringing = user(TelecomPhase.STATE_RINGING)
+        // Od kroga 14 (N13-2) ne zasede linije samo klic, ki ga je storitev ze zavrnila z zasedenim znakom.
+        val ringing = LineCall(w, ownedByLina = false, androidState = TelecomPhase.STATE_RINGING, rejectedBusy = true)
         assertFalse(CallLineFacts.blocksCapture(listOf(lina(12), ringing), x))
         assertTrue(CallLineFacts.permitsCapture(listOf(lina(12), ringing), x))
-        assertTrue(CallLineFacts.permitsCapture(listOf(lina(12), user(TelecomPhase.STATE_SIMULATED_RINGING)), x))
+        assertTrue(
+            CallLineFacts.permitsCapture(
+                listOf(lina(12), LineCall(w, false, TelecomPhase.STATE_SIMULATED_RINGING, rejectedBusy = true)),
+                x,
+            ),
+        )
         // Za odlocitev o PREVZEMU se zvoneci klic se vedno steje (TakeoverPolicy, nespremenjeno).
         assertTrue(CallLineFacts.otherLiveNotLina(listOf(lina(12), ringing), x))
         // Vse drugo linijo zasede kot prej: uporabnik ima prednost, tudi ko sele klice (odhodni klic).

@@ -21,6 +21,7 @@ object CallRegistry {
     private val idsByCall = IdentityHashMap<Call, String>()
     private val pendingOutgoing = ArrayDeque<PendingOutgoing>()
     private val rejectedCallIds = mutableSetOf<String>()
+    private val busyRejectedIds = mutableSetOf<String>()
     private val listeners = CopyOnWriteArraySet<Listener>()
 
     @Synchronized
@@ -58,6 +59,7 @@ object CallRegistry {
         val callId = idsByCall.remove(call) ?: return null
         callsById.remove(callId)
         rejectedCallIds.remove(callId)
+        busyRejectedIds.remove(callId)
         notifyListeners()
         return callId
     }
@@ -66,6 +68,15 @@ object CallRegistry {
     fun markRejected(callId: String) {
         rejectedCallIds.add(callId)
     }
+
+    /** Storitev je klic zavrnila z zasedenim znakom (Lina govori); do odstranitve ne zaseda linije (N13-2). */
+    @Synchronized
+    fun markBusyRejected(callId: String) {
+        busyRejectedIds.add(callId)
+    }
+
+    @Synchronized
+    fun wasBusyRejected(callId: String): Boolean = busyRejectedIds.contains(callId)
 
     @Synchronized
     fun clearRejected(callId: String) {
