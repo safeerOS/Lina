@@ -17,6 +17,7 @@ import com.httpgateway.dialer.config.LinaSettingsStore
 import com.httpgateway.dialer.transport.GatewayRuntime
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.protocol.EmergencyLock
+import com.httpgateway.protocol.IncomingCallAlert
 import com.httpgateway.protocol.EmergencyNote
 import com.httpgateway.protocol.LineCall
 import com.httpgateway.protocol.LineRecheck
@@ -108,6 +109,7 @@ class GatewayInCallService : InCallService() {
         callbacks.remove(call)?.let(call::unregisterCallback)
         if (callId != null) {
             busyRejected.remove(callId)
+            IncomingCallNotice.cancel(this, callId)
             cancelTimer(callId)
             ringStartedAt.remove(callId)
             // Vedno, tudi ce je markManual owned ze pobrisal.
@@ -167,8 +169,25 @@ class GatewayInCallService : InCallService() {
         }
     }
 
+    /** N14-4: obvestilo dohodnega klica z dvigni/zavrni; odlocitev je v protocol/IncomingCallAlert. */
+    private fun refreshIncomingNotice(callId: String, call: Call) {
+        val action = IncomingCallAlert.decide(
+            phase = phaseOf(call),
+            direction = directionOf(call),
+            busyRejected = callId in busyRejected,
+            ownedByLina = LinaCallGate.isOwned(callId),
+            manual = LinaCallGate.isManual(callId),
+            uiVisible = InCallActivity.visible,
+        )
+        runCatching {
+            if (action == IncomingCallAlert.Action.SHOW) IncomingCallNotice.show(this, callId, numberOf(call))
+            else IncomingCallNotice.cancel(this, callId)
+        }.onFailure { Log.w(TAG, "obvestilo dohodnega klica ni uspelo") }
+    }
+
     private fun onCallUpdated(callId: String, call: Call) {
         if (rejectIfLinaBusy(callId, call)) {
+            refreshIncomingNotice(callId, call)
             CallRegistry.notifyChanged()
             return
         }
@@ -206,6 +225,7 @@ class GatewayInCallService : InCallService() {
         syncCallAudio(callId, call)
         // N13-2: tuj klic, ki zvoni in ni zavrnjen, zasede linijo Lininemu klicu (politika ga zanj ne vidi).
         if (phase == TakeoverPhase.RINGING && !LinaCallGate.isOwned(callId)) resyncOwnedCalls()
+        refreshIncomingNotice(callId, call)
         CallRegistry.notifyChanged()
     }
 

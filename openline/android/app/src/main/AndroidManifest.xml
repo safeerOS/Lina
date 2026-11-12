@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- N14-4: celozaslonsko obvestilo dohodnega klica (klicalnik); brez njega bi se klic ob zaklenjenem zaslonu ne dal dvigniti. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Povezava do streznika v ozadju. -->
@@ -55,6 +57,10 @@
             </intent-filter>
         </activity>
 
+
+        <receiver
+            android:name=".telecom.IncomingCallActionReceiver"
+            android:exported="false" />
 
         <service
             android:name=".telecom.GatewayInCallService"

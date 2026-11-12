@@ -2,6 +2,7 @@ package com.httpgateway.dialer
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,7 @@ import com.httpgateway.dialer.audio.CallAudioBridge
 import com.httpgateway.dialer.telecom.CallBackgroundAudio
 import com.httpgateway.dialer.telecom.CallCommandController
 import com.httpgateway.dialer.telecom.CallRegistry
+import com.httpgateway.dialer.telecom.IncomingCallNotice
 import com.httpgateway.dialer.telecom.LinaCallGate
 import com.httpgateway.dialer.transport.GatewayRuntime
 import com.httpgateway.protocol.AudioReturn
@@ -29,6 +31,16 @@ import com.httpgateway.protocol.GatewayCommand
 import java.util.UUID
 
 class InCallActivity : Activity(), CallRegistry.Listener {
+    companion object {
+        /** N14-4: klic, ki ga ob odprtju vmesnika takoj dvignemo (dejanje v obvestilu). */
+        const val EXTRA_ANSWER_CALL_ID = "answer_call_id"
+
+        /** Vmesnik je viden: obvestilo dohodnega klica se umakne. */
+        @Volatile
+        var visible = false
+            private set
+    }
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocale.wrap(newBase))
     }
@@ -103,16 +115,39 @@ class InCallActivity : Activity(), CallRegistry.Listener {
             keypad.visibility = if (keypad.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
         buildKeypad()
+        handleAnswerIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAnswerIntent(intent)
+    }
+
+    /** N14-4: »Sprejmi« iz obvestila dohodnega klica: odgovor gre skozi isto pot kot gumb v vmesniku. */
+    private fun handleAnswerIntent(intent: Intent?) {
+        val callId = intent?.getStringExtra(EXTRA_ANSWER_CALL_ID) ?: return
+        intent.removeExtra(EXTRA_ANSWER_CALL_ID)
+        selectedCallId = callId
+        controller.performLocal(
+            GatewayCommand(commandId = "local_ui_${UUID.randomUUID()}", callId = callId, action = CommandAction.ANSWER),
+        ) { result ->
+            if (!result.ok) runOnUiThread { Toast.makeText(this, textFor(result.error), Toast.LENGTH_SHORT).show() }
+        }
     }
 
     override fun onStart() {
         super.onStart()
+        visible = true
+        // Vmesnik je odprt: obvestilo dohodnega klica ni vec potrebno.
+        IncomingCallNotice.cancelAll(this)
         CallRegistry.addListener(this)
         render()
         handler.post(ticker)
     }
 
     override fun onStop() {
+        visible = false
         handler.removeCallbacks(ticker)
         CallRegistry.removeListener(this)
         super.onStop()

@@ -128,7 +128,11 @@ object CaptureMachine {
         data class RetryDue(val callId: String, val generation: Long) : Event
 
         /** opened false: linija tik pred odprtjem ni bila prosta ali lupina ukaza ni potrdila. */
-        data class UplinkResult(val callId: String, val generation: Long, val opened: Boolean) : Event
+        /**
+         * [lineBusy]: odprtja nismo poskusili, ker ima uporabnik svoj klic (linePermits=false). To ni napaka povezave
+         * in se ne steje (N14-2): sicer bi giveBack vrnil klicatelja na slusalko, ko je uporabnik na drugem klicu.
+         */
+        data class UplinkResult(val callId: String, val generation: Long, val opened: Boolean, val lineBusy: Boolean = false) : Event
 
         /** Rok starta je potekel. Velja samo, ce zajem te generacije se ni potrjen. */
         data class StartDue(val callId: String, val generation: Long, val permitted: Boolean = true) : Event
@@ -308,6 +312,8 @@ object CaptureMachine {
     private fun onUplinkResult(s: State, e: Event.UplinkResult): Step {
         if (s.phase != Phase.CAPTURING || s.generation != e.generation || s.callId != e.callId) return Step(s)
         if (e.opened) return Step(if (s.openFailures == 0) s else s.copy(openFailures = 0))
+        // N14-2: zasedena linija ni neuspeh odprtja: samo zadrzimo (krog najema oceni znova), stevca ne dvignemo.
+        if (e.lineBusy) return stop(cancelled(s, Phase.SUSPENDED, e.callId), e.callId, STOP_BUDGET_MS)
         // N13-1: vztrajen neuspeh open bi sicer klic zadrzal za vedno (vsak neuspeh = nova generacija = nov rok).
         val failures = s.openFailures + 1
         // Ukaz open je ze koncan (izid je prisel), urejena nit lupine je prosta: stop pred izhodom ostane v vrstnem redu.

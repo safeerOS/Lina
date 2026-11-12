@@ -661,6 +661,22 @@ class CaptureDriverTest {
     }
 
     @Test
+    fun `N14-2 open pri zasedeni liniji ne steje kot neuspeh in klic se ne vrne`() {
+        val sim = CaptureSim()
+        sim.activate()
+        sim.runPrep()
+        sim.runOps()
+        assertTrue(sim.opsLabels.first() is Effect.OpenUplink)
+        // Uporabnik dvigne svoj klic tik pred odprtjem: linePermits=false, open sploh ni poskusen.
+        sim.wLive = true
+        sim.runOps()
+        assertFalse(sim.calls.any { it.startsWith("open:") }, "open ne sme teci na zasedeni liniji")
+        assertEquals(Phase.SUSPENDED, sim.state.phase)
+        assertEquals(0, sim.state.openFailures, "zasedena linija ni napaka odprtja")
+        assertFalse(sim.gaveBack, "klic ne sme na slusalko, ko je uporabnik na drugem klicu")
+    }
+
+    @Test
     fun `N13-4 nujni stop pride do lupine tudi med odprtjem povezave`() {
         val sim = CaptureSim()
         sim.activate()

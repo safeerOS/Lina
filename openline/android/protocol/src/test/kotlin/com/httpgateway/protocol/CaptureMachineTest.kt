@@ -88,6 +88,7 @@ class CaptureMachineTest {
             out += Event.StartDue(id, g - 1)
             out += Event.UplinkResult(id, g, opened = false)
             out += Event.UplinkResult(id, g, opened = true)
+            out += Event.UplinkResult(id, g, opened = false, lineBusy = true)
             out += Event.UplinkResult(id, g - 1, opened = false)
         }
         return out
@@ -161,7 +162,14 @@ class CaptureMachineTest {
         if (event is Event.UplinkResult && !event.opened && s.phase == Phase.CAPTURING &&
             event.generation == s.generation && event.callId == s.callId
         ) {
-            if (s.openFailures + 1 >= CaptureMachine.MAX_OPEN_FAILURES) {
+            if (event.lineBusy) {
+                // N14-2: zasedena linija: zadrzi, stop, BREZ vrnitve klica in brez stevca.
+                if (n.phase != Phase.SUSPENDED || fx.stops().none { it.callId == event.callId } ||
+                    n.openFailures != s.openFailures || fx.any { it is Effect.MarkManual }
+                ) {
+                    broken("N14-2 zasedena linija je stela kot neuspeh odprtja")
+                }
+            } else if (s.openFailures + 1 >= CaptureMachine.MAX_OPEN_FAILURES) {
                 // N13-1: vztrajen neuspeh open vrne klic uporabniku (rok starta se ob novi generaciji ne sprozi nikoli).
                 if (n.phase != Phase.IDLE || fx.none { it is Effect.MarkManual && it.callId == event.callId } ||
                     fx.stops().isEmpty() || n.openFailures != 0
@@ -639,6 +647,31 @@ class CaptureMachineTest {
         val (stale, none) = run(Event.UplinkResult(X, once.generation - 1, opened = false), from = capturingAgain)
         assertEquals(capturingAgain, stale)
         assertTrue(none.single().isEmpty())
+    }
+
+    @Test
+    fun `N14-2 zasedena linija ni neuspeh odprtja klic se ne vrne na slusalko ko je uporabnik na drugem klicu`() {
+        var state = afterOpenFailures(0).first
+        assertEquals(Phase.CAPTURING, state.phase)
+        // Veckrat zapored (vec kot MAX_OPEN_FAILURES): stevec ostane 0, klic se nikoli ne vrne.
+        repeat(CaptureMachine.MAX_OPEN_FAILURES + 2) {
+            val (held, fx) = run(Event.UplinkResult(X, state.generation, opened = false, lineBusy = true), from = state)
+            assertEquals(Phase.SUSPENDED, held.phase)
+            assertEquals(0, held.openFailures)
+            assertTrue(fx.single().none { it is Effect.MarkManual || it is Effect.NotifyServerEnded })
+            assertTrue(fx.single().any { it is Effect.StopCapture })
+            // Uporabnikov klic se konca: krog najema zajem nadaljuje (CallActive isti klic).
+            val (prepared, _) = run(Event.CallActive(X), from = held)
+            state = run(
+                Event.Prepared(X, prepared.generation, ok = true),
+                Event.StartResult(X, prepared.generation, started = true, permitted = true),
+                from = prepared,
+            ).first
+            assertEquals(Phase.CAPTURING, state.phase)
+        }
+        // Prava napaka povezave se se vedno steje in po drugem vrne klic.
+        val (one, _) = run(Event.UplinkResult(X, state.generation, opened = false), from = state)
+        assertEquals(1, one.openFailures)
     }
 
     @Test

@@ -460,7 +460,8 @@ class DialerActivity : Activity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         val unseen = MissedCallNotice.takeUnseen(this)
         if (unseen > 0) toast(getString(R.string.missed_unseen, unseen))
-        if (NoticePermission.mustAsk(Build.VERSION.SDK_INT, granted) && !notificationAsked) {
+        val isDefaultDialer = getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_DIALER)
+        if (NoticePermission.shouldAsk(Build.VERSION.SDK_INT, granted, unseen, isDefaultDialer) && !notificationAsked) {
             notificationAsked = true
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS_MISSED)
         }

@@ -125,7 +125,7 @@ class CaptureDriver(
                 } finally {
                     if (permitted) startInFlight = NO_START
                 }
-                post(CaptureMachine.Event.UplinkResult(effect.callId, effect.generation, opened))
+                post(CaptureMachine.Event.UplinkResult(effect.callId, effect.generation, opened, lineBusy = !permitted))
             }
             is CaptureMachine.Effect.StopCapture -> shellOps.execute {
                 val ok = stopUntil(effect.callId, effect.budgetMs)
