@@ -25,7 +25,7 @@ function zazeniStreznik(zeton = ZETON, vrata = VRATA) {
       delete env.EHO_ZETON;
     }
 
-    const p = fork('tools/eho-wss.mjs', ['--vrata', vrata.toString()], {
+    const p = fork(new URL('./eho-wss.mjs', import.meta.url).pathname, ['--vrata', vrata.toString()], {
       env,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
