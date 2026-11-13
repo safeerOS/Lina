@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as http from "node:http";
 import { WebSocket } from "ws";
 import { ustvariLinaSprejemnik } from "../src/lina-sprejemnik.js";
+
+const ZETON = "skrivnost-za-preizkus-0123456789abcdef";
 import { MEDIA_FRAME_BYTES, MEDIA_FORMAT } from "../src/media-relay.js";
 
 describe("Lina Sprejemnik", () => {
@@ -12,7 +14,7 @@ describe("Lina Sprejemnik", () => {
 
   beforeEach(async () => {
     klicani = [];
-    sprejemnik = ustvariLinaSprejemnik({ zeton: "skrivnost123" });
+    sprejemnik = ustvariLinaSprejemnik({ zeton: ZETON, nesifriranoSamoZaPreizkus: true });
     streznik = http.createServer();
     sprejemnik.attach(streznik);
 
@@ -34,7 +36,7 @@ describe("Lina Sprejemnik", () => {
     await new Promise<void>((resolve) => streznik.close(() => resolve()));
   });
 
-  function ustvariOdjemalca(pot: string = "/api/voice/stream", glave: Record<string, string> = { Authorization: "Bearer skrivnost123" }) {
+  function ustvariOdjemalca(pot: string = "/api/voice/stream", glave: Record<string, string> = { Authorization: `Bearer ${ZETON}` }) {
     const ws = new WebSocket(`ws://127.0.0.1:${vrata}${pot}`, { headers: glave });
     klicani.push(ws);
     return ws;
@@ -65,7 +67,8 @@ describe("Lina Sprejemnik", () => {
 
   // 2. zeton v poizvedbi 401
   it("zavrne povezavo z zetonom v poizvedbi z 401", async () => {
-    const ws = ustvariOdjemalca("/api/voice/stream?token=skrivnost123");
+    // Z veljavno glavo: zavrne SAMO zato, ker je zeton tudi v poizvedbi (pregled 15: prej brez glave ni nic dokazal).
+    const ws = ustvariOdjemalca(`/api/voice/stream?token=${ZETON}`, { Authorization: `Bearer ${ZETON}` });
     await expect(cakajOdprtje(ws)).rejects.toThrow("Status: 401");
   });
 
@@ -119,12 +122,25 @@ describe("Lina Sprejemnik", () => {
   });
 
   // 8. druga povezava 429
-  it("vrne 429 ob poskusu druge socasne povezave", async () => {
+  it("nova overjena povezava zamenja staro (ponovna povezava po izpadu Wi-Fi)", async () => {
     const ws1 = ustvariOdjemalca();
     await cakajOdprtje(ws1);
-    
+    const zaprtje1 = new Promise<number>((r) => ws1.on("close", (koda) => r(koda)));
+
     const ws2 = ustvariOdjemalca();
-    await expect(cakajOdprtje(ws2)).rejects.toThrow("Status: 429");
+    await cakajOdprtje(ws2);
+    expect(await zaprtje1).toBe(1012);
+    expect(ws2.readyState).toBe(WebSocket.OPEN);
+  });
+
+  it("zavrne prekratek ali prazen zeton ob ustvarjanju", () => {
+    expect(() => ustvariLinaSprejemnik({ zeton: "", nesifriranoSamoZaPreizkus: true })).toThrow();
+    expect(() => ustvariLinaSprejemnik({ zeton: "kratek", nesifriranoSamoZaPreizkus: true })).toThrow();
+  });
+
+  it("brez TLS se ne priklopi, razen izrecno za preizkus", () => {
+    const s = ustvariLinaSprejemnik({ zeton: ZETON });
+    expect(() => s.attach(http.createServer())).toThrow(/TLS/);
   });
 
   // 9. hitrost

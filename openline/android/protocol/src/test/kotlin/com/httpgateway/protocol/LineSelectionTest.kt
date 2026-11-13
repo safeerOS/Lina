@@ -32,18 +32,18 @@ class LineSelectionTest {
             Line("2", "Druga", isEsim = true, active = true)
         )
         val result = LineSelection.choose(lines, "3")
-        assertEquals(LineSelectionResult.Ambiguous, result)
+        assertEquals(LineSelectionResult.SavedUnavailable, result)
     }
 
     @Test
-    fun `shranjena neaktivna linija se ignorira`() {
+    fun `shranjena neaktivna linija ne preklopi na drugo linijo`() {
         val lines = listOf(
             Line("1", "Prva", isEsim = false, active = true),
             Line("2", "Druga", isEsim = true, active = false)
         )
         val result = LineSelection.choose(lines, "2")
-        // Ker je samo ena aktivna in shranjena ni aktivna, vrne Single(1)
-        assertEquals(LineSelectionResult.Single("1"), result)
+        // Pregled 15 (N1): prej Single("1") - Lina bi prevzela klice na liniji, ki je uporabnik ni dovolil.
+        assertEquals(LineSelectionResult.SavedUnavailable, result)
     }
 
     @Test
@@ -124,11 +124,25 @@ class LineSelectionTest {
     fun `id linije je stabilen, razlicen za razlicne racune in ne vsebuje ICCID`() {
         val component = "com.android.phone/com.android.services.telephony.TelephonyConnectionService"
         val iccid = "8938601234567890123"
-        val id = LineIdCodec.encode(component, iccid)
-        assertEquals(id, LineIdCodec.encode(component, iccid))
+        val key = ByteArray(32) { it.toByte() }
+        val id = LineIdCodec.encode(key, component, iccid)
+        assertEquals(id, LineIdCodec.encode(key, component, iccid))
         assertEquals(64, id.length)
         assertEquals(false, id.contains(iccid))
-        assertEquals(false, id == LineIdCodec.encode(component, "8938601234567890124"))
-        assertEquals(false, id == LineIdCodec.encode("druga.komponenta", iccid))
+        assertEquals(false, id == LineIdCodec.encode(key, component, "8938601234567890124"))
+        assertEquals(false, id == LineIdCodec.encode(key, "druga.komponenta", iccid))
+    }
+
+    @Test
+    fun `id brez kljuca namestitve se ne da izracunati (ni gol SHA-256)`() {
+        val component = "com.android.phone/com.android.services.telephony.TelephonyConnectionService"
+        val iccid = "8938601234567890123"
+        val gol = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$component\n$iccid".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        val a = LineIdCodec.encode(ByteArray(32) { 1 }, component, iccid)
+        val b = LineIdCodec.encode(ByteArray(32) { 2 }, component, iccid)
+        assertEquals(false, a == gol)
+        assertEquals(false, a == b)
+        kotlin.test.assertFailsWith<IllegalArgumentException> { LineIdCodec.encode(ByteArray(8), component, iccid) }
     }
 }

@@ -15,9 +15,10 @@ import com.httpgateway.protocol.LineIdCodec
 
 /**
  * Branje dostopnih klicnih linij (SIM in eSIM) iz sistema Android.
- * Ne bere telefonskih stevilk; identifikator racuna (pri SIM pogosto ICCID) gre samo kot SHA-256 (LineIdCodec).
+ * Ne bere telefonskih stevilk; identifikator racuna (pri SIM pogosto ICCID) gre samo kot HMAC s kljucem namestitve (LineIdCodec).
+ * Samo racuni SIM/eSIM (CAPABILITY_SIM_SUBSCRIPTION): racuni SIP/VoIP drugih aplikacij niso linije za Lino (pregled 15, N14).
  */
-class LineSource(private val context: Context) {
+class LineSource(private val context: Context, private val key: ByteArray) {
 
     @RequiresApi(Build.VERSION_CODES.R)
     fun getLines(): List<Line> {
@@ -38,9 +39,10 @@ class LineSource(private val context: Context) {
 
         return handles.mapNotNull { handle ->
             val account = telecomManager.getPhoneAccount(handle) ?: return@mapNotNull null
-            // Ustvarimo stabilen in neprozoren identifikator racuna
-            val id = LineIdCodec.encode(handle.componentName.flattenToString(), handle.id)
-            val label = account.label?.toString() ?: "Neznana linija"
+            if (!account.hasCapabilities(android.telecom.PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION)) return@mapNotNull null
+            // Racun brez imena izpustimo (prej je en tak racun naredil ves izbor neveljaven).
+            val label = account.label?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val id = LineIdCodec.encode(key, handle.componentName.flattenToString(), handle.id)
             val active = account.isEnabled
 
             var isEsim = false

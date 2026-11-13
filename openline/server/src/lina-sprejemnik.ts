@@ -2,11 +2,18 @@ import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import * as crypto from "node:crypto";
+import * as tls from "node:tls";
 import { MEDIA_FORMAT, MEDIA_FRAME_BYTES, DEVICE_MEDIA_MAX_PAYLOAD } from "./media-relay.js";
 
 export interface LinaSprejemnikOpcije {
+  /** Skrivnost povezave, najmanj 32 bajtov (pregled 15, N5: prazen zeton je sprejel vsak "Bearer "). */
   zeton: string;
+  /** Samo za preizkuse na 127.0.0.1: dovoli streznik brez TLS. V izdelku zvok klica in zeton nikoli nesifrirano (N4). */
+  nesifriranoSamoZaPreizkus?: boolean;
 }
+
+export const NAJKRAJSI_ZETON_BAJTOV = 32;
+const NAJVEC_CAKAJOCIH_BAJTOV = 64 * 1024;
 
 export interface StatistikaSprejemnika {
   sprejetiOkvirji: number;
@@ -15,6 +22,9 @@ export interface StatistikaSprejemnika {
 }
 
 export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
+  if (typeof opcije.zeton !== "string" || Buffer.byteLength(opcije.zeton, "utf8") < NAJKRAJSI_ZETON_BAJTOV) {
+    throw new Error(`Zeton sprejemnika mora imeti vsaj ${NAJKRAJSI_ZETON_BAJTOV} bajtov`);
+  }
   const server = new WebSocketServer({ noServer: true, maxPayload: DEVICE_MEDIA_MAX_PAYLOAD });
   let aktivnaPovezava: WebSocket | undefined = undefined;
 
@@ -48,10 +58,13 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
   }
 
   function attach(httpServer: HttpServer) {
+    if (!(httpServer instanceof tls.Server) && !opcije.nesifriranoSamoZaPreizkus) {
+      throw new Error("Sprejemnik zvoka klica zahteva streznik TLS (https/wss)");
+    }
     httpServer.on("upgrade", (request, socket, head) => {
       try {
-        const host = request.headers.host || "localhost";
-        const url = new URL(request.url || "/", `http://${host}`);
+        // Fiksna osnova: glave Host doloca odjemalec in ne sme vplivati na pot (N7).
+        const url = new URL(request.url || "/", "http://localhost");
 
         if (url.pathname !== "/api/voice/stream") {
           return;
@@ -67,13 +80,12 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
           return;
         }
 
-        if (aktivnaPovezava && aktivnaPovezava.readyState === WebSocket.OPEN) {
-          zavrni(socket, 429, "Too Many Requests");
-          return;
-        }
-
         server.handleUpgrade(request, socket, head, (ws) => {
+          // Nova overjena povezava zamenja staro (N6): po prekinitvi Wi-Fi je stara se "odprta" in bi telefon
+          // zavrnili (429) do 10 s - del zvoka klica bi se izgubil. En klic = ena povezava ostane.
+          const prejsnja = aktivnaPovezava;
           aktivnaPovezava = ws;
+          if (prejsnja && prejsnja.readyState === WebSocket.OPEN) prejsnja.close(1012, "Nadomescena");
           povezave++;
 
           let zaloga = 100;
@@ -115,7 +127,6 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
           osveziMirovanje();
 
           ws.on("message", (data: RawData, isBinary: boolean) => {
-            osveziMirovanje();
 
             if (!preveriHitrost()) {
               zavrnjeniOkvirji++;
@@ -131,11 +142,15 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
                 return;
               }
               sprejetiOkvirji++;
+              // Mirovanje osvezi samo zvok (N6): besedilni "clear" ne drzi linije zasedene.
+              osveziMirovanje();
             } else {
               try {
                 const text = data.toString();
                 const obj = JSON.parse(text);
                 if (obj && obj.type === "clear") {
+                  // Odjemalec, ki ne bere, ne sme polniti pomnilnika streznika (N9).
+                  if (ws.bufferedAmount > NAJVEC_CAKAJOCIH_BAJTOV) { ws.close(1008, "Odjemalec ne bere"); return; }
                   ws.send(JSON.stringify({ type: "cleared" }));
                 } else {
                   ws.close(1008, "Neveljavno besedilno sporocilo");
