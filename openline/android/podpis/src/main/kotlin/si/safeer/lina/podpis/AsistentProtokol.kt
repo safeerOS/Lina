@@ -22,6 +22,9 @@ sealed class DogodekLine {
 
 data class DogodkiLine(val dogodki: List<DogodekLine>, val koncano: Boolean)
 
+/** GET /seznani?koda= (pogodba @7a065fb). */
+enum class StanjeSeznanitve { CAKA, SPREJETO, ZAVRNJENO }
+
 /**
  * Telesa zahtev in razclenitev odgovorov koncne tocke asistentke. Vse od racunalnika je nezaupljivo: najvec 64 KiB odgovora,
  * stroge vrste, st mora narascati nad [od], dolzine besedil omejene; zgostitve, ki jo poslje Lina, telefon ne uporabi -
@@ -47,6 +50,29 @@ object AsistentProtokol {
     fun teloUstavitve(id: String, posiljatelj: String, cas: Long, enkratni: String, podpis: String): String = buildJsonObject {
         put("id", id); put("posiljatelj", posiljatelj); put("cas", cas); put("enkratni", enkratni); put("podpis", podpis)
     }.toString()
+
+    fun teloSeznanitve(koda: String, id: String, kljuc: String, ime: String, cas: Long, enkratni: String, podpis: String): String =
+        buildJsonObject {
+            put("koda", koda); put("id", id); put("kljuc", kljuc); put("ime", ime)
+            put("cas", cas); put("enkratni", enkratni); put("podpis", podpis)
+        }.toString()
+
+    private fun koren(besedilo: String): JsonObject? =
+        if (besedilo.length > 4096) null else try { json.parseToJsonElement(besedilo).jsonObject } catch (_: Exception) { null }
+
+    fun razberiSeznanitev(besedilo: String): StanjeSeznanitve? = when (koren(besedilo)?.let { niz(it, "stanje", 16) }) {
+        "caka" -> StanjeSeznanitve.CAKA
+        "sprejeto" -> StanjeSeznanitve.SPREJETO
+        "zavrnjeno" -> StanjeSeznanitve.ZAVRNJENO
+        else -> null
+    }
+
+    /** true = seja Claude Code odprta; tudi iz telesa 503 {"napaka":"claude-code-ni","stanje":{...}}. */
+    fun razberiSejo(besedilo: String): Boolean? {
+        val k = koren(besedilo) ?: return null
+        val o = (k["stanje"] as? JsonObject) ?: k
+        return when (niz(o, "claudeCode", 16)) { "odprta" -> true; "zaprta" -> false; else -> null }
+    }
 
     private fun niz(o: JsonObject, k: String, najvec: Int = NAJVEC_BESEDILA): String? =
         (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { it.length <= najvec && NiziLine.praviUnicode(it) }

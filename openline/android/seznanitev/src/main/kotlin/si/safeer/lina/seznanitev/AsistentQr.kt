@@ -1,7 +1,5 @@
 package si.safeer.lina.seznanitev
 
-import java.net.URI
-
 /** Naslov Line na racunalniku za asistentko: zasebni IP, vrata in odtis SHA-256 lista potrdila (64 hex, male crke). */
 data class AsistentNaslov(val naslov: String, val vrata: Int, val odtis: String) {
     /** Osnova poti po pogodbi (lina-asistent2 AGENTS.md »Koncna tocka asistentke za telefon«). */
@@ -11,34 +9,16 @@ data class AsistentNaslov(val naslov: String, val vrata: Int, val odtis: String)
     }
 }
 
-/**
- * QR za seznanitev telefona z Lino na racunalniku (PREDLOG v1, 14. 11. 2026 - na strani racunalnika se ni dogovorjen):
- *   safeer-lina://asistent?v=1&naslov=<IPv4 ali IPv6 brez oklepajev>&vrata=<1-65535>&odtis=<64 hex>
- * Samo zanka ali zasebni naslov domacega omrezja (kot streznik: 0.0.0.0 in javni naslov se zavrneta), brez imena gostitelja
- * (ime lahko razresi kamorkoli), brez uporabniskega imena, brez dodatnih ali podvojenih parametrov.
- */
+/** Pravila naslova asistentke: samo zanka ali zasebni naslov domacega omrezja, brez imena gostitelja (DNS). */
 object AsistentQr {
-    const val SHEMA = "safeer-lina"
     private val ODTIS = Regex("^[0-9a-fA-F]{64}$")
     private val IPV4 = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$")
     private val IPV6 = Regex("^[0-9a-fA-F:]{2,39}$")
 
-    fun razberi(besedilo: String): AsistentNaslov? {
-        if (besedilo.length > 512) return null
-        val uri = try { URI(besedilo.trim()) } catch (_: Exception) { return null }
-        if (uri.scheme != SHEMA || uri.rawAuthority != "asistent" || uri.rawFragment != null) return null
-        if (!uri.rawPath.isNullOrEmpty()) return null
-        val q = uri.rawQuery ?: return null
-        val pari = q.split('&').map { del -> del.split('=', limit = 2) }
-        if (pari.any { it.size != 2 }) return null
-        val polja = pari.associate { it[0] to it[1] }
-        if (polja.size != pari.size || polja.keys != setOf("v", "naslov", "vrata", "odtis")) return null
-        if (polja["v"] != "1") return null
-        val naslov = polja.getValue("naslov")
-        if (!jeZasebniNaslov(naslov)) return null
-        val vrata = polja.getValue("vrata").toIntOrNull()?.takeIf { it in 1..65535 && polja.getValue("vrata") == it.toString() } ?: return null
-        val odtis = polja.getValue("odtis").takeIf { ODTIS.matches(it) }?.lowercase() ?: return null
-        return AsistentNaslov(naslov, vrata, odtis)
+    /** Preverjen naslov ali null (shramba ga preveri ob vsakem branju). */
+    fun naslov(naslov: String, vrata: Int, odtis: String): AsistentNaslov? {
+        if (!jeZasebniNaslov(naslov) || vrata !in 1..65535 || !ODTIS.matches(odtis)) return null
+        return AsistentNaslov(naslov, vrata, odtis.lowercase())
     }
 
     /** Zanka, 10/8, 172.16/12, 192.168/16, ::1, fc00::/7 (brez DNS: samo zapis naslova). */

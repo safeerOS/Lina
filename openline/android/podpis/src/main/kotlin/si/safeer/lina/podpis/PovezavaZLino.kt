@@ -15,6 +15,9 @@ interface PovezavaZLino {
     fun dogodki(id: String, od: Long, cakaS: Int): OdgovorLine
     fun odobritev(telo: String): OdgovorLine
     fun ustavi(telo: String): OdgovorLine
+    fun seznani(telo: String): OdgovorLine
+    fun stanjeSeznanitve(koda: String): OdgovorLine
+    fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine
 }
 
 /** Kaj uporabnik izve ob napaki (kljuc besedila v aplikaciji). Vse 403 so ista koda (Lina ne pove razloga). */

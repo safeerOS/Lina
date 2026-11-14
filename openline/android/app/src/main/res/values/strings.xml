@@ -193,4 +193,11 @@
     <string name="assistant_err_busy">Too many requests. Try again in a minute.</string>
     <string name="assistant_err_gone">Lina no longer knows this task.</string>
     <string name="assistant_err_other">Error talking to Lina.</string>
+    <string name="assistant_wait_confirm">Waiting for Lina on your computer to confirm this phone.</string>
+    <string name="assistant_pair_accepted">Lina on your computer confirmed this phone. Paired.</string>
+    <string name="assistant_pair_refused">Lina on your computer refused the pairing.</string>
+    <string name="assistant_pair_expired">The QR code has expired. Show a new one in Lina on your computer and scan it again.</string>
+    <string name="assistant_pair_failed">Pairing failed. Check that the phone and the computer are on the same network and try again.</string>
+    <string name="assistant_session_open">The Claude Code session on your computer is open.</string>
+    <string name="assistant_session_closed">The Claude Code session on your computer is closed.</string>
 </resources>

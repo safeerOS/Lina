@@ -10,6 +10,8 @@ data class StanjeAsistenta(
     val nalogaTece: Boolean,
     val odprtaOdobritev: DogodekLine.Odobritev?,
     val posiljam: Boolean = false,
+    /** Telefon se je prijavil z QR in caka, da ga lastnik v Lini na racunalniku potrdi. */
+    val cakaPotrditev: Boolean = false,
 )
 
 data class PrikazAsistenta(
@@ -25,7 +27,7 @@ object AsistentPrikaz {
     fun izracunaj(s: StanjeAsistenta): PrikazAsistenta {
         val prosto = s.seznanjen && !s.nalogaTece && !s.posiljam
         return PrikazAsistenta(
-            seznani = !s.seznanjen,
+            seznani = !s.seznanjen && !s.cakaPotrditev,
             pozabi = s.seznanjen && !s.nalogaTece,
             vnos = prosto,
             poslji = prosto,

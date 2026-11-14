@@ -14,7 +14,7 @@ object AsistentShramba {
         val odtis = p.getString("odtis", null) ?: return null
         val vrata = p.getInt("vrata", 0)
         // Ponovna preverba: shranjeno mora se vedno ustrezati pravilom QR.
-        return AsistentQr.razberi("safeer-lina://asistent?v=1&naslov=$naslov&vrata=$vrata&odtis=$odtis")
+        return AsistentQr.naslov(naslov, vrata, odtis)
     }
 
     fun shrani(context: Context, a: AsistentNaslov): Boolean =

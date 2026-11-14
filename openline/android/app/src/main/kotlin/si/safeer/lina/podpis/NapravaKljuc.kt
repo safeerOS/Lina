@@ -50,7 +50,14 @@ object NapravaKljuc {
         return java.util.Base64.getEncoder().encodeToString(s.sign())
     }
 
-    private val podpisnik = Podpisnik(::podpisi, ::id)
+    private val podpisnik = Podpisnik(::podpisi, ::id, ::javniKljucB64)
+
+    /** Seznanitev s kodo iz QR v1 (pogodba @7a065fb); null, ce polja niso veljavna. */
+    fun podpisiSeznanitev(koda: String, ime: String, cas: Long, enkratni: String): PodpisSeznanitve? =
+        podpisnik.podpisiSeznanitev(koda, ime, cas, enkratni)
+
+    /** Poizvedba o stanju seje Claude Code. */
+    fun podpisiStanje(cas: Long, enkratni: String): String? = podpisnik.podpisiStanje(cas, enkratni)
 
     /** Naloga za Claude Code; null, ce vnos ni veljaven. */
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =

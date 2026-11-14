@@ -193,4 +193,11 @@
     <string name="assistant_err_busy">Preveč zahtev. Poskusite čez minuto.</string>
     <string name="assistant_err_gone">Lina te naloge ne pozna več.</string>
     <string name="assistant_err_other">Napaka pri povezavi z Lino.</string>
+    <string name="assistant_wait_confirm">Čakam, da te Lina na računalniku potrdi.</string>
+    <string name="assistant_pair_accepted">Lina na računalniku je telefon potrdila. Seznanjeno.</string>
+    <string name="assistant_pair_refused">Lina na računalniku je seznanitev zavrnila.</string>
+    <string name="assistant_pair_expired">Koda QR je potekla. V Lini na računalniku prikažite novo in jo skenirajte znova.</string>
+    <string name="assistant_pair_failed">Seznanitev ni uspela. Preverite, da sta telefon in računalnik v istem omrežju, in poskusite znova.</string>
+    <string name="assistant_session_open">Seja Claude Code na računalniku je odprta.</string>
+    <string name="assistant_session_closed">Seja Claude Code na računalniku je zaprta.</string>
 </resources>

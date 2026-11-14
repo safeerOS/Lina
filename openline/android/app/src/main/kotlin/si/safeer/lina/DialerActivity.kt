@@ -47,7 +47,7 @@ import si.safeer.lina.asistent.AsistentKontroler
 import si.safeer.lina.asistent.AsistentShramba
 import si.safeer.lina.podpis.AsistentPrikaz
 import si.safeer.lina.podpis.SporociloNapake
-import si.safeer.lina.seznanitev.AsistentNaslov
+import si.safeer.lina.seznanitev.AsistentVabilo
 import si.safeer.lina.seznanitev.QrSeznanitev
 import si.safeer.lina.protocol.LinePicker
 import si.safeer.lina.protocol.LineStatus
@@ -360,21 +360,34 @@ class DialerActivity : Activity() {
         tabAssistantButton.isSelected = assistant
         tabCallsButton.alpha = if (assistant) 0.6f else 1f
         tabAssistantButton.alpha = if (assistant) 1f else 0.6f
-        if (assistant) renderAssistant()
+        if (assistant) { renderAssistant(); asistent.preveriSejo() }
     }
 
     private fun renderAssistant() {
         val stanje = asistent.stanje()
         val p = AsistentPrikaz.izracunaj(stanje)
         val naslov = AsistentShramba.beri(this)
-        assistantStatus.text = when {
+        val izidS = asistent.izidSeznanitve
+        val glavno = when {
+            stanje.cakaPotrditev -> getString(R.string.assistant_wait_confirm)
+            !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.ZAVRNJENO -> getString(R.string.assistant_pair_refused)
+            !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.POTEKLO -> getString(R.string.assistant_pair_expired)
+            !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.NAPAKA -> getString(R.string.assistant_pair_failed)
             !stanje.seznanjen -> getString(R.string.assistant_no_link)
             asistent.napaka != null -> getString(napakaNiz(asistent.napaka!!))
             stanje.posiljam -> getString(R.string.assistant_sending)
             stanje.nalogaTece -> getString(R.string.assistant_running)
             asistent.izid != null -> getString(if (asistent.izid!!.ok) R.string.assistant_done_ok else R.string.assistant_done_fail)
+            izidS == AsistentKontroler.IzidSeznanitve.SPREJETO -> getString(R.string.assistant_pair_accepted)
             else -> getString(R.string.assistant_paired, naslov?.naslov.orEmpty())
         }
+        // Stanje seje Claude Code (GET /stanje); neznano se ne pokaze.
+        val seja = if (!stanje.seznanjen) null else when (asistent.seja) {
+            true -> getString(R.string.assistant_session_open)
+            false -> getString(R.string.assistant_session_closed)
+            null -> null
+        }
+        assistantStatus.text = if (seja == null) glavno else "$glavno\n$seja"
         // Kar ni narejeno, se ne pokaze: vsak gumb samo, ko ima ucinek (AsistentPrikaz, preizkusi v modulu podpis).
         assistantPairButton.visibility = if (p.seznani) View.VISIBLE else View.GONE
         assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
@@ -417,13 +430,15 @@ class DialerActivity : Activity() {
         assistantTaskInput.setText("")
     }
 
-    private fun confirmAsistent(a: AsistentNaslov) {
+    private fun confirmAsistent(v: AsistentVabilo) {
+        val a = v.naslov
         AlertDialog.Builder(this, R.style.Gw_Dialog)
             .setTitle(getString(R.string.assistant_pair_title))
             .setMessage(getString(R.string.assistant_pair_message, "${a.naslov}:${a.vrata}", TlsPin.pretty(a.odtis)))
             .setPositiveButton(getString(R.string.assistant_pair_ok)) { _, _ ->
-                if (AsistentShramba.shrani(this, a)) toast(getString(R.string.assistant_paired, a.naslov))
-                renderAssistant()
+                // Shrani se sele, ko lastnik telefon potrdi v Lini na racunalniku (AsistentKontroler.seznani).
+                asistent.seznani(v)
+                showTab(assistant = true)
             }
             .setNegativeButton(getString(R.string.pair_cancel), null)
             .show()
@@ -770,7 +785,7 @@ class DialerActivity : Activity() {
         val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
         GmsBarcodeScanning.getClient(this, options).startScan()
             .addOnSuccessListener { barcode ->
-                val s = barcode.rawValue?.let(QrSeznanitev::razberi)
+                val s = barcode.rawValue?.let { QrSeznanitev.razberi(it, System.currentTimeMillis()) }
                 when {
                     s == null -> toast(getString(R.string.qr_bad))
                     else -> {

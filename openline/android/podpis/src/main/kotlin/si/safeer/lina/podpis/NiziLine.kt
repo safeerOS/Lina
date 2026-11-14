@@ -28,6 +28,28 @@ object NiziLine {
     const val PREDPONA_NALOGE = "safeer-lina-naloga-v1"
     const val PREDPONA_ODOBRITVE = "safeer-lina-odobritev-v2"
     const val PREDPONA_USTAVITVE = "safeer-lina-ustavi-v1"
+    const val PREDPONA_SEZNANITVE = "safeer-lina-seznani-v1"
+    const val PREDPONA_STANJA = "safeer-lina-stanje-v1"
+    /** Enkratna koda asistentke iz zdruzenega QR v1 (linakoda). */
+    val KODA_SEZNANITVE = Regex("^[A-Za-z0-9_-]{22,64}$")
+    private val B64 = Regex("^[A-Za-z0-9+/]{40,200}={0,2}$")
+
+    /** Ime telefona: 1-60 znakov, brez nadzornih in oblikovnih znakov (pogodba seznanitve @7a065fb). */
+    fun veljavnoIme(ime: String): Boolean =
+        ime.length in 1..60 && praviUnicode(ime) && ime.none { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() }
+
+    /** Pogodba seznanitve @7a065fb (kanal-claude.ts nizSeznanitve); id mora biti izpeljan iz [kljuc]. */
+    fun nizSeznanitve(koda: String, id: String, kljuc: String, ime: String, cas: Long, enkratni: String): String? {
+        if (!KODA_SEZNANITVE.matches(koda) || !skupno(id, cas, enkratni) || !B64.matches(kljuc) || !veljavnoIme(ime)) return null
+        if (runCatching { KrogKljuc.idIzKljuca(kljuc) }.getOrNull() != id) return null
+        return "$PREDPONA_SEZNANITVE\n$koda\n$id\n$kljuc\n$cas\n$enkratni\n$ime"
+    }
+
+    /** Poizvedba o stanju seje Claude Code (kanal-claude.ts nizStanja @7a065fb). */
+    fun nizStanja(posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_STANJA\n$posiljatelj\n$cas\n$enkratni"
+    }
 
     private fun skupno(posiljatelj: String, cas: Long, enkratni: String): Boolean =
         ID_NAPRAVE.matches(posiljatelj) && cas > 0 && ENKRATNI.matches(enkratni)

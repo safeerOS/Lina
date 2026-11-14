@@ -11,6 +11,8 @@ import si.safeer.lina.podpis.NapravaKljuc
 import si.safeer.lina.podpis.OdgovorLine
 import si.safeer.lina.podpis.SporociloNapake
 import si.safeer.lina.podpis.StanjeAsistenta
+import si.safeer.lina.podpis.StanjeSeznanitve
+import si.safeer.lina.seznanitev.AsistentVabilo
 
 /**
  * Ena naloga naenkrat: poslje podpisano nalogo, v loceni niti dolgo poizveduje /dogodki, odobritev in ustavitev podpise kljuc
@@ -18,6 +20,7 @@ import si.safeer.lina.podpis.StanjeAsistenta
  */
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
+    enum class IzidSeznanitve { SPREJETO, ZAVRNJENO, POTEKLO, NAPAKA }
 
     private val glavna = Handler(Looper.getMainLooper())
     var nalogaId: String? = null; private set
@@ -26,10 +29,85 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     var napaka: SporociloNapake? = null; private set
     var izid: DogodekLine.Izid? = null; private set
     val dnevnik = ArrayDeque<String>()
+    /** Vabilo iz QR v1, ki caka na potrditev v Lini na racunalniku; shrani se sele ob "sprejeto". */
+    var cakaPotrditev: AsistentVabilo? = null; private set
+    var izidSeznanitve: IzidSeznanitve? = null; private set
+    /** Seja Claude Code na racunalniku: true odprta, false zaprta, null neznano. */
+    var seja: Boolean? = null; private set
     @Volatile private var poizvedovalec: Thread? = null
     @Volatile private var ustavljen = false
 
-    fun stanje() = StanjeAsistenta(AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam)
+    fun stanje() = StanjeAsistenta(AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam, cakaPotrditev != null)
+
+    /**
+     * Po skeniranju QR v1: podpisan POST /seznani, nato GET /seznani?koda= na 2 s do odlocitve lastnika ali izteka
+     * vabila (do). Naslov se shrani samo ob "sprejeto"; zavrnitev, 404 ali iztek ne pustijo nicesar.
+     */
+    fun seznani(v: AsistentVabilo): Boolean {
+        if (cakaPotrditev != null || nalogaId != null) return false
+        cakaPotrditev = v; izidSeznanitve = null; napaka = null
+        obSpremembi()
+        Thread {
+            val pov = HttpPovezavaZLino(v.naslov)
+            val izid = try { seznaniNaRacunalniku(pov, v) } catch (_: InterruptedException) { null } finally { pov.zapri() }
+            naGlavni {
+                cakaPotrditev = null
+                izidSeznanitve = izid
+                if (izid == IzidSeznanitve.SPREJETO && !AsistentShramba.shrani(context, v.naslov)) izidSeznanitve = IzidSeznanitve.NAPAKA
+                if (izidSeznanitve == IzidSeznanitve.SPREJETO) preveriSejo()
+            }
+        }.also { poizvedovalec = it }.start()
+        return true
+    }
+
+    private fun seznaniNaRacunalniku(pov: HttpPovezavaZLino, v: AsistentVabilo): IzidSeznanitve? {
+        val cas = System.currentTimeMillis()
+        val enkratni = NalogaLine.nakljucno(32)
+        val p = runCatching { NapravaKljuc.podpisiSeznanitev(v.koda, imeNaprave(), cas, enkratni) }.getOrNull()
+            ?: return IzidSeznanitve.NAPAKA
+        val prvi = pov.seznani(AsistentProtokol.teloSeznanitve(v.koda, p.id, p.kljuc, imeNaprave(), cas, enkratni, p.podpis))
+        if (prvi !is OdgovorLine.Ok) return if (prvi is OdgovorLine.Napaka && prvi.status == 404) IzidSeznanitve.POTEKLO else IzidSeznanitve.NAPAKA
+        while (!ustavljen) {
+            if (System.currentTimeMillis() > v.doMs) return IzidSeznanitve.POTEKLO
+            Thread.sleep(2000)
+            val o = pov.stanjeSeznanitve(v.koda)
+            when {
+                o is OdgovorLine.Napaka && o.status == 404 -> return IzidSeznanitve.POTEKLO
+                o is OdgovorLine.Ok -> when (AsistentProtokol.razberiSeznanitev(o.telo)) {
+                    StanjeSeznanitve.SPREJETO -> return IzidSeznanitve.SPREJETO
+                    StanjeSeznanitve.ZAVRNJENO -> return IzidSeznanitve.ZAVRNJENO
+                    else -> Unit
+                }
+                else -> Unit // kratka prekinitev omrezja: poskusi znova do izteka vabila
+            }
+        }
+        return null
+    }
+
+    /** Ime telefona, kot ga lastnik vidi v Lini na racunalniku (model naprave, 1-60 znakov brez nadzornih znakov). */
+    private fun imeNaprave(): String =
+        "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+            .filter { !Character.isISOControl(it) && Character.getType(it) != Character.FORMAT.toInt() }
+            .trim().take(60).ifEmpty { "Android" }
+
+    /** GET /stanje (podpisano): ali je seja Claude Code na racunalniku odprta. */
+    fun preveriSejo() {
+        val pov = povezava() ?: return
+        Thread {
+            val cas = System.currentTimeMillis()
+            val enkratni = NalogaLine.nakljucno(32)
+            val podpis = runCatching { NapravaKljuc.podpisiStanje(cas, enkratni) }.getOrNull()
+            val id = runCatching { NapravaKljuc.id() }.getOrNull()
+            val odg = if (podpis == null || id == null) OdgovorLine.Nedosegljiva else pov.stanjeSeje(id, cas, enkratni, podpis)
+            pov.zapri()
+            val s = when (odg) {
+                is OdgovorLine.Ok -> AsistentProtokol.razberiSejo(odg.telo)
+                is OdgovorLine.Napaka -> if (odg.koda == "claude-code-ni") false else null
+                else -> null
+            }
+            naGlavni { seja = s }
+        }.start()
+    }
 
     private fun povezava(): HttpPovezavaZLino? = AsistentShramba.beri(context)?.let { HttpPovezavaZLino(it) }
 
@@ -56,8 +134,12 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 posiljam = false
                 if (odg is OdgovorLine.Ok && naloga != null) {
                     nalogaId = naloga.id
+                    seja = true
                     poizveduj(naloga.id)
-                } else napaka = NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
+                } else {
+                    napaka = NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
+                    if (napaka == SporociloNapake.CLAUDE_CODE_NI) seja = false
+                }
             }
         }.start()
         return true

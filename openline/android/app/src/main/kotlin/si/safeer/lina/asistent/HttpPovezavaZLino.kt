@@ -55,6 +55,21 @@ class HttpPovezavaZLino(private val naslov: AsistentNaslov) : PovezavaZLino {
     override fun odobritev(telo: String) = post("odobritev", telo)
     override fun ustavi(telo: String) = post("ustavi", telo)
 
+    override fun seznani(telo: String) = post("seznani", telo)
+
+    private fun get(pot: String, vec: okhttp3.HttpUrl.Builder.() -> Unit): OdgovorLine {
+        val url = okhttp3.HttpUrl.Builder().scheme("https").host(naslov.naslov).port(naslov.vrata)
+            .addPathSegments("api/asistent/v1/$pot").apply(vec).build()
+        return izvedi(Request.Builder().url(url).get().build())
+    }
+
+    override fun stanjeSeznanitve(koda: String) = get("seznani") { addQueryParameter("koda", koda) }
+
+    override fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String) = get("stanje") {
+        addQueryParameter("posiljatelj", posiljatelj); addQueryParameter("cas", cas.toString())
+        addQueryParameter("enkratni", enkratni); addQueryParameter("podpis", podpis)
+    }
+
     override fun dogodki(id: String, od: Long, cakaS: Int): OdgovorLine {
         val url = okhttp3.HttpUrl.Builder().scheme("https").host(naslov.naslov).port(naslov.vrata)
             .addPathSegments("api/asistent/v1/dogodki")
