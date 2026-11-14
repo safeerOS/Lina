@@ -48,6 +48,7 @@ import si.safeer.lina.podpis.NiPovezave
 import si.safeer.lina.podpis.PovezavaZLino
 import si.safeer.lina.protocol.LinePicker
 import si.safeer.lina.protocol.LineStatus
+import si.safeer.lina.protocol.PermissionDenial
 import si.safeer.lina.telecom.MissedCallNotice
 import si.safeer.lina.transport.DeviceHealth
 import si.safeer.lina.transport.GatewayRuntime
@@ -237,7 +238,6 @@ class DialerActivity : Activity() {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                 }.onFailure { toast(getString(R.string.line_permission_settings)) }
             } else {
-                getSharedPreferences(PREFS_UI, MODE_PRIVATE).edit().putBoolean(KEY_PHONE_ASKED, true).apply()
                 requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
             }
         }
@@ -298,10 +298,11 @@ class DialerActivity : Activity() {
     }
 
     /** Dovoljenje smo ze zahtevali, uporabnik ga je zavrnil in sistem prosnje ne pokaze vec (»Ne vprasaj vec«). */
-    private fun phonePermissionDeniedForever(): Boolean =
-        checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED &&
-            getSharedPreferences(PREFS_UI, MODE_PRIVATE).getBoolean(KEY_PHONE_ASKED, false) &&
-            !shouldShowRequestPermissionRationale(Manifest.permission.READ_PHONE_STATE)
+    private fun phonePermissionDeniedForever(): Boolean = PermissionDenial.deniedForever(
+        granted = checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED,
+        recordedDenial = getSharedPreferences(PREFS_UI, MODE_PRIVATE).getBoolean(KEY_PHONE_DENIED, false),
+        showRationale = shouldShowRequestPermissionRationale(Manifest.permission.READ_PHONE_STATE),
+    )
 
     /**
      * Zavihka »Klici« in »Asistent« (lastnik 14. 11. 2026: ena aplikacija). Asistentka ne uporablja nicesar iz poti klicev:
@@ -678,7 +679,13 @@ class DialerActivity : Activity() {
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         if (requestCode == REQUEST_CALL_PHONE && granted) pendingPermissionNumber?.let(::dialLocally)
         if (requestCode == REQUEST_NOTIFICATIONS && granted) startAudioSetup()
-        if (requestCode == REQUEST_PHONE_STATE) renderLines()
+        if (requestCode == REQUEST_PHONE_STATE) {
+            // Prazen izid je preklic (okno se ni pokazalo), ne zavrnitev: zapis se spremeni samo ob pravem izidu.
+            val prefs = getSharedPreferences(PREFS_UI, MODE_PRIVATE)
+            prefs.edit().putBoolean(KEY_PHONE_DENIED,
+                PermissionDenial.afterResult(prefs.getBoolean(KEY_PHONE_DENIED, false), grantResults)).apply()
+            renderLines()
+        }
         pendingPermissionNumber = null
     }
 
@@ -813,6 +820,6 @@ class DialerActivity : Activity() {
         const val REQUEST_NOTIFICATIONS_MISSED = 1004
         const val REQUEST_PHONE_STATE = 1005
         private const val PREFS_UI = "lina_ui"
-        private const val KEY_PHONE_ASKED = "phone_permission_asked"
+        private const val KEY_PHONE_DENIED = "phone_permission_denied"
     }
 }
