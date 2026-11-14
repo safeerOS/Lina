@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SAMO debug gradnja: preizkus stopnje 1 (binarni eho prek wss s pripetim odtisom). Release tega ne vsebuje. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name="com.httpgateway.dialer.probe.EhoProbeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+    </application>
+</manifest>
