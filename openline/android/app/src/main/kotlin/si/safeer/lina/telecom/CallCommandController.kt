@@ -85,7 +85,12 @@ class CallCommandController(context: Context) {
         if (command.action != CommandAction.ANSWER) return perform(command)
 
         val ringing = call ?: return Result(false, "call_not_found")
-        val answer = CallCommandPolicy.allowRemoteAnswer(phaseOf(ringing), LinaCallGate.isManual(command.callId))
+        // Pregled 17 (A5): pred ANSWER se enkrat izbrana linija (ukaz strezniku ne sme mimo LineGate).
+        val answer = CallCommandPolicy.allowRemoteAnswer(
+            phaseOf(ringing),
+            LinaCallGate.isManual(command.callId),
+            lineAllowed = LinaLine.allowed(appContext, ringing),
+        )
         if (!answer.allowed) return Result(false, answer.reason)
         if (!LinaCallGate.beginAnswer(command.callId)) return Result(false, "call_controlled_locally")
 

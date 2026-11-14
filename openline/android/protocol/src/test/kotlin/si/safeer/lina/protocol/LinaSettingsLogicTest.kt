@@ -13,11 +13,13 @@ class LinaSettingsLogicTest {
     private class MemKv : SettingsKv {
         val map = HashMap<String, Any>()
         var commits = 0
+        var odpove = false
         override fun getInt(key: String) = map[key] as? Int
         override fun getString(key: String) = map[key] as? String
         override fun getBoolean(key: String) = map[key] as? Boolean
         override fun commit(changes: Map<String, Any?>): Boolean {
             commits++
+            if (odpove) return false
             for ((k, v) in changes) if (v == null) map.remove(k) else map[k] = v
             return true
         }
@@ -72,9 +74,9 @@ class LinaSettingsLogicTest {
     fun `kljuc linije ostane enak in izbira ostane veljavna`() {
         val kv = MemKv()
         val s = LinaSettingsLogic(kv, ::fixedRandom)
-        val k1 = s.lineIdKey()
+        val k1 = s.lineIdKey()!!
         s.saveSelectedLine("linija-a")
-        val k2 = s.lineIdKey()
+        val k2 = s.lineIdKey()!!
         assertContentEquals(k1, k2)
         assertEquals(LineIdCodec.KEY_BYTES, k1.size)
         assertEquals("linija-a", s.load().selectedLineId)
@@ -87,11 +89,23 @@ class LinaSettingsLogicTest {
         kv.map[LinaSettingsLogic.KEY_LINE_ID_KEY] = "kratek"   // neveljaven base64 / prekratek kljuc
         val s = LinaSettingsLogic(kv, ::fixedRandom)
         val before = kv.commits
-        val k = s.lineIdKey()
+        val k = s.lineIdKey()!!
         assertEquals(LineIdCodec.KEY_BYTES, k.size)
         assertNull(s.load().selectedLineId)
         assertEquals(before + 1, kv.commits, "kljuc in izbris izbire v enem zapisu")
         // Shranjen kljuc je standardni base64 (enako kot android.util.Base64.NO_WRAP).
         assertContentEquals(k, java.util.Base64.getDecoder().decode(kv.map[LinaSettingsLogic.KEY_LINE_ID_KEY] as String))
+    }
+
+    @Test
+    fun `CR1 neshranjen kljuc linije se ne vrne`() {
+        val kv = MemKv()
+        kv.map[LinaSettingsLogic.KEY_SELECTED_LINE_ID] = "stara"
+        kv.odpove = true
+        val s = LinaSettingsLogic(kv, ::fixedRandom)
+        assertNull(s.lineIdKey(), "kljuc, ki ga ni na disku, bi ob naslednjem zagonu dal druge id-je")
+        assertFalse(kv.map.containsKey(LinaSettingsLogic.KEY_LINE_ID_KEY))
+        kv.odpove = false
+        assertEquals(LineIdCodec.KEY_BYTES, s.lineIdKey()!!.size)
     }
 }

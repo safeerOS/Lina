@@ -7,29 +7,55 @@ import java.security.MessageDigest
  * (nizNaloge v1, nizOdobritve v2, nizUstavitve v1, zgostitevPrikaza). Ujemanje bajt za bajtom drzi NiziLineTest
  * (vektor, izracunan s TS kodo 14. 11. 2026). ODVISNOST: nizOdobritve v Lini spreminja drug agent - ob spremembi tam
  * najprej nov vektor iz TS, nato ta datoteka.
+ *
+ * Pregled 17 (A3): vsak niz se sestavi SAMO iz preverjenih polj (vzorci iz kanal-claude.ts in asistent.server.ts); polje z
+ * napacno obliko ali prelomom vrstice da null in se ne podpise - tako polje ne more premakniti meje med polji niza.
+ * Vsak niz se zacne s predpono svojega namena (safeer-lina-...), nikoli s safeer-krog-clan-v1 (A2).
  */
 object NiziLine {
     /** Okno veljavnosti podpisa v Lini (OKNO_PODPISA_MS). */
     const val OKNO_PODPISA_MS = 2 * 60_000L
     /** Enkratni niz (ENKRATNI v kanal-claude.ts). */
     val ENKRATNI = Regex("^[A-Za-z0-9_-]{16,64}$")
+    /** Id naloge in pogovora (asistent.server.ts dovoljenaNaloga). */
+    val ID_NALOGE = Regex("^[A-Za-z0-9_-]{8,64}$")
+    /** Id naprave (ID_NAPRAVE v kanal-claude.ts). */
+    val ID_NAPRAVE = Regex("^n-[0-9a-f]{16}(-[A-Za-z0-9._-]{1,100})?$")
+    /** Id zahteve za odobritev (ID_ODOBRITVE v kanal-claude.ts). */
+    val ID_ODOBRITVE = Regex("^[a-km-z]{5}$")
+    private val ZGOSTITEV = Regex("^[0-9a-f]{64}$")
 
-    fun nizNaloge(id: String, posiljatelj: String, besedilo: String, cas: Long, enkratni: String): String =
-        "safeer-lina-naloga-v1\n$id\n$posiljatelj\n$cas\n$enkratni\n$besedilo"
+    const val PREDPONA_NALOGE = "safeer-lina-naloga-v1"
+    const val PREDPONA_ODOBRITVE = "safeer-lina-odobritev-v2"
+    const val PREDPONA_USTAVITVE = "safeer-lina-ustavi-v1"
+
+    private fun skupno(posiljatelj: String, cas: Long, enkratni: String): Boolean =
+        ID_NAPRAVE.matches(posiljatelj) && cas > 0 && ENKRATNI.matches(enkratni)
+
+    /** Besedilo je zadnje polje: sme imeti prelome, ne sme pa osamljenih nadomestnih znakov. */
+    fun nizNaloge(id: String, posiljatelj: String, besedilo: String, cas: Long, enkratni: String): String? {
+        if (!ID_NALOGE.matches(id) || !skupno(posiljatelj, cas, enkratni) || !praviUnicode(besedilo)) return null
+        return "$PREDPONA_NALOGE\n$id\n$posiljatelj\n$cas\n$enkratni\n$besedilo"
+    }
 
     /** Podpis je vezan na nalogo (chatId) in na prikazano (zgostitev): odobritev ni prenosljiva na drugo vsebino. */
     fun nizOdobritve(
         zahtevaId: String, dovoli: Boolean, posiljatelj: String, cas: Long, enkratni: String, chatId: String, zgostitev: String,
-    ): String =
-        "safeer-lina-odobritev-v2\n$zahtevaId\n${if (dovoli) "allow" else "deny"}\n$posiljatelj\n$cas\n$enkratni\n$chatId\n$zgostitev"
+    ): String? {
+        if (!ID_ODOBRITVE.matches(zahtevaId) || !skupno(posiljatelj, cas, enkratni)) return null
+        if (!ID_NALOGE.matches(chatId) || !ZGOSTITEV.matches(zgostitev)) return null
+        return "$PREDPONA_ODOBRITVE\n$zahtevaId\n${if (dovoli) "allow" else "deny"}\n$posiljatelj\n$cas\n$enkratni\n$chatId\n$zgostitev"
+    }
 
     /** SHA-256 (hex) TEGA, kar telefon pokaze: orodje, predogled, opis. */
     fun zgostitevPrikaza(orodje: String, predogled: String, opis: String): String =
         MessageDigest.getInstance("SHA-256").digest("$orodje\n$predogled\n$opis".toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
 
-    fun nizUstavitve(id: String, posiljatelj: String, cas: Long, enkratni: String): String =
-        "safeer-lina-ustavi-v1\n$id\n$posiljatelj\n$cas\n$enkratni"
+    fun nizUstavitve(id: String, posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!ID_NALOGE.matches(id) || !skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_USTAVITVE\n$id\n$posiljatelj\n$cas\n$enkratni"
+    }
 
     /** Besedilo brez osamljenih nadomestnih znakov; tako besedilo se zavrne, ne popravi (praviUnicode v Lini). */
     fun praviUnicode(s: String): Boolean {

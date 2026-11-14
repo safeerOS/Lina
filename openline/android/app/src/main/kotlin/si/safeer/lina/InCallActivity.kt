@@ -82,8 +82,8 @@ class InCallActivity : Activity(), CallRegistry.Listener {
         controller = CallCommandController(this)
         setContentView(R.layout.activity_in_call)
         findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { view, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars())
-            view.setPadding(dp(24) + bars.left, dp(40) + bars.top, dp(24) + bars.right, dp(28) + bars.bottom)
+            val b = SistemskeVrstice.odmiki(insets)
+            view.setPadding(dp(24) + b[0], dp(40) + b[1], dp(24) + b[2], dp(28) + b[3])
             insets
         }
         stateDot = findViewById(R.id.stateDot)

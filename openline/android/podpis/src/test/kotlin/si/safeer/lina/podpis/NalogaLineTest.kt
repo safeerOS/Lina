@@ -22,7 +22,7 @@ class NalogaLineTest {
     fun `podpisana naloga se preveri s kljucem naprave`() {
         val n = assertNotNull(NalogaLine.podpisi("naloga-0001", id, "  izpisi git status  ", 1763120000000, "enkratni-vektor-0001", podpisnik))
         assertEquals("izpisi git status", n.besedilo)
-        val niz = NiziLine.nizNaloge(n.id, n.posiljatelj, n.besedilo, n.cas, n.enkratni).toByteArray(Charsets.UTF_8)
+        val niz = NiziLine.nizNaloge(n.id, n.posiljatelj, n.besedilo, n.cas, n.enkratni)!!.toByteArray(Charsets.UTF_8)
         assertTrue(KrogKljuc.preveriPodpisSKljucem(kljuc, niz, n.podpis))
     }
 

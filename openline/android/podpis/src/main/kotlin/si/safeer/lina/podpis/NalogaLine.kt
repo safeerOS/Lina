@@ -18,8 +18,6 @@ data class PodpisanaNaloga(
  */
 object NalogaLine {
     const val NAJVEC_ZNAKOV = 4000
-    private val ID_NALOGE = Regex("^[A-Za-z0-9_-]{8,64}$")
-    private val ID_NAPRAVE = Regex("^n-[0-9a-f]{16}(-[A-Za-z0-9._-]{1,100})?$")
     private const val ABECEDA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 
     /** Besedilo, ki ga uporabnik vpise: obrezano; null, ce je prazno, predolgo ali ima osamljene nadomestne znake. */
@@ -38,9 +36,8 @@ object NalogaLine {
         id: String, posiljatelj: String, vnos: String, cas: Long, enkratni: String, podpisnik: (ByteArray) -> String,
     ): PodpisanaNaloga? {
         val b = besedilo(vnos) ?: return null
-        if (!ID_NALOGE.matches(id) || !ID_NAPRAVE.matches(posiljatelj) || !NiziLine.ENKRATNI.matches(enkratni) || cas <= 0) return null
-        val podpis = podpisnik(NiziLine.nizNaloge(id, posiljatelj, b, cas, enkratni).toByteArray(Charsets.UTF_8))
-        return PodpisanaNaloga(id, posiljatelj, b, cas, enkratni, podpis)
+        val niz = NiziLine.nizNaloge(id, posiljatelj, b, cas, enkratni) ?: return null
+        return PodpisanaNaloga(id, posiljatelj, b, cas, enkratni, podpisnik(niz.toByteArray(Charsets.UTF_8)))
     }
 }
 

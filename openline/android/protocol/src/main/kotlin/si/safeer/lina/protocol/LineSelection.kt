@@ -116,12 +116,22 @@ data class PhoneAccountFacts(
 )
 
 object LineAccounts {
-    /** Linije uporabnika: samo racuni SIM/eSIM z aktivno narocnino, nikoli racun samo za klice v sili. */
-    fun lines(accounts: List<PhoneAccountFacts>): List<Line> = accounts.mapNotNull { a ->
+    /**
+     * Linije uporabnika: samo racuni SIM/eSIM z aktivno narocnino, nikoli racun samo za klice v sili.
+     * Android 10 (subscriptionId null): racuna ne moremo zanesljivo povezati z narocnino, zato velja samo, ko je natanko en
+     * tak racun (in natanko ena aktivna narocnina, activeSubscription); sicer nobena linija (pregled 17, B1).
+     */
+    fun lines(accounts: List<PhoneAccountFacts>): List<Line> {
+        val candidates = candidates(accounts)
+        if (candidates.any { it.second == null } && candidates.size != 1) return emptyList()
+        return candidates.map { it.first }
+    }
+
+    private fun candidates(accounts: List<PhoneAccountFacts>): List<Pair<Line, Int?>> = accounts.mapNotNull { a ->
         if (!a.simSubscription || a.emergencyCallsOnly) return@mapNotNull null
         if (a.subscriptionId != null && a.subscriptionId < 0) return@mapNotNull null
         if (!a.activeSubscription) return@mapNotNull null
         if (a.label.isBlank() || a.id.isBlank()) return@mapNotNull null
-        Line(a.id, a.label, a.isEsim, a.enabled)
+        Line(a.id, a.label, a.isEsim, a.enabled) to a.subscriptionId
     }
 }

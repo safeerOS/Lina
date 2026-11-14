@@ -28,7 +28,8 @@ import java.io.InputStream
 object ShellLauncher {
     private const val TAG = "ShellLauncher"
     private const val CONNECT_TIMEOUT_MS = 10_000L
-    private const val PROCESS_NAME = "httpgateway_shell"
+    // Pregled 17 (A4): svoje ime, da se ne bije s staro aplikacijo com.httpgateway.dialer.
+    private const val PROCESS_NAME = "safeer_lina_shell"
 
     sealed interface Result {
         /** Lupina zivi brez odprte seje ADB. */

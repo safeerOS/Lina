@@ -63,7 +63,7 @@
     <string name="pair_toast">Vklopite brezžično odpravljanje napak, tapnite Seznani napravo s kodo, nato uporabite obvestilo</string>
     <string name="wireless_manual">Odpri Nastavitve, Možnosti za razvijalce, Brezžično odpravljanje napak</string>
     <string name="call_failed">Klic ni uspel</string>
-    <string name="qr_bad">Ta koda ni iz konzole Lina (potrebna sta https in odtis)</string>
+    <string name="qr_bad">Ta koda ni iz konzole Line (potrebna sta https in odtis)</string>
     <string name="scanner_unavailable">Optični bralnik ni na voljo.</string>
     <string name="pair_title">Poveži s tem strežnikom?</string>
     <string name="pair_message">Gostitelj: %1$s\nOdtis: %2$s</string>
@@ -149,7 +149,7 @@
     <string name="line_label">Linija, na kateri se oglasi Lina (SIM ali eSIM)</string>
     <string name="line_choose">Izberite linijo</string>
     <string name="line_esim">%1$s (eSIM)</string>
-    <string name="line_permission_reason">Da se Lina oglasi samo na liniji, ki jo izberete, mora videti vaši liniji SIM in eSIM (dovoljenje Telefon). Telefonskih številk ne bere. Dokler tega ne dovolite, se Lina na klice ne oglaša.</string>
+    <string name="line_permission_reason">Da se Lina oglasi samo na liniji, ki jo izberete, mora videti vaše linije SIM in eSIM (dovoljenje Telefon). Telefonskih številk ne bere. Dokler tega ne dovolite, se Lina na klice ne oglaša.</string>
     <string name="line_permission_button">Dovoli dostop do linij</string>
     <string name="line_status_using">Lina se oglaša na liniji: %1$s. Klici na drugih linijah zvonijo samo na telefonu.</string>
     <string name="line_status_ambiguous">Telefon ima več linij. Izberite, na kateri se oglasi Lina; do takrat se Lina na klice ne oglaša.</string>
@@ -168,4 +168,6 @@
     <string name="assistant_sent">Naloga podpisana in poslana.</string>
     <string name="assistant_not_sent">Lina naloge ni sprejela.</string>
     <string name="assistant_bad_text">Naloga je prazna, predolga ali vsebuje neveljavne znake.</string>
+    <string name="line_permission_settings">Dostop do linij je bil zavrnjen in Android ne bo več vprašal. Odprite nastavitve aplikacije, nato Dovoljenja, in dovolite Telefon. Do takrat se Lina na klice ne oglaša.</string>
+    <string name="line_open_settings">Odpri nastavitve aplikacije</string>
 </resources>

@@ -116,4 +116,21 @@ class Krog17LinijaTest {
         }
         assertTrue(LineGate.allows(LineAccounts.lines(listOf(racun("a", "SIM 1"), sos)), null, "a"))
     }
+
+    @Test
+    fun `Android 10 - brez subscriptionId velja samo natanko en racun z edino aktivno narocnino`() {
+        // Pregled 17 (B1): na API 29 racuna ne moremo zanesljivo povezati z narocnino.
+        assertEquals(1, LineAccounts.lines(listOf(racun("a", "SIM 1", subId = null))).size)
+        assertTrue(LineAccounts.lines(listOf(racun("a", "SIM 1", subId = null), racun("b", "SIM 2", subId = null))).isEmpty())
+        assertTrue(LineAccounts.lines(listOf(racun("a", "SIM 1", subId = null, active = false))).isEmpty(), "vec narocnin = active false")
+        // Klic v sili se izloci, preden se stejejo kandidati.
+        val sos = racun("sos", "Klici v sili", emergencyOnly = true, subId = null, active = true)
+        assertEquals(listOf("a"), LineAccounts.lines(listOf(racun("a", "SIM 1", subId = null), sos)).map { it.id })
+    }
+
+    @Test
+    fun `A5 oddaljeni ANSWER na nedovoljeni liniji je zavrnjen`() {
+        assertFalse(CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.RINGING, manuallyAnswered = false, lineAllowed = false).allowed)
+        assertTrue(CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.RINGING, manuallyAnswered = false, lineAllowed = true).allowed)
+    }
 }

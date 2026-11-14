@@ -25,7 +25,7 @@ class LinaSettingsStore(context: Context) {
         logic.saveSelectedLine(lineId)
     }
 
-    fun lineIdKey(): ByteArray = logic.lineIdKey()
+    fun lineIdKey(): ByteArray? = logic.lineIdKey()
 
     private class PrefsKv(private val prefs: SharedPreferences) : SettingsKv {
         override fun getInt(key: String): Int? = if (prefs.contains(key)) prefs.getInt(key, 0) else null

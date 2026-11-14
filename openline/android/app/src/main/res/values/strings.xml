@@ -168,4 +168,6 @@
     <string name="assistant_sent">Task signed and sent.</string>
     <string name="assistant_not_sent">Lina did not accept the task.</string>
     <string name="assistant_bad_text">The task is empty, too long or contains invalid characters.</string>
+    <string name="line_permission_settings">Access to lines was refused and Android will not ask again. Open the app settings, then Permissions, and allow Phone. Until then Lina does not answer calls.</string>
+    <string name="line_open_settings">Open app settings</string>
 </resources>

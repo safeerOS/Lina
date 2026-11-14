@@ -46,16 +46,20 @@ class LinaSettingsLogic(
     /** Izbira linije za Lino (null = izbira izbrisana). */
     fun saveSelectedLine(lineId: String?): Boolean = kv.commit(mapOf(KEY_SELECTED_LINE_ID to lineId))
 
-    /** Nakljucen kljuc te namestitve za id linije (HMAC); ustvari se ob prvi rabi, ostane samo v zasebnih nastavitvah. */
-    fun lineIdKey(): ByteArray {
+    /**
+     * Nakljucen kljuc te namestitve za id linije (HMAC); ustvari se ob prvi rabi, ostane samo v zasebnih nastavitvah.
+     * null, ce novega kljuca ni bilo mogoce shraniti (CodeRabbit, krog 17): kljuc, ki ga ni na disku, bi ob naslednjem
+     * zagonu dal druge id-je linij in izbira bi tiho izginila - zato ga ne vrnemo, klicatelj pa linije ne dovoli.
+     */
+    fun lineIdKey(): ByteArray? {
         kv.getString(KEY_LINE_ID_KEY)?.let { s ->
             val k = try { java.util.Base64.getDecoder().decode(s) } catch (_: IllegalArgumentException) { null }
             if (k != null && k.size >= LineIdCodec.KEY_BYTES) return k
         }
         val k = ByteArray(LineIdCodec.KEY_BYTES).also(randomBytes)
         // Nov kljuc = novi id-ji: stara izbira ne velja vec. En zapis, da kljuc in izbira ne prideta narazen.
-        kv.commit(mapOf(KEY_LINE_ID_KEY to java.util.Base64.getEncoder().encodeToString(k), KEY_SELECTED_LINE_ID to null))
-        return k
+        val shranjen = kv.commit(mapOf(KEY_LINE_ID_KEY to java.util.Base64.getEncoder().encodeToString(k), KEY_SELECTED_LINE_ID to null))
+        return if (shranjen) k else null
     }
 
     companion object {

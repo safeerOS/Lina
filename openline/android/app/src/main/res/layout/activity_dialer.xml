@@ -138,6 +138,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:labelFor="@+id/ringTimeoutInput"
                     android:text="@string/ring_timeout_label" />
 
                 <EditText
@@ -147,14 +148,14 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:importantForAutofill="no"
-                    android:inputType="number"
-                    android:text="20" />
+                    android:inputType="number" />
 
                 <TextView
                     style="@style/Gw.Muted"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
+                    android:labelFor="@+id/allowlistInput"
                     android:text="@string/allowlist_label" />
 
                 <EditText

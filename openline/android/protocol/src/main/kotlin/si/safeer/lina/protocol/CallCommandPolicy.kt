@@ -28,8 +28,13 @@ object CallCommandPolicy {
      * ANSWER samo za klic, ki se se zvoni in ni bil rocno sprejet.
      * Zakasnel ANSWER po rocnem dvigu je zavrnitev.
      */
-    fun allowRemoteAnswer(phase: TakeoverPhase, manuallyAnswered: Boolean): Decision {
+    /**
+     * Pregled 17 (A5): oddaljeni ANSWER (strezniski ukaz) gre skozi isto vrata linije kot prevzem po casu zvonjenja -
+     * strezniku ni dovoljeno prevzeti klica na liniji, ki je uporabnik ni dal Lini (LineGate.allows). Brez privzete vrednosti.
+     */
+    fun allowRemoteAnswer(phase: TakeoverPhase, manuallyAnswered: Boolean, lineAllowed: Boolean): Decision {
         if (manuallyAnswered) return Decision(false, "call_answered_manually")
+        if (!lineAllowed) return Decision(false, "line_not_allowed")
         if (phase != TakeoverPhase.RINGING) return Decision(false, "call_not_ringing")
         return Decision(true)
     }

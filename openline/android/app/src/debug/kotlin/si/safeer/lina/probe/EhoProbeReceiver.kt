@@ -90,14 +90,16 @@ class EhoProbeReceiver : BroadcastReceiver() {
             }
         })
         val prisel = konec.await(8, TimeUnit.SECONDS)
+        // CodeRabbit (krog 17): izid zajamemo PRED ws.cancel() - preklic sprozi onFailure, ki bi uspeh prepisal v napako.
+        val napakIzid = napak.get()
+        val kopija = synchronized(rtt) { ArrayList(rtt) }.sorted()
         ws.cancel()
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
-        val kopija = synchronized(rtt) { ArrayList(rtt) }.sorted()
         val mediana = if (kopija.isEmpty()) -1 else kopija[kopija.size / 2]
         val najvec = kopija.lastOrNull() ?: -1
-        Log.i(TAG, "EHO ${if (prisel && napak.get() == 0 && kopija.size == okvirjev) "OK" else "NAPAKA"} " +
-            "okvirjev=$okvirjev vrnjenih=${kopija.size} napak=${napak.get()} rtt_mediana_ms=$mediana rtt_najvec_ms=$najvec")
+        Log.i(TAG, "EHO ${if (prisel && napakIzid == 0 && kopija.size == okvirjev) "OK" else "NAPAKA"} " +
+            "okvirjev=$okvirjev vrnjenih=${kopija.size} napak=$napakIzid rtt_mediana_ms=$mediana rtt_najvec_ms=$najvec")
     }
 
     private companion object {

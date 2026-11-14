@@ -26,7 +26,7 @@ class NiziLineTest {
 
     @Test
     fun `podpis Python velja za niz naloge iz Kotlina`() {
-        val niz = NiziLine.nizNaloge("naloga-vektor-01", id, "izpisi git status", cas, "enkratni-vektor-0001")
+        val niz = NiziLine.nizNaloge("naloga-vektor-01", id, "izpisi git status", cas, "enkratni-vektor-0001")!!
         assertEquals("safeer-lina-naloga-v1\nnaloga-vektor-01\n$id\n$cas\nenkratni-vektor-0001\nizpisi git status", niz)
         assertTrue(KrogKljuc.preveriPodpisSKljucem(kljuc, niz.toByteArray(Charsets.UTF_8), podpisNaloge))
         assertFalse(KrogKljuc.preveriPodpisSKljucem(kljuc, niz.replace("git status", "rm -rf .").toByteArray(Charsets.UTF_8), podpisNaloge))
@@ -55,7 +55,7 @@ class NiziLineTest {
             initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
         }.generateKeyPair()
         val b64 = java.util.Base64.getEncoder().encodeToString(par.public.encoded)
-        val niz = NiziLine.nizNaloge("n1", KrogKljuc.idIzKljuca(b64), "x", cas, "enkratni-vektor-0009").toByteArray(Charsets.UTF_8)
+        val niz = NiziLine.nizNaloge("naloga-n1", KrogKljuc.idIzKljuca(b64), "x", cas, "enkratni-vektor-0009")!!.toByteArray(Charsets.UTF_8)
         val s = java.security.Signature.getInstance("SHA256withECDSA").apply { initSign(par.private); update(niz) }
         val podpis = java.util.Base64.getEncoder().encodeToString(s.sign())
         assertTrue(KrogKljuc.preveriPodpisSKljucem(b64, niz, podpis))

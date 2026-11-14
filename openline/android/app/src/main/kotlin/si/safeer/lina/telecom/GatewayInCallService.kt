@@ -14,7 +14,6 @@ import android.util.Log
 import si.safeer.lina.InCallActivity
 import si.safeer.lina.audio.CallAudioBridge
 import si.safeer.lina.config.LinaSettingsStore
-import si.safeer.lina.protocol.LineGate
 import si.safeer.lina.transport.GatewayRuntime
 import si.safeer.lina.shell.ShellClient
 import si.safeer.lina.protocol.EmergencyLock
@@ -266,8 +265,7 @@ class GatewayInCallService : InCallService() {
     }
 
     private fun evaluate(callId: String, call: Call): TakeoverVerdict {
-        val store = LinaSettingsStore(this)
-        val settings = store.load()
+        val settings = LinaSettingsStore(this).load()
         val started = ringStartedAt[callId]
         val elapsed = if (started == null) 0L else SystemClock.elapsedRealtime() - started
         val number = call.details.handle?.schemeSpecificPart.orEmpty()
@@ -286,20 +284,9 @@ class GatewayInCallService : InCallService() {
                 emergencyCallback = emergencyCallback(call),
                 emergencyCooldown = TakeoverPolicy.inEmergencyCooldown(emergencyAt(), System.currentTimeMillis()),
                 externalPickup = RouteGuard.externalPickup,
-                lineAllowed = lineAllowed(store, settings.selectedLineId, call),
+                lineAllowed = LinaLine.allowed(this, call),
             ),
         )
-    }
-
-    /**
-     * Pregled 16 (N1): Lina prevzame samo klic na liniji, ki jo je uporabnik izbral (ali edini aktivni). Napaka pri branju
-     * linij = ne prevzame: klic zvoni na telefonu kot brez Line.
-     */
-    private fun lineAllowed(store: LinaSettingsStore, saved: String?, call: Call): Boolean = try {
-        val source = LineSource(this, store.lineIdKey())
-        LineGate.allows(source.getLines(), saved, source.idOf(call.details.accountHandle))
-    } catch (_: RuntimeException) {
-        false
     }
 
     /**

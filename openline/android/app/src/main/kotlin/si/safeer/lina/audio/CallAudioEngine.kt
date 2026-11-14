@@ -367,6 +367,12 @@ class CallAudioEngine(private val context: Context?) {
             .setChannelMask(channelMask)
             .build()
 
+        /**
+         * Lint (SoonBlockedPrivateApi): CallAudioEngine tece SAMO v lupini (ShellServerMain, app_process kot uid shell), ne v
+         * procesu aplikacije - tam omejitve skritih API po targetSdk aplikacije ne veljajo. Javni getDevices izhoda TELEPHONY
+         * ne vrne. Ce bi klic padel, pride IllegalStateException in zajem se ne zacne (klic ni tih: CaptureMachine).
+         */
+        @android.annotation.SuppressLint("SoonBlockedPrivateApi")
         fun telephonyOutput(): AudioDeviceInfo? {
             val getDevices = AudioManager::class.java
                 .getDeclaredMethod("getDevicesStatic", Int::class.javaPrimitiveType)

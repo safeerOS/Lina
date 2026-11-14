@@ -194,8 +194,8 @@ class DialerActivity : Activity() {
 
     private fun bindViews() {
         findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { view, insets ->
-            val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            val b = SistemskeVrstice.odmiki(insets)
+            view.setPadding(b[0], b[1], b[2], b[3])
             insets
         }
         connectionDot = findViewById(R.id.connectionDot)
@@ -231,7 +231,15 @@ class DialerActivity : Activity() {
         lineSpinner = findViewById(R.id.lineSpinner)
         bindTabs()
         linePermissionButton.setOnClickListener {
-            requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
+            if (phonePermissionDeniedForever()) {
+                // Pregled 17 (B5): sistem prosnje ne pokaze vec - odpremo nastavitve aplikacije, razlaga je v besedilu stanja.
+                runCatching {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                }.onFailure { toast(getString(R.string.line_permission_settings)) }
+            } else {
+                getSharedPreferences(PREFS_UI, MODE_PRIVATE).edit().putBoolean(KEY_PHONE_ASKED, true).apply()
+                requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
+            }
         }
         fillAdvancedFields()
         fillLinaFields()
@@ -289,6 +297,12 @@ class DialerActivity : Activity() {
         renderLines()
     }
 
+    /** Dovoljenje smo ze zahtevali, uporabnik ga je zavrnil in sistem prosnje ne pokaze vec (»Ne vprasaj vec«). */
+    private fun phonePermissionDeniedForever(): Boolean =
+        checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED &&
+            getSharedPreferences(PREFS_UI, MODE_PRIVATE).getBoolean(KEY_PHONE_ASKED, false) &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.READ_PHONE_STATE)
+
     /**
      * Zavihka »Klici« in »Asistent« (lastnik 14. 11. 2026: ena aplikacija). Asistentka ne uporablja nicesar iz poti klicev:
      * podpis je samo v modulu podpis, gumb je samo tu.
@@ -321,8 +335,17 @@ class DialerActivity : Activity() {
     private fun renderAssistant() {
         val connected = linaLink.povezana()
         assistantStatus.text = getString(if (connected) R.string.assistant_ready else R.string.assistant_no_link)
-        assistantDeviceId.text = runCatching { getString(R.string.assistant_device_id, NapravaKljuc.id()) }.getOrDefault("")
-        assistantDeviceId.visibility = if (assistantDeviceId.text.isEmpty()) View.GONE else View.VISIBLE
+        // Pregled 17 (B6): KeyStore ne na glavni niti.
+        assistantDeviceId.visibility = View.GONE
+        Thread {
+            val id = runCatching { NapravaKljuc.id() }.getOrNull()
+            runOnUiThread {
+                if (id != null && !isFinishing) {
+                    assistantDeviceId.text = getString(R.string.assistant_device_id, id)
+                    assistantDeviceId.visibility = View.VISIBLE
+                }
+            }
+        }.start()
         // Kar ni narejeno, se ne pokaze: vnos in gumb samo ob povezavi z Lino.
         assistantTaskInput.visibility = if (connected) View.VISIBLE else View.GONE
         assistantSendButton.visibility = if (connected) View.VISIBLE else View.GONE
@@ -330,17 +353,15 @@ class DialerActivity : Activity() {
 
     private fun sendTask() {
         if (!linaLink.povezana()) { renderAssistant(); return }
-        val naloga = NalogaLine.podpisi(
-            id = NalogaLine.nakljucno(),
-            posiljatelj = NapravaKljuc.id(),
-            vnos = assistantTaskInput.text.toString(),
-            cas = System.currentTimeMillis(),
-            enkratni = NalogaLine.nakljucno(),
-            podpisnik = NapravaKljuc::podpisi,
-        ) ?: return toast(getString(R.string.assistant_bad_text))
+        if (NalogaLine.besedilo(assistantTaskInput.text.toString()) == null) return toast(getString(R.string.assistant_bad_text))
+        val vnos = assistantTaskInput.text.toString()
         assistantSendButton.isEnabled = false
+        // Pregled 17 (B6): podpis (KeyStore) in posiljanje zunaj glavne niti.
         Thread {
-            val ok = runCatching { linaLink.poslji(naloga) }.getOrDefault(false)
+            val naloga = runCatching {
+                NapravaKljuc.podpisiNalogo(NalogaLine.nakljucno(), vnos, System.currentTimeMillis(), NalogaLine.nakljucno())
+            }.getOrNull()
+            val ok = naloga != null && runCatching { linaLink.poslji(naloga) }.getOrDefault(false)
             runOnUiThread {
                 assistantSendButton.isEnabled = true
                 if (ok) assistantTaskInput.setText("")
@@ -355,12 +376,17 @@ class DialerActivity : Activity() {
      */
     private fun renderLines() {
         if (!::lineSpinner.isInitialized) return
-        val source = LineSource(this, linaSettings.lineIdKey())
-        val permission = source.hasPermission()
+        val key = linaSettings.lineIdKey()
+        val source = key?.let { LineSource(this, it) }
+        val permission = checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
         val saved = linaSettings.load().selectedLineId
-        val view = LinePicker.view(permission, if (permission) source.getLines() else emptyList(), saved)
+        // Brez shranjenega kljuca namestitve (CR1) linij ni mogoce zanesljivo prepoznati: Invalid (Lina se ne oglasa).
+        val lines = if (permission && source != null) source.getLines() else emptyList()
+        val view = if (permission && source == null) LinePicker.View(LineStatus.INVALID, null, emptyList(), -1)
+            else LinePicker.view(permission, lines, saved)
+        val denied = view.status == LineStatus.NO_PERMISSION && phonePermissionDeniedForever()
         lineStatus.text = when (view.status) {
-            LineStatus.NO_PERMISSION -> getString(R.string.line_permission_reason)
+            LineStatus.NO_PERMISSION -> getString(if (denied) R.string.line_permission_settings else R.string.line_permission_reason)
             LineStatus.USING -> getString(R.string.line_status_using, view.usingLabel)
             LineStatus.AMBIGUOUS -> getString(R.string.line_status_ambiguous)
             LineStatus.SAVED_UNAVAILABLE -> getString(R.string.line_status_unavailable)
@@ -368,6 +394,7 @@ class DialerActivity : Activity() {
             LineStatus.INVALID -> getString(R.string.line_status_invalid)
         }
         linePermissionButton.visibility = if (view.status == LineStatus.NO_PERMISSION) View.VISIBLE else View.GONE
+        linePermissionButton.text = getString(if (denied) R.string.line_open_settings else R.string.line_permission_button)
         if (view.choices.isEmpty()) {
             lineSpinner.visibility = View.GONE
             return
@@ -785,5 +812,7 @@ class DialerActivity : Activity() {
         const val REQUEST_NOTIFICATIONS = 1003
         const val REQUEST_NOTIFICATIONS_MISSED = 1004
         const val REQUEST_PHONE_STATE = 1005
+        private const val PREFS_UI = "lina_ui"
+        private const val KEY_PHONE_ASKED = "phone_permission_asked"
     }
 }

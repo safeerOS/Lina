@@ -6,7 +6,7 @@ import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
 
 /**
- * KOPIJA (dobesedno, brez sprememb vsebine) iz Android-tv: src/main/kotlin/si/safeer/tv/cast/KrogZaupanja.kt @707ff60,
+ * KOPIJA (dobesedno; edina razlika: KDoc preveriPodpisSKljucem prestavljen k funkciji, pregled 17 B10) iz Android-tv: src/main/kotlin/si/safeer/tv/cast/KrogZaupanja.kt @707ff60,
  * companion object od dekodirajKljuc do jeIdIzKljuca. Isti zapis kot core/link_krog.py (Safeer-linux) in idIzKljuca v
  * Lini (kanal-claude.ts). Ne spreminjaj tu - popravek gre najprej v Android-tv; ujemanje drzi KrogKljucTest (skupni vektor).
  */
@@ -15,7 +15,6 @@ object KrogKljuc {
         KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(b64)))
     } catch (_: Throwable) { null }
 
-    /** Ali je [podpisB64] podpis [podatkov] z javnim kljucem [kljucB64] (SHA256withECDSA, DER podpis). */
     /**
      * Kar podpise naprava, ki v krog doda drugo napravo. Podpis je vezan na id, kljuc, platformo,
      * cas in podpisnika: vnosa ni mogoce spremeniti ne prestaviti k drugemu clanu. Isti zapis kot
@@ -28,6 +27,7 @@ object KrogKljuc {
     fun podatkiUmika(id: String, umaknjeno: Double, umaknil: String): ByteArray =
         "safeer-krog-umik-v1\n$id\n${String.format(java.util.Locale.ROOT, "%.3f", umaknjeno)}\n$umaknil".toByteArray(Charsets.UTF_8)
 
+    /** Ali je [podpisB64] podpis [podatkov] z javnim kljucem [kljucB64] (SHA256withECDSA, DER podpis). */
     fun preveriPodpisSKljucem(kljucB64: String, podatki: ByteArray, podpisB64: String): Boolean {
         val kljuc = dekodirajKljuc(kljucB64) ?: return false
         return try {

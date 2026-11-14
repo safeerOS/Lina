@@ -38,15 +38,15 @@ class CallCommandPolicyTest {
 
     @Test
     fun `rocno sprejet klic in zakasnel ANSWER je zavrnjen`() {
-        val manual = CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.ACTIVE, manuallyAnswered = true)
+        val manual = CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.ACTIVE, manuallyAnswered = true, lineAllowed = true)
         assertFalse(manual.allowed)
         assertEquals("call_answered_manually", manual.reason)
 
-        val alreadyUp = CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.ACTIVE, manuallyAnswered = false)
+        val alreadyUp = CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.ACTIVE, manuallyAnswered = false, lineAllowed = true)
         assertFalse(alreadyUp.allowed)
         assertEquals("call_not_ringing", alreadyUp.reason)
 
-        val ringing = CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.RINGING, manuallyAnswered = false)
+        val ringing = CallCommandPolicy.allowRemoteAnswer(TakeoverPhase.RINGING, manuallyAnswered = false, lineAllowed = true)
         assertTrue(ringing.allowed)
     }
 }

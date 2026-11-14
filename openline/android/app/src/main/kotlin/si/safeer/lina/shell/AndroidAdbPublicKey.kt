@@ -11,7 +11,7 @@ object AndroidAdbPublicKey {
     private const val MODULUS_BYTES = 256
     private const val MODULUS_WORDS = MODULUS_BYTES / 4
 
-    fun encodeLine(key: RSAPublicKey, name: String = "httpgateway"): String {
+    fun encodeLine(key: RSAPublicKey, name: String = "safeer-lina"): String {
         val body = Base64.getEncoder().encodeToString(encode(key))
         return "$body $name"
     }
@@ -23,7 +23,7 @@ object AndroidAdbPublicKey {
         val n0 = modulus.mod(BigInteger.ONE.shiftLeft(32))
         out.putInt(n0.modInverse(BigInteger.ONE.shiftLeft(32)).negate().toInt())
         putLittleEndian(out, modulus, MODULUS_BYTES)
-        val rr = BigInteger.ONE.shiftLeft(MODULUS_BYTES * 8).modPow(BigInteger.TWO, modulus)
+        val rr = BigInteger.ONE.shiftLeft(MODULUS_BYTES * 8).modPow(BigInteger.valueOf(2), modulus)
         putLittleEndian(out, rr, MODULUS_BYTES)
         out.putInt(key.publicExponent.toInt())
         return out.array()

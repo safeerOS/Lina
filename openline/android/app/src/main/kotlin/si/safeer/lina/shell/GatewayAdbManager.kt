@@ -54,11 +54,11 @@ class GatewayAdbManager private constructor(context: Context) : AbsAdbConnection
         return AndroidAdbPublicKey.encodeLine(publicKey)
     }
 
-    override fun getDeviceName(): String = "httpgateway"
+    override fun getDeviceName(): String = "safeer-lina"
 
     private fun generate() {
         val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-        val name = X500Name("CN=httpgateway")
+        val name = X500Name("CN=safeer-lina")
         val now = System.currentTimeMillis()
         val holder = JcaX509v3CertificateBuilder(
             name,
@@ -103,7 +103,7 @@ class GatewayAdbManager private constructor(context: Context) : AbsAdbConnection
     }
 
     companion object {
-        private const val WRAP_ALIAS = "httpgateway_adb_wrap"
+        private const val WRAP_ALIAS = "safeer_lina_adb_wrap"
 
         @Volatile
         private var instance: GatewayAdbManager? = null

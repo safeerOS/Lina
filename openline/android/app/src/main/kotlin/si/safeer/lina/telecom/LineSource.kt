@@ -65,7 +65,8 @@ class LineSource(private val context: Context, private val key: ByteArray) {
                 simSubscription = account.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION),
                 emergencyCallsOnly = account.hasCapabilities(CAPABILITY_EMERGENCY_CALLS_ONLY),
                 subscriptionId = subId,
-                activeSubscription = if (subId != null) sub != null else activeSubs.isNotEmpty(),
+                // Android 10 (pregled 17, B1): racuna ne moremo zanesljivo povezati z narocnino - velja samo natanko ena aktivna.
+                activeSubscription = if (subId != null) sub != null else activeSubs.size == 1,
                 isEsim = sub?.isEmbedded ?: false,
                 enabled = account.isEnabled,
             )
