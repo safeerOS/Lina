@@ -9,7 +9,9 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
   Nacrt: ogled/openline-k17/nacrt-enotna-aplikacija.md (izven repozitorija). V kodi se NI zdruzeno.
 - Ime aplikacije »Lina« (v programu »Lina – AI tajnica«, v govoru »AI asistentka«; lastnik 10. 11. 2026).
 - applicationId `si.safeer.lina` (lastnik 14. 11. 2026). Staro aplikacijo `com.httpgateway.dialer` na testnih telefonih
-  odstrani LASTNIK, ko je nova pripravljena za namestitev - agent je ne odstranjuje.
+  odstrani vodja seje (koordinator) ob novi gradnji - podagent je ne odstranjuje.
+- Uporabnik vidi samo ime Lina (tudi »konzola Lina« / »Lina console«). Strežnik se interno lahko še imenuje OpenLine;
+  shema QR `httpgateway://` in ime procesa lupine ostaneta, ker ju uporabnik ne vidi (odločitev 14. 11. 2026).
 - Seznanitev v ozji krog Safeer Linka (lastnik 14. 11. 2026): Safeer OS na istem telefonu potrdi Lino v krog z ENIM dotikom
   (namera, zascitena z dovoljenjem ravni signature - obe aplikaciji podpisani z istim kljucem Safeer). Rezerva, ce to ni
   izvedljivo: navadno seznanjanje Linka. Debug APK je podpisan z razvojnim kljucem, zato se za preizkus te poti podpise s
