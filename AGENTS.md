@@ -8,6 +8,14 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
   Claude Code s podpisom naprave; NALOGA-lina-kanal-claude-code.md, razdelek 3b). Druge aplikacije za asistentko NE delamo.
   Nacrt: ogled/openline-k17/nacrt-enotna-aplikacija.md (izven repozitorija). V kodi se NI zdruzeno.
 - Ime aplikacije »Lina« (v programu »Lina – AI tajnica«, v govoru »AI asistentka«; lastnik 10. 11. 2026).
+- applicationId `si.safeer.lina` (lastnik 14. 11. 2026). Staro aplikacijo `com.httpgateway.dialer` na testnih telefonih
+  odstrani LASTNIK, ko je nova pripravljena za namestitev - agent je ne odstranjuje.
+- Seznanitev v ozji krog Safeer Linka (lastnik 14. 11. 2026): Safeer OS na istem telefonu potrdi Lino v krog z ENIM dotikom
+  (namera, zascitena z dovoljenjem ravni signature - obe aplikaciji podpisani z istim kljucem Safeer). Rezerva, ce to ni
+  izvedljivo: navadno seznanjanje Linka. Debug APK je podpisan z razvojnim kljucem, zato se za preizkus te poti podpise s
+  kljucem Safeer (orodje podpisi-apk.sh izven repozitorija) - sicer Android dovoljenja ne podeli.
+- Kljuc naprave: oblika Safeer Linka (EC P-256, SHA256withECDSA DER, id n-<16 hex SHA-256 SPKI); koda je KOPIJA iz Android-tv
+  (KrogZaupanja.kt, HubTls.kt) z navedbo vira, ujemanje drzi skupni vektor TS <-> Kotlin. Ne pisi na novo.
 - Tajnica (klici neznancev) in osebna asistentka (lastnik) sta strogo loceni: iz poti klica ni nobene poti do asistentke,
   kanala Claude Code ali podpisa naprave. Preizkus mora pasti, ce se poti povezeta.
 - Lina prevzame samo klic na liniji (SIM/eSIM), ki jo izbere uporabnik, ali na edini aktivni liniji (LineGate, TakeoverPolicy).
