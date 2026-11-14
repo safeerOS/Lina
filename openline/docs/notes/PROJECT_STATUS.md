@@ -105,7 +105,7 @@ Location: `android/`
 Package:
 
 ```text
-com.httpgateway.dialer
+si.safeer.lina
 ```
 
 Implemented:

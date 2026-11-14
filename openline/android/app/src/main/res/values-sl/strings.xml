@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OpenLine</string>
+    <string name="app_name">Lina</string>
+    <string name="app_title">Lina – AI tajnica</string>
     <string name="setup_title">Nastavitev telefona</string>
     <string name="step_role_title">Privzeta aplikacija za telefon</string>
     <string name="step_server_title">Povezava s prehodom</string>
@@ -33,11 +34,11 @@
     <string name="role_done">Ta aplikacija obravnava klice telefona.</string>
     <string name="role_needed">Potrebno za klicanje in sprejemanje.</string>
     <string name="set">Nastavi</string>
-    <string name="battery_done">Dovoljeno. Na Vivo še Baterija, nato Poraba v ozadju, dovoli za OpenLine.</string>
+    <string name="battery_done">Dovoljeno. Na Vivo še Baterija, nato Poraba v ozadju, dovoli za Lino.</string>
     <string name="battery_needed">Brez tega telefon po nekaj minutah pade s prehoda.</string>
     <string name="vivo_setting">Nastavitev Vivo</string>
     <string name="allow">Dovoli</string>
-    <string name="battery_manual">Odpri Nastavitve, Aplikacije, OpenLine, Baterija</string>
+    <string name="battery_manual">Odpri Nastavitve, Aplikacije, Lina, Baterija</string>
     <string name="server_scan">Skeniraj kodo QR iz skrbniške konzole.</string>
     <string name="server_offline">%1$s trenutno ni dosegljiv.</string>
     <string name="scan_again">Skeniraj znova</string>
@@ -54,7 +55,7 @@
     <string name="audio_starting">Zaganjam…</string>
     <string name="wifi_title">Povežite se na omrežje Wi-Fi</string>
     <string name="wifi_on_prefix">Wi-Fi je vklopljen, telefon pa še ni v omrežju. </string>
-    <string name="wifi_body">OpenLine zažene pomočnika za zvok klica prek Androidovega brezžičnega odpravljanja napak, ki teče samo, ko je telefon v omrežju Wi-Fi. Za hip se pridružite kateremu koli omrežju (zadostuje tudi dostopna točka drugega telefona). Potem klici delujejo na mobilnih podatkih do ponovnega zagona.</string>
+    <string name="wifi_body">Lina zažene pomočnika za zvok klica prek Androidovega brezžičnega odpravljanja napak, ki teče samo, ko je telefon v omrežju Wi-Fi. Za hip se pridružite kateremu koli omrežju (zadostuje tudi dostopna točka drugega telefona). Potem klici delujejo na mobilnih podatkih do ponovnega zagona.</string>
     <string name="open_wifi">Odpri Wi-Fi</string>
     <string name="not_now">Ne zdaj</string>
     <string name="wifi_manual">Odpri Nastavitve in vklopi Wi-Fi</string>
@@ -99,7 +100,7 @@
     <string name="routed_audio">Zvok gre na prehod. Ta telefon ostane tih.</string>
     <string name="didnt_work">To ni uspelo</string>
     <string name="pair_channel">Nastavitev</string>
-    <string name="pair_title_note">Nastavitev OpenLine</string>
+    <string name="pair_title_note">Nastavitev Line</string>
     <string name="pair_begin">Odpri Nastavitve › Možnosti za razvijalce › Brezžično odpravljanje napak › Seznani napravo s kodo</string>
     <string name="pair_not_found">Storitev za seznanjanje še ni najdena; pustite pogovorno okno odprto.</string>
     <string name="pair_pairing">Seznanjam…</string>
@@ -114,7 +115,7 @@
     <string name="pair_code_label">6-mestna koda za seznanjanje</string>
     <string name="pair_enter">Vnesi kodo</string>
     <string name="pair_found">Storitev za seznanjanje je najdena. Tapnite Vnesi kodo in vpišite kodo iz nastavitev.</string>
-    <string name="connection_channel">Povezava OpenLine</string>
+    <string name="connection_channel">Povezava Line</string>
     <string name="connection_channel_desc">Prikazano, dokler je telefon povezan s prehodom.</string>
     <string name="connection_connected">Povezan</string>
     <string name="connection_offline">Ni povezave</string>
@@ -124,7 +125,7 @@
     <string name="shell_still_running">Zvok klica še teče. Izklopite brezžično odpravljanje napak in poskusite znova.</string>
     <string name="telecom_action_failed">Telefon tega ni naredil.</string>
     <string name="telecom_permission_denied">Telefon je to zavrnil.</string>
-    <string name="call_phone_permission_missing">OpenLine potrebuje dovoljenje za klicanje.</string>
+    <string name="call_phone_permission_missing">Lina potrebuje dovoljenje za klicanje.</string>
     <string name="call_controlled_locally">Ta klic je na slušalki.</string>
     <string name="call_not_found">Tega klica ni več.</string>
     <string name="call_not_taken_over">Lina tega klica nima.</string>
@@ -144,7 +145,7 @@
     <string name="missed_channel">Zgrešeni klici</string>
     <string name="missed_title">Zgrešen klic</string>
     <string name="missed_while_lina">%1$s je klical, medtem ko je Lina govorila z drugim klicateljem.</string>
-    <string name="missed_unseen">Zgrešenih klicev, medtem ko je Lina govorila: %1$d. Obvestila so izklopljena, zato jih ne vidite v seznamu obvestil. Dovolite obvestila za OpenLine.</string>
+    <string name="missed_unseen">Zgrešenih klicev, medtem ko je Lina govorila: %1$d. Obvestila so izklopljena, zato jih ne vidite v seznamu obvestil. Dovolite obvestila za Lino.</string>
     <string name="line_label">Linija, na kateri se oglasi Lina (SIM ali eSIM)</string>
     <string name="line_choose">Izberite linijo</string>
     <string name="line_esim">%1$s (eSIM)</string>

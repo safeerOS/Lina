@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.httpgateway.dialer"
+    namespace = "si.safeer.lina"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "com.httpgateway.dialer"
+        applicationId = "si.safeer.lina"
         minSdk = 29
         targetSdk = 35
         versionCode = 1

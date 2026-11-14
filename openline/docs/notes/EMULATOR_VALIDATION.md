@@ -5,7 +5,7 @@ Validated on Android API 36.1 using the AVD `Medium_Phone_API_36.1` and the Andr
 ## What was verified
 
 - APK installs and launches.
-- `com.httpgateway.dialer` can hold `android.app.role.DIALER`.
+- `si.safeer.lina` can hold `android.app.role.DIALER`.
 - `ACTION_DIAL tel:` resolves to the gateway dialer and pre-fills the number.
 - Emulator GSM incoming calls bind `GatewayInCallService` and open `InCallActivity`.
 - Incoming call events reach the gateway server over the authenticated WebSocket.
@@ -27,8 +27,8 @@ Validated on Android API 36.1 using the AVD `Medium_Phone_API_36.1` and the Andr
 ## Useful commands
 
 ```powershell
-adb shell cmd role add-role-holder android.app.role.DIALER com.httpgateway.dialer 0
-adb shell pm grant com.httpgateway.dialer android.permission.CALL_PHONE
+adb shell cmd role add-role-holder android.app.role.DIALER si.safeer.lina 0
+adb shell pm grant si.safeer.lina android.permission.CALL_PHONE
 adb emu gsm call 5550001
 adb emu gsm cancel 5550001
 adb emu gsm list
