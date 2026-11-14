@@ -97,3 +97,31 @@ object LinePicker {
         }
     }
 }
+
+/**
+ * Kar Android pove o enem klicnem racunu (PhoneAccount), brez stevilk. Krog 17c (preizkus na WP28 S brez SIM, 14. 11. 2026):
+ * telefon brez kartice ima racun »Klici v sili« (SIM racun, samo klici v sili, brez narocnine) - ta NI linija uporabnika.
+ */
+data class PhoneAccountFacts(
+    val id: String,
+    val label: String,
+    val simSubscription: Boolean,
+    val emergencyCallsOnly: Boolean,
+    /** subscriptionId racuna; < 0 = brez narocnine (INVALID_SUBSCRIPTION_ID je -1). null = sistem tega ne pove (Android 10). */
+    val subscriptionId: Int?,
+    /** SubscriptionManager ima za ta racun aktivno narocnino. */
+    val activeSubscription: Boolean,
+    val isEsim: Boolean,
+    val enabled: Boolean,
+)
+
+object LineAccounts {
+    /** Linije uporabnika: samo racuni SIM/eSIM z aktivno narocnino, nikoli racun samo za klice v sili. */
+    fun lines(accounts: List<PhoneAccountFacts>): List<Line> = accounts.mapNotNull { a ->
+        if (!a.simSubscription || a.emergencyCallsOnly) return@mapNotNull null
+        if (a.subscriptionId != null && a.subscriptionId < 0) return@mapNotNull null
+        if (!a.activeSubscription) return@mapNotNull null
+        if (a.label.isBlank() || a.id.isBlank()) return@mapNotNull null
+        Line(a.id, a.label, a.isEsim, a.enabled)
+    }
+}

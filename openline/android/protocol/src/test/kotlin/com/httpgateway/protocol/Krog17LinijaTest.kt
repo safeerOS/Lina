@@ -83,4 +83,37 @@ class Krog17LinijaTest {
         assertFalse(c.followSslRedirects)
         c.dispatcher.executorService.shutdown()
     }
+
+    // Krog 17c: WP28 S brez SIM je ponudil in izbral »Klici v sili« (14. 11. 2026).
+    private fun racun(id: String, label: String, emergencyOnly: Boolean = false, subId: Int? = 1, active: Boolean = true, sim: Boolean = true) =
+        PhoneAccountFacts(id, label, simSubscription = sim, emergencyCallsOnly = emergencyOnly, subscriptionId = subId,
+            activeSubscription = active, isEsim = false, enabled = true)
+
+    @Test
+    fun `racun samo za klice v sili ni linija`() {
+        // Kot WP28 S brez kartice: en SIM racun brez narocnine, samo klici v sili.
+        val sos = racun("sos", "Klici v sili", emergencyOnly = true, subId = -1, active = false)
+        assertTrue(LineAccounts.lines(listOf(sos)).isEmpty())
+        assertEquals(LineStatus.NONE, LinePicker.view(true, LineAccounts.lines(listOf(sos)), null).status)
+        // Vsak znak posebej zadostuje za izlocitev.
+        assertTrue(LineAccounts.lines(listOf(racun("a", "SIM 1", emergencyOnly = true))).isEmpty())
+        assertTrue(LineAccounts.lines(listOf(racun("a", "SIM 1", subId = -1))).isEmpty())
+        assertTrue(LineAccounts.lines(listOf(racun("a", "SIM 1", active = false))).isEmpty())
+        assertTrue(LineAccounts.lines(listOf(racun("a", "SIP", sim = false))).isEmpty())
+        // Prava linija ostane, racun za klice v sili ne.
+        val lines = LineAccounts.lines(listOf(racun("a", "SIM 1"), sos))
+        assertEquals(listOf("a"), lines.map { it.id })
+        // Android 10: subscriptionId ni znan - velja aktivna narocnina.
+        assertEquals(1, LineAccounts.lines(listOf(racun("a", "SIM 1", subId = null))).size)
+    }
+
+    @Test
+    fun `LineGate klica na racunu za klice v sili nikoli ne dovoli`() {
+        val sos = racun("sos", "Klici v sili", emergencyOnly = true, subId = -1, active = false)
+        for (saved in listOf(null, "sos", "a")) {
+            assertFalse(LineGate.allows(LineAccounts.lines(listOf(sos)), saved, "sos"), "saved=$saved")
+            assertFalse(LineGate.allows(LineAccounts.lines(listOf(racun("a", "SIM 1"), sos)), saved, "sos"), "saved=$saved")
+        }
+        assertTrue(LineGate.allows(LineAccounts.lines(listOf(racun("a", "SIM 1"), sos)), null, "a"))
+    }
 }

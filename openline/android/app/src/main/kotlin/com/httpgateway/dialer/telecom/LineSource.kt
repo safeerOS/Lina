@@ -11,6 +11,9 @@ import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.httpgateway.protocol.Line
 import com.httpgateway.protocol.LineIdCodec
+import com.httpgateway.protocol.LineAccounts
+import com.httpgateway.protocol.PhoneAccountFacts
+import android.telecom.PhoneAccount
 
 /**
  * Branje dostopnih klicnih linij (SIM in eSIM) iz sistema Android.
@@ -42,33 +45,39 @@ class LineSource(private val context: Context, private val key: ByteArray) {
             emptyList<PhoneAccountHandle>()
         }
 
-        return handles.mapNotNull { handle ->
-            // Racun drugega uporabnika naprave ali nedosegljiv racun ne sme sesuti branja.
-            val account = telecomManager.getPhoneAccount(handle) ?: return@mapNotNull null
-            if (!account.hasCapabilities(android.telecom.PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION)) return@mapNotNull null
-            // Racun brez imena izpustimo (prej je en tak racun naredil ves izbor neveljaven).
-            val label = account.label?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val id = idOf(handle) ?: return@mapNotNull null
-            val active = account.isEnabled
-
-            var isEsim = false
-            try {
-                // Subscription ID iz PhoneAccountHandle zahteva API 30+; na Androidu 10 je linija brez oznake eSIM.
-                val subId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) telephonyManager.getSubscriptionId(handle)
-                    else SubscriptionManager.INVALID_SUBSCRIPTION_ID
-                if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                    val subInfo = subscriptionManager.getActiveSubscriptionInfo(subId)
-                    if (subInfo != null) {
-                        isEsim = subInfo.isEmbedded
-                    }
-                }
-            } catch (e: SecurityException) {
-                // Ignoriramo napako dovoljenj
-            } catch (e: UnsupportedOperationException) {
-                // Naprava morda ne podpira te operacije
-            }
-
-            Line(id, label, isEsim, active)
+        val activeSubs = try {
+            subscriptionManager.activeSubscriptionInfoList.orEmpty()
+        } catch (e: SecurityException) {
+            emptyList()
         }
+        val facts = handles.mapNotNull { handle ->
+            val account = telecomManager.getPhoneAccount(handle) ?: return@mapNotNull null
+            val id = idOf(handle) ?: return@mapNotNull null
+            // subscriptionId racuna zna Telephony sele od Androida 11; na Androidu 10 velja samo, da obstaja aktivna narocnina.
+            val subId: Int? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try { telephonyManager.getSubscriptionId(handle) } catch (e: SecurityException) { SubscriptionManager.INVALID_SUBSCRIPTION_ID }
+                    catch (e: UnsupportedOperationException) { SubscriptionManager.INVALID_SUBSCRIPTION_ID }
+            } else null
+            val sub = if (subId != null) activeSubs.firstOrNull { it.subscriptionId == subId } else null
+            PhoneAccountFacts(
+                id = id,
+                label = account.label?.toString().orEmpty(),
+                simSubscription = account.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION),
+                emergencyCallsOnly = account.hasCapabilities(CAPABILITY_EMERGENCY_CALLS_ONLY),
+                subscriptionId = subId,
+                activeSubscription = if (subId != null) sub != null else activeSubs.isNotEmpty(),
+                isEsim = sub?.isEmbedded ?: false,
+                enabled = account.isEnabled,
+            )
+        }
+        return LineAccounts.lines(facts)
+    }
+
+    private companion object {
+        /**
+         * PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY je @SystemApi (ni v javnem SDK); vrednost 0x80 iz izvorne kode SDK
+         * android-37.0 (android/telecom/PhoneAccount.java:370). Glavna varovala sta javna: subscriptionId < 0 in brez aktivne narocnine.
+         */
+        const val CAPABILITY_EMERGENCY_CALLS_ONLY = 0x80
     }
 }
