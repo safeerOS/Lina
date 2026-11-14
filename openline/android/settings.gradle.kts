@@ -18,3 +18,4 @@ dependencyResolutionManagement {
 rootProject.name = "HttpGatewayDialer"
 include(":app")
 include(":protocol")
+include(":podpis")
