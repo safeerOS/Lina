@@ -1,0 +1,55 @@
+# Pravila za AI pomocnike (Claude, Gemini, Grok, Antigravity ...) v OpenLine / Lina za Android
+
+Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti so v kodi in preizkusih.
+
+## Izdelek (lastnik)
+- **ENA aplikacija (lastnik 13. in 14. 11. 2026: »OpenLine mora biti enotna aplikacija z Lino AI asistentko za telefon.«):**
+  na Androidu je ena sama aplikacija - prevzem klicev (OpenLine) + Lina asistentka (pogovor z Lino, naloge in odobritve za
+  Claude Code s podpisom naprave; NALOGA-lina-kanal-claude-code.md, razdelek 3b). Druge aplikacije za asistentko NE delamo.
+  Nacrt: ogled/openline-k17/nacrt-enotna-aplikacija.md (izven repozitorija). V kodi se NI zdruzeno.
+- Ime aplikacije »Lina« (v programu »Lina – AI tajnica«, v govoru »AI asistentka«; lastnik 10. 11. 2026).
+- Tajnica (klici neznancev) in osebna asistentka (lastnik) sta strogo loceni: iz poti klica ni nobene poti do asistentke,
+  kanala Claude Code ali podpisa naprave. Preizkus mora pasti, ce se poti povezeta.
+- Lina prevzame samo klic na liniji (SIM/eSIM), ki jo izbere uporabnik, ali na edini aktivni liniji (LineGate, TakeoverPolicy).
+  Brez dovoljenja za branje linij ali brez izbire med vec linijami se ne oglasi - in to uporabniku pove z besedami.
+- Razkritje UI v PRVEM izgovorjenem stavku vsakega klica je trdo pravilo (Linin AGENTS.md); nobena pot ga ne izpusti.
+- Jeziki: vsi, ki jih datoteka virov ze ima (zdaj sl, en); privzeto jezik sistema, rocni preklop. Besedila v values*/strings.xml.
+- Kjer vmesnik pove, kje v nastavitvah naprave kaj klikniti, uporabi tocen napis, ki ga naprava pokaze (preveri na napravi).
+
+## Pravi klici in naprave
+- Pravi klici prek OpenLine so PREPOVEDANI do cistega neodvisnega pregleda (lastnik 10. 11. 2026). Ko bo dovolj stabilno,
+  lastnik aplikacijo SAM namesti na svoj Samsung. Na pravih telefonih agent nic ne namesca brez izrecne naloge.
+- Privzeta aplikacija za klice z `cmd role add-role-holder` samo na emulatorju, nikoli na pravem telefonu.
+- Emulator telefona: slika sistema se prenese samo po lastnikovem »da« (prenos in licenca). Po preizkusu `emu kill`,
+  preveri po PID, da emulatorja ni, in `free -m`.
+
+## Zasebnost (nikoli v kodo, preizkus, commit ali dnevnik)
+- Ime lastnika, telefonske stevilke (v preizkusih izmisljene, npr. +99955501001), ICCID, IP-ji naprav, kljuci, zetoni, poti
+  domace mape, posnetki zaslona pravih naprav. V besedilu: »lastnik«.
+- Id linije je HMAC s kljucem namestitve (LineIdCodec), nikoli ICCID ali gol SHA-256. Logcat brez stevilk in ICCID.
+- Zeton gre samo v glavo (Authorization: Bearer), nikoli v poizvedbo; >= 32 B; primerjava v konstantnem casu.
+
+## Varnost povezav
+- Zvok klica in zetoni samo prek TLS s pripetim odtisom lista (TlsPin / PinnedHttp); zahteve s kljucem NE sledijo preusmeritvam.
+- Strezniki samo na 127.0.0.1 ali zasebnem IP domacega omrezja, nikoli 0.0.0.0. Vsaka pot nadgradnje gre prek
+  server/src/upgrade-router.ts (tuja pot 404, vticnica se vedno zapre).
+- Razvojna orodja (tools/eho-wss, debug sonda) imajo enaka pravila: samo wss, zeton iz datoteke ali okolja, ne iz ukazne vrstice.
+
+## Git
+- Avtor commitov: `Safeer <info@safeer.si>`; sporocila v slovenscini; `[skip ci]`; BREZ vrstic Co-Authored-By, Claude-Session
+  ali podobnih oznak agenta. Brez potiska in objave brez lastnikovega »da«. Brez `--force`, brez `git stash` brez oznake.
+- AGENTS.md se commita sam (samo ta datoteka v commitu).
+
+## Preizkusi (vse pred commitom, vse zeleno)
+- Kotlin: `ANDROID_HOME=<mapa Android SDK> JAVA_HOME=<jbr iz Android Studia> ./gradlew --max-workers=2 :protocol:test :app:compileDebugKotlin`
+  v ozadju (setsid nohup, dnevnik), pred tem `uptime` (load < 4); na koncu `./gradlew --stop`.
+- Streznik: `npx vitest run --config vitest.config.ts` in `npx tsc -p tsconfig.json --noEmit` v openline/server.
+- Eho: `node --test --test-timeout=8000 eho-wss.test.mjs` v openline/android/tools/eho-wss.
+- Vsak varnostni popravek ima preizkus, ki BREZ popravka pade - dokazi z mutacijo v kopiji `mktemp -d` (nikoli v izvirniku).
+- Logika, ki jo je treba preizkusiti, gre v modul `protocol` (cisti JVM); `app` je tanek izvajalec. Kar v app ni preizkuseno,
+  v porocilu pise NEPREVERJENO.
+- Ena gradnja APK na sklop popravkov, sele po neodvisnem pregledu; nobenih gradenj, ki krpajo prejsnjo.
+
+## Pospravi za sabo
+- Procese ustavi po PID (ne `pkill -f`), zacasne mape v `mktemp -d`, brez streznikov, ki ostanejo odprti; na koncu
+  `pgrep -af` in `ss -ltn`. Pomozne datoteke naloge, ki niso vec potrebne, izbrisi.
