@@ -14,6 +14,7 @@ import android.util.Log
 import com.httpgateway.dialer.InCallActivity
 import com.httpgateway.dialer.audio.CallAudioBridge
 import com.httpgateway.dialer.config.LinaSettingsStore
+import com.httpgateway.protocol.LineGate
 import com.httpgateway.dialer.transport.GatewayRuntime
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.protocol.EmergencyLock
@@ -265,7 +266,8 @@ class GatewayInCallService : InCallService() {
     }
 
     private fun evaluate(callId: String, call: Call): TakeoverVerdict {
-        val settings = LinaSettingsStore(this).load()
+        val store = LinaSettingsStore(this)
+        val settings = store.load()
         val started = ringStartedAt[callId]
         val elapsed = if (started == null) 0L else SystemClock.elapsedRealtime() - started
         val number = call.details.handle?.schemeSpecificPart.orEmpty()
@@ -284,8 +286,20 @@ class GatewayInCallService : InCallService() {
                 emergencyCallback = emergencyCallback(call),
                 emergencyCooldown = TakeoverPolicy.inEmergencyCooldown(emergencyAt(), System.currentTimeMillis()),
                 externalPickup = RouteGuard.externalPickup,
+                lineAllowed = lineAllowed(store, settings.selectedLineId, call),
             ),
         )
+    }
+
+    /**
+     * Pregled 16 (N1): Lina prevzame samo klic na liniji, ki jo je uporabnik izbral (ali edini aktivni). Napaka pri branju
+     * linij = ne prevzame: klic zvoni na telefonu kot brez Line.
+     */
+    private fun lineAllowed(store: LinaSettingsStore, saved: String?, call: Call): Boolean = try {
+        val source = LineSource(this, store.lineIdKey())
+        LineGate.allows(source.getLines(), saved, source.idOf(call.details.accountHandle))
+    } catch (_: RuntimeException) {
+        false
     }
 
     /**

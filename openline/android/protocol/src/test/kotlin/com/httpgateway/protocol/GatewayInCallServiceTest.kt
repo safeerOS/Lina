@@ -102,5 +102,6 @@ class GatewayInCallServiceTest {
         emergencyCallback = emergencyCallback,
         emergencyCooldown = emergencyCooldown,
         externalPickup = externalPickup,
+        lineAllowed = true,
     )
 }

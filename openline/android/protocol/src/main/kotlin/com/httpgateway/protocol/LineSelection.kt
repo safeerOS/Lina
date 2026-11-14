@@ -62,3 +62,38 @@ object LineSelection {
         return LineSelectionResult.Ambiguous
     }
 }
+
+/**
+ * Pregled 16 (N1): ali Lina sme prevzeti klic na liniji callLineId. Samo ce izbira vrne Use ali Single za PRAV to linijo;
+ * vec linij brez izbire, izbrana linija neaktivna, brez linij ali neveljaven seznam -> ne (klic zvoni samo na telefonu).
+ */
+object LineGate {
+    fun allows(lines: List<Line>, saved: String?, callLineId: String?): Boolean {
+        if (callLineId.isNullOrBlank()) return false
+        return when (val r = LineSelection.choose(lines, saved)) {
+            is LineSelectionResult.Use -> r.id == callLineId
+            is LineSelectionResult.Single -> r.id == callLineId
+            else -> false
+        }
+    }
+}
+
+enum class LineStatus { NO_PERMISSION, NONE, AMBIGUOUS, SAVED_UNAVAILABLE, INVALID, USING }
+
+/** Kaj pokaze izbirnik linije v nastavitvah (N1, N4). Izbrati se da samo aktivno linijo. */
+object LinePicker {
+    data class View(val status: LineStatus, val usingLabel: String?, val choices: List<Line>, val selectedIndex: Int)
+
+    fun view(permission: Boolean, lines: List<Line>, saved: String?): View {
+        if (!permission) return View(LineStatus.NO_PERMISSION, null, emptyList(), -1)
+        val choices = lines.filter { it.active }
+        return when (val r = LineSelection.choose(lines, saved)) {
+            is LineSelectionResult.Use -> View(LineStatus.USING, choices.first { it.id == r.id }.label, choices, choices.indexOfFirst { it.id == r.id })
+            is LineSelectionResult.Single -> View(LineStatus.USING, choices.first { it.id == r.id }.label, choices, 0)
+            LineSelectionResult.Ambiguous -> View(LineStatus.AMBIGUOUS, null, choices, -1)
+            LineSelectionResult.SavedUnavailable -> View(LineStatus.SAVED_UNAVAILABLE, null, choices, -1)
+            LineSelectionResult.None -> View(LineStatus.NONE, null, emptyList(), -1)
+            LineSelectionResult.Invalid -> View(LineStatus.INVALID, null, emptyList(), -1)
+        }
+    }
+}

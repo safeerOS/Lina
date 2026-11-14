@@ -145,6 +145,37 @@
                 android:checked="true"
                 android:text="@string/allowlist_switch" />
 
+            <TextView
+                style="@style/Gw.Muted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/line_label" />
+
+            <TextView
+                android:id="@+id/lineStatus"
+                style="@style/Gw.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <Button
+                android:id="@+id/linePermissionButton"
+                style="@style/Gw.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/line_permission_button"
+                android:visibility="gone" />
+
+            <Spinner
+                android:id="@+id/lineSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:contentDescription="@string/line_label"
+                android:visibility="gone" />
+
             <Button
                 android:id="@+id/saveLinaButton"
                 style="@style/Gw.Button"

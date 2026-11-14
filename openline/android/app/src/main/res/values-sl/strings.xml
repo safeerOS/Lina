@@ -145,4 +145,15 @@
     <string name="missed_title">Zgrešen klic</string>
     <string name="missed_while_lina">%1$s je klical, medtem ko je Lina govorila z drugim klicateljem.</string>
     <string name="missed_unseen">Zgrešenih klicev, medtem ko je Lina govorila: %1$d. Obvestila so izklopljena, zato jih ne vidite v seznamu obvestil. Dovolite obvestila za OpenLine.</string>
+    <string name="line_label">Linija, na kateri se oglasi Lina (SIM ali eSIM)</string>
+    <string name="line_choose">Izberite linijo</string>
+    <string name="line_esim">%1$s (eSIM)</string>
+    <string name="line_permission_reason">Da se Lina oglasi samo na liniji, ki jo izberete, mora videti vaši liniji SIM in eSIM (dovoljenje Telefon). Telefonskih številk ne bere. Dokler tega ne dovolite, se Lina na klice ne oglaša.</string>
+    <string name="line_permission_button">Dovoli dostop do linij</string>
+    <string name="line_status_using">Lina se oglaša na liniji: %1$s. Klici na drugih linijah zvonijo samo na telefonu.</string>
+    <string name="line_status_ambiguous">Telefon ima več linij. Izberite, na kateri se oglasi Lina; do takrat se Lina na klice ne oglaša.</string>
+    <string name="line_status_unavailable">Izbrana linija ni aktivna (brez signala, izklopljena ali zamenjana eSIM). Lina se na klice ne oglaša, dokler ne izberete linije.</string>
+    <string name="line_status_none">Ni aktivne linije SIM ali eSIM. Lina se na klice ne oglaša.</string>
+    <string name="line_status_invalid">Linij ni bilo mogoče zanesljivo prebrati. Lina se na klice ne oglaša.</string>
+    <string name="line_saved">Linija shranjena.</string>
 </resources>

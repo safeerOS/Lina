@@ -25,7 +25,9 @@ import kotlin.concurrent.thread
  * lupina ga zapise v zasebno datoteko aplikacije, sonda jo prebere in takoj izbrise:
  *   adb shell "run-as com.httpgateway.dialer sh -c 'umask 077; mkdir -p files; cat > files/eho-zeton'" < zeton.txt
  *   adb shell am broadcast -n com.httpgateway.dialer/.probe.EhoProbeReceiver \
- *     --es naslov wss://IP:8787/v1/device-channel --es odtis <sha256>
+ *     --es naslov wss://<IP eho-wss>:8787/v1/device-channel --es odtis <sha256 iz izpisa eho-wss>
+ * Cilj je SAMO razvojni streznik android/tools/eho-wss (sprejme glavo Authorization: Bearer). Strezniku OpenLine sonda
+ * ni namenjena: njegov /v1/device-channel zahteva deviceId in x-device-token in bi Bearer zavrnil z 401.
  */
 class EhoProbeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

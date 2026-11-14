@@ -140,5 +140,6 @@ class TakeoverPolicyTest {
         number = number,
         allowlist = allowlist,
         userCallActive = userCallActive,
+        lineAllowed = true,
     )
 }

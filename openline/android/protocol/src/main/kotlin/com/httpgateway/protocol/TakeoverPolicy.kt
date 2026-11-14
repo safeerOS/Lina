@@ -35,6 +35,11 @@ data class TakeoverFacts(
     val emergencyCooldown: Boolean = false,
     /** Prikljucena slusalka, zica ali avtomobilski nacin. */
     val externalPickup: Boolean = false,
+    /**
+     * Pregled 16 (N1): klic je na liniji, ki jo uporabnik dovoli Lini (LineGate.allows). Brez privzete vrednosti:
+     * vsak klicatelj mora odlociti, sicer bi Lina prevzemala klice na drugi SIM/eSIM.
+     */
+    val lineAllowed: Boolean,
 )
 
 object TakeoverPolicy {
@@ -55,6 +60,8 @@ object TakeoverPolicy {
         }
         if (facts.phase != TakeoverPhase.RINGING) return TakeoverVerdict.REFUSE
         if (facts.externalPickup) return TakeoverVerdict.REFUSE
+        // Klic na drugi liniji (SIM/eSIM, ki je uporabnik ni izbral) ostane samo na telefonu.
+        if (!facts.lineAllowed) return TakeoverVerdict.REFUSE
         // Stikalo je za preizkus. Pred njim ostanejo sila, smer, rocni dvig in drug klic.
         if (!mayTakeOver(facts.number, facts.allowlist, facts.allowlistEnabled)) return TakeoverVerdict.REFUSE
         if (facts.ringingForMs < facts.ringTimeoutMs) return TakeoverVerdict.WAIT

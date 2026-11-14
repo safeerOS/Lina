@@ -145,4 +145,15 @@
     <string name="missed_title">Missed call</string>
     <string name="missed_while_lina">%1$s called while Lina was on another call.</string>
     <string name="missed_unseen">Calls missed while Lina was busy: %1$d. Notifications are off, so they are not shown in the notification list. Allow notifications for OpenLine.</string>
+    <string name="line_label">Line Lina answers (SIM or eSIM)</string>
+    <string name="line_choose">Choose a line</string>
+    <string name="line_esim">%1$s (eSIM)</string>
+    <string name="line_permission_reason">To answer only on the line you choose, Lina needs to see your SIM and eSIM lines (permission Phone). It does not read phone numbers. Until you allow it, Lina does not answer calls.</string>
+    <string name="line_permission_button">Allow access to lines</string>
+    <string name="line_status_using">Lina answers calls on: %1$s. Calls on other lines ring only on the phone.</string>
+    <string name="line_status_ambiguous">This phone has more lines. Choose the one Lina answers; until then Lina does not answer calls.</string>
+    <string name="line_status_unavailable">The chosen line is not active (no signal, turned off or eSIM changed). Lina does not answer calls until you choose a line.</string>
+    <string name="line_status_none">No active SIM or eSIM line. Lina does not answer calls.</string>
+    <string name="line_status_invalid">Lines could not be read reliably. Lina does not answer calls.</string>
+    <string name="line_saved">Line saved.</string>
 </resources>

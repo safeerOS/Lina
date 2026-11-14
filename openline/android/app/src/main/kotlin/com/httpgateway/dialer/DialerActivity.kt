@@ -41,6 +41,9 @@ import com.httpgateway.dialer.shell.PairingService
 import com.httpgateway.dialer.shell.ShellClient
 import com.httpgateway.dialer.shell.ShellLauncher
 import com.httpgateway.dialer.telecom.CallCommandController
+import com.httpgateway.dialer.telecom.LineSource
+import com.httpgateway.protocol.LinePicker
+import com.httpgateway.protocol.LineStatus
 import com.httpgateway.dialer.telecom.MissedCallNotice
 import com.httpgateway.dialer.transport.DeviceHealth
 import com.httpgateway.dialer.transport.GatewayRuntime
@@ -92,6 +95,11 @@ class DialerActivity : Activity() {
     private lateinit var allowlistInput: EditText
     private lateinit var allowlistEnabled: CheckBox
     private lateinit var stopCleanButton: Button
+    private lateinit var lineStatus: TextView
+    private lateinit var linePermissionButton: Button
+    private lateinit var lineSpinner: Spinner
+    /** Polozaj, ki ga je nastavila koda (ne uporabnik): izbirnik ga ne shrani. */
+    private var lineProgrammatic = -1
 
     private lateinit var configStore: GatewayConfigStore
     private lateinit var linaSettings: LinaSettingsStore
@@ -152,6 +160,7 @@ class DialerActivity : Activity() {
         wifiPromptShown = false
         notifyMissedWithoutPermission()
         renderSteps()
+        renderLines()
         refreshAudioStatus()
         handler.post(ticker)
         runCatching {
@@ -203,6 +212,12 @@ class DialerActivity : Activity() {
         allowlistInput = findViewById(R.id.allowlistInput)
         allowlistEnabled = findViewById(R.id.allowlistEnabled)
         stopCleanButton = findViewById(R.id.stopCleanButton)
+        lineStatus = findViewById(R.id.lineStatus)
+        linePermissionButton = findViewById(R.id.linePermissionButton)
+        lineSpinner = findViewById(R.id.lineSpinner)
+        linePermissionButton.setOnClickListener {
+            requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
+        }
         fillAdvancedFields()
         fillLinaFields()
         val advanced = findViewById<View>(R.id.advanced)
@@ -256,6 +271,54 @@ class DialerActivity : Activity() {
         ringTimeoutInput.setText(settings.ringTimeoutSec.toString())
         allowlistInput.setText(settings.allowlist.joinToString("\n"))
         allowlistEnabled.isChecked = settings.allowlistEnabled
+        renderLines()
+    }
+
+    /**
+     * Pregled 16 (N1, N4): izbirnik linije in prosnja za dovoljenje Telefon z razlago. Brez dovoljenja ali brez izbire
+     * med vec linijami se Lina ne oglasa (GatewayInCallService.lineAllowed) - to uporabnik tu vidi z besedami.
+     */
+    private fun renderLines() {
+        if (!::lineSpinner.isInitialized) return
+        val source = LineSource(this, linaSettings.lineIdKey())
+        val permission = source.hasPermission()
+        val saved = linaSettings.load().selectedLineId
+        val view = LinePicker.view(permission, if (permission) source.getLines() else emptyList(), saved)
+        lineStatus.text = when (view.status) {
+            LineStatus.NO_PERMISSION -> getString(R.string.line_permission_reason)
+            LineStatus.USING -> getString(R.string.line_status_using, view.usingLabel)
+            LineStatus.AMBIGUOUS -> getString(R.string.line_status_ambiguous)
+            LineStatus.SAVED_UNAVAILABLE -> getString(R.string.line_status_unavailable)
+            LineStatus.NONE -> getString(R.string.line_status_none)
+            LineStatus.INVALID -> getString(R.string.line_status_invalid)
+        }
+        linePermissionButton.visibility = if (view.status == LineStatus.NO_PERMISSION) View.VISIBLE else View.GONE
+        if (view.choices.isEmpty()) {
+            lineSpinner.visibility = View.GONE
+            return
+        }
+        val labels = listOf(getString(R.string.line_choose)) +
+            view.choices.map { if (it.isEsim) getString(R.string.line_esim, it.label) else it.label }
+        lineSpinner.onItemSelectedListener = null
+        lineSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        lineProgrammatic = view.selectedIndex + 1
+        lineSpinner.setSelection(lineProgrammatic, false)
+        lineSpinner.visibility = View.VISIBLE
+        val choices = view.choices
+        lineSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, v: View?, position: Int, id: Long) {
+                if (position == lineProgrammatic) { lineProgrammatic = -1; return }
+                lineProgrammatic = -1
+                if (position == 0) return
+                val chosen = choices.getOrNull(position - 1) ?: return
+                if (chosen.id == linaSettings.load().selectedLineId) return
+                linaSettings.saveSelectedLine(chosen.id)
+                toast(getString(R.string.line_saved))
+                renderLines()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
     }
 
     /** Shrani cas zvonjenja, seznam in stikalo. Privzeto je seznam vklopljen. */
@@ -513,6 +576,7 @@ class DialerActivity : Activity() {
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         if (requestCode == REQUEST_CALL_PHONE && granted) pendingPermissionNumber?.let(::dialLocally)
         if (requestCode == REQUEST_NOTIFICATIONS && granted) startAudioSetup()
+        if (requestCode == REQUEST_PHONE_STATE) renderLines()
         pendingPermissionNumber = null
     }
 
@@ -645,5 +709,6 @@ class DialerActivity : Activity() {
         const val REQUEST_CALL_PHONE = 1002
         const val REQUEST_NOTIFICATIONS = 1003
         const val REQUEST_NOTIFICATIONS_MISSED = 1004
+        const val REQUEST_PHONE_STATE = 1005
     }
 }
