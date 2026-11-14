@@ -149,7 +149,7 @@
     <string name="line_label">Line Lina answers (SIM or eSIM)</string>
     <string name="line_choose">Choose a line</string>
     <string name="line_esim">%1$s (eSIM)</string>
-    <string name="line_permission_reason">To answer only on the line you choose, Lina needs to see your SIM and eSIM lines (permission Phone). It does not read phone numbers. Until you allow it, Lina does not answer calls.</string>
+    <string name="line_permission_reason">To answer only on the line you choose, Lina needs to see your SIM and eSIM lines. It does not read phone numbers. When you press the button, Android asks “Allow Lina to make and manage phone calls?” - choose “Allow”. Until you allow it, Lina does not answer calls.</string>
     <string name="line_permission_button">Allow access to lines</string>
     <string name="line_status_using">Lina answers calls on: %1$s. Calls on other lines ring only on the phone.</string>
     <string name="line_status_ambiguous">This phone has more lines. Choose the one Lina answers; until then Lina does not answer calls.</string>
@@ -168,6 +168,6 @@
     <string name="assistant_sent">Task signed and sent.</string>
     <string name="assistant_not_sent">Lina did not accept the task.</string>
     <string name="assistant_bad_text">The task is empty, too long or contains invalid characters.</string>
-    <string name="line_permission_settings">Access to lines was refused and Android will not ask again. Open the app settings, then Permissions, and allow Phone. Until then Lina does not answer calls.</string>
+    <string name="line_permission_settings">Access was refused and Android will not ask again. Press “Open app settings”, then in “App info” choose “Permissions”, “Phone” and “Allow”. Until then Lina does not answer calls.</string>
     <string name="line_open_settings">Open app settings</string>
 </resources>
