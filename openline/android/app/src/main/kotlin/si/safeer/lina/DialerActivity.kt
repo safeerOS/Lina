@@ -42,6 +42,10 @@ import si.safeer.lina.shell.ShellClient
 import si.safeer.lina.shell.ShellLauncher
 import si.safeer.lina.telecom.CallCommandController
 import si.safeer.lina.telecom.LineSource
+import si.safeer.lina.podpis.NalogaLine
+import si.safeer.lina.podpis.NapravaKljuc
+import si.safeer.lina.podpis.NiPovezave
+import si.safeer.lina.podpis.PovezavaZLino
 import si.safeer.lina.protocol.LinePicker
 import si.safeer.lina.protocol.LineStatus
 import si.safeer.lina.telecom.MissedCallNotice
@@ -98,6 +102,16 @@ class DialerActivity : Activity() {
     private lateinit var lineStatus: TextView
     private lateinit var linePermissionButton: Button
     private lateinit var lineSpinner: Spinner
+    private lateinit var tabCalls: View
+    private lateinit var tabAssistant: View
+    private lateinit var tabCallsButton: Button
+    private lateinit var tabAssistantButton: Button
+    private lateinit var assistantStatus: TextView
+    private lateinit var assistantDeviceId: TextView
+    private lateinit var assistantTaskInput: EditText
+    private lateinit var assistantSendButton: Button
+    /** Povezava z Lino na racunalniku. Koncne tocke v Lini se ni (14. 11. 2026), zato NiPovezave. */
+    private val linaLink: PovezavaZLino = NiPovezave
     /** Polozaj, ki ga je nastavila koda (ne uporabnik): izbirnik ga ne shrani. */
     private var lineProgrammatic = -1
 
@@ -215,6 +229,7 @@ class DialerActivity : Activity() {
         lineStatus = findViewById(R.id.lineStatus)
         linePermissionButton = findViewById(R.id.linePermissionButton)
         lineSpinner = findViewById(R.id.lineSpinner)
+        bindTabs()
         linePermissionButton.setOnClickListener {
             requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
         }
@@ -272,6 +287,66 @@ class DialerActivity : Activity() {
         allowlistInput.setText(settings.allowlist.joinToString("\n"))
         allowlistEnabled.isChecked = settings.allowlistEnabled
         renderLines()
+    }
+
+    /**
+     * Zavihka »Klici« in »Asistent« (lastnik 14. 11. 2026: ena aplikacija). Asistentka ne uporablja nicesar iz poti klicev:
+     * podpis je samo v modulu podpis, gumb je samo tu.
+     */
+    private fun bindTabs() {
+        tabCalls = findViewById(R.id.tabCalls)
+        tabAssistant = findViewById(R.id.tabAssistant)
+        tabCallsButton = findViewById(R.id.tabCallsButton)
+        tabAssistantButton = findViewById(R.id.tabAssistantButton)
+        assistantStatus = findViewById(R.id.assistantStatus)
+        assistantDeviceId = findViewById(R.id.assistantDeviceId)
+        assistantTaskInput = findViewById(R.id.assistantTaskInput)
+        assistantSendButton = findViewById(R.id.assistantSendButton)
+        tabCallsButton.setOnClickListener { showTab(assistant = false) }
+        tabAssistantButton.setOnClickListener { showTab(assistant = true) }
+        assistantSendButton.setOnClickListener { sendTask() }
+        showTab(assistant = false)
+    }
+
+    private fun showTab(assistant: Boolean) {
+        tabCalls.visibility = if (assistant) View.GONE else View.VISIBLE
+        tabAssistant.visibility = if (assistant) View.VISIBLE else View.GONE
+        tabCallsButton.isSelected = !assistant
+        tabAssistantButton.isSelected = assistant
+        tabCallsButton.alpha = if (assistant) 0.6f else 1f
+        tabAssistantButton.alpha = if (assistant) 1f else 0.6f
+        if (assistant) renderAssistant()
+    }
+
+    private fun renderAssistant() {
+        val connected = linaLink.povezana()
+        assistantStatus.text = getString(if (connected) R.string.assistant_ready else R.string.assistant_no_link)
+        assistantDeviceId.text = runCatching { getString(R.string.assistant_device_id, NapravaKljuc.id()) }.getOrDefault("")
+        assistantDeviceId.visibility = if (assistantDeviceId.text.isEmpty()) View.GONE else View.VISIBLE
+        // Kar ni narejeno, se ne pokaze: vnos in gumb samo ob povezavi z Lino.
+        assistantTaskInput.visibility = if (connected) View.VISIBLE else View.GONE
+        assistantSendButton.visibility = if (connected) View.VISIBLE else View.GONE
+    }
+
+    private fun sendTask() {
+        if (!linaLink.povezana()) { renderAssistant(); return }
+        val naloga = NalogaLine.podpisi(
+            id = NalogaLine.nakljucno(),
+            posiljatelj = NapravaKljuc.id(),
+            vnos = assistantTaskInput.text.toString(),
+            cas = System.currentTimeMillis(),
+            enkratni = NalogaLine.nakljucno(),
+            podpisnik = NapravaKljuc::podpisi,
+        ) ?: return toast(getString(R.string.assistant_bad_text))
+        assistantSendButton.isEnabled = false
+        Thread {
+            val ok = runCatching { linaLink.poslji(naloga) }.getOrDefault(false)
+            runOnUiThread {
+                assistantSendButton.isEnabled = true
+                if (ok) assistantTaskInput.setText("")
+                toast(getString(if (ok) R.string.assistant_sent else R.string.assistant_not_sent))
+            }
+        }.start()
     }
 
     /**

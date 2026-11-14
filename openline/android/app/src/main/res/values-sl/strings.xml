@@ -63,7 +63,7 @@
     <string name="pair_toast">Vklopite brezžično odpravljanje napak, tapnite Seznani napravo s kodo, nato uporabite obvestilo</string>
     <string name="wireless_manual">Odpri Nastavitve, Možnosti za razvijalce, Brezžično odpravljanje napak</string>
     <string name="call_failed">Klic ni uspel</string>
-    <string name="qr_bad">Ta koda ni iz konzole OpenLine (potrebna sta https in odtis)</string>
+    <string name="qr_bad">Ta koda ni iz konzole Lina (potrebna sta https in odtis)</string>
     <string name="scanner_unavailable">Optični bralnik ni na voljo.</string>
     <string name="pair_title">Poveži s tem strežnikom?</string>
     <string name="pair_message">Gostitelj: %1$s\nOdtis: %2$s</string>
@@ -157,4 +157,15 @@
     <string name="line_status_none">Ni aktivne linije SIM ali eSIM. Lina se na klice ne oglaša.</string>
     <string name="line_status_invalid">Linij ni bilo mogoče zanesljivo prebrati. Lina se na klice ne oglaša.</string>
     <string name="line_saved">Linija shranjena.</string>
+    <string name="tab_calls">Klici</string>
+    <string name="tab_assistant">Asistent</string>
+    <string name="assistant_title">Asistentka Lina</string>
+    <string name="assistant_no_link">Ni povezave z Lino na računalniku. Naloge za Claude Code bo mogoče poslati, ko bo ta telefon v ožjem krogu Safeer Linka in bo Lina na računalniku sprejemala naloge s telefona.</string>
+    <string name="assistant_ready">Povezano z Lino na računalniku. Naloga se podpiše s ključem tega telefona.</string>
+    <string name="assistant_device_id">Ta telefon v ožjem krogu Safeer Linka: %1$s</string>
+    <string name="assistant_task_hint">Naloga za Claude Code</string>
+    <string name="assistant_send">Pošlji</string>
+    <string name="assistant_sent">Naloga podpisana in poslana.</string>
+    <string name="assistant_not_sent">Lina naloge ni sprejela.</string>
+    <string name="assistant_bad_text">Naloga je prazna, predolga ali vsebuje neveljavne znake.</string>
 </resources>

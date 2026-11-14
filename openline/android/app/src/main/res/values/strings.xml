@@ -63,7 +63,7 @@
     <string name="pair_toast">Turn on Wireless debugging, tap \"Pair device with pairing code\", then use the notification</string>
     <string name="wireless_manual">Open Settings, Developer options, Wireless debugging</string>
     <string name="call_failed">Call failed</string>
-    <string name="qr_bad">This code is not from the OpenLine console (https and a fingerprint are required)</string>
+    <string name="qr_bad">This code is not from the Lina console (https and a fingerprint are required)</string>
     <string name="scanner_unavailable">Scanner unavailable</string>
     <string name="pair_title">Connect to this server?</string>
     <string name="pair_message">Host: %1$s\nFingerprint: %2$s</string>
@@ -157,4 +157,15 @@
     <string name="line_status_none">No active SIM or eSIM line. Lina does not answer calls.</string>
     <string name="line_status_invalid">Lines could not be read reliably. Lina does not answer calls.</string>
     <string name="line_saved">Line saved.</string>
+    <string name="tab_calls">Calls</string>
+    <string name="tab_assistant">Assistant</string>
+    <string name="assistant_title">Lina assistant</string>
+    <string name="assistant_no_link">No connection to Lina on your computer. Tasks for Claude Code can be sent once this phone is in the Safeer Link inner circle and Lina on the computer accepts tasks from the phone.</string>
+    <string name="assistant_ready">Connected to Lina on your computer. A task is signed with this phone\'s key.</string>
+    <string name="assistant_device_id">This phone in the Safeer Link circle: %1$s</string>
+    <string name="assistant_task_hint">Task for Claude Code</string>
+    <string name="assistant_send">Send</string>
+    <string name="assistant_sent">Task signed and sent.</string>
+    <string name="assistant_not_sent">Lina did not accept the task.</string>
+    <string name="assistant_bad_text">The task is empty, too long or contains invalid characters.</string>
 </resources>
