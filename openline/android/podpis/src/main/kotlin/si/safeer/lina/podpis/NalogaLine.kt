@@ -18,6 +18,7 @@ data class PodpisanaNaloga(
  */
 object NalogaLine {
     const val NAJVEC_ZNAKOV = 4000
+    const val NAJKRAJSI_ID = 22
     private const val ABECEDA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 
     /** Besedilo, ki ga uporabnik vpise: obrezano; null, ce je prazno, predolgo ali ima osamljene nadomestne znake. */
@@ -36,19 +37,9 @@ object NalogaLine {
         id: String, posiljatelj: String, vnos: String, cas: Long, enkratni: String, podpisnik: (ByteArray) -> String,
     ): PodpisanaNaloga? {
         val b = besedilo(vnos) ?: return null
+        // Lina (asistent-streznik @e815ed0): id naloge 22-64 znakov - je hkrati kljuc za branje dogodkov (vsaj 128 bitov).
+        if (id.length < NAJKRAJSI_ID) return null
         val niz = NiziLine.nizNaloge(id, posiljatelj, b, cas, enkratni) ?: return null
         return PodpisanaNaloga(id, posiljatelj, b, cas, enkratni, podpisnik(niz.toByteArray(Charsets.UTF_8)))
     }
-}
-
-/** Povezava telefona z Lino na racunalniku. Koncna tocka v Lini se ne obstaja (14. 11. 2026): edina izvedba je NiPovezave. */
-interface PovezavaZLino {
-    fun povezana(): Boolean
-    /** true, ce je Lina nalogo sprejela. */
-    fun poslji(naloga: PodpisanaNaloga): Boolean
-}
-
-object NiPovezave : PovezavaZLino {
-    override fun povezana() = false
-    override fun poslji(naloga: PodpisanaNaloga) = false
 }

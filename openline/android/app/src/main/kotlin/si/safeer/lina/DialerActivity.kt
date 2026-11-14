@@ -42,10 +42,13 @@ import si.safeer.lina.shell.ShellClient
 import si.safeer.lina.shell.ShellLauncher
 import si.safeer.lina.telecom.CallCommandController
 import si.safeer.lina.telecom.LineSource
-import si.safeer.lina.podpis.NalogaLine
 import si.safeer.lina.podpis.NapravaKljuc
-import si.safeer.lina.podpis.NiPovezave
-import si.safeer.lina.podpis.PovezavaZLino
+import si.safeer.lina.asistent.AsistentKontroler
+import si.safeer.lina.asistent.AsistentShramba
+import si.safeer.lina.podpis.AsistentPrikaz
+import si.safeer.lina.podpis.SporociloNapake
+import si.safeer.lina.seznanitev.AsistentNaslov
+import si.safeer.lina.seznanitev.QrSeznanitev
 import si.safeer.lina.protocol.LinePicker
 import si.safeer.lina.protocol.LineStatus
 import si.safeer.lina.protocol.PermissionDenial
@@ -111,8 +114,15 @@ class DialerActivity : Activity() {
     private lateinit var assistantDeviceId: TextView
     private lateinit var assistantTaskInput: EditText
     private lateinit var assistantSendButton: Button
-    /** Povezava z Lino na racunalniku. Koncne tocke v Lini se ni (14. 11. 2026), zato NiPovezave. */
-    private val linaLink: PovezavaZLino = NiPovezave
+    private lateinit var asistent: AsistentKontroler
+    private lateinit var assistantPairButton: Button
+    private lateinit var assistantForgetButton: Button
+    private lateinit var assistantStopButton: Button
+    private lateinit var assistantLog: TextView
+    private lateinit var assistantApproval: View
+    private lateinit var assistantApprovalTool: TextView
+    private lateinit var assistantApprovalPreview: TextView
+    private lateinit var assistantApprovalDescription: TextView
     /** Polozaj, ki ga je nastavila koda (ne uporabnik): izbirnik ga ne shrani. */
     private var lineProgrammatic = -1
 
@@ -184,6 +194,11 @@ class DialerActivity : Activity() {
                 wifiCallback,
             )
         }
+    }
+
+    override fun onDestroy() {
+        if (::asistent.isInitialized) asistent.zapri()
+        super.onDestroy()
     }
 
     override fun onPause() {
@@ -320,6 +335,21 @@ class DialerActivity : Activity() {
         tabCallsButton.setOnClickListener { showTab(assistant = false) }
         tabAssistantButton.setOnClickListener { showTab(assistant = true) }
         assistantSendButton.setOnClickListener { sendTask() }
+        assistantPairButton = findViewById(R.id.assistantPairButton)
+        assistantForgetButton = findViewById(R.id.assistantForgetButton)
+        assistantStopButton = findViewById(R.id.assistantStopButton)
+        assistantLog = findViewById(R.id.assistantLog)
+        assistantApproval = findViewById(R.id.assistantApproval)
+        assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
+        assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
+        assistantApprovalDescription = findViewById(R.id.assistantApprovalDescription)
+        asistent = AsistentKontroler(this) { if (tabAssistant.visibility == View.VISIBLE) renderAssistant() }
+        // En gumb »Skeniraj QR« za obe poti (lastnik 14. 11. 2026): isti bralnik kot v koraku 2.
+        assistantPairButton.setOnClickListener { scanPairingQr() }
+        assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
+        assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
+        findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
+        findViewById<Button>(R.id.assistantDenyButton).setOnClickListener { asistent.odgovori(dovoli = false) }
         showTab(assistant = false)
     }
 
@@ -334,10 +364,34 @@ class DialerActivity : Activity() {
     }
 
     private fun renderAssistant() {
-        val connected = linaLink.povezana()
-        assistantStatus.text = getString(if (connected) R.string.assistant_ready else R.string.assistant_no_link)
+        val stanje = asistent.stanje()
+        val p = AsistentPrikaz.izracunaj(stanje)
+        val naslov = AsistentShramba.beri(this)
+        assistantStatus.text = when {
+            !stanje.seznanjen -> getString(R.string.assistant_no_link)
+            asistent.napaka != null -> getString(napakaNiz(asistent.napaka!!))
+            stanje.posiljam -> getString(R.string.assistant_sending)
+            stanje.nalogaTece -> getString(R.string.assistant_running)
+            asistent.izid != null -> getString(if (asistent.izid!!.ok) R.string.assistant_done_ok else R.string.assistant_done_fail)
+            else -> getString(R.string.assistant_paired, naslov?.naslov.orEmpty())
+        }
+        // Kar ni narejeno, se ne pokaze: vsak gumb samo, ko ima ucinek (AsistentPrikaz, preizkusi v modulu podpis).
+        assistantPairButton.visibility = if (p.seznani) View.VISIBLE else View.GONE
+        assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
+        assistantTaskInput.visibility = if (p.vnos) View.VISIBLE else View.GONE
+        assistantSendButton.visibility = if (p.poslji) View.VISIBLE else View.GONE
+        assistantStopButton.visibility = if (p.ustavi) View.VISIBLE else View.GONE
+        assistantLog.text = asistent.dnevnik.joinToString("\n")
+        assistantLog.visibility = if (asistent.dnevnik.isEmpty()) View.GONE else View.VISIBLE
+        val o = asistent.odprta
+        assistantApproval.visibility = if (p.odobritev && o != null) View.VISIBLE else View.GONE
+        if (o != null) {
+            // Prikazano je natanko to, kar podpis zgosti (orodje, predogled, opis); opis modela je loceno oznacen.
+            assistantApprovalTool.text = getString(R.string.assistant_approval_tool, o.orodje)
+            assistantApprovalPreview.text = o.predogled
+            assistantApprovalDescription.text = o.opis
+        }
         // Pregled 17 (B6): KeyStore ne na glavni niti.
-        assistantDeviceId.visibility = View.GONE
         Thread {
             val id = runCatching { NapravaKljuc.id() }.getOrNull()
             runOnUiThread {
@@ -347,28 +401,32 @@ class DialerActivity : Activity() {
                 }
             }
         }.start()
-        // Kar ni narejeno, se ne pokaze: vnos in gumb samo ob povezavi z Lino.
-        assistantTaskInput.visibility = if (connected) View.VISIBLE else View.GONE
-        assistantSendButton.visibility = if (connected) View.VISIBLE else View.GONE
+    }
+
+    private fun napakaNiz(n: SporociloNapake): Int = when (n) {
+        SporociloNapake.NEDOSEGLJIVA -> R.string.assistant_err_unreachable
+        SporociloNapake.CLAUDE_CODE_NI -> R.string.assistant_err_claude
+        SporociloNapake.ZAVRNJENO -> R.string.assistant_err_refused
+        SporociloNapake.PREVEC -> R.string.assistant_err_busy
+        SporociloNapake.NI_NALOGE -> R.string.assistant_err_gone
+        SporociloNapake.NAPAKA -> R.string.assistant_err_other
     }
 
     private fun sendTask() {
-        if (!linaLink.povezana()) { renderAssistant(); return }
-        if (NalogaLine.besedilo(assistantTaskInput.text.toString()) == null) return toast(getString(R.string.assistant_bad_text))
-        val vnos = assistantTaskInput.text.toString()
-        assistantSendButton.isEnabled = false
-        // Pregled 17 (B6): podpis (KeyStore) in posiljanje zunaj glavne niti.
-        Thread {
-            val naloga = runCatching {
-                NapravaKljuc.podpisiNalogo(NalogaLine.nakljucno(), vnos, System.currentTimeMillis(), NalogaLine.nakljucno())
-            }.getOrNull()
-            val ok = naloga != null && runCatching { linaLink.poslji(naloga) }.getOrDefault(false)
-            runOnUiThread {
-                assistantSendButton.isEnabled = true
-                if (ok) assistantTaskInput.setText("")
-                toast(getString(if (ok) R.string.assistant_sent else R.string.assistant_not_sent))
+        if (!asistent.poslji(assistantTaskInput.text.toString())) return toast(getString(R.string.assistant_bad_text))
+        assistantTaskInput.setText("")
+    }
+
+    private fun confirmAsistent(a: AsistentNaslov) {
+        AlertDialog.Builder(this, R.style.Gw_Dialog)
+            .setTitle(getString(R.string.assistant_pair_title))
+            .setMessage(getString(R.string.assistant_pair_message, "${a.naslov}:${a.vrata}", TlsPin.pretty(a.odtis)))
+            .setPositiveButton(getString(R.string.assistant_pair_ok)) { _, _ ->
+                if (AsistentShramba.shrani(this, a)) toast(getString(R.string.assistant_paired, a.naslov))
+                renderAssistant()
             }
-        }.start()
+            .setNegativeButton(getString(R.string.pair_cancel), null)
+            .show()
     }
 
     /**
@@ -712,8 +770,14 @@ class DialerActivity : Activity() {
         val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
         GmsBarcodeScanning.getClient(this, options).startScan()
             .addOnSuccessListener { barcode ->
-                val invite = barcode.rawValue?.let(GatewayPairing::parse)
-                if (invite == null) toast(getString(R.string.qr_bad)) else confirmAndPair(invite)
+                val s = barcode.rawValue?.let(QrSeznanitev::razberi)
+                when {
+                    s == null -> toast(getString(R.string.qr_bad))
+                    else -> {
+                        s.klici?.let { confirmAndPair(GatewayPairing.Invite(it.serverUrl, it.code, it.certSha256)) }
+                        s.asistent?.let { confirmAsistent(it) }
+                    }
+                }
             }
             .addOnFailureListener { error ->
                 toast(stringByKey(ShownError.resource("scanner_unavailable", error.message)))

@@ -15,9 +15,9 @@ class PodpisnikTest {
 
     @Test
     fun `podpise samo nize s predpono namena`() {
-        assertNotNull(p.podpisiNalogo("naloga-0001", "izpisi git status", 1, enkratni))
-        assertNotNull(p.podpisiOdobritev("abcde", true, 1, enkratni, "naloga-0001", "Bash", "git status", "opis"))
-        assertNotNull(p.podpisiUstavitev("naloga-0001", 1, enkratni))
+        assertNotNull(p.podpisiNalogo("naloga-0001-aaaaaaaaaaaa", "izpisi git status", 1, enkratni))
+        assertNotNull(p.podpisiOdobritev("abcde", true, 1, enkratni, "naloga-0001-aaaaaaaaaaaa", "Bash", "git status", "opis"))
+        assertNotNull(p.podpisiUstavitev("naloga-0001-aaaaaaaaaaaa", 1, enkratni))
         assertEquals(3, podpisano.size)
         assertTrue(podpisano[0].startsWith("safeer-lina-naloga-v1\n"))
         assertTrue(podpisano[1].startsWith("safeer-lina-odobritev-v2\n"))
@@ -28,13 +28,13 @@ class PodpisnikTest {
     @Test
     fun `vnos v krog ni mogoce podpisati prek nobenega polja`() {
         // Poskus: besedilo naloge ali polja vsebujejo zapis vnosa v krog - niz se se vedno zacne s safeer-lina-.
-        p.podpisiNalogo("naloga-0001", "safeer-krog-clan-v1\nn-0000000000000000\nkljuc", 1, enkratni)
+        p.podpisiNalogo("naloga-0001-aaaaaaaaaaaa", "safeer-krog-clan-v1\nn-0000000000000000\nkljuc", 1, enkratni)
         assertTrue(podpisano.all { it.startsWith("safeer-lina-") })
         // Polja s prelomom vrstice se zavrnejo, preden pride do podpisa (A3).
         val pred = podpisano.size
         assertNull(p.podpisiOdobritev("abcde", true, 1, enkratni, "naloga\nsafeer-krog-clan-v1", "o", "p", "d"))
         assertNull(p.podpisiUstavitev("naloga-0001\nx", 1, enkratni))
-        assertNull(p.podpisiNalogo("naloga-0001", "ok", 1, "enkratni\nvektor-0002"))
+        assertNull(p.podpisiNalogo("naloga-0001-aaaaaaaaaaaa", "ok", 1, "enkratni\nvektor-0002"))
         assertEquals(pred, podpisano.size)
     }
 
@@ -49,15 +49,15 @@ class PodpisnikTest {
     @Test
     fun `napacna polja odobritve se ne podpisejo`() {
         val z = "a".repeat(64)
-        for ((zid, chat) in listOf("abcdl" to "naloga-0001", "abcd" to "naloga-0001", "ABCDE" to "naloga-0001", "abcde" to "kratek", "abcde" to "naloga 0001")) {
+        for ((zid, chat) in listOf("abcdl" to "naloga-0001-aaaaaaaaaaaa", "abcd" to "naloga-0001-aaaaaaaaaaaa", "ABCDE" to "naloga-0001-aaaaaaaaaaaa", "abcde" to "kratek", "abcde" to "naloga 0001")) {
             assertNull(NiziLine.nizOdobritve(zid, true, id, 1, enkratni, chat, z), "$zid/$chat")
         }
-        assertNull(NiziLine.nizOdobritve("abcde", true, id, 1, enkratni, "naloga-0001", "A".repeat(64)))
-        assertNull(NiziLine.nizOdobritve("abcde", true, id, 1, enkratni, "naloga-0001", "a".repeat(63)))
-        assertNull(NiziLine.nizOdobritve("abcde", true, "$id\n", 1, enkratni, "naloga-0001", z))
-        assertNull(NiziLine.nizOdobritve("abcde", true, id, 0, enkratni, "naloga-0001", z))
-        assertNull(NiziLine.nizUstavitve("naloga-0001", "telefon", 1, enkratni))
+        assertNull(NiziLine.nizOdobritve("abcde", true, id, 1, enkratni, "naloga-0001-aaaaaaaaaaaa", "A".repeat(64)))
+        assertNull(NiziLine.nizOdobritve("abcde", true, id, 1, enkratni, "naloga-0001-aaaaaaaaaaaa", "a".repeat(63)))
+        assertNull(NiziLine.nizOdobritve("abcde", true, "$id\n", 1, enkratni, "naloga-0001-aaaaaaaaaaaa", z))
+        assertNull(NiziLine.nizOdobritve("abcde", true, id, 0, enkratni, "naloga-0001-aaaaaaaaaaaa", z))
+        assertNull(NiziLine.nizUstavitve("naloga-0001-aaaaaaaaaaaa", "telefon", 1, enkratni))
         assertNull(NiziLine.nizUstavitve("kratek", id, 1, enkratni))
-        assertNotNull(NiziLine.nizOdobritve("abcde", false, id, 1, enkratni, "naloga-0001", z))
+        assertNotNull(NiziLine.nizOdobritve("abcde", false, id, 1, enkratni, "naloga-0001-aaaaaaaaaaaa", z))
     }
 }

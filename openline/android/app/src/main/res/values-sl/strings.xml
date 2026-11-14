@@ -160,7 +160,7 @@
     <string name="tab_calls">Klici</string>
     <string name="tab_assistant">Asistent</string>
     <string name="assistant_title">Asistentka Lina</string>
-    <string name="assistant_no_link">Ni povezave z Lino na računalniku. Naloge za Claude Code bo mogoče poslati, ko bo ta telefon v ožjem krogu Safeer Linka in bo Lina na računalniku sprejemala naloge s telefona.</string>
+    <string name="assistant_no_link">Telefon ni seznanjen z Lino na računalniku. V Lini na računalniku prikažite kodo QR za telefon in jo skenirajte z gumbom »Skeniraj QR«.</string>
     <string name="assistant_ready">Povezano z Lino na računalniku. Naloga se podpiše s ključem tega telefona.</string>
     <string name="assistant_device_id">Ta telefon v ožjem krogu Safeer Linka: %1$s</string>
     <string name="assistant_task_hint">Naloga za Claude Code</string>
@@ -170,4 +170,27 @@
     <string name="assistant_bad_text">Naloga je prazna, predolga ali vsebuje neveljavne znake.</string>
     <string name="line_permission_settings">Dostop je bil zavrnjen in Android ne bo več vprašal. Pritisnite »Odpri nastavitve aplikacije«, nato v »Informacije o aplikaciji« izberite »Dovoljenja«, »Telefon« in »Dovoli«. Do takrat se Lina na klice ne oglaša.</string>
     <string name="line_open_settings">Odpri nastavitve aplikacije</string>
+    <string name="assistant_paired">Seznanjeno z Lino na računalniku (%1$s).</string>
+    <string name="assistant_pair_title">Seznanitev z Lino</string>
+    <string name="assistant_pair_message">Lina na računalniku: %1$s\nOdtis: %2$s\nPreverite, da je odtis enak kot na računalniku.</string>
+    <string name="assistant_pair_ok">Seznani</string>
+    <string name="assistant_forget">Pozabi Lino na računalniku</string>
+    <string name="assistant_sending">Podpisujem in pošiljam nalogo …</string>
+    <string name="assistant_running">Naloga teče na računalniku.</string>
+    <string name="assistant_done_ok">Naloga končana.</string>
+    <string name="assistant_done_fail">Naloga ni uspela.</string>
+    <string name="assistant_stop">Ustavi nalogo</string>
+    <string name="assistant_stop_sent">Zahteva za ustavitev poslana.</string>
+    <string name="assistant_approval_title">Claude Code prosi za dovoljenje</string>
+    <string name="assistant_approval_tool">Orodje: %1$s</string>
+    <string name="assistant_approval_preview">Kaj bo izvedeno:</string>
+    <string name="assistant_approval_desc">Opis modela (ni preverjen):</string>
+    <string name="assistant_allow">Dovoli</string>
+    <string name="assistant_deny">Zavrni</string>
+    <string name="assistant_err_unreachable">Lina na računalniku ni dosegljiva (računalnik spi, ni v istem omrežju ali se je odtis spremenil).</string>
+    <string name="assistant_err_claude">Claude Code na računalniku ni odprt.</string>
+    <string name="assistant_err_refused">Lina zahteve ni sprejela. Telefon mora biti v ožjem krogu Safeer Linka.</string>
+    <string name="assistant_err_busy">Preveč zahtev. Poskusite čez minuto.</string>
+    <string name="assistant_err_gone">Lina te naloge ne pozna več.</string>
+    <string name="assistant_err_other">Napaka pri povezavi z Lino.</string>
 </resources>

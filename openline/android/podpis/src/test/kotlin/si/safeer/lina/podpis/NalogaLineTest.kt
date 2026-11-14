@@ -20,7 +20,7 @@ class NalogaLineTest {
 
     @Test
     fun `podpisana naloga se preveri s kljucem naprave`() {
-        val n = assertNotNull(NalogaLine.podpisi("naloga-0001", id, "  izpisi git status  ", 1763120000000, "enkratni-vektor-0001", podpisnik))
+        val n = assertNotNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "  izpisi git status  ", 1763120000000, "enkratni-vektor-0001", podpisnik))
         assertEquals("izpisi git status", n.besedilo)
         val niz = NiziLine.nizNaloge(n.id, n.posiljatelj, n.besedilo, n.cas, n.enkratni)!!.toByteArray(Charsets.UTF_8)
         assertTrue(KrogKljuc.preveriPodpisSKljucem(kljuc, niz, n.podpis))
@@ -30,15 +30,15 @@ class NalogaLineTest {
     fun `neveljavna naloga se ne podpise`() {
         var podpisov = 0
         val stej: (ByteArray) -> String = { podpisov++; "x" }
-        assertNull(NalogaLine.podpisi("naloga-0001", id, "   ", 1, "enkratni-vektor-0001", stej))
-        assertNull(NalogaLine.podpisi("naloga-0001", id, "a".repeat(4001), 1, "enkratni-vektor-0001", stej))
-        assertNull(NalogaLine.podpisi("naloga-0001", id, "a\uD83Db", 1, "enkratni-vektor-0001", stej))
+        assertNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "   ", 1, "enkratni-vektor-0001", stej))
+        assertNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "a".repeat(4001), 1, "enkratni-vektor-0001", stej))
+        assertNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "a\uD83Db", 1, "enkratni-vektor-0001", stej))
         assertNull(NalogaLine.podpisi("kratek", id, "ok", 1, "enkratni-vektor-0001", stej))
-        assertNull(NalogaLine.podpisi("naloga-0001", "telefon", "ok", 1, "enkratni-vektor-0001", stej))
-        assertNull(NalogaLine.podpisi("naloga-0001", id, "ok", 1, "kratek", stej))
-        assertNull(NalogaLine.podpisi("naloga-0001", id, "ok", 0, "enkratni-vektor-0001", stej))
+        assertNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", "telefon", "ok", 1, "enkratni-vektor-0001", stej))
+        assertNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "ok", 1, "kratek", stej))
+        assertNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "ok", 0, "enkratni-vektor-0001", stej))
         assertEquals(0, podpisov)
-        assertNotNull(NalogaLine.podpisi("naloga-0001", id, "a".repeat(4000), 1, "enkratni-vektor-0001", stej))
+        assertNotNull(NalogaLine.podpisi("naloga-0001-aaaaaaaaaaaa", id, "a".repeat(4000), 1, "enkratni-vektor-0001", stej))
     }
 
     @Test
@@ -49,7 +49,8 @@ class NalogaLineTest {
     }
 
     @Test
-    fun `brez koncne tocke v Lini ni povezave`() {
-        assertFalse(NiPovezave.povezana())
+    fun `id naloge krajsi od 22 znakov se ne podpise`() {
+        assertNull(NalogaLine.podpisi("naloga-0001", id, "ok", 1, "enkratni-vektor-0001", podpisnik))
+        assertNotNull(NalogaLine.podpisi(NalogaLine.nakljucno(), id, "ok", 1, "enkratni-vektor-0001", podpisnik))
     }
 }

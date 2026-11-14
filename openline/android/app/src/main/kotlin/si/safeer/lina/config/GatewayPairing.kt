@@ -21,17 +21,9 @@ object GatewayPairing {
     /** Zavrnitev z imenom niza. Zaslon pokaze niz, ne besedila izjeme (N11-7). */
     class Refused(val resource: String) : IllegalStateException(resource)
 
-    fun parse(text: String): Invite? {
-        val uri = runCatching { Uri.parse(text.trim()) }.getOrNull() ?: return null
-        if (uri.scheme != "httpgateway" || uri.host != "pair") return null
-        val server = uri.getQueryParameter("url")?.trimEnd('/') ?: return null
-        val code = uri.getQueryParameter("code") ?: return null
-        val fingerprint = uri.getQueryParameter("fp")?.trim().orEmpty()
-        // Golo http:// ni dovoljeno. Brez odtisa se ne povezemo.
-        if (!server.startsWith("https://")) return null
-        if (fingerprint.isEmpty()) return null
-        return Invite(server, code, fingerprint)
-    }
+    /** Ista pravila kot QrSeznanitev.stariOpenLine (cisti JVM, preizkusi v modulu seznanitev). */
+    fun parse(text: String): Invite? =
+        si.safeer.lina.seznanitev.QrSeznanitev.stariOpenLine(text.trim())?.let { Invite(it.serverUrl, it.code, it.certSha256) }
 
     /** Blokirajoc klic. Klient zaupa samo pripetemu odtisu. */
     fun pair(context: Context, invite: Invite): GatewayConfig {

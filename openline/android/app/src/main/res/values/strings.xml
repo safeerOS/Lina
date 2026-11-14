@@ -160,7 +160,7 @@
     <string name="tab_calls">Calls</string>
     <string name="tab_assistant">Assistant</string>
     <string name="assistant_title">Lina assistant</string>
-    <string name="assistant_no_link">No connection to Lina on your computer. Tasks for Claude Code can be sent once this phone is in the Safeer Link inner circle and Lina on the computer accepts tasks from the phone.</string>
+    <string name="assistant_no_link">This phone is not paired with Lina on your computer. In Lina on the computer, show the QR code for the phone and scan it with \u201cScan QR\u201d.</string>
     <string name="assistant_ready">Connected to Lina on your computer. A task is signed with this phone\'s key.</string>
     <string name="assistant_device_id">This phone in the Safeer Link circle: %1$s</string>
     <string name="assistant_task_hint">Task for Claude Code</string>
@@ -170,4 +170,27 @@
     <string name="assistant_bad_text">The task is empty, too long or contains invalid characters.</string>
     <string name="line_permission_settings">Access was refused and Android will not ask again. Press “Open app settings”, then in “App info” choose “Permissions”, “Phone” and “Allow”. Until then Lina does not answer calls.</string>
     <string name="line_open_settings">Open app settings</string>
+    <string name="assistant_paired">Paired with Lina on your computer (%1$s).</string>
+    <string name="assistant_pair_title">Pair with Lina</string>
+    <string name="assistant_pair_message">Lina on the computer: %1$s\nFingerprint: %2$s\nCheck that the fingerprint is the same as on the computer.</string>
+    <string name="assistant_pair_ok">Pair</string>
+    <string name="assistant_forget">Forget Lina on the computer</string>
+    <string name="assistant_sending">Signing and sending the task…</string>
+    <string name="assistant_running">The task is running on the computer.</string>
+    <string name="assistant_done_ok">Task finished.</string>
+    <string name="assistant_done_fail">Task did not succeed.</string>
+    <string name="assistant_stop">Stop task</string>
+    <string name="assistant_stop_sent">Stop request sent.</string>
+    <string name="assistant_approval_title">Claude Code asks for permission</string>
+    <string name="assistant_approval_tool">Tool: %1$s</string>
+    <string name="assistant_approval_preview">What will run:</string>
+    <string name="assistant_approval_desc">The model\'s description (not verified):</string>
+    <string name="assistant_allow">Allow</string>
+    <string name="assistant_deny">Deny</string>
+    <string name="assistant_err_unreachable">Lina on the computer cannot be reached (the computer is asleep, not on the same network, or the fingerprint changed).</string>
+    <string name="assistant_err_claude">Claude Code is not open on the computer.</string>
+    <string name="assistant_err_refused">Lina refused the request. The phone must be in the Safeer Link inner circle.</string>
+    <string name="assistant_err_busy">Too many requests. Try again in a minute.</string>
+    <string name="assistant_err_gone">Lina no longer knows this task.</string>
+    <string name="assistant_err_other">Error talking to Lina.</string>
 </resources>
