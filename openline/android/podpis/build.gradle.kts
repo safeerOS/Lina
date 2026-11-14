@@ -11,6 +11,8 @@ kotlin {
 dependencies {
     // JSON pogodbe asistentke (samo JsonElement, brez vticnika); ista razlicica kot protocol.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    // Tok s kodo (TokKode) uporabi SPAKE2 iz modula seznanitev; oba sta pot asistentke, ne klicev.
+    implementation(project(":seznanitev"))
     testImplementation(kotlin("test-junit5"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

@@ -119,6 +119,7 @@ class DialerActivity : Activity() {
     private lateinit var assistantCodeButton: Button
     private var odkrivanje: si.safeer.lina.asistent.OdkrivanjeLine? = null
     private var iscemLino = false
+    private var ponovniVnosOdprt = false
     private lateinit var assistantForgetButton: Button
     private lateinit var assistantStopButton: Button
     private lateinit var assistantLog: TextView
@@ -378,8 +379,11 @@ class DialerActivity : Activity() {
         val glavno = when {
             iscemLino -> getString(R.string.assistant_code_searching)
             asistent.korakKode == AsistentKontroler.KorakKode.POVEZUJEM -> getString(R.string.assistant_code_connecting)
+            asistent.korakKode == AsistentKontroler.KorakKode.CAKA_KODO && koda != null && asistent.kodaNiBilaPrava ->
+                getString(R.string.assistant_code_wrong_on_pc, si.safeer.lina.seznanitev.KodaLine.prikaz(koda))
             asistent.korakKode == AsistentKontroler.KorakKode.CAKA_KODO && koda != null ->
                 getString(R.string.assistant_code_show, si.safeer.lina.seznanitev.KodaLine.prikaz(koda))
+            asistent.korakKode == AsistentKontroler.KorakKode.VNESI_ZNOVA -> getString(R.string.assistant_code_retry_message)
             stanje.cakaPotrditev -> getString(R.string.assistant_wait_confirm)
             !stanje.seznanjen && izidS != null && izidNizKode(izidS) != null -> getString(izidNizKode(izidS)!!)
             !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.ZAVRNJENO -> getString(R.string.assistant_pair_refused)
@@ -403,6 +407,7 @@ class DialerActivity : Activity() {
         // Kar ni narejeno, se ne pokaze: vsak gumb samo, ko ima ucinek (AsistentPrikaz, preizkusi v modulu podpis).
         assistantPairButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
         assistantCodeButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
+        if (asistent.korakKode == AsistentKontroler.KorakKode.VNESI_ZNOVA && !ponovniVnosOdprt) kodoZnova()
         // Razdelek klicev iz /koda/potrdi: ista potrditev kot pri QR (gostitelj in odtis na zaslonu).
         asistent.vzemiKlice()?.let { confirmAndPair(GatewayPairing.Invite(it.serverUrl, it.code, it.certSha256)) }
         assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
@@ -493,6 +498,28 @@ class DialerActivity : Activity() {
                 if (n == null) toast(getString(R.string.assistant_code_bad_address)) else naprejKoda(n.first, n.second, naTelefonu)
             }
             .setNegativeButton(getString(R.string.pair_cancel), null)
+            .show()
+    }
+
+    /** Nacin A: koda ni bila prava; nov krog gre na isti pair_id (brez novega iskanja Line). */
+    private fun kodoZnova() {
+        ponovniVnosOdprt = true
+        val vnos = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(7))
+            hint = "482 913"
+        }
+        AlertDialog.Builder(this, R.style.Gw_Dialog)
+            .setTitle(getString(R.string.assistant_code_retry_title))
+            .setMessage(getString(R.string.assistant_code_retry_message))
+            .setView(vnos)
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.assistant_code_next)) { _, _ ->
+                ponovniVnosOdprt = false
+                val k = si.safeer.lina.seznanitev.KodaLine.koda(vnos.text.toString())
+                if (k == null) { toast(getString(R.string.assistant_code_bad_code)); kodoZnova() } else asistent.vnesiKodoZnova(k)
+            }
+            .setNegativeButton(getString(R.string.pair_cancel)) { _, _ -> ponovniVnosOdprt = false; asistent.vnesiKodoZnova(null) }
             .show()
     }
 

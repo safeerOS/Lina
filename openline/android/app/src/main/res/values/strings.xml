@@ -217,9 +217,12 @@
     <string name="assistant_code_show">In Lina on the computer, type the code %1$s next to the waiting phone.</string>
     <string name="assistant_code_expired">The code has expired. In Lina on the computer, click \u201cPoveži s kodo\u201d again.</string>
     <string name="assistant_code_wrong">The code is wrong. In Lina on the computer, click \u201cPoveži s kodo\u201d again and try once more.</string>
-    <string name="assistant_code_busy">Too many attempts. In Lina on the computer, click \u201cPoveži s kodo\u201d again.</string>
+    <string name="assistant_code_busy">Too many attempts – this pairing has ended. In Lina on the computer, click \u201cPoveži s kodo\u201d again.</string>
     <string name="assistant_code_locked">Connecting with a code is temporarily closed on the computer after too many attempts. Lina shows for how long. You can scan the QR code instead.</string>
     <string name="assistant_code_not_open">In Lina on the computer, first click \u201cPoveži s kodo\u201d.</string>
     <string name="assistant_code_already">This phone is already on the device list in Lina on the computer.</string>
     <string name="assistant_code_fingerprint">The computer\u2019s certificate fingerprint does not match. Not continuing.</string>
+    <string name="assistant_code_wrong_on_pc">The code typed on the computer was not right. In Lina, type it again next to the waiting phone: %1$s.</string>
+    <string name="assistant_code_retry_title">The code was not right</string>
+    <string name="assistant_code_retry_message">The code was not right. Type the code shown by Lina on the computer again.</string>
 </resources>

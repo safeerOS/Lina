@@ -217,9 +217,12 @@
     <string name="assistant_code_show">V Lini na računalniku pri čakajočem telefonu vtipkajte kodo %1$s.</string>
     <string name="assistant_code_expired">Koda je potekla. V Lini na računalniku znova kliknite »Poveži s kodo«.</string>
     <string name="assistant_code_wrong">Koda ni prava. V Lini na računalniku znova kliknite »Poveži s kodo« in poskusite še enkrat.</string>
-    <string name="assistant_code_busy">Preveč poskusov. V Lini na računalniku znova kliknite »Poveži s kodo«.</string>
+    <string name="assistant_code_busy">Preveč poskusov – ta prijava je končana. V Lini na računalniku znova kliknite »Poveži s kodo«.</string>
     <string name="assistant_code_locked">Povezovanje s kodo je na računalniku zaradi preveč poskusov začasno zaprto. Lina pokaže, koliko časa še. Lahko skenirate kodo QR.</string>
     <string name="assistant_code_not_open">V Lini na računalniku najprej kliknite »Poveži s kodo«.</string>
     <string name="assistant_code_already">Ta telefon je v Lini na računalniku že na seznamu naprav.</string>
     <string name="assistant_code_fingerprint">Odtis potrdila računalnika se ne ujema. Povezave ne nadaljujem.</string>
+    <string name="assistant_code_wrong_on_pc">Koda, vtipkana na računalniku, ni bila prava. V Lini pri čakajočem telefonu jo vtipkajte znova: %1$s.</string>
+    <string name="assistant_code_retry_title">Koda ni bila prava</string>
+    <string name="assistant_code_retry_message">Koda ni bila prava. Vtipkajte kodo, ki jo kaže Lina na računalniku, znova.</string>
 </resources>

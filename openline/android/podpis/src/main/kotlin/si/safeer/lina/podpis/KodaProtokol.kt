@@ -16,7 +16,10 @@ data class ZacetekKode(val pairId: String, val nacin: String, val hubId: String,
 data class KliciIzKode(val url: String, val code: String, val fp: String)
 
 /** Napake poti /koda/zacni, /koda/spake in /koda/potrdi po polju "napaka". */
-enum class NapakaKode { CAKA_KODO, NAPACNA_KODA, PREVEC, ZAPRTO, NI_ODPRTO, ID_ZASEDEN, NI_PRIJAVE, ZAVRNJENO, NAPAKA }
+enum class NapakaKode {
+    CAKA_KODO, NAPACNA_KODA, PREVEC, ZAPRTO, NI_ODPRTO, ID_ZASEDEN, NI_PRIJAVE, MANJKA_KORAK, ZAVRNJENO, NAPAKA,
+    NEDOSEGLJIVA, POTEKLO, PREKINJENO,
+}
 
 object KodaProtokol {
     private val json = Json { ignoreUnknownKeys = true }
@@ -48,6 +51,11 @@ object KodaProtokol {
         return (niz(o, "pa", 130) ?: return null) to (niz(o, "ca", 64) ?: return null)
     }
 
+    /** POST /koda/odpovej (@abc0bd3): cA ni veljal, potrditve ne bo. */
+    fun teloOdpovej(pairId: String, id: String): String = buildJsonObject { put("pair_id", pairId); put("id", id) }.toString()
+
+    fun odpovedano(t: String): Boolean = koren(t)?.let { niz(it, "stanje", 16) } == "odpovedano"
+
     fun teloPotrdi(
         pairId: String, id: String, kljuc: String, ime: String, cas: Long, enkratni: String, podpis: String, cb: String, mac: String,
     ): String = buildJsonObject {
@@ -71,7 +79,8 @@ object KodaProtokol {
         "seznanitev_zaprta" -> NapakaKode.ZAPRTO
         "ni_odprto" -> NapakaKode.NI_ODPRTO
         "id_zaseden" -> NapakaKode.ID_ZASEDEN
-        "prijava_ne_obstaja", "manjka_korak" -> NapakaKode.NI_PRIJAVE
+        "prijava_ne_obstaja" -> NapakaKode.NI_PRIJAVE
+        "manjka_korak" -> NapakaKode.MANJKA_KORAK
         "zavrnjeno" -> NapakaKode.ZAVRNJENO
         else -> if (status == 403) NapakaKode.ZAVRNJENO else NapakaKode.NAPAKA
     }

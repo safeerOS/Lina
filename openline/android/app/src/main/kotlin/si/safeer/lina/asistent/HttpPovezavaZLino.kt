@@ -64,6 +64,7 @@ class HttpPovezavaZLino(
     fun kodaZacni(telo: String) = post("koda/zacni", telo)
     fun kodaSpake(telo: String) = post("koda/spake", telo)
     fun kodaPotrdi(telo: String) = post("koda/potrdi", telo)
+    fun kodaOdpovej(telo: String) = post("koda/odpovej", telo)
 
     private fun get(pot: String, vec: okhttp3.HttpUrl.Builder.() -> Unit): OdgovorLine {
         val url = okhttp3.HttpUrl.Builder().scheme("https").host(naslov.naslov).port(naslov.vrata)
