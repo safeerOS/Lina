@@ -26,6 +26,19 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
 - Jeziki: vsi, ki jih datoteka virov ze ima (zdaj sl, en); privzeto jezik sistema, rocni preklop. Besedila v values*/strings.xml.
 - Kjer vmesnik pove, kje v nastavitvah naprave kaj klikniti, uporabi tocen napis, ki ga naprava pokaze (preveri na napravi).
 
+## Seznanitev in asistentka (14. 11. 2026)
+- Asistentka govori z Lino na racunalniku po pogodbi lina-asistent2 AGENTS.md »Koncna tocka asistentke za telefon«
+  (@e815ed0): HTTPS s pripetim odtisom lista, samo zasebni naslov, brez preusmeritev, dolgo poizvedovanje /dogodki.
+  Izvedba: app asistent/ (HttpPovezavaZLino, AsistentKontroler), cista logika v modulu podpis (AsistentProtokol, AsistentPrikaz).
+- Seznanitev je ZDRUZENA (lastnik): en QR z Linine strani nastavi pot klicev in pot asistentke, en gumb »Skeniraj QR«.
+  Pogodbo v1 (dva razdelka, rok veljavnosti, enkratna koda) pise agent v lina-asistent2; dokler ni objavljena, modul
+  seznanitev (QrSeznanitev) bere samo stari QR OpenLine (httpgateway://pair, samo klici) in vmesni QR asistentke
+  (safeer-lina://asistent?v=1&naslov&vrata&odtis, samo asistentka - PREDLOG). Zdruzenega zapisa se ne ugiba.
+- Moduli: seznanitev in podpis ne uvazata protocol (klici); protocol ne uvaza ne podpisa ne seznanitve. Kljuci in zetoni
+  obeh poti so loceni (GatewayConfigStore za klice, AsistentShramba in AndroidKeyStore za asistentko).
+- Telefon z nameščenim Safeer Phone/OS: Lina se v ozji krog vpise prek Safeer Phone/OS z enim dotikom (dovoljenje ravni
+  signature), brez QR in kode; QR in 6-mestna koda (SPAKE2 kot Safeer Link) samo za telefone brez Safeerja. V kodi se NI.
+
 ## Pravi klici in naprave
 - Pravi klici prek OpenLine so PREPOVEDANI do cistega neodvisnega pregleda (lastnik 10. 11. 2026). Ko bo dovolj stabilno,
   lastnik aplikacijo SAM namesti na svoj Samsung. Na pravih telefonih agent nic ne namesca brez izrecne naloge.
