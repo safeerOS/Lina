@@ -5,6 +5,7 @@ import { deviceHealthSchema, deviceInboundMessageSchema } from "./schemas.js";
 import type { StateStore } from "./state.js";
 import type { DeviceAction, DeviceCommand, DeviceEvent } from "./types.js";
 import { hasSecretQuery } from "./lan-url.js";
+import { registerUpgrade } from "./upgrade-router.js";
 
 export interface DeviceCommandChannel {
   isConnected(deviceId: string): boolean;
@@ -40,10 +41,8 @@ export class DeviceWebSocketHub implements DeviceCommandChannel {
   ) {}
 
   attach(httpServer: HttpServer): void {
-    httpServer.on("upgrade", (request, socket, head) => {
-      const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-      if (url.pathname !== "/v1/device-channel") return;
-
+    // Skupni usmerjevalnik (N8): tuja pot dobi 404 enkrat za vse module.
+    registerUpgrade(httpServer, (pathname) => pathname === "/v1/device-channel", (request, socket, head, url) => {
       const deviceId = url.searchParams.get("deviceId") ?? headerString(request, "x-device-id");
       // Zeton samo v glavi. Ce je v poizvedbi, zahtevo zavrnemo (ze je v dnevniku posrednika).
       const deviceToken = hasSecretQuery(url) ? null : headerString(request, "x-device-token");

@@ -4,6 +4,7 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import type { AuthService } from "./auth.js";
 import { isEndedCallState, type StateStore } from "./state.js";
 import { hasSecretQuery } from "./lan-url.js";
+import { registerUpgrade } from "./upgrade-router.js";
 
 /**
  * Live call audio, relayed between the phone and one developer/AI client per call.
@@ -91,14 +92,13 @@ export class MediaRelay {
   ) {}
 
   attach(httpServer: HttpServer): void {
-    httpServer.on("upgrade", (request, socket, head) => {
-      const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-      if (url.pathname === DEVICE_MEDIA_PATH) {
-        this.upgradeDevice(request, socket, head, url);
-        return;
-      }
-      const match = CLIENT_MEDIA_PATH.exec(url.pathname);
-      if (match) this.upgradeClient(request, socket, head, url, decodeURIComponent(match[1]!));
+    // Skupni usmerjevalnik (N8): tuja pot dobi 404 enkrat za vse module.
+    registerUpgrade(httpServer, (pathname) => pathname === DEVICE_MEDIA_PATH, (request, socket, head, url) => {
+      this.upgradeDevice(request, socket, head, url);
+    });
+    registerUpgrade(httpServer, (pathname) => CLIENT_MEDIA_PATH.test(pathname), (request, socket, head, url) => {
+      const match = CLIENT_MEDIA_PATH.exec(url.pathname)!;
+      this.upgradeClient(request, socket, head, url, decodeURIComponent(match[1]!));
     });
   }
 

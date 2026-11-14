@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import * as crypto from "node:crypto";
 import * as tls from "node:tls";
+import { registerUpgrade } from "./upgrade-router.js";
 import { MEDIA_FORMAT, MEDIA_FRAME_BYTES, DEVICE_MEDIA_MAX_PAYLOAD } from "./media-relay.js";
 
 export interface LinaSprejemnikOpcije {
@@ -61,15 +62,9 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
     if (!(httpServer instanceof tls.Server) && !opcije.nesifriranoSamoZaPreizkus) {
       throw new Error("Sprejemnik zvoka klica zahteva streznik TLS (https/wss)");
     }
-    httpServer.on("upgrade", (request, socket, head) => {
+    // Skupni usmerjevalnik (N8): pot doloci usmerjevalnik s fiksno osnovo (N7), tuja pot dobi 404 tam.
+    registerUpgrade(httpServer, (pathname) => pathname === "/api/voice/stream", (request, socket, head, url) => {
       try {
-        // Fiksna osnova: glave Host doloca odjemalec in ne sme vplivati na pot (N7).
-        const url = new URL(request.url || "/", "http://localhost");
-
-        if (url.pathname !== "/api/voice/stream") {
-          return;
-        }
-
         if (url.searchParams.has("token")) {
           zavrni(socket, 401, "Unauthorized");
           return;
