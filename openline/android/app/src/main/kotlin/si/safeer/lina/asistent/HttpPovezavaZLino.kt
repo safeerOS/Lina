@@ -16,9 +16,12 @@ import java.util.concurrent.TimeUnit
  * preusmeritev), samo zasebni naslov (AsistentQr). Telo odgovora najvec AsistentProtokol.NAJVEC_ODGOVORA; vse drugo je
  * OdgovorLine.Nedosegljiva. Klici so blokirajoci - samo zunaj glavne niti.
  */
-class HttpPovezavaZLino(private val naslov: AsistentNaslov) : PovezavaZLino {
+class HttpPovezavaZLino(
+    private val naslov: AsistentNaslov,
+    osnovni: OkHttpClient = PinnedHttp.client(naslov.odtis, pingSeconds = 0),
+) : PovezavaZLino {
     private val osnova = naslov.osnova()
-    private val client: OkHttpClient = PinnedHttp.client(naslov.odtis, pingSeconds = 0).newBuilder()
+    private val client: OkHttpClient = osnovni.newBuilder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(35, TimeUnit.SECONDS) // dolgo poizvedovanje: Lina caka najvec 25 s
         .writeTimeout(10, TimeUnit.SECONDS)
@@ -46,7 +49,7 @@ class HttpPovezavaZLino(private val naslov: AsistentNaslov) : PovezavaZLino {
     }
 
     private fun kodaNapake(telo: String): String? =
-        Regex("\"napaka\"\\s*:\\s*\"([a-z0-9-]{1,40})\"").find(telo.take(2048))?.groupValues?.get(1)
+        Regex("\"napaka\"\\s*:\\s*\"([a-z0-9_-]{1,40})\"").find(telo.take(2048))?.groupValues?.get(1)
 
     private fun post(pot: String, telo: String) =
         izvedi(Request.Builder().url("$osnova/$pot").post(telo.toRequestBody(json)).build())
@@ -56,6 +59,11 @@ class HttpPovezavaZLino(private val naslov: AsistentNaslov) : PovezavaZLino {
     override fun ustavi(telo: String) = post("ustavi", telo)
 
     override fun seznani(telo: String) = post("seznani", telo)
+
+    // Seznanitev s kodo (pogodba @fdd787b); /koda/zacni gre prek OdtisPrvePovezave, drugo pripeto na videni odtis.
+    fun kodaZacni(telo: String) = post("koda/zacni", telo)
+    fun kodaSpake(telo: String) = post("koda/spake", telo)
+    fun kodaPotrdi(telo: String) = post("koda/potrdi", telo)
 
     private fun get(pot: String, vec: okhttp3.HttpUrl.Builder.() -> Unit): OdgovorLine {
         val url = okhttp3.HttpUrl.Builder().scheme("https").host(naslov.naslov).port(naslov.vrata)

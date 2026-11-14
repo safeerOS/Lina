@@ -116,6 +116,9 @@ class DialerActivity : Activity() {
     private lateinit var assistantSendButton: Button
     private lateinit var asistent: AsistentKontroler
     private lateinit var assistantPairButton: Button
+    private lateinit var assistantCodeButton: Button
+    private var odkrivanje: si.safeer.lina.asistent.OdkrivanjeLine? = null
+    private var iscemLino = false
     private lateinit var assistantForgetButton: Button
     private lateinit var assistantStopButton: Button
     private lateinit var assistantLog: TextView
@@ -197,6 +200,7 @@ class DialerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        odkrivanje?.ustavi()
         if (::asistent.isInitialized) asistent.zapri()
         super.onDestroy()
     }
@@ -336,6 +340,8 @@ class DialerActivity : Activity() {
         tabAssistantButton.setOnClickListener { showTab(assistant = true) }
         assistantSendButton.setOnClickListener { sendTask() }
         assistantPairButton = findViewById(R.id.assistantPairButton)
+        assistantCodeButton = findViewById(R.id.assistantCodeButton)
+        assistantCodeButton.setOnClickListener { izberiNacinKode() }
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
@@ -368,8 +374,14 @@ class DialerActivity : Activity() {
         val p = AsistentPrikaz.izracunaj(stanje)
         val naslov = AsistentShramba.beri(this)
         val izidS = asistent.izidSeznanitve
+        val koda = asistent.kodaZaPrikaz
         val glavno = when {
+            iscemLino -> getString(R.string.assistant_code_searching)
+            asistent.korakKode == AsistentKontroler.KorakKode.POVEZUJEM -> getString(R.string.assistant_code_connecting)
+            asistent.korakKode == AsistentKontroler.KorakKode.CAKA_KODO && koda != null ->
+                getString(R.string.assistant_code_show, si.safeer.lina.seznanitev.KodaLine.prikaz(koda))
             stanje.cakaPotrditev -> getString(R.string.assistant_wait_confirm)
+            !stanje.seznanjen && izidS != null && izidNizKode(izidS) != null -> getString(izidNizKode(izidS)!!)
             !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.ZAVRNJENO -> getString(R.string.assistant_pair_refused)
             !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.POTEKLO -> getString(R.string.assistant_pair_expired)
             !stanje.seznanjen && izidS == AsistentKontroler.IzidSeznanitve.NAPAKA -> getString(R.string.assistant_pair_failed)
@@ -389,7 +401,10 @@ class DialerActivity : Activity() {
         }
         assistantStatus.text = if (seja == null) glavno else "$glavno\n$seja"
         // Kar ni narejeno, se ne pokaze: vsak gumb samo, ko ima ucinek (AsistentPrikaz, preizkusi v modulu podpis).
-        assistantPairButton.visibility = if (p.seznani) View.VISIBLE else View.GONE
+        assistantPairButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
+        assistantCodeButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
+        // Razdelek klicev iz /koda/potrdi: ista potrditev kot pri QR (gostitelj in odtis na zaslonu).
+        asistent.vzemiKlice()?.let { confirmAndPair(GatewayPairing.Invite(it.serverUrl, it.code, it.certSha256)) }
         assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
         assistantTaskInput.visibility = if (p.vnos) View.VISIBLE else View.GONE
         assistantSendButton.visibility = if (p.poslji) View.VISIBLE else View.GONE
@@ -414,6 +429,90 @@ class DialerActivity : Activity() {
                 }
             }
         }.start()
+    }
+
+    /** Izidi seznanitve s kodo; QR ima svoja besedila spodaj (null = obicajno besedilo). */
+    private fun izidNizKode(i: AsistentKontroler.IzidSeznanitve): Int? = when (i) {
+        AsistentKontroler.IzidSeznanitve.POTEKLO -> if (asistent.zadnjaSKodo) R.string.assistant_code_expired else null
+        AsistentKontroler.IzidSeznanitve.NAPACNA_KODA -> R.string.assistant_code_wrong
+        AsistentKontroler.IzidSeznanitve.PREVEC -> R.string.assistant_code_busy
+        AsistentKontroler.IzidSeznanitve.ZAPRTO -> R.string.assistant_code_locked
+        AsistentKontroler.IzidSeznanitve.NI_ODPRTO -> R.string.assistant_code_not_open
+        AsistentKontroler.IzidSeznanitve.ZE_DODAN -> R.string.assistant_code_already
+        AsistentKontroler.IzidSeznanitve.ODTIS -> R.string.assistant_code_fingerprint
+        else -> null
+    }
+
+    /** »Poveži s kodo«: nacin (kodo kaze Lina ali telefon), nato DNS-SD najvec 5 s, rezerva je rocni vnos naslova. */
+    private fun izberiNacinKode() {
+        val nacini = arrayOf(getString(R.string.assistant_code_mode_pc), getString(R.string.assistant_code_mode_phone))
+        AlertDialog.Builder(this, R.style.Gw_Dialog)
+            .setTitle(getString(R.string.assistant_code_button))
+            .setItems(nacini) { _, i -> poisciLino(naTelefonu = i == 1) }
+            .setNegativeButton(getString(R.string.pair_cancel), null)
+            .show()
+    }
+
+    private fun poisciLino(naTelefonu: Boolean) {
+        odkrivanje?.ustavi()
+        iscemLino = true
+        renderAssistant()
+        val o = si.safeer.lina.asistent.OdkrivanjeLine(this)
+        odkrivanje = o
+        o.isci { najdene ->
+            if (odkrivanje !== o || isFinishing) return@isci
+            odkrivanje = null
+            iscemLino = false
+            renderAssistant()
+            when (najdene.size) {
+                0 -> rocniNaslov(naTelefonu)
+                1 -> naprejKoda(najdene[0].naslov, najdene[0].vrata, naTelefonu)
+                else -> AlertDialog.Builder(this, R.style.Gw_Dialog)
+                    .setTitle(getString(R.string.assistant_code_pick))
+                    .setItems(najdene.map { "${it.ime} (${it.naslov})" }.toTypedArray()) { _, i ->
+                        naprejKoda(najdene[i].naslov, najdene[i].vrata, naTelefonu)
+                    }
+                    .setNegativeButton(getString(R.string.pair_cancel), null)
+                    .show()
+            }
+        }
+    }
+
+    private fun rocniNaslov(naTelefonu: Boolean) {
+        val vnos = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            hint = getString(R.string.assistant_code_manual_hint)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(60))
+        }
+        AlertDialog.Builder(this, R.style.Gw_Dialog)
+            .setTitle(getString(R.string.assistant_code_manual_title))
+            .setMessage(getString(R.string.assistant_code_manual_message))
+            .setView(vnos)
+            .setPositiveButton(getString(R.string.assistant_code_next)) { _, _ ->
+                val n = si.safeer.lina.seznanitev.KodaLine.rocniNaslov(vnos.text.toString())
+                if (n == null) toast(getString(R.string.assistant_code_bad_address)) else naprejKoda(n.first, n.second, naTelefonu)
+            }
+            .setNegativeButton(getString(R.string.pair_cancel), null)
+            .show()
+    }
+
+    private fun naprejKoda(naslov: String, vrata: Int, naTelefonu: Boolean) {
+        if (naTelefonu) { asistent.povezisKodo(naslov, vrata, null); return }
+        val vnos = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(7))
+            hint = "482 913"
+        }
+        AlertDialog.Builder(this, R.style.Gw_Dialog)
+            .setTitle(getString(R.string.assistant_code_enter_title))
+            .setMessage(getString(R.string.assistant_code_enter_message))
+            .setView(vnos)
+            .setPositiveButton(getString(R.string.assistant_code_next)) { _, _ ->
+                if (si.safeer.lina.seznanitev.KodaLine.koda(vnos.text.toString()) == null) toast(getString(R.string.assistant_code_bad_code))
+                else asistent.povezisKodo(naslov, vrata, vnos.text.toString())
+            }
+            .setNegativeButton(getString(R.string.pair_cancel), null)
+            .show()
     }
 
     private fun napakaNiz(n: SporociloNapake): Int = when (n) {

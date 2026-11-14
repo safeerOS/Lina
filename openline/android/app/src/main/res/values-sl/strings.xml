@@ -200,4 +200,26 @@
     <string name="assistant_pair_failed">Seznanitev ni uspela. Preverite, da sta telefon in računalnik v istem omrežju, in poskusite znova.</string>
     <string name="assistant_session_open">Seja Claude Code na računalniku je odprta.</string>
     <string name="assistant_session_closed">Seja Claude Code na računalniku je zaprta.</string>
+    <string name="assistant_code_button">Poveži s kodo</string>
+    <string name="assistant_code_mode_pc">Kodo kaže Lina na računalniku – vtipkam jo na telefonu</string>
+    <string name="assistant_code_mode_phone">Kodo pokaže telefon – vtipkam jo v Lini na računalniku</string>
+    <string name="assistant_code_searching">Iščem Lino v domačem omrežju …</string>
+    <string name="assistant_code_pick">Izberite Lino</string>
+    <string name="assistant_code_manual_title">Naslov računalnika z Lino</string>
+    <string name="assistant_code_manual_message">Lina v domačem omrežju ni bila najdena. Preverite, da ste v Lini na računalniku kliknili »Poveži s kodo«, ali vpišite naslov računalnika v domačem omrežju. Privzeta vrata so 8446.</string>
+    <string name="assistant_code_manual_hint">npr. 192.168.1.20 ali 192.168.1.20:8446</string>
+    <string name="assistant_code_bad_address">To ni naslov v domačem omrežju.</string>
+    <string name="assistant_code_next">Naprej</string>
+    <string name="assistant_code_enter_title">Koda iz Line</string>
+    <string name="assistant_code_enter_message">Vtipkajte 6-mestno kodo, ki jo kaže Lina na računalniku.</string>
+    <string name="assistant_code_bad_code">Koda ima 6 števk.</string>
+    <string name="assistant_code_connecting">Povezujem se z Lino na računalniku …</string>
+    <string name="assistant_code_show">V Lini na računalniku pri čakajočem telefonu vtipkajte kodo %1$s.</string>
+    <string name="assistant_code_expired">Koda je potekla. V Lini na računalniku znova kliknite »Poveži s kodo«.</string>
+    <string name="assistant_code_wrong">Koda ni prava. V Lini na računalniku znova kliknite »Poveži s kodo« in poskusite še enkrat.</string>
+    <string name="assistant_code_busy">Preveč poskusov. V Lini na računalniku znova kliknite »Poveži s kodo«.</string>
+    <string name="assistant_code_locked">Povezovanje s kodo je na računalniku zaradi preveč poskusov začasno zaprto. Lina pokaže, koliko časa še. Lahko skenirate kodo QR.</string>
+    <string name="assistant_code_not_open">V Lini na računalniku najprej kliknite »Poveži s kodo«.</string>
+    <string name="assistant_code_already">Ta telefon je v Lini na računalniku že na seznamu naprav.</string>
+    <string name="assistant_code_fingerprint">Odtis potrdila računalnika se ne ujema. Povezave ne nadaljujem.</string>
 </resources>

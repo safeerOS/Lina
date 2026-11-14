@@ -61,6 +61,8 @@ object QrSeznanitev {
     }
 
     /** Razdelek klicev v v1: https na zasebnem naslovu, koda OpenLine 8 znakov, odtis 64 hex. */
+    fun klicnoVabilo(url: String, code: String, fp: String): KlicnoVabilo? = klicniDel(url, code, fp)
+
     private fun klicniDel(url: String, code: String, fp: String): KlicnoVabilo? {
         val u = try { URI(url) } catch (_: Exception) { return null }
         if (u.scheme != "https" || u.rawUserInfo != null) return null

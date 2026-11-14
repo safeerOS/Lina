@@ -99,8 +99,8 @@ class Spake2 private constructor(
             Spake2(wIzKode(koda, sol), jaz.toByteArray(), hub.toByteArray(), aad, false, nakljucniSkalar())
 
         /** Samo za teste: znani w in x (testni vektor RFC 9382). */
-        internal fun zaTest(w: BigInteger, jaz: String, oni: String, strezniska: Boolean, x: BigInteger): Spake2 =
-            Spake2(w, jaz.toByteArray(), oni.toByteArray(), ByteArray(0), strezniska, x)
+        internal fun zaTest(w: BigInteger, jaz: String, oni: String, strezniska: Boolean, x: BigInteger, aad: ByteArray = ByteArray(0)): Spake2 =
+            Spake2(w, jaz.toByteArray(), oni.toByteArray(), aad, strezniska, x)
 
         /** w = MHF(koda) mod n; kratko kodo najprej raztegne PBKDF2 (20000 krogov) s soljo seje. */
         fun wIzKode(koda: String, sol: ByteArray): BigInteger {

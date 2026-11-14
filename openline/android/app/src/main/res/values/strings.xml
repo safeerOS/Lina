@@ -200,4 +200,26 @@
     <string name="assistant_pair_failed">Pairing failed. Check that the phone and the computer are on the same network and try again.</string>
     <string name="assistant_session_open">The Claude Code session on your computer is open.</string>
     <string name="assistant_session_closed">The Claude Code session on your computer is closed.</string>
+    <string name="assistant_code_button">Connect with code</string>
+    <string name="assistant_code_mode_pc">Lina on the computer shows the code – I type it on the phone</string>
+    <string name="assistant_code_mode_phone">The phone shows the code – I type it in Lina on the computer</string>
+    <string name="assistant_code_searching">Looking for Lina on your home network…</string>
+    <string name="assistant_code_pick">Choose Lina</string>
+    <string name="assistant_code_manual_title">Address of the computer with Lina</string>
+    <string name="assistant_code_manual_message">Lina was not found on your home network. Check that you clicked \u201cPoveži s kodo\u201d in Lina on the computer, or type the computer\u2019s address on your home network. The default port is 8446.</string>
+    <string name="assistant_code_manual_hint">e.g. 192.168.1.20 or 192.168.1.20:8446</string>
+    <string name="assistant_code_bad_address">That is not an address on your home network.</string>
+    <string name="assistant_code_next">Continue</string>
+    <string name="assistant_code_enter_title">Code from Lina</string>
+    <string name="assistant_code_enter_message">Type the 6-digit code shown by Lina on the computer.</string>
+    <string name="assistant_code_bad_code">The code has 6 digits.</string>
+    <string name="assistant_code_connecting">Connecting to Lina on your computer…</string>
+    <string name="assistant_code_show">In Lina on the computer, type the code %1$s next to the waiting phone.</string>
+    <string name="assistant_code_expired">The code has expired. In Lina on the computer, click \u201cPoveži s kodo\u201d again.</string>
+    <string name="assistant_code_wrong">The code is wrong. In Lina on the computer, click \u201cPoveži s kodo\u201d again and try once more.</string>
+    <string name="assistant_code_busy">Too many attempts. In Lina on the computer, click \u201cPoveži s kodo\u201d again.</string>
+    <string name="assistant_code_locked">Connecting with a code is temporarily closed on the computer after too many attempts. Lina shows for how long. You can scan the QR code instead.</string>
+    <string name="assistant_code_not_open">In Lina on the computer, first click \u201cPoveži s kodo\u201d.</string>
+    <string name="assistant_code_already">This phone is already on the device list in Lina on the computer.</string>
+    <string name="assistant_code_fingerprint">The computer\u2019s certificate fingerprint does not match. Not continuing.</string>
 </resources>

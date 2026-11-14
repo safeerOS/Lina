@@ -13,6 +13,14 @@ import si.safeer.lina.podpis.SporociloNapake
 import si.safeer.lina.podpis.StanjeAsistenta
 import si.safeer.lina.podpis.StanjeSeznanitve
 import si.safeer.lina.seznanitev.AsistentVabilo
+import si.safeer.lina.seznanitev.AsistentNaslov
+import si.safeer.lina.seznanitev.AsistentQr
+import si.safeer.lina.seznanitev.KlicnoVabilo
+import si.safeer.lina.seznanitev.KodaLine
+import si.safeer.lina.seznanitev.KodaOdjemalec
+import si.safeer.lina.seznanitev.QrSeznanitev
+import si.safeer.lina.podpis.KodaProtokol
+import si.safeer.lina.podpis.NapakaKode
 
 /**
  * Ena naloga naenkrat: poslje podpisano nalogo, v loceni niti dolgo poizveduje /dogodki, odobritev in ustavitev podpise kljuc
@@ -20,7 +28,8 @@ import si.safeer.lina.seznanitev.AsistentVabilo
  */
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
-    enum class IzidSeznanitve { SPREJETO, ZAVRNJENO, POTEKLO, NAPAKA }
+    enum class IzidSeznanitve { SPREJETO, ZAVRNJENO, POTEKLO, NAPAKA, NAPACNA_KODA, PREVEC, ZAPRTO, NI_ODPRTO, ZE_DODAN, ODTIS }
+    enum class KorakKode { POVEZUJEM, CAKA_KODO, CAKA_DODAJ }
 
     private val glavna = Handler(Looper.getMainLooper())
     var nalogaId: String? = null; private set
@@ -34,10 +43,111 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     var izidSeznanitve: IzidSeznanitve? = null; private set
     /** Seja Claude Code na racunalniku: true odprta, false zaprta, null neznano. */
     var seja: Boolean? = null; private set
+    /** Seznanitev s kodo: korak in koda, ki jo telefon kaze (nacin B). */
+    var korakKode: KorakKode? = null; private set
+    var kodaZaPrikaz: String? = null; private set
+    /** Razdelek klicev iz /koda/potrdi (kot v QR), preverjen; ponudi se po »sprejeto« z isto potrditvijo kot QR. */
+    var kliciIzKode: KlicnoVabilo? = null; private set
+    /** true, ce je zadnja seznanitev sla prek kode (besedilo izteka je drugo kot pri QR). */
+    var zadnjaSKodo = false; private set
     @Volatile private var poizvedovalec: Thread? = null
     @Volatile private var ustavljen = false
 
-    fun stanje() = StanjeAsistenta(AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam, cakaPotrditev != null)
+    fun stanje() = StanjeAsistenta(
+        AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam, cakaPotrditev != null || korakKode != null,
+    )
+
+    fun vzemiKlice(): KlicnoVabilo? = kliciIzKode.also { kliciIzKode = null }
+
+    /**
+     * Seznanitev s 6-mestno kodo (pogodba @fdd787b). [koda] je vtipkana koda nacina A ali null za nacin B (telefon pokaze
+     * svojo kodo). Naslov je iz DNS-SD ali rocnega vnosa (samo zasebni). Shrani se sele ob »sprejeto«, kot pri QR.
+     */
+    fun povezisKodo(naslov: String, vrata: Int, koda: String?): Boolean {
+        if (cakaPotrditev != null || korakKode != null || nalogaId != null) return false
+        if (koda != null && KodaLine.koda(koda) == null) return false
+        korakKode = KorakKode.POVEZUJEM; kodaZaPrikaz = null; zadnjaSKodo = true; izidSeznanitve = null; napaka = null; kliciIzKode = null
+        obSpremembi()
+        Thread {
+            val izid = try { tokKode(naslov, vrata, koda?.let { KodaLine.koda(it) }) } catch (_: InterruptedException) { null }
+            naGlavni {
+                korakKode = null; kodaZaPrikaz = null
+                izidSeznanitve = izid
+                if (izid == IzidSeznanitve.SPREJETO) preveriSejo() else kliciIzKode = null
+            }
+        }.also { poizvedovalec = it }.start()
+        return true
+    }
+
+    private fun izNapake(o: OdgovorLine): IzidSeznanitve = when (o) {
+        is OdgovorLine.Napaka -> when (KodaProtokol.napaka(o.status, o.koda)) {
+            NapakaKode.NAPACNA_KODA -> IzidSeznanitve.NAPACNA_KODA
+            NapakaKode.PREVEC -> IzidSeznanitve.PREVEC
+            NapakaKode.ZAPRTO -> IzidSeznanitve.ZAPRTO
+            NapakaKode.NI_ODPRTO -> IzidSeznanitve.NI_ODPRTO
+            NapakaKode.ID_ZASEDEN -> IzidSeznanitve.ZE_DODAN
+            NapakaKode.NI_PRIJAVE -> IzidSeznanitve.POTEKLO
+            NapakaKode.ZAVRNJENO -> IzidSeznanitve.ZAVRNJENO
+            else -> IzidSeznanitve.NAPAKA
+        }
+        else -> IzidSeznanitve.NAPAKA
+    }
+
+    private fun tokKode(naslov: String, vrata: Int, vtipkana: String?): IzidSeznanitve? {
+        val id = runCatching { NapravaKljuc.id() }.getOrNull() ?: return IzidSeznanitve.NAPAKA
+        val ime = imeNaprave()
+        // 1. Prva povezava: odtis, ki ga telefon VIDI; /koda/zacni mora vrniti isti fp.
+        val prva = OdtisPrvePovezave()
+        val pov1 = HttpPovezavaZLino(AsistentNaslov(naslov, vrata, ""), prva.client())
+        val o1 = try { pov1.kodaZacni(KodaProtokol.teloZacni(id, ime, vtipkana == null)) } finally { pov1.zapri() }
+        if (o1 !is OdgovorLine.Ok) return izNapake(o1)
+        val z = KodaProtokol.razberiZacetek(o1.telo) ?: return IzidSeznanitve.NAPAKA
+        val vidni = prva.odtis ?: return IzidSeznanitve.NAPAKA
+        if (!KodaLine.veljavenZacetek(z.pairId, z.nacin, z.hubId, z.fp, vidni)) return IzidSeznanitve.ODTIS
+        val cilj = AsistentQr.naslov(naslov, vrata, vidni) ?: return IzidSeznanitve.NAPAKA
+        val doMs = System.currentTimeMillis() + z.poteceS * 1000
+        val koda = vtipkana ?: KodaLine.novaKoda()
+        if (vtipkana == null) naGlavni { kodaZaPrikaz = koda; korakKode = KorakKode.CAKA_KODO }
+        // 2. Vse naprej pripeto na videni odtis.
+        val pov = HttpPovezavaZLino(cilj)
+        try {
+            while (!ustavljen) {
+                if (System.currentTimeMillis() > doMs) return IzidSeznanitve.POTEKLO
+                val odj = KodaOdjemalec.zacni(koda, id, z.pairId, vidni) ?: return IzidSeznanitve.NAPAKA
+                val o2 = pov.kodaSpake(KodaProtokol.teloSpake(z.pairId, id, odj.pb))
+                if (o2 is OdgovorLine.Napaka && KodaProtokol.napaka(o2.status, o2.koda) == NapakaKode.CAKA_KODO) {
+                    Thread.sleep(2000); continue // nacin B: lastnik kode se ni vtipkal
+                }
+                if (o2 !is OdgovorLine.Ok) return izNapake(o2)
+                val (pa, ca) = KodaProtokol.razberiSpake(o2.telo) ?: return IzidSeznanitve.NAPAKA
+                // cA se preveri, PREDEN gre karkoli naprej: napacna koda ali drugo potrdilo TLS.
+                val cb = odj.potrdi(pa, ca) ?: return IzidSeznanitve.NAPACNA_KODA
+                val kljuc = runCatching { NapravaKljuc.javniKljucB64() }.getOrNull() ?: return IzidSeznanitve.NAPAKA
+                val mac = odj.mac(kljuc) ?: return IzidSeznanitve.NAPAKA
+                val cas = System.currentTimeMillis()
+                val enkratni = NalogaLine.nakljucno(32)
+                val p = runCatching { NapravaKljuc.podpisiSeznanitev(z.pairId, ime, cas, enkratni) }.getOrNull() ?: return IzidSeznanitve.NAPAKA
+                val o3 = pov.kodaPotrdi(KodaProtokol.teloPotrdi(z.pairId, p.id, p.kljuc, ime, cas, enkratni, p.podpis, cb, mac))
+                if (o3 is OdgovorLine.Napaka && vtipkana == null && KodaProtokol.napaka(o3.status, o3.koda) == NapakaKode.NAPACNA_KODA) {
+                    continue // nacin B: Lina je kodo pozabila, lastnik jo vtipka znova
+                }
+                if (o3 !is OdgovorLine.Ok) return izNapake(o3)
+                val (_, k) = KodaProtokol.razberiPotrdi(o3.telo) ?: return IzidSeznanitve.NAPAKA
+                val klici = k?.let { QrSeznanitev.klicnoVabilo(it.url, it.code, it.fp) }
+                naGlavni { korakKode = KorakKode.CAKA_DODAJ; kodaZaPrikaz = null }
+                // 3. Kot pri QR: GET /seznani?koda=<pair_id> do »Dodaj«/»Zavrni« (najvec 10 min, kot velja QR).
+                val izid = cakajNaDodaj(pov, z.pairId, System.currentTimeMillis() + 600_000)
+                if (izid == IzidSeznanitve.SPREJETO) {
+                    if (!AsistentShramba.shrani(context, cilj)) return IzidSeznanitve.NAPAKA
+                    naGlavni { kliciIzKode = klici }
+                }
+                return izid
+            }
+            return null
+        } finally {
+            pov.zapri()
+        }
+    }
 
     /**
      * Po skeniranju QR v1: podpisan POST /seznani, nato GET /seznani?koda= na 2 s do odlocitve lastnika ali izteka
@@ -45,7 +155,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
      */
     fun seznani(v: AsistentVabilo): Boolean {
         if (cakaPotrditev != null || nalogaId != null) return false
-        cakaPotrditev = v; izidSeznanitve = null; napaka = null
+        cakaPotrditev = v; izidSeznanitve = null; napaka = null; zadnjaSKodo = false
         obSpremembi()
         Thread {
             val pov = HttpPovezavaZLino(v.naslov)
@@ -67,10 +177,15 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             ?: return IzidSeznanitve.NAPAKA
         val prvi = pov.seznani(AsistentProtokol.teloSeznanitve(v.koda, p.id, p.kljuc, imeNaprave(), cas, enkratni, p.podpis))
         if (prvi !is OdgovorLine.Ok) return if (prvi is OdgovorLine.Napaka && prvi.status == 404) IzidSeznanitve.POTEKLO else IzidSeznanitve.NAPAKA
+        return cakajNaDodaj(pov, v.koda, v.doMs)
+    }
+
+    /** GET /seznani?koda= vsaki 2 s do lastnikove odlocitve, 404 ali izteka. */
+    private fun cakajNaDodaj(pov: HttpPovezavaZLino, koda: String, doMs: Long): IzidSeznanitve? {
         while (!ustavljen) {
-            if (System.currentTimeMillis() > v.doMs) return IzidSeznanitve.POTEKLO
+            if (System.currentTimeMillis() > doMs) return IzidSeznanitve.POTEKLO
             Thread.sleep(2000)
-            val o = pov.stanjeSeznanitve(v.koda)
+            val o = pov.stanjeSeznanitve(koda)
             when {
                 o is OdgovorLine.Napaka && o.status == 404 -> return IzidSeznanitve.POTEKLO
                 o is OdgovorLine.Ok -> when (AsistentProtokol.razberiSeznanitev(o.telo)) {
