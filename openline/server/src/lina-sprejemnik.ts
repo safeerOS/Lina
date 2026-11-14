@@ -11,14 +11,26 @@ export interface LinaSprejemnikOpcije {
   zeton: string;
   /** Samo za preizkuse na 127.0.0.1: dovoli streznik brez TLS. V izdelku zvok klica in zeton nikoli nesifrirano (N4). */
   nesifriranoSamoZaPreizkus?: boolean;
+  /** Samo za preizkuse: ura v ms (ena prebrana vrednost na sporocilo). */
+  ura?: () => number;
 }
 
 export const NAJKRAJSI_ZETON_BAJTOV = 32;
 const NAJVEC_CAKAJOCIH_BAJTOV = 64 * 1024;
+/**
+ * Pregled 16 (N2): po zastoju Wi-Fi telefon poslje zaostale okvirje naenkrat (izmerjeno lokalno: 150 okvirjev = 3 s zvoka
+ * je zaprlo povezavo pri zalogi 100). Zaloga je zato 10 s zvoka (50 okvirjev/s), polni se s 60/s; odvec okvirji se
+ * zavrzejo in stejejo, povezava se zapre sele, ko prekoracitev traja TRAJNA_PREKORACITEV_MS.
+ */
+export const ZALOGA_OKVIRJEV = 500;
+const POLNJENJE_NA_SEKUNDO = 60;
+export const TRAJNA_PREKORACITEV_MS = 10_000;
 
 export interface StatistikaSprejemnika {
   sprejetiOkvirji: number;
   zavrnjeniOkvirji: number;
+  /** Okvirji, zavrzeni zaradi hitrosti (povezava ostane odprta). */
+  zavrzeniOkvirji: number;
   povezave: number;
 }
 
@@ -31,7 +43,9 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
 
   let sprejetiOkvirji = 0;
   let zavrnjeniOkvirji = 0;
+  let zavrzeniOkvirji = 0;
   let povezave = 0;
+  const ura = opcije.ura ?? Date.now;
 
   function zavrni(socket: Duplex, koda: number, razlog: string) {
     if (socket.writable) {
@@ -83,8 +97,9 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
           if (prejsnja && prejsnja.readyState === WebSocket.OPEN) prejsnja.close(1012, "Nadomescena");
           povezave++;
 
-          let zaloga = 100;
-          let zadnjaOsvezitev = Date.now();
+          let zaloga = ZALOGA_OKVIRJEV;
+          let zadnjaOsvezitev = ura();
+          let prekoracitevOd: number | undefined;
           let casovnikMirovanja: NodeJS.Timeout;
           let casovnikTrajanja: NodeJS.Timeout;
 
@@ -100,17 +115,20 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
             }, 10000);
           }
 
-          function preveriHitrost(): boolean {
-            const zdaj = Date.now();
-            const preteklo = (zdaj - zadnjaOsvezitev) / 1000;
-            zaloga = Math.min(100, zaloga + preteklo * 60);
+          /** "sprejmi", "zavrzi" (odvec, povezava ostane) ali "zapri" (prekoracitev traja). */
+          function preveriHitrost(): "sprejmi" | "zavrzi" | "zapri" {
+            const zdaj = ura();
+            const preteklo = Math.max(0, (zdaj - zadnjaOsvezitev) / 1000);
+            zaloga = Math.min(ZALOGA_OKVIRJEV, zaloga + preteklo * POLNJENJE_NA_SEKUNDO);
             zadnjaOsvezitev = zdaj;
-
+            // Posiljatelj je spet pod mejo (zaloga se je napolnila do polovice): prekoracitev je koncana.
+            if (zaloga >= ZALOGA_OKVIRJEV / 2) prekoracitevOd = undefined;
             if (zaloga >= 1) {
               zaloga -= 1;
-              return true;
+              return "sprejmi";
             }
-            return false;
+            prekoracitevOd ??= zdaj;
+            return zdaj - prekoracitevOd >= TRAJNA_PREKORACITEV_MS ? "zapri" : "zavrzi";
           }
 
           ws.send(JSON.stringify({ type: "start", format: MEDIA_FORMAT }));
@@ -122,10 +140,17 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
           osveziMirovanje();
 
           ws.on("message", (data: RawData, isBinary: boolean) => {
+            // Po zacetku zapiranja ne obdelujemo vec: sporocila na poti ne stejejo in ne sprozijo drugega zapiranja.
+            if (ws.readyState !== WebSocket.OPEN) return;
 
-            if (!preveriHitrost()) {
+            const hitrost = preveriHitrost();
+            if (hitrost === "zapri") {
               zavrnjeniOkvirji++;
               ws.close(1008, "Prehitro");
+              return;
+            }
+            if (hitrost === "zavrzi") {
+              zavrzeniOkvirji++;
               return;
             }
 
@@ -175,6 +200,6 @@ export function ustvariLinaSprejemnik(opcije: LinaSprejemnikOpcije) {
 
   return {
     attach,
-    statistika: (): StatistikaSprejemnika => ({ sprejetiOkvirji, zavrnjeniOkvirji, povezave }),
+    statistika: (): StatistikaSprejemnika => ({ sprejetiOkvirji, zavrnjeniOkvirji, zavrzeniOkvirji, povezave }),
   };
 }

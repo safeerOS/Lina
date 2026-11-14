@@ -143,19 +143,49 @@ describe("Lina Sprejemnik", () => {
     expect(() => s.attach(http.createServer())).toThrow(/TLS/);
   });
 
-  // 9. hitrost
-  it("prekine povezavo s 1008 ob prekoracitvi hitrosti (vec kot 100 okvirjev naenkrat)", async () => {
+  // 9. hitrost (pregled 16, N2)
+  it("zaostali okvirji po zastoju Wi-Fi (150 naenkrat) ne zaprejo povezave", async () => {
     const ws = ustvariOdjemalca();
     await cakajOdprtje(ws);
-    const zaprtje = new Promise<number>((r) => ws.on("close", r));
-    
-    for (let i = 0; i < 101; i++) {
-      ws.send(Buffer.alloc(MEDIA_FRAME_BYTES));
+    let zaprta: number | undefined;
+    ws.on("close", (k) => (zaprta = k));
+    for (let i = 0; i < 150; i++) ws.send(Buffer.alloc(MEDIA_FRAME_BYTES));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(zaprta).toBeUndefined();
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(sprejemnik.statistika().sprejetiOkvirji).toBe(150);
+    expect(sprejemnik.statistika().zavrzeniOkvirji).toBe(0);
+  });
+
+  it("odvec okvirje zavrze, zapre s 1008 sele ob trajni prekoracitvi (10 s)", async () => {
+    // Lastna ura: vsako sporocilo premakne cas za 1/150 s = trikratna hitrost zvoka.
+    let t = 0;
+    const lasten = ustvariLinaSprejemnik({ zeton: ZETON, nesifriranoSamoZaPreizkus: true, ura: () => (t += 1000 / 150) });
+    const drug = http.createServer();
+    lasten.attach(drug);
+    await new Promise<void>((r) => drug.listen(0, "127.0.0.1", () => r()));
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${(drug.address() as http.AddressInfo).port}/api/voice/stream`, { headers: { Authorization: `Bearer ${ZETON}` } });
+      klicani.push(ws);
+      await cakajOdprtje(ws);
+      const zaprtje = new Promise<number>((r) => ws.on("close", r));
+      let poslanih = 0;
+      let zaprta = false;
+      void zaprtje.then(() => (zaprta = true));
+      while (!zaprta && poslanih < 6000) {
+        for (let i = 0; i < 100; i++) ws.send(Buffer.alloc(MEDIA_FRAME_BYTES));
+        poslanih += 100;
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      expect(await zaprtje).toBe(1008);
+      const st = lasten.statistika();
+      expect(st.zavrzeniOkvirji).toBeGreaterThan(0);
+      expect(st.zavrnjeniOkvirji).toBe(1);
+      // Zapre sele po 10 s prekoracitve: pred tem je zavrgel vsaj 10 s presezka (~ 90 okvirjev/s pri trojni hitrosti).
+      expect(st.zavrzeniOkvirji).toBeGreaterThan(800);
+    } finally {
+      await new Promise<void>((r) => drug.close(() => r()));
     }
-    const koda = await zaprtje;
-    
-    expect(koda).toBe(1008);
-    expect(sprejemnik.statistika().zavrnjeniOkvirji).toBeGreaterThan(0);
   });
 
   // 10. neveljaven besedilni okvir
