@@ -30,6 +30,8 @@ object NiziLine {
     const val PREDPONA_USTAVITVE = "safeer-lina-ustavi-v1"
     const val PREDPONA_SEZNANITVE = "safeer-lina-seznani-v1"
     const val PREDPONA_STANJA = "safeer-lina-stanje-v1"
+    const val PREDPONA_DOGODKI = "safeer-lina-dogodki-v1"
+    const val PREDPONA_KLICI = "safeer-lina-klici-v1"
     /** Enkratna koda asistentke iz zdruzenega QR v1 (linakoda). */
     val KODA_SEZNANITVE = Regex("^[A-Za-z0-9_-]{22,64}$")
     private val B64 = Regex("^[A-Za-z0-9+/]{40,200}={0,2}$")
@@ -60,6 +62,18 @@ object NiziLine {
     fun nizStanja(posiljatelj: String, cas: Long, enkratni: String): String? {
         if (!skupno(posiljatelj, cas, enkratni)) return null
         return "$PREDPONA_STANJA\n$posiljatelj\n$cas\n$enkratni"
+    }
+
+    /** Branje dogodkov naloge (kanal-claude.ts nizDogodkov, T1-N3): bere samo naprava, ki je dala nalogo. */
+    fun nizDogodkov(id: String, posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!ID_NALOGE.matches(id) || !skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_DOGODKI\n$id\n$posiljatelj\n$cas\n$enkratni"
+    }
+
+    /** Prevzem poti klicev OpenLine po lastnikovem »Dodaj« (kanal-claude.ts nizKlici, T1-S1); koda = koda QR ali pair_id. */
+    fun nizKlici(koda: String, posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!KODA_SEZNANITVE.matches(koda) || !skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_KLICI\n$koda\n$posiljatelj\n$cas\n$enkratni"
     }
 
     private fun skupno(posiljatelj: String, cas: Long, enkratni: String): Boolean =

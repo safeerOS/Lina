@@ -59,6 +59,12 @@ object NapravaKljuc {
     /** Poizvedba o stanju seje Claude Code. */
     fun podpisiStanje(cas: Long, enkratni: String): String? = podpisnik.podpisiStanje(cas, enkratni)
 
+    /** Branje dogodkov naloge (podpisano od T1-N3). */
+    fun podpisiDogodke(id: String, cas: Long, enkratni: String): String? = podpisnik.podpisiDogodke(id, cas, enkratni)
+
+    /** Prevzem poti klicev po lastnikovem »Dodaj« (T1-S1). */
+    fun podpisiKlice(koda: String, cas: Long, enkratni: String): String? = podpisnik.podpisiKlice(koda, cas, enkratni)
+
     /** Naloga za Claude Code; null, ce vnos ni veljaven. */
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
         podpisnik.podpisiNalogo(id, vnos, cas, enkratni)

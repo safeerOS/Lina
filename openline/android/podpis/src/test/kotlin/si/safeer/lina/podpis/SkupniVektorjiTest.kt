@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
  */
 class SkupniVektorjiTest {
     private companion object {
-        const val SHA256 = "4ec90827642dc3494f0ecdb1b29ba17210787b60ceac7e7ef89d4f959732c8fd"
+        const val SHA256 = "bd39c40105ce1f64128dced831c702795c696b110caaf8374340bdeac97fc728"
     }
 
     private val v: JsonObject by lazy {
@@ -54,6 +54,8 @@ class SkupniVektorjiTest {
         "ustavitev" -> NiziLine.nizUstavitve(p.s("id"), p.s("posiljatelj"), p.l("cas"), p.s("enkratni"))
         "stanje" -> NiziLine.nizStanja(p.s("posiljatelj"), p.l("cas"), p.s("enkratni"))
         "seznanitev" -> NiziLine.nizSeznanitve(p.s("koda"), p.s("id"), p.s("kljuc"), p.s("ime"), p.l("cas"), p.s("enkratni"))
+        "dogodki" -> NiziLine.nizDogodkov(p.s("id"), p.s("posiljatelj"), p.l("cas"), p.s("enkratni"))
+        "klici" -> NiziLine.nizKlici(p.s("koda"), p.s("posiljatelj"), p.l("cas"), p.s("enkratni"))
         else -> error("neznana vrsta $vrsta")
     }
 
@@ -69,7 +71,7 @@ class SkupniVektorjiTest {
     @Test
     fun `nizi podpisov so bajt za bajtom isti kot v Lini in podpis iz Line (Node ECDSA) preveri JCA`() {
         val nizi = v.o("podpis").a("nizi")
-        assertEquals(6, nizi.size)
+        assertEquals(8, nizi.size)
         for (n in nizi) {
             val ime = n.s("ime")
             assertEquals(n.s("niz"), niz(n.s("vrsta"), n.o("vhod")), ime)
@@ -111,11 +113,8 @@ class SkupniVektorjiTest {
             assertTrue(KrogKljuc.preveriPodpisSKljucem(kljuc, t.s("niz_podpisa").toByteArray(Charsets.UTF_8), p.s("podpis")), "podpis potrditve $ime")
             enakoJson(p, KodaProtokol.teloPotrdi(pairId, id, kljuc, t.s("ime_telefona"), p.l("cas"), p.s("enkratni"), p.s("podpis"), p.s("cb"), p.s("mac")), "potrdi telo $ime")
             val r = assertNotNull(KodaProtokol.razberiPotrdi(t.o("potrdi_odgovor").toString()), "potrdi odgovor $ime")
-            val klici = assertNotNull(r.second)
-            assertEquals(t.o("potrdi_odgovor").o("klici").s("url"), klici.url)
-            assertEquals(t.o("potrdi_odgovor").o("klici").s("code"), klici.code)
-            // razdelek poti klicev iz kode preveri isto pravilo kot QR (https, zasebni naslov, koda OpenLine, odtis)
-            assertNotNull(QrSeznanitev.klicnoVabilo(klici.url, klici.code, klici.fp), "razdelek klicev $ime")
+            // T1-S1: /koda/potrdi ne nosi poti klicev (pride sele s podpisanim POST /seznani/klici po lastnikovem »Dodaj«)
+            assertNull(r.second, "potrdi brez poti klicev $ime")
         }
         val napake = koda.a("napake")
         assertTrue(napake.size >= 12)
@@ -138,6 +137,26 @@ class SkupniVektorjiTest {
         // zgostitev odobritve iz prikazanih polj = zgostitev v podpisanem nizu
         val zg = NiziLine.zgostitevPrikaza(a.o("orodje").s("orodje"), a.o("orodje").s("predogled"), a.o("orodje").s("opis"))
         assertTrue(v.o("podpis").a("nizi").first { it.s("ime") == "odobritev_dovoli" }.s("niz").endsWith("\n$zg"))
+    }
+
+    @Test
+    fun `T1 podpisan GET dogodki in POST seznani klici - telo, poizvedba in odgovori so v zapisu Line`() {
+        val a = v.o("asistent")
+        val dp = a.o("dogodki_poizvedba")
+        val nd = v.o("podpis").a("nizi").first { it.s("ime") == "dogodki" }
+        assertEquals(nd.s("podpis"), dp.s("podpis"))
+        assertEquals(nd.s("niz"), NiziLine.nizDogodkov(a.s("id_naloge"), dp.s("posiljatelj"), dp.l("cas"), dp.s("enkratni")))
+        val kt = a.o("klici_telo")
+        val nk = v.o("podpis").a("nizi").first { it.s("ime") == "klici" }
+        enakoJson(kt, AsistentProtokol.teloKlici(kt.s("koda"), kt.s("id"), kt.l("cas"), kt.s("enkratni"), kt.s("podpis")), "klici telo")
+        assertEquals(nk.s("podpis"), kt.s("podpis"))
+        assertEquals(nk.s("niz"), NiziLine.nizKlici(kt.s("koda"), kt.s("id"), kt.l("cas"), kt.s("enkratni")))
+        val odg = a.a("klici_odgovori")
+        val z = assertNotNull(AsistentProtokol.razberiKlice(odg[0].o("telo").toString()))
+        assertEquals(odg[0].o("pricakovano").s("url"), z.url); assertEquals(odg[0].o("pricakovano").s("code"), z.code); assertEquals(odg[0].o("pricakovano").s("fp"), z.fp)
+        assertNotNull(QrSeznanitev.klicnoVabilo(z.url, z.code, z.fp), "razdelek klicev iz /seznani/klici preveri isto pravilo kot QR")
+        assertNull(AsistentProtokol.razberiKlice(odg[1].o("telo").toString()), """{"klici":null}""")
+        assertNull(AsistentProtokol.razberiKlice("""{"klici":{"url":"https://192.168.1.20:8787","code":"K7QM4TZP"}}"""), "manjka fp")
     }
 
     @Test

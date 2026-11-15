@@ -145,12 +145,13 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 is IzidKroga.Konec -> return izKonca(r.napaka)
                 else -> return IzidSeznanitve.NAPAKA
             }
-            val klici = sprejeto.klici?.let { QrSeznanitev.klicnoVabilo(it.url, it.code, it.fp) }
             naGlavni { korakKode = KorakKode.CAKA_DODAJ; kodaZaPrikaz = null; kodaNiBilaPrava = false }
             // 3. Kot pri QR: GET /seznani?koda=<pair_id> do »Dodaj«/»Zavrni« (najvec 10 min, kot velja QR).
             val izid = cakajNaDodaj(pov, z.pairId, System.currentTimeMillis() + 600_000)
             if (izid == IzidSeznanitve.SPREJETO) {
                 if (!AsistentShramba.shrani(context, cilj)) return IzidSeznanitve.NAPAKA
+                // T1-S1: koda OpenLine pride sele po lastnikovem »Dodaj«, s podpisanim POST /seznani/klici (ne iz /koda/potrdi)
+                val klici = prevzemiKlice(pov, z.pairId)
                 naGlavni { kliciIzKode = klici }
             }
             return izid
@@ -185,8 +186,12 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         obSpremembi()
         Thread {
             val pov = HttpPovezavaZLino(v.naslov)
-            val izid = try { seznaniNaRacunalniku(pov, v) } catch (_: InterruptedException) { null } finally { pov.zapri() }
+            var klici: KlicnoVabilo? = null
+            val izid = try {
+                seznaniNaRacunalniku(pov, v).also { if (it == IzidSeznanitve.SPREJETO) klici = prevzemiKlice(pov, v.koda) }
+            } catch (_: InterruptedException) { null } finally { pov.zapri() }
             naGlavni {
+                kliciIzKode = if (izid == IzidSeznanitve.SPREJETO) klici else null
                 cakaPotrditev = null
                 izidSeznanitve = izid
                 if (izid == IzidSeznanitve.SPREJETO && !AsistentShramba.shrani(context, v.naslov)) izidSeznanitve = IzidSeznanitve.NAPAKA
@@ -204,6 +209,19 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         val prvi = pov.seznani(AsistentProtokol.teloSeznanitve(v.koda, p.id, p.kljuc, imeNaprave(), cas, enkratni, p.podpis))
         if (prvi !is OdgovorLine.Ok) return if (prvi is OdgovorLine.Napaka && prvi.status == 404) IzidSeznanitve.POTEKLO else IzidSeznanitve.NAPAKA
         return cakajNaDodaj(pov, v.koda, v.doMs)
+    }
+
+    /**
+     * T1-S1: po lastnikovem »Dodaj« podpisan POST /seznani/klici (nizKlici). Vrne preverjeno vabilo ali null (Lina poti klicev
+     * nima, OpenLine ni odgovoril, podpis ni mogoc ali odgovor ni veljaven: uporabnik klice nastavi sam, asistentka dela naprej).
+     */
+    private fun prevzemiKlice(pov: HttpPovezavaZLino, koda: String): KlicnoVabilo? {
+        val id = runCatching { NapravaKljuc.id() }.getOrNull() ?: return null
+        val cas = System.currentTimeMillis()
+        val enkratni = NalogaLine.nakljucno(32)
+        val podpis = runCatching { NapravaKljuc.podpisiKlice(koda, cas, enkratni) }.getOrNull() ?: return null
+        val o = pov.klici(AsistentProtokol.teloKlici(koda, id, cas, enkratni, podpis)) as? OdgovorLine.Ok ?: return null
+        return AsistentProtokol.razberiKlice(o.telo)?.let { QrSeznanitev.klicnoVabilo(it.url, it.code, it.fp) }
     }
 
     /** GET /seznani?koda= vsaki 2 s do lastnikove odlocitve, 404 ali izteka. */
@@ -293,7 +311,12 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             var zaporednih = 0
             try {
                 while (!ustavljen && nalogaId == id) {
-                    val odg = pov.dogodki(id, od, 25)
+                    val cas = System.currentTimeMillis()
+                    val enkratni = NalogaLine.nakljucno(32)
+                    val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()
+                    val podpis = runCatching { NapravaKljuc.podpisiDogodke(id, cas, enkratni) }.getOrNull()
+                    val odg = if (posiljatelj == null || podpis == null) OdgovorLine.Nedosegljiva
+                        else pov.dogodki(id, posiljatelj, cas, enkratni, podpis, od, 25)
                     if (odg is OdgovorLine.Ok) {
                         val d = AsistentProtokol.razberiDogodke(odg.telo, od)
                         if (d == null) { zaporednih++; naGlavni { napaka = SporociloNapake.NAPAKA } }

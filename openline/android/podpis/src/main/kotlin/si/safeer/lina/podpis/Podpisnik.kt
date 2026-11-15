@@ -24,6 +24,16 @@ class Podpisnik(
         return podpisi(niz.toByteArray(Charsets.UTF_8))
     }
 
+    fun podpisiDogodke(id: String, cas: Long, enkratni: String): String? {
+        val niz = NiziLine.nizDogodkov(id, idNaprave(), cas, enkratni) ?: return null
+        return podpisi(niz.toByteArray(Charsets.UTF_8))
+    }
+
+    fun podpisiKlice(koda: String, cas: Long, enkratni: String): String? {
+        val niz = NiziLine.nizKlici(koda, idNaprave(), cas, enkratni) ?: return null
+        return podpisi(niz.toByteArray(Charsets.UTF_8))
+    }
+
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
         NalogaLine.podpisi(id, idNaprave(), vnos, cas, enkratni, podpisi)
 

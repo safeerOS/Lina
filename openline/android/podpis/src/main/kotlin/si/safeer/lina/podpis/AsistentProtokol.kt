@@ -57,6 +57,16 @@ object AsistentProtokol {
             put("cas", cas); put("enkratni", enkratni); put("podpis", podpis)
         }.toString()
 
+    /** POST /seznani/klici (T1-S1); id = id naprave (posiljatelj). */
+    fun teloKlici(koda: String, id: String, cas: Long, enkratni: String, podpis: String): String = buildJsonObject {
+        put("koda", koda); put("id", id); put("cas", cas); put("enkratni", enkratni); put("podpis", podpis)
+    }.toString()
+
+    /** Odgovor 200 {"klici":{url,code,fp}|null}; null = neveljaven odgovor, Pair(false,null) = Lina poti klicev nima. */
+    fun razberiKlice(besedilo: String): KliciIzKode? = (koren(besedilo)?.get("klici") as? JsonObject)?.let {
+        KliciIzKode(niz(it, "url", 300) ?: return null, niz(it, "code", 16) ?: return null, niz(it, "fp", 64) ?: return null)
+    }
+
     private fun koren(besedilo: String): JsonObject? =
         if (besedilo.length > 4096) null else try { json.parseToJsonElement(besedilo).jsonObject } catch (_: Exception) { null }
 

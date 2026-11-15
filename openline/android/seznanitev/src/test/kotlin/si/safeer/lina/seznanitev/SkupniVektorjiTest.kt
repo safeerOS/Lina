@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
  */
 internal object Vektorji {
     /** Vsota datoteke; spremeni se skupaj s kopijo v Lini (preizkus Line skupni-vektorji.test.ts ima isto vsoto). */
-    const val SHA256 = "4ec90827642dc3494f0ecdb1b29ba17210787b60ceac7e7ef89d4f959732c8fd"
+    const val SHA256 = "bd39c40105ce1f64128dced831c702795c696b110caaf8374340bdeac97fc728"
     val koren: JsonObject by lazy {
         val b = File("../skupni-vektorji/vektorji-lina-v1.json").readBytes()
         val vsota = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
