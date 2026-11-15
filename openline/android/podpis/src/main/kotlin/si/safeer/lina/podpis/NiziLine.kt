@@ -36,7 +36,18 @@ object NiziLine {
 
     /** Ime telefona: 1-60 znakov, brez nadzornih in oblikovnih znakov (pogodba seznanitve @7a065fb). */
     fun veljavnoIme(ime: String): Boolean =
-        ime.length in 1..60 && praviUnicode(ime) && ime.none { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() }
+        ime.length in 1..60 && praviUnicode(ime) && !samoPresledki(ime) &&
+            ime.none { Character.isISOControl(it) || Character.getType(it) == Character.FORMAT.toInt() }
+
+    /**
+     * Ime iz samih presledkov (Zs vkljucno z NBSP in ideografskim, Zl, Zp). Lina (imeNaprave: ime.trim() ni prazno) ga zavrne
+     * s 400, zato ga telefon ne sme podpisati in poslati; skupni vektor TS <-> Kotlin (15. 11. 2026) je odkril, da ga je
+     * Android prej sprejel.
+     */
+    private fun samoPresledki(ime: String): Boolean = ime.all {
+        val t = Character.getType(it)
+        t == Character.SPACE_SEPARATOR.toInt() || t == Character.LINE_SEPARATOR.toInt() || t == Character.PARAGRAPH_SEPARATOR.toInt()
+    }
 
     /** Pogodba seznanitve @7a065fb (kanal-claude.ts nizSeznanitve); id mora biti izpeljan iz [kljuc]. */
     fun nizSeznanitve(koda: String, id: String, kljuc: String, ime: String, cas: Long, enkratni: String): String? {
