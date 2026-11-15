@@ -229,4 +229,8 @@
     <string name="assistant_code_wrong_on_pc">El código escrito en el ordenador no era correcto. Escríbalo de nuevo en Lina junto al teléfono en espera: %1$s.</string>
     <string name="assistant_code_retry_title">El código no era correcto</string>
     <string name="assistant_code_retry_message">El código no era correcto. Escriba de nuevo el código que muestra Lina en el ordenador.</string>
+    <string name="circle_confirm">Añadir a Lina al círculo cercano</string>
+    <string name="circle_done">Lina está en su círculo cercano.</string>
+    <string name="circle_refused">No se ha añadido al círculo cercano.</string>
+    <string name="circle_failed">Safeer no pudo añadir a Lina al círculo cercano. Actualice Safeer e inténtelo de nuevo.</string>
 </resources>

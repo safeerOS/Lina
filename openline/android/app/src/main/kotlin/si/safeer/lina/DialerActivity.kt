@@ -442,9 +442,9 @@ class DialerActivity : Activity() {
                     assistantDeviceId.visibility = View.VISIBLE
                 }
             }
-            // Potrditev v ozji krog prek Safeerja: gumb samo, ce je Safeer na voljo in Lina se ni potrjena (brez gumba, ki ne dela).
+            // Potrditev v ozji krog prek Safeerja: gumb vedno, ko je Safeer na voljo; clanstvo preveri Safeer, Lina ga ne hrani (T4-6).
             val cilj = OzjiKrogSafeerLepilo.cilj(this)
-            val pokazi = id != null && OzjiKrogSafeer.pokaziGumb(cilj != null, OzjiKrogSafeerLepilo.vKrogu(this, id))
+            val pokazi = id != null && OzjiKrogSafeer.pokaziGumb(cilj != null)
             runOnUiThread { if (!isFinishing) assistantCircleButton.visibility = if (pokazi) View.VISIBLE else View.GONE }
         }.start()
     }
@@ -471,8 +471,7 @@ class DialerActivity : Activity() {
         assistantCircleButton.isEnabled = true
         val izid = OzjiKrogSafeer.izid(resultCode == RESULT_OK, data?.getStringExtra(OzjiKrogSafeer.POLJE_IZID))
         if (OzjiKrogSafeer.jeUspeh(izid)) {
-            Thread { runCatching { NapravaKljuc.id() }.getOrNull()?.let { OzjiKrogSafeerLepilo.zapomni(this, it) }
-                runOnUiThread { if (!isFinishing) { assistantCircleButton.visibility = View.GONE; toast(getString(R.string.circle_done)) } } }.start()
+            if (!isFinishing) toast(getString(R.string.circle_done))
         } else {
             toast(getString(if (izid == OzjiKrogSafeer.Izid.ZAVRNJENO) R.string.circle_refused else R.string.circle_failed))
         }

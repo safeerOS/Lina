@@ -57,9 +57,12 @@ object OzjiKrogSafeer {
         else -> Izid.NAPAKA
     }
 
-    /** Ali pokazati gumb »Potrdi v ozji krog«: samo ko je Safeer na voljo in Lina se ni v krogu (ne ponujaj, kar ne uspe). */
-    fun pokaziGumb(ciljNaVoljo: Boolean, vKrogu: Boolean): Boolean = ciljNaVoljo && !vKrogu
+    /**
+     * Ali pokazati gumb »Potrdi v ozji krog«: kadar je Safeer na voljo. Clanstva Lina NE hrani (T4-6, 15. 11. 2026): ce uporabnik
+     * Lino pozneje iz kroga umakne, mora gumb spet delovati; clanstvo vedno preveri Safeer (ZE_V_KROGU pride brez okna).
+     */
+    fun pokaziGumb(ciljNaVoljo: Boolean): Boolean = ciljNaVoljo
 
-    /** Uspeh, ki ga shranimo (Lina se naslednjic ne ponuja znova); preklic ali napaka se ne shrani. */
+    /** Uspeh za sporocilo uporabniku; preklic ali napaka ni uspeh. Rezultata se ne shranjuje (glej pokaziGumb). */
     fun jeUspeh(i: Izid): Boolean = i == Izid.V_KROGU || i == Izid.ZE_V_KROGU
 }

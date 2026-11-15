@@ -229,4 +229,8 @@
     <string name="assistant_code_wrong_on_pc">Il codice digitato sul computer non era corretto. Digitalo di nuovo in Lina accanto al telefono in attesa: %1$s.</string>
     <string name="assistant_code_retry_title">Il codice non era corretto</string>
     <string name="assistant_code_retry_message">Il codice non era corretto. Digita di nuovo il codice mostrato da Lina sul computer.</string>
+    <string name="circle_confirm">Aggiungi Lina alla cerchia ristretta</string>
+    <string name="circle_done">Lina è nella tua cerchia ristretta.</string>
+    <string name="circle_refused">Non aggiunta alla cerchia ristretta.</string>
+    <string name="circle_failed">Safeer non ha potuto aggiungere Lina alla cerchia ristretta. Aggiorna Safeer e riprova.</string>
 </resources>

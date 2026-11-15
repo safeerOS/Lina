@@ -54,9 +54,8 @@ class OzjiKrogSafeerTest {
 
     @Test
     fun `gumb samo ko ima ucinek in shrani samo uspeh`() {
-        assertTrue(OzjiKrogSafeer.pokaziGumb(ciljNaVoljo = true, vKrogu = false))
-        assertFalse(OzjiKrogSafeer.pokaziGumb(ciljNaVoljo = false, vKrogu = false), "brez Safeerja ni gumba")
-        assertFalse(OzjiKrogSafeer.pokaziGumb(ciljNaVoljo = true, vKrogu = true), "ze v krogu: brez ponovne potrditve")
+        assertTrue(OzjiKrogSafeer.pokaziGumb(ciljNaVoljo = true), "T4-6: gumb je ob vsakem prikazu, ko je Safeer na voljo (clanstvo preveri Safeer)")
+        assertFalse(OzjiKrogSafeer.pokaziGumb(ciljNaVoljo = false), "brez Safeerja ni gumba")
         assertTrue(OzjiKrogSafeer.jeUspeh(OzjiKrogSafeer.Izid.V_KROGU) && OzjiKrogSafeer.jeUspeh(OzjiKrogSafeer.Izid.ZE_V_KROGU))
         assertFalse(OzjiKrogSafeer.jeUspeh(OzjiKrogSafeer.Izid.ZAVRNJENO) || OzjiKrogSafeer.jeUspeh(OzjiKrogSafeer.Izid.NAPAKA))
     }

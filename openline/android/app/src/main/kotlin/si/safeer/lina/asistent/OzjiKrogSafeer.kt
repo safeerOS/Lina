@@ -13,9 +13,6 @@ import si.safeer.lina.podpis.OzjiKrogSafeer
  * KeyStore - Safeerju poslemo samo javni kljuc in id iz njega. Vse klice delaj zunaj glavne niti (KeyStore, B6).
  */
 object OzjiKrogSafeerLepilo {
-    private const val PREFS = "lina_ozji_krog"
-    private const val KLJUC_V_KROGU = "v_krogu_id"
-
     /** Paket Safeer z oknom potrditve in istim podpisom kot Lina; null, ce Safeerja ni (ali ni iste podpisne verige). */
     fun cilj(context: Context): String? {
         val pm = context.packageManager
@@ -38,14 +35,6 @@ object OzjiKrogSafeerLepilo {
         return Intent(OzjiKrogSafeer.DEJANJE).setComponent(ComponentName(paket, KOMPONENTA))
             .putExtra(OzjiKrogSafeer.POLJE_ID, polja.getValue(OzjiKrogSafeer.POLJE_ID))
             .putExtra(OzjiKrogSafeer.POLJE_KLJUC, polja.getValue(OzjiKrogSafeer.POLJE_KLJUC))
-    }
-
-    /** Shranjen id, s katerim je bila Lina ze potrjena (ob zamenjavi kljuca id ni enak, gumb se spet pokaze). */
-    fun vKrogu(context: Context, id: String): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KLJUC_V_KROGU, null) == id
-
-    fun zapomni(context: Context, id: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KLJUC_V_KROGU, id).apply()
     }
 
     private const val KOMPONENTA = "si.safeer.tv.link.OzjiKrogPotrdiActivity"
