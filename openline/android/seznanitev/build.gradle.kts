@@ -9,6 +9,8 @@ kotlin {
 }
 
 dependencies {
+    // samo za preizkuse: branje skupne datoteke vektorjev TS <-> Kotlin (glavna koda modula ostane brez odvisnosti)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     testImplementation(kotlin("test-junit5"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
