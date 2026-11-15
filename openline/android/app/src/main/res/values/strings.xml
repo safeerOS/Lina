@@ -229,8 +229,8 @@
     <string name="assistant_code_wrong_on_pc">The code typed on the computer was not right. In Lina, type it again next to the waiting phone: %1$s.</string>
     <string name="assistant_code_retry_title">The code was not right</string>
     <string name="assistant_code_retry_message">The code was not right. Type the code shown by Lina on the computer again.</string>
-    <string name="circle_confirm">Add Lina to inner circle</string>
-    <string name="circle_done">Lina is in your inner circle.</string>
-    <string name="circle_refused">Not added to the inner circle.</string>
-    <string name="circle_failed">Safeer could not add Lina to the inner circle. Update Safeer and try again.</string>
+    <string name="circle_confirm">Connect Lina</string>
+    <string name="circle_done">Lina is connected to Safeer and added to the Safeer Link circle of trust.</string>
+    <string name="circle_refused">Lina was not connected to Safeer.</string>
+    <string name="circle_failed">Safeer could not connect Lina. Update Safeer and try again.</string>
 </resources>

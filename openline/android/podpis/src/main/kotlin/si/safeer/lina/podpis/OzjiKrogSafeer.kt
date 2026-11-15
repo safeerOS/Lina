@@ -7,7 +7,7 @@ package si.safeer.lina.podpis
  *
  * Pogodba (Android-tv src/main/kotlin/si/safeer/tv/link/OzjiKrogSorodnikPravila.kt, preizkus tam in tu): Lina odpre
  * okno Safeer z startActivityForResult in namero [DEJANJE] z id-jem in javnim kljucem; okno ZASCITENO z dovoljenjem
- * ravni signature (si.safeer.tv.permission.LINK) uporabnik potrdi enkrat. Odgovor: RESULT_OK + [POLJE_IZID].
+ * ravni signature (si.safeer.tv.permission.OZJI_KROG) uporabnik potrdi enkrat. Odgovor: RESULT_OK + [POLJE_IZID].
  *
  * Varnost: (1) cilj je izrecna komponenta v aplikaciji z DOVOLJENIM imenom paketa IN istim podpisom kot Lina - namera
  * brez cilja bi jo lahko prestregla tuja aplikacija, ki napove isto dejanje; (2) uspeh je samo RESULT_OK z znanim izidom;
@@ -16,6 +16,8 @@ package si.safeer.lina.podpis
  */
 object OzjiKrogSafeer {
     const val DEJANJE = "si.safeer.tv.OZJI_KROG_POTRDI"
+    /** Dovoljenje ravni signature, ki varuje okno v Safeerju; Lina ga samo napove v manifestu (T4-1: NE LINK, ta odpre sorodniske poti). */
+    const val DOVOLJENJE = "si.safeer.tv.permission.OZJI_KROG"
     const val POLJE_ID = "id"
     const val POLJE_KLJUC = "kljuc"
     const val POLJE_IZID = "izid"

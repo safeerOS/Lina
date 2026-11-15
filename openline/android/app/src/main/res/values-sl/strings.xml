@@ -229,8 +229,8 @@
     <string name="assistant_code_wrong_on_pc">Koda, vtipkana na računalniku, ni bila prava. V Lini pri čakajočem telefonu jo vtipkajte znova: %1$s.</string>
     <string name="assistant_code_retry_title">Koda ni bila prava</string>
     <string name="assistant_code_retry_message">Koda ni bila prava. Vtipkajte kodo, ki jo kaže Lina na računalniku, znova.</string>
-    <string name="circle_confirm">Dodaj Lino v ožji krog</string>
-    <string name="circle_done">Lina je v vašem ožjem krogu.</string>
-    <string name="circle_refused">Ni dodana v ožji krog.</string>
-    <string name="circle_failed">Safeer ni mogel dodati Line v ožji krog. Posodobite Safeer in poskusite znova.</string>
+    <string name="circle_confirm">Poveži Lino</string>
+    <string name="circle_done">Lina je povezana s Safeerjem in vpisana v krog zaupanja Safeer Linka.</string>
+    <string name="circle_refused">Lina ni povezana s Safeerjem.</string>
+    <string name="circle_failed">Safeer ni mogel povezati Line. Posodobite Safeer in poskusite znova.</string>
 </resources>

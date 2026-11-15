@@ -63,6 +63,7 @@ class OzjiKrogSafeerTest {
     @Test
     fun `dejanje in polja so enaka kot na strani Safeer`() {
         assertEquals("si.safeer.tv.OZJI_KROG_POTRDI", OzjiKrogSafeer.DEJANJE)
+        assertEquals("si.safeer.tv.permission.OZJI_KROG", OzjiKrogSafeer.DOVOLJENJE)
         assertEquals("id", OzjiKrogSafeer.POLJE_ID); assertEquals("kljuc", OzjiKrogSafeer.POLJE_KLJUC)
         assertEquals("izid", OzjiKrogSafeer.POLJE_IZID)
     }
