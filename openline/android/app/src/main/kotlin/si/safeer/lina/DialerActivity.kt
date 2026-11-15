@@ -45,6 +45,8 @@ import si.safeer.lina.telecom.LineSource
 import si.safeer.lina.podpis.NapravaKljuc
 import si.safeer.lina.asistent.AsistentKontroler
 import si.safeer.lina.asistent.AsistentShramba
+import si.safeer.lina.asistent.OzjiKrogSafeerLepilo
+import si.safeer.lina.podpis.OzjiKrogSafeer
 import si.safeer.lina.podpis.AsistentPrikaz
 import si.safeer.lina.podpis.SporociloNapake
 import si.safeer.lina.seznanitev.AsistentVabilo
@@ -117,6 +119,7 @@ class DialerActivity : Activity() {
     private lateinit var asistent: AsistentKontroler
     private lateinit var assistantPairButton: Button
     private lateinit var assistantCodeButton: Button
+    private lateinit var assistantCircleButton: Button
     private var odkrivanje: si.safeer.lina.asistent.OdkrivanjeLine? = null
     private var iscemLino = false
     private var ponovniVnosOdprt = false
@@ -343,6 +346,8 @@ class DialerActivity : Activity() {
         assistantPairButton = findViewById(R.id.assistantPairButton)
         assistantCodeButton = findViewById(R.id.assistantCodeButton)
         assistantCodeButton.setOnClickListener { izberiNacinKode() }
+        assistantCircleButton = findViewById(R.id.assistantCircleButton)
+        assistantCircleButton.setOnClickListener { potrdiVOzjiKrog() }
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
@@ -433,7 +438,40 @@ class DialerActivity : Activity() {
                     assistantDeviceId.visibility = View.VISIBLE
                 }
             }
+            // Potrditev v ozji krog prek Safeerja: gumb samo, ce je Safeer na voljo in Lina se ni potrjena (brez gumba, ki ne dela).
+            val cilj = OzjiKrogSafeerLepilo.cilj(this)
+            val pokazi = id != null && OzjiKrogSafeer.pokaziGumb(cilj != null, OzjiKrogSafeerLepilo.vKrogu(this, id))
+            runOnUiThread { if (!isFinishing) assistantCircleButton.visibility = if (pokazi) View.VISIBLE else View.GONE }
         }.start()
+    }
+
+    /** Ena potrditev v Safeerju (okno zasciteno z dovoljenjem ravni signature); Lina sama sebe ne more vpisati. */
+    private fun potrdiVOzjiKrog() {
+        assistantCircleButton.isEnabled = false
+        Thread {
+            val cilj = OzjiKrogSafeerLepilo.cilj(this)
+            val namera = cilj?.let { OzjiKrogSafeerLepilo.namera(it) }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                if (namera == null) { assistantCircleButton.isEnabled = true; toast(getString(R.string.circle_failed)); return@runOnUiThread }
+                try { startActivityForResult(namera, OzjiKrogSafeerLepilo.ZAHTEVA) }
+                catch (_: Throwable) { assistantCircleButton.isEnabled = true; toast(getString(R.string.circle_failed)) }
+            }
+        }.start()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != OzjiKrogSafeerLepilo.ZAHTEVA) return
+        assistantCircleButton.isEnabled = true
+        val izid = OzjiKrogSafeer.izid(resultCode == RESULT_OK, data?.getStringExtra(OzjiKrogSafeer.POLJE_IZID))
+        if (OzjiKrogSafeer.jeUspeh(izid)) {
+            Thread { runCatching { NapravaKljuc.id() }.getOrNull()?.let { OzjiKrogSafeerLepilo.zapomni(this, it) }
+                runOnUiThread { if (!isFinishing) { assistantCircleButton.visibility = View.GONE; toast(getString(R.string.circle_done)) } } }.start()
+        } else {
+            toast(getString(if (izid == OzjiKrogSafeer.Izid.ZAVRNJENO) R.string.circle_refused else R.string.circle_failed))
+        }
     }
 
     /** Izidi seznanitve s kodo; QR ima svoja besedila spodaj (null = obicajno besedilo). */

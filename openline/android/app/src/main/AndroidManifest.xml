@@ -4,6 +4,18 @@
     <!-- Lina deluje tudi na napravi brez telefonije (zavihek Asistent, tablica); prevzem klicev takrat ni na voljo. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Potrditev v ozji krog z enim dotikom: okno Safeer Phone/OS je zasciteno z dovoljenjem ravni signature. Dovoljenje
+         napove vsaka aplikacija Safeer (isto kot v Safeerju); deluje samo, ce sta obe podpisani s kljucem Safeer. -->
+    <permission
+        android:name="si.safeer.tv.permission.LINK"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="si.safeer.tv.permission.LINK" />
+    <!-- Android 11+: vidnost paketov Safeer za potrditev v ozji krog (samo ta tri imena). -->
+    <queries>
+        <package android:name="si.safeer.phone" />
+        <package android:name="si.safeer.os" />
+        <package android:name="si.safeer.tablet" />
+    </queries>
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
