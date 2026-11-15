@@ -37,7 +37,9 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
 - Moduli: seznanitev in podpis ne uvazata protocol (klici); protocol ne uvaza ne podpisa ne seznanitve. Kljuci in zetoni
   obeh poti so loceni (GatewayConfigStore za klice, AsistentShramba in AndroidKeyStore za asistentko).
 - Telefon z nameščenim Safeer Phone/OS: Lina se v ozji krog vpise prek Safeer Phone/OS z enim dotikom (dovoljenje ravni
-  signature), brez QR in kode; QR in 6-mestna koda (SPAKE2 kot Safeer Link) samo za telefone brez Safeerja. V kodi se NI.
+  signature), brez QR in kode; QR in 6-mestna koda (SPAKE2 kot Safeer Link) samo za telefone brez Safeerja.
+  V kodi (15. 11. 2026): modul podpis OzjiKrogSafeer + app/asistent/OzjiKrogSafeer.kt; okno potrditve je v Safeerju (si.safeer.tv.link.OzjiKrogPotrdiActivity,
+  veja ozji-krog-1511). NEPREVERJENO na napravi (potrebuje APK Line in Safeerja, oba podpisana s kljucem Safeer).
 
 ## Pravi klici in naprave
 - Pravi klici prek OpenLine so PREPOVEDANI do cistega neodvisnega pregleda (lastnik 10. 11. 2026). Ko bo dovolj stabilno,
