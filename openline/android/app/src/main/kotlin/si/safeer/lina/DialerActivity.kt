@@ -279,11 +279,15 @@ class DialerActivity : Activity() {
 
     private fun bindLanguage() {
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
-        val codes = listOf(AppLocale.SYSTEM, AppLocale.EN, AppLocale.SL)
+        val codes = listOf(AppLocale.SYSTEM, AppLocale.EN, AppLocale.SL, AppLocale.DE, AppLocale.ES, AppLocale.FR, AppLocale.IT)
         val labels = listOf(
             getString(R.string.language_system),
             getString(R.string.language_english),
             getString(R.string.language_slovenian),
+            getString(R.string.language_german),
+            getString(R.string.language_spanish),
+            getString(R.string.language_french),
+            getString(R.string.language_italian),
         )
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
         spinner.setSelection(codes.indexOf(AppLocale.mode(this)).coerceAtLeast(0))

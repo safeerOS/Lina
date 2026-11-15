@@ -4,13 +4,17 @@ import android.content.Context
 import android.content.res.Configuration
 import java.util.Locale
 
-/** Jezik zaslonov: sistem, anglescina ali slovenscina. Anglescina ostane. */
+/** Jezik zaslonov: sistem, anglescina, slovenscina, nemscina, spanscina, francoscina ali italijanscina. Anglescina ostane. */
 object AppLocale {
     const val PREFS = "app_locale"
     const val KEY = "mode"
     const val SYSTEM = "system"
     const val EN = "en"
     const val SL = "sl"
+    const val DE = "de"
+    const val ES = "es"
+    const val FR = "fr"
+    const val IT = "it"
 
     fun mode(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, SYSTEM) ?: SYSTEM
