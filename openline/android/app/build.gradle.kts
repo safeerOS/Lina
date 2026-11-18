@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":protocol"))
     implementation(project(":podpis"))
     implementation(project(":seznanitev"))
+    implementation(project(":samostojna"))
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // In-app wireless ADB: pairs with this phone's own adbd to launch the shell-UID audio server.
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")

@@ -414,6 +414,109 @@
                 android:layout_height="wrap_content"
                 android:text="@string/assistant_title" />
 
+            <!-- Samostojna asistentka: deluje brez racunalnika (lastnik 18. 11. 2026). -->
+            <TextView
+                android:id="@+id/assistantLocalInfo"
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <LinearLayout
+                android:id="@+id/assistantKeyBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical">
+
+                <EditText
+                    android:id="@+id/assistantKeyInput"
+                    style="@style/Gw.Field"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/local_key_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:maxLength="200" />
+
+                <Button
+                    android:id="@+id/assistantKeySave"
+                    style="@style/Gw.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/local_key_save" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/assistantChatBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/assistantChatLog"
+                    style="@style/Gw.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textIsSelectable="true"
+                    android:visibility="gone" />
+
+                <EditText
+                    android:id="@+id/assistantChatInput"
+                    style="@style/Gw.Field"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="top"
+                    android:hint="@string/local_chat_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textMultiLine"
+                    android:maxLength="4000"
+                    android:minLines="2" />
+
+                <Button
+                    android:id="@+id/assistantChatSend"
+                    style="@style/Gw.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/local_send" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/assistantNotesTitle"
+                style="@style/Gw.Heading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/local_notes_title"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/assistantNotesList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/assistantKeyForget"
+                style="@style/Gw.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/local_key_forget"
+                android:visibility="gone" />
+
+            <TextView
+                style="@style/Gw.Heading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/assistant_computer_title" />
+
             <TextView
                 android:id="@+id/assistantStatus"
                 style="@style/Gw.Body"

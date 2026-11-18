@@ -166,7 +166,7 @@
     <string name="tab_calls">Chiamate</string>
     <string name="tab_assistant">Assistente</string>
     <string name="assistant_title">Assistente Lina</string>
-    <string name="assistant_no_link">Questo telefono non è associato a Lina sul tuo computer. In Lina sul computer mostra il codice QR per il telefono e scansionalo con «Scansiona QR».</string>
+    <string name="assistant_no_link">Questo telefono non è associato a Lina su un computer. L’associazione è facoltativa: in Lina sul computer mostra il codice QR per il telefono e scansionalo con «Scansiona QR».</string>
     <string name="assistant_ready">Connesso a Lina sul tuo computer. Un’attività viene firmata con la chiave di questo telefono.</string>
     <string name="assistant_device_id">Questo telefono nella cerchia ristretta di Safeer Link: %1$s</string>
     <string name="assistant_task_hint">Attività per Claude Code</string>
@@ -235,4 +235,20 @@
     <string name="circle_done">Lina è collegata a Safeer e aggiunta alla cerchia di fiducia di Safeer Link.</string>
     <string name="circle_refused">Lina non è stata collegata a Safeer.</string>
     <string name="circle_failed">Safeer non ha potuto collegare Lina. Aggiorna Safeer e riprova.</string>
+    <string name="local_info">Lina funziona solo su questo telefono, senza computer. La tua chiave Gemini resta cifrata su questo telefono e viene inviata solo a Google.</string>
+    <string name="local_key_hint">Chiave API Gemini (Google AI Studio)</string>
+    <string name="local_key_save">Salva chiave</string>
+    <string name="local_key_bad">Questa non sembra una chiave Gemini.</string>
+    <string name="local_key_forget">Dimentica chiave</string>
+    <string name="local_chat_hint">Chiedi o di’ qualcosa a Lina…</string>
+    <string name="local_send">Invia</string>
+    <string name="local_thinking">Sto pensando…</string>
+    <string name="local_you">Tu</string>
+    <string name="local_lina">Lina</string>
+    <string name="local_note_saved">Nota salvata: %1$s</string>
+    <string name="local_notes_title">Note</string>
+    <string name="local_note_delete">Elimina</string>
+    <string name="local_err_offline">Nessuna connessione a Google.</string>
+    <string name="local_err_generic">Lina non ha potuto rispondere: %1$s</string>
+    <string name="assistant_computer_title">Computer (facoltativo)</string>
 </resources>

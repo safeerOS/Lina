@@ -126,6 +126,7 @@ class DialerActivity : Activity() {
     private lateinit var assistantForgetButton: Button
     private lateinit var assistantStopButton: Button
     private lateinit var assistantLog: TextView
+    private lateinit var samostojniPogled: si.safeer.lina.asistent.SamostojniPogled
     private lateinit var assistantApproval: View
     private lateinit var assistantApprovalTool: TextView
     private lateinit var assistantApprovalPreview: TextView
@@ -356,6 +357,7 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
+        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this)
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
@@ -381,6 +383,7 @@ class DialerActivity : Activity() {
     }
 
     private fun renderAssistant() {
+        samostojniPogled.osvezi()
         val stanje = asistent.stanje()
         val p = AsistentPrikaz.izracunaj(stanje)
         val naslov = AsistentShramba.beri(this)

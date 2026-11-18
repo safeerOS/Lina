@@ -166,7 +166,7 @@
     <string name="tab_calls">Anrufe</string>
     <string name="tab_assistant">Assistentin</string>
     <string name="assistant_title">Assistentin Lina</string>
-    <string name="assistant_no_link">Dieses Telefon ist nicht mit Lina auf Ihrem Computer gekoppelt. Lassen Sie in Lina auf dem Computer den QR-Code für das Telefon anzeigen und scannen Sie ihn mit „QR scannen“.</string>
+    <string name="assistant_no_link">Dieses Telefon ist nicht mit Lina auf einem Computer gekoppelt. Die Kopplung ist optional: Lassen Sie in Lina auf dem Computer den QR-Code für das Telefon anzeigen und scannen Sie ihn mit „QR scannen“.</string>
     <string name="assistant_ready">Mit Lina auf Ihrem Computer verbunden. Eine Aufgabe wird mit dem Schlüssel dieses Telefons signiert.</string>
     <string name="assistant_device_id">Dieses Telefon im engeren Kreis von Safeer Link: %1$s</string>
     <string name="assistant_task_hint">Aufgabe für Claude Code</string>
@@ -235,4 +235,20 @@
     <string name="circle_done">Lina ist mit Safeer verbunden und in den Vertrauenskreis von Safeer Link aufgenommen.</string>
     <string name="circle_refused">Lina wurde nicht mit Safeer verbunden.</string>
     <string name="circle_failed">Safeer konnte Lina nicht verbinden. Aktualisieren Sie Safeer und versuchen Sie es erneut.</string>
+    <string name="local_info">Lina arbeitet allein auf diesem Telefon, ein Computer ist nicht nötig. Ihr Gemini-Schlüssel bleibt verschlüsselt auf diesem Telefon und wird nur an Google gesendet.</string>
+    <string name="local_key_hint">Gemini-API-Schlüssel (Google AI Studio)</string>
+    <string name="local_key_save">Schlüssel speichern</string>
+    <string name="local_key_bad">Das sieht nicht nach einem Gemini-Schlüssel aus.</string>
+    <string name="local_key_forget">Schlüssel vergessen</string>
+    <string name="local_chat_hint">Lina fragen oder etwas sagen …</string>
+    <string name="local_send">Senden</string>
+    <string name="local_thinking">Ich denke nach …</string>
+    <string name="local_you">Sie</string>
+    <string name="local_lina">Lina</string>
+    <string name="local_note_saved">Notiz gespeichert: %1$s</string>
+    <string name="local_notes_title">Notizen</string>
+    <string name="local_note_delete">Löschen</string>
+    <string name="local_err_offline">Keine Verbindung zu Google.</string>
+    <string name="local_err_generic">Lina konnte nicht antworten: %1$s</string>
+    <string name="assistant_computer_title">Computer (optional)</string>
 </resources>

@@ -1,0 +1,121 @@
+package si.safeer.lina.asistent
+
+import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import si.safeer.lina.samostojna.KljucGemini
+import si.safeer.lina.samostojna.OdgovorHttp
+import si.safeer.lina.samostojna.Prenos
+import si.safeer.lina.samostojna.ShranjevalnikKljuca
+import si.safeer.lina.samostojna.Zapisek
+import si.safeer.lina.samostojna.zapiskiIzJsona
+import si.safeer.lina.samostojna.zapiskiVJson
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+
+/** Prenos za samostojno asistentko: samo https, brez preusmeritev (kljuc je v glavi zahteve), odgovor omejen na 1 MB + 1 bajt. */
+class AndroidPrenos : Prenos {
+    override fun post(url: String, glave: Map<String, String>, telo: String, casMs: Long): OdgovorHttp {
+        if (!url.startsWith("https://")) throw IOException("samo https")
+        val c = URL(url).openConnection() as HttpURLConnection
+        try {
+            c.requestMethod = "POST"
+            c.instanceFollowRedirects = false
+            c.connectTimeout = 10_000
+            c.readTimeout = casMs.toInt()
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            glave.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            c.outputStream.use { it.write(telo.toByteArray(Charsets.UTF_8)) }
+            val koda = c.responseCode
+            val tok = if (koda in 200..299) c.inputStream else c.errorStream
+            val bajti = tok?.use { omejenoBranje(it, MEJA_ODGOVORA + 1) } ?: ByteArray(0)
+            return OdgovorHttp(koda, String(bajti, Charsets.UTF_8))
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    private fun omejenoBranje(vhod: java.io.InputStream, meja: Int): ByteArray {
+        val izhod = java.io.ByteArrayOutputStream()
+        val medpomnilnik = ByteArray(8192)
+        while (izhod.size() < meja) {
+            val n = vhod.read(medpomnilnik, 0, minOf(medpomnilnik.size, meja - izhod.size()))
+            if (n < 0) break
+            izhod.write(medpomnilnik, 0, n)
+        }
+        return izhod.toByteArray()
+    }
+
+    private companion object { const val MEJA_ODGOVORA = 1024 * 1024 }
+}
+
+private const val SHRAMBA = "lina_asistent"
+
+/** Kljuc Gemini je v shrambi samo kot AES-GCM tajnopis; AES kljuc ne zapusti AndroidKeyStore. Kljuca ne zapisemo nikamor drugam. */
+class KeystoreShranjevalnik(private val context: Context) : ShranjevalnikKljuca {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+
+    private fun kljucAes(ustvari: Boolean): SecretKey? {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        if (!ustvari) return null
+        val g = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        g.init(
+            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build(),
+        )
+        return g.generateKey()
+    }
+
+    override fun preberi(): KljucGemini? = try {
+        val zapis = prefs().getString(KLJUC, null) ?: return null
+        val vse = Base64.decode(zapis, Base64.NO_WRAP)
+        if (vse.size <= 12) return null
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.DECRYPT_MODE, kljucAes(false) ?: return null, GCMParameterSpec(128, vse, 0, 12))
+        KljucGemini(String(c.doFinal(vse, 12, vse.size - 12), Charsets.UTF_8))
+    } catch (_: Exception) { null }
+
+    override fun shrani(k: KljucGemini) {
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.ENCRYPT_MODE, kljucAes(true)!!)
+        val tajnopis = c.doFinal(k.izpostavi().toByteArray(Charsets.UTF_8))
+        prefs().edit().putString(KLJUC, Base64.encodeToString(c.iv + tajnopis, Base64.NO_WRAP)).apply()
+    }
+
+    override fun izbrisi() {
+        prefs().edit().remove(KLJUC).apply()
+        try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) } catch (_: Exception) {}
+    }
+
+    private companion object { const val ALIAS = "lina_asistent_gemini"; const val KLJUC = "gemini_kljuc" }
+}
+
+/** Zapiski na telefonu. Poskodovan zapis se pred prvim novim zapisom shrani kot varnostna kopija, nikoli ne izgine tiho. */
+class ZapiskiShramba(private val context: Context) {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+
+    @Synchronized fun beri(): List<Zapisek> {
+        val surovo = prefs().getString(ZAPISKI, null) ?: return emptyList()
+        zapiskiIzJsona(surovo)?.let { return it }
+        if (!prefs().contains(ZAPISKI_POSKODOVANI)) prefs().edit().putString(ZAPISKI_POSKODOVANI, surovo).apply()
+        return emptyList()
+    }
+
+    @Synchronized fun shrani(zapiski: List<Zapisek>) {
+        prefs().edit().putString(ZAPISKI, zapiskiVJson(zapiski)).apply()
+    }
+
+    private companion object { const val ZAPISKI = "zapiski"; const val ZAPISKI_POSKODOVANI = "zapiski_poskodovani" }
+}

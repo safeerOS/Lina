@@ -166,7 +166,7 @@
     <string name="tab_calls">Calls</string>
     <string name="tab_assistant">Assistant</string>
     <string name="assistant_title">Lina assistant</string>
-    <string name="assistant_no_link">This phone is not paired with Lina on your computer. In Lina on the computer, show the QR code for the phone and scan it with \u201cScan QR\u201d.</string>
+    <string name="assistant_no_link">Not paired with Lina on a computer. Pairing is optional: in Lina on the computer, show the QR code for the phone and scan it with \u201cScan QR\u201d.</string>
     <string name="assistant_ready">Connected to Lina on your computer. A task is signed with this phone\'s key.</string>
     <string name="assistant_device_id">This phone in the Safeer Link circle: %1$s</string>
     <string name="assistant_task_hint">Task for Claude Code</string>
@@ -235,4 +235,20 @@
     <string name="circle_done">Lina is connected to Safeer and added to the Safeer Link circle of trust.</string>
     <string name="circle_refused">Lina was not connected to Safeer.</string>
     <string name="circle_failed">Safeer could not connect Lina. Update Safeer and try again.</string>
+    <string name="local_info">Lina works on this phone alone, no computer needed. Your Gemini key stays encrypted on this phone and is sent only to Google.</string>
+    <string name="local_key_hint">Gemini API key (Google AI Studio)</string>
+    <string name="local_key_save">Save key</string>
+    <string name="local_key_bad">That does not look like a Gemini key.</string>
+    <string name="local_key_forget">Forget key</string>
+    <string name="local_chat_hint">Ask or tell Lina…</string>
+    <string name="local_send">Send</string>
+    <string name="local_thinking">Thinking…</string>
+    <string name="local_you">You</string>
+    <string name="local_lina">Lina</string>
+    <string name="local_note_saved">Note saved: %1$s</string>
+    <string name="local_notes_title">Notes</string>
+    <string name="local_note_delete">Delete</string>
+    <string name="local_err_offline">No connection to Google.</string>
+    <string name="local_err_generic">Lina could not answer: %1$s</string>
+    <string name="assistant_computer_title">Computer (optional)</string>
 </resources>

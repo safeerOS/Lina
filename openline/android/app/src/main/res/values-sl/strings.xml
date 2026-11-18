@@ -166,7 +166,7 @@
     <string name="tab_calls">Klici</string>
     <string name="tab_assistant">Asistent</string>
     <string name="assistant_title">Asistentka Lina</string>
-    <string name="assistant_no_link">Telefon ni seznanjen z Lino na računalniku. V Lini na računalniku prikažite kodo QR za telefon in jo skenirajte z gumbom »Skeniraj QR«.</string>
+    <string name="assistant_no_link">Telefon ni seznanjen z Lino na računalniku. Seznanitev ni obvezna: v Lini na računalniku prikažite kodo QR za telefon in jo skenirajte z gumbom »Skeniraj QR«.</string>
     <string name="assistant_ready">Povezano z Lino na računalniku. Naloga se podpiše s ključem tega telefona.</string>
     <string name="assistant_device_id">Ta telefon v ožjem krogu Safeer Linka: %1$s</string>
     <string name="assistant_task_hint">Naloga za Claude Code</string>
@@ -235,4 +235,20 @@
     <string name="circle_done">Lina je povezana s Safeerjem in vpisana v krog zaupanja Safeer Linka.</string>
     <string name="circle_refused">Lina ni povezana s Safeerjem.</string>
     <string name="circle_failed">Safeer ni mogel povezati Line. Posodobite Safeer in poskusite znova.</string>
+    <string name="local_info">Lina deluje samo v tem telefonu, računalnika ne potrebujete. Ključ Gemini ostane šifriran v telefonu in se pošilja samo Googlu.</string>
+    <string name="local_key_hint">Ključ Gemini API (Google AI Studio)</string>
+    <string name="local_key_save">Shrani ključ</string>
+    <string name="local_key_bad">To ni videti kot ključ Gemini.</string>
+    <string name="local_key_forget">Pozabi ključ</string>
+    <string name="local_chat_hint">Vprašajte ali povejte Lini …</string>
+    <string name="local_send">Pošlji</string>
+    <string name="local_thinking">Razmišljam …</string>
+    <string name="local_you">Vi</string>
+    <string name="local_lina">Lina</string>
+    <string name="local_note_saved">Zapisano: %1$s</string>
+    <string name="local_notes_title">Zapiski</string>
+    <string name="local_note_delete">Izbriši</string>
+    <string name="local_err_offline">Ni povezave z Googlom.</string>
+    <string name="local_err_generic">Lina ni mogla odgovoriti: %1$s</string>
+    <string name="assistant_computer_title">Računalnik (neobvezno)</string>
 </resources>
