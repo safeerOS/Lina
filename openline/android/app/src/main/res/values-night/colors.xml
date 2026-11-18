@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Aura (temna): iste vrednosti kot samostojna/Teme.kt; preizkus ColorsXmlTest to zagotavlja. -->
 <resources>
-    <color name="paper">#141619</color>
-    <color name="surface">#1C1F23</color>
-    <color name="ink">#E7E9EC</color>
-    <color name="on_ink">#141619</color>
-    <color name="muted">#969CA3</color>
-    <color name="line">#2D3136</color>
-    <color name="soft">#24282D</color>
-    <color name="hint">#80969CA3</color>
+    <color name="paper">#0E0B24</color>
+    <color name="surface">#171236</color>
+    <color name="ink">#EEF0FF</color>
+    <color name="on_ink">#0E0B24</color>
+    <color name="muted">#A7A9D6</color>
+    <color name="line">#6A62B8</color>
+    <color name="soft">#1F1948</color>
+    <color name="hint">#80A7A9D6</color>
     <color name="live">#6CC28F</color>
     <color name="ring">#D6A54B</color>
-    <color name="bad">#F08A80</color>
+    <color name="bad">#FF8087</color>
+    <color name="on_bad">#0E0B24</color>
+    <color name="accent">#5CE1E6</color>
+    <color name="on_accent">#0E0B24</color>
+    <color name="record">#FF4F9A</color>
 </resources>

@@ -58,14 +58,14 @@ object MissedCallNotice {
         )
         val who = number.ifBlank { context.getString(R.string.unknown_number) }
         val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_missed_call)
+            .setSmallIcon(R.drawable.ic_stat_lina)
             .setContentTitle(context.getString(R.string.missed_title))
             .setContentText(context.getString(R.string.missed_while_lina, who))
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             // Javna razlicica (zaklenjen zaslon): samo dejstvo, brez stevilke.
             .setPublicVersion(
                 Notification.Builder(context, CHANNEL)
-                    .setSmallIcon(android.R.drawable.stat_notify_missed_call)
+                    .setSmallIcon(R.drawable.ic_stat_lina)
                     .setContentTitle(context.getString(R.string.missed_title))
                     .build(),
             )

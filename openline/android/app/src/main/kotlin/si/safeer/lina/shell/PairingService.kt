@@ -123,7 +123,7 @@ class PairingService : Service() {
         builder(text).setOngoing(!done).setAutoCancel(done).build()
 
     private fun builder(text: String) = Notification.Builder(this, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+        .setSmallIcon(R.drawable.ic_stat_lina)
         .setContentTitle(getString(R.string.pair_title_note))
         .setContentText(text)
         .setStyle(Notification.BigTextStyle().bigText(text))

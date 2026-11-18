@@ -262,7 +262,7 @@ object CallAudioBridge {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = Notification.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setSmallIcon(R.drawable.ic_stat_lina)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.shell_lost))
             .setOngoing(true)
@@ -290,7 +290,7 @@ object CallAudioBridge {
             },
         )
         val notification = Notification.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setSmallIcon(R.drawable.ic_stat_lina)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(text)
             .setOnlyAlertOnce(true)

@@ -83,7 +83,7 @@ class DialerActivity : Activity() {
         fun render(done: Boolean, statusText: String, actionText: String?) {
             status.text = statusText
             badge.setBackgroundResource(if (done) R.drawable.step_badge_done else R.drawable.step_badge)
-            badge.setTextColor(badge.context.getColor(if (done) R.color.on_ink else R.color.muted))
+            badge.setTextColor(badge.context.getColor(if (done) R.color.on_accent else R.color.muted))
             action.visibility = if (actionText == null) View.GONE else View.VISIBLE
             if (actionText != null) action.text = actionText
         }
@@ -301,7 +301,7 @@ class DialerActivity : Activity() {
             getString(R.string.language_french),
             getString(R.string.language_italian),
         )
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        spinner.adapter = ArrayAdapter(this, R.layout.spinner_item, labels).apply { setDropDownViewResource(R.layout.spinner_dropdown_item) }
         spinner.setSelection(codes.indexOf(AppLocale.mode(this)).coerceAtLeast(0))
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -659,7 +659,7 @@ class DialerActivity : Activity() {
         val labels = listOf(getString(R.string.line_choose)) +
             view.choices.map { if (it.isEsim) getString(R.string.line_esim, it.label) else it.label }
         lineSpinner.onItemSelectedListener = null
-        lineSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        lineSpinner.adapter = ArrayAdapter(this, R.layout.spinner_item, labels).apply { setDropDownViewResource(R.layout.spinner_dropdown_item) }
         lineProgrammatic = view.selectedIndex + 1
         lineSpinner.setSelection(lineProgrammatic, false)
         lineSpinner.visibility = View.VISIBLE

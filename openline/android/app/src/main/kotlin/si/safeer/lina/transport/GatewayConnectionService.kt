@@ -66,7 +66,7 @@ class GatewayConnectionService : Service() {
             else -> getString(R.string.connection_offline)
         }
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            .setSmallIcon(R.drawable.ic_stat_lina)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setContentIntent(open)

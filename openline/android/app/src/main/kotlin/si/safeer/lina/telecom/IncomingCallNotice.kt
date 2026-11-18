@@ -49,7 +49,7 @@ object IncomingCallNotice {
         )
         val who = number.ifBlank { context.getString(R.string.unknown_number) }
         val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.sym_call_incoming)
+            .setSmallIcon(R.drawable.ic_stat_lina)
             .setContentTitle(context.getString(R.string.incoming_call))
             .setContentText(who)
             .setCategory(Notification.CATEGORY_CALL)
