@@ -262,12 +262,16 @@
     <string name="local_google_err_fmt">Error al iniciar sesión con Google: %1$s</string>
     <string name="local_google_sign_out">Cerrar sesión</string>
     <string name="local_google_relogin">La sesión de Google caducó. Inicia sesión de nuevo.</string>
-    <string name="tab_phone">Teléfono</string>
+    <string name="tab_phone">Preparar</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Ordenador</string>
 
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Búsqueda web y conexiones</string>
+    <string name="assistant_setup_title">Asistente: proveedor y claves</string>
+    <string name="assistant_setup_hint_missing">Para chatear, elija un proveedor e introduzca su clave en Ajustes (pestaña Lina).</string>
+    <string name="assistant_setup_hint_active_fmt">Proveedor: %1$s. Cambie el proveedor y las claves en Ajustes (pestaña Lina).</string>
+    <string name="assistant_open_settings">Ajustes de claves</string>
     <string name="tool_info">Opcional. Las claves quedan cifradas en el teléfono y solo se envían a su propio servicio. Una clave se guarda solo cuando el servicio la acepta.</string>
     <string name="tool_brave_title">Brave Search (búsqueda web)</string>
     <string name="tool_brave_note">Lina lo usa para buscar datos actuales (noticias, tiempo, precios). Clave en api-dashboard.search.brave.com.</string>

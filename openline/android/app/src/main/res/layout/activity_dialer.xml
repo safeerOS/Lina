@@ -448,29 +448,18 @@
                     android:text="@string/stop_clean" />
             </LinearLayout>
 
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/tabAssistant"
-            style="@style/Gw.Panel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:visibility="gone">
-
-            <TextView
-                style="@style/Gw.Heading"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/assistant_title" />
-
-            <!-- Samostojna asistentka: deluje brez racunalnika (lastnik 18. 11. 2026). -->
-            <TextView
-                android:id="@+id/assistantLocalInfo"
-                style="@style/Gw.Muted"
+            <LinearLayout
+                android:id="@+id/assistantSetupPanel"
+                style="@style/Gw.Panel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="16dp">
+
+                <TextView
+                    style="@style/Gw.Heading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/assistant_setup_title" />
 
             <TextView
                 android:id="@+id/assistantProviderLabel"
@@ -537,6 +526,78 @@
                     android:text="@string/local_google_sign_in" />
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/assistantToolsTitle"
+                style="@style/Gw.Heading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/tool_title" />
+
+            <TextView
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/tool_info" />
+
+            <LinearLayout
+                android:id="@+id/assistantToolsList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/assistantKeyForget"
+                style="@style/Gw.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/local_key_forget"
+                android:visibility="gone" />
+            </LinearLayout>
+
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabAssistant"
+            style="@style/Gw.Panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/Gw.Heading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/assistant_title" />
+
+            <!-- Samostojna asistentka: deluje brez racunalnika (lastnik 18. 11. 2026). -->
+            <TextView
+                android:id="@+id/assistantLocalInfo"
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <!-- Ponudnik in kljuci so v Nastavitvah (zavihek Lina), ne tu (lastnik 18. 11. 2026). -->
+            <TextView
+                android:id="@+id/assistantSetupHint"
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp" />
+
+            <Button
+                android:id="@+id/assistantOpenSettings"
+                style="@style/Gw.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/assistant_open_settings" />
+
             <LinearLayout
                 android:id="@+id/assistantChatBlock"
                 android:layout_width="match_parent"
@@ -590,35 +651,6 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />
 
-            <TextView
-                android:id="@+id/assistantToolsTitle"
-                style="@style/Gw.Heading"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/tool_title" />
-
-            <TextView
-                style="@style/Gw.Muted"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/tool_info" />
-
-            <LinearLayout
-                android:id="@+id/assistantToolsList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <Button
-                android:id="@+id/assistantKeyForget"
-                style="@style/Gw.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/local_key_forget"
-                android:visibility="gone" />
 
         </LinearLayout>
 

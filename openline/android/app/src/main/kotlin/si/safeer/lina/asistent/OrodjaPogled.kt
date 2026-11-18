@@ -90,6 +90,10 @@ class OrodjaPogled(
         val vnosi = polja.mapIndexed { i, hint ->
             EditText(a, null, 0, R.style.Gw_Field).apply {
                 setHint(hint)
+                // 18. 11. 2026: z defStyleAttr 0 EditText ne dobi editTextStyle, zato ni bil fokusabilen z dotikom: tipkovnica se ni odprla
+                // in lastnik kljucev ni mogel vpisati (fokus je ostal v polju klepeta). Dotik mora polje fokusirati.
+                isFocusable = true
+                isFocusableInTouchMode = true
                 importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
                 inputType = InputType.TYPE_CLASS_TEXT or (if (skrita[i]) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
                 filters = arrayOf(android.text.InputFilter.LengthFilter(200))

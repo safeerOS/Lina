@@ -262,12 +262,16 @@
     <string name="local_google_err_fmt">Accesso Google non riuscito: %1$s</string>
     <string name="local_google_sign_out">Esci</string>
     <string name="local_google_relogin">L\'accesso Google è scaduto. Accedi di nuovo.</string>
-    <string name="tab_phone">Telefono</string>
+    <string name="tab_phone">Prepara</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
 
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Ricerca web e collegamenti</string>
+    <string name="assistant_setup_title">Assistente: fornitore e chiavi</string>
+    <string name="assistant_setup_hint_missing">Per chattare, scegli un fornitore e inserisci la chiave nelle Impostazioni (scheda Lina).</string>
+    <string name="assistant_setup_hint_active_fmt">Fornitore: %1$s. Cambia fornitore e chiavi nelle Impostazioni (scheda Lina).</string>
+    <string name="assistant_open_settings">Impostazioni chiavi</string>
     <string name="tool_info">Facoltativo. Le chiavi restano cifrate sul telefono e vanno solo al proprio servizio. Una chiave viene salvata solo quando il servizio la accetta.</string>
     <string name="tool_brave_title">Brave Search (ricerca web)</string>
     <string name="tool_brave_note">Lina lo usa per cercare fatti attuali (notizie, meteo, prezzi). Chiave su api-dashboard.search.brave.com.</string>

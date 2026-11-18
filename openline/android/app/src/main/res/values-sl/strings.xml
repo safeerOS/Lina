@@ -262,12 +262,16 @@
     <string name="local_google_err_fmt">Prijava z Google ni uspela: %1$s</string>
     <string name="local_google_sign_out">Odjava</string>
     <string name="local_google_relogin">Prijava z Google je potekla. Prijavi se znova.</string>
-    <string name="tab_phone">Telefon</string>
+    <string name="tab_phone">Priprava</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Računalnik</string>
 
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Spletno iskanje in povezave</string>
+    <string name="assistant_setup_title">Asistentka: ponudnik in ključi</string>
+    <string name="assistant_setup_hint_missing">Za pogovor izberite ponudnika in vnesite ključ v Nastavitvah (zavihek Lina).</string>
+    <string name="assistant_setup_hint_active_fmt">Ponudnik: %1$s. Ponudnika in ključe spremenite v Nastavitvah (zavihek Lina).</string>
+    <string name="assistant_open_settings">Nastavitve ključev</string>
     <string name="tool_info">Neobvezno. Ključi ostanejo šifrirani v telefonu in gredo samo na naslov svoje storitve. Ključ se shrani šele, ko ga storitev sprejme.</string>
     <string name="tool_brave_title">Brave Search (iskanje po spletu)</string>
     <string name="tool_brave_note">Lina z njim poišče aktualna dejstva (novice, vreme, cene). Ključ dobite na api-dashboard.search.brave.com.</string>

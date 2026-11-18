@@ -39,7 +39,7 @@ import java.util.concurrent.Executors
  * Samostojna asistentka v zavihku Asistent (lastnik 18. 11. 2026: mora delovati tudi brez racunalnika).
  * Pogovor je v pomnilniku (trajen zapis pogovora je naslednji sklop), zapiski in kljuc sta trajna na telefonu.
  */
-class SamostojniPogled(private val a: Activity) {
+class SamostojniPogled(private val a: Activity, private val odpriNastavitve: () -> Unit = {}) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
     private val ponudnikShramba = PonudnikShramba(a)
@@ -57,6 +57,9 @@ class SamostojniPogled(private val a: Activity) {
     private val pogovor = StringBuilder()
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
+    // Ponudnik in kljuci so v Nastavitvah (zavihek Lina); tu samo namig in bližnjica (lastnik 18. 11. 2026).
+    private val namig: TextView = a.findViewById(R.id.assistantSetupHint)
+    private val namigGumb: Button = a.findViewById(R.id.assistantOpenSettings)
     private val kljucBlok: View = a.findViewById(R.id.assistantKeyBlock)
     private val kljucVnos: EditText = a.findViewById(R.id.assistantKeyInput)
     private val kljucShrani: Button = a.findViewById(R.id.assistantKeySave)
@@ -78,6 +81,7 @@ class SamostojniPogled(private val a: Activity) {
 
     init {
         kljucShrani.setOnClickListener { shraniKljuc() }
+        namigGumb.setOnClickListener { odpriNastavitve() }
         klepetPosli.setOnClickListener { poslji() }
         googleGumb.setOnClickListener { zacniPrijavoGoogle() }
         kljucPozabi.setOnClickListener {
@@ -161,6 +165,7 @@ class SamostojniPogled(private val a: Activity) {
     fun osvezi() {
         val imaKljuc = imaDostop()
         info.text = a.getString(R.string.local_info)
+        namig.text = if (imaKljuc) a.getString(R.string.assistant_setup_hint_active_fmt, ponudnik.oznaka) else a.getString(R.string.assistant_setup_hint_missing)
         kljucVnos.hint = a.getString(R.string.local_key_hint_fmt, ponudnik.oznaka)
         for (i in 0 until ponudnikVrstica.childCount) {
             val b = ponudnikVrstica.getChildAt(i) as Button

@@ -262,12 +262,16 @@
     <string name="local_google_err_fmt">Google-Anmeldung fehlgeschlagen: %1$s</string>
     <string name="local_google_sign_out">Abmelden</string>
     <string name="local_google_relogin">Google-Anmeldung abgelaufen. Bitte erneut anmelden.</string>
-    <string name="tab_phone">Telefon</string>
+    <string name="tab_phone">Einrichtung</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
 
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Websuche und Verbindungen</string>
+    <string name="assistant_setup_title">Assistentin: Anbieter und Schlüssel</string>
+    <string name="assistant_setup_hint_missing">Wählen Sie zum Chatten einen Anbieter und geben Sie den Schlüssel in den Einstellungen ein (Tab Lina).</string>
+    <string name="assistant_setup_hint_active_fmt">Anbieter: %1$s. Anbieter und Schlüssel ändern Sie in den Einstellungen (Tab Lina).</string>
+    <string name="assistant_open_settings">Schlüsseleinstellungen</string>
     <string name="tool_info">Optional. Schlüssel bleiben verschlüsselt auf dem Telefon und gehen nur an den eigenen Dienst. Ein Schlüssel wird erst gespeichert, wenn der Dienst ihn akzeptiert.</string>
     <string name="tool_brave_title">Brave Search (Websuche)</string>
     <string name="tool_brave_note">Lina sucht damit aktuelle Fakten (Nachrichten, Wetter, Preise). Schlüssel auf api-dashboard.search.brave.com.</string>

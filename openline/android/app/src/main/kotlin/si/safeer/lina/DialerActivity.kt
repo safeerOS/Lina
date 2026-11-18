@@ -191,7 +191,7 @@ class DialerActivity : Activity() {
         setIntent(intent)
         // Vrnitev prijave z Google (shema ID odjemalca): samo to povezavo obdela asistent, drugo gre po starem.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
-            showTab(Zavihek.ASISTENT)
+            odpriNastavitveKljucev()   // prijava Google je v Nastavitvah (zavihek Lina)
             samostojniPogled.obdelajPovezavo(intent.data.toString())
             return
         }
@@ -395,7 +395,7 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this)
+        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this) { odpriNastavitveKljucev() }
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
@@ -410,9 +410,17 @@ class DialerActivity : Activity() {
         showTab(Zavihek.KLICI)
         // Proces je bil med prijavo v brskalniku ubit: vrnitev pride v onCreate namesto onNewIntent.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
-            showTab(Zavihek.ASISTENT)
+            odpriNastavitveKljucev()   // prijava Google je v Nastavitvah (zavihek Lina)
             samostojniPogled.obdelajPovezavo(intent.data.toString())
         }
+    }
+
+    /** Nastavitve ključev so v zavihku Lina: odpri ga in drsi do ploščice ponudnika (lastnik 18. 11. 2026). */
+    private fun odpriNastavitveKljucev() {
+        showTab(Zavihek.LINA)
+        val drsno = findViewById<android.widget.ScrollView>(R.id.root)
+        val plosca = findViewById<View>(R.id.assistantSetupPanel)
+        drsno.post { drsno.smoothScrollTo(0, (tabLina.top + plosca.top).coerceAtLeast(0)) }
     }
 
     private fun showTab(z: Zavihek) {

@@ -262,12 +262,16 @@
     <string name="local_google_err_fmt">Échec de la connexion Google : %1$s</string>
     <string name="local_google_sign_out">Se déconnecter</string>
     <string name="local_google_relogin">La connexion Google a expiré. Reconnectez-vous.</string>
-    <string name="tab_phone">Téléphone</string>
+    <string name="tab_phone">Préparer</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Ordinateur</string>
 
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Recherche web et connexions</string>
+    <string name="assistant_setup_title">Assistante : fournisseur et clés</string>
+    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur et saisissez sa clé dans les Réglages (onglet Lina).</string>
+    <string name="assistant_setup_hint_active_fmt">Fournisseur : %1$s. Modifiez le fournisseur et les clés dans les Réglages (onglet Lina).</string>
+    <string name="assistant_open_settings">Réglages des clés</string>
     <string name="tool_info">Facultatif. Les clés restent chiffrées sur le téléphone et ne sont envoyées qu\'à leur propre service. Une clé n\'est enregistrée qu\'une fois acceptée par le service.</string>
     <string name="tool_brave_title">Brave Search (recherche web)</string>
     <string name="tool_brave_note">Lina s\'en sert pour chercher des faits actuels (actualités, météo, prix). Clé sur api-dashboard.search.brave.com.</string>
