@@ -78,3 +78,7 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
 ## Pospravi za sabo
 - Procese ustavi po PID (ne `pkill -f`), zacasne mape v `mktemp -d`, brez streznikov, ki ostanejo odprti; na koncu
   `pgrep -af` in `ss -ltn`. Pomozne datoteke naloge, ki niso vec potrebne, izbrisi.
+
+## Dnevnik dela in iskanje (lastnik 19. 11. 2026)
+- Pred delom preberi zadnje bloke `DNEVNIK-DELA.md` in poisci, ali je kdo to ze delal: `python3 orodja/isci-dnevnik.py --zadnji 5` ali `python3 orodja/isci-dnevnik.py <besede>` (FTS5 kazalo v binarni datoteki, iscejo c/c, s/s, z/z; orodje in dnevnik hrani vodja izven repozitorija).
+- Ob koncu vsake naloge (tudi nedokoncane) dopisi blok: naslov (datum, agent, projekt/veja), narocilo, narejeno (commiti, dokaz), ni narejeno (in zakaj), stanje, naslednji korak. Brez dostopa: v porocilu razdelek »Za zapis«.
