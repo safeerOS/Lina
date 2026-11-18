@@ -56,7 +56,7 @@ object MissedCallNotice {
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             },
         )
-        val who = number.ifBlank { context.getString(R.string.unknown_number) }
+        val who = si.safeer.lina.ContactSearch(context).nameOf(number)?.let { "$it \u00b7 $number" } ?: number.ifBlank { context.getString(R.string.unknown_number) }
         val notification = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_lina)
             .setContentTitle(context.getString(R.string.missed_title))

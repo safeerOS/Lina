@@ -269,9 +269,25 @@
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Recherche web et connexions</string>
     <string name="assistant_setup_title">Assistante : fournisseur et clés</string>
-    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur et saisissez sa clé dans les Réglages (onglet Lina).</string>
-    <string name="assistant_setup_hint_active_fmt">Fournisseur : %1$s. Modifiez le fournisseur et les clés dans les Réglages (onglet Lina).</string>
+    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur dans l\'onglet Assistant et saisissez sa clé dans les Réglages (bouton en haut).</string>
+    <string name="assistant_setup_hint_active_fmt">Fournisseur : %1$s. Le fournisseur se choisit dans l\'onglet Assistant, les clés dans les Réglages (bouton en haut).</string>
     <string name="assistant_open_settings">Réglages des clés</string>
+    <string name="settings_title">Réglages</string>
+    <string name="lina_chat_title">Conversation avec Lina</string>
+    <string name="assistant_providers_note">Choisissez quel fournisseur répond pour Lina. La clé du fournisseur choisi se saisit dans les Réglages.</string>
+    <string name="assistant_provider_ready_fmt">Le fournisseur %1$s est prêt.</string>
+    <string name="assistant_provider_missing_fmt">Le fournisseur %1$s n\'est pas encore prêt. Saisissez sa clé ou connectez-vous dans les Réglages.</string>
+    <string name="assistant_key_provider_fmt">Clé du fournisseur : %1$s. Le fournisseur se choisit dans l\'onglet Assistant.</string>
+    <string name="notes_storage_title">Notes : où elles sont enregistrées</string>
+    <string name="notes_storage_info_fmt">Une copie des notes est écrite au fil de l\'eau dans ce fichier : %1$s. Modifier le fichier ne change pas les notes de l\'application.</string>
+    <string name="notes_storage_pick">Choisir un autre dossier</string>
+    <string name="notes_storage_default">Revenir à Documents</string>
+    <string name="notes_storage_empty">Le fichier est créé avec la première note.</string>
+    <string name="notes_storage_ok_fmt">Dernière écriture : %1$s.</string>
+    <string name="notes_storage_fail">L\'écriture du fichier a échoué. Choisissez de nouveau le dossier.</string>
+    <string name="notes_storage_no_picker">Ce téléphone n\'a pas de sélecteur de dossier.</string>
+    <string name="notes_file_title">Notes de Lina</string>
+    <string name="notes_file_note">Copie des notes de l\'application. Modifier ce fichier ne change pas les notes de l\'application.</string>
     <string name="tool_info">Facultatif. Les clés restent chiffrées sur le téléphone et ne sont envoyées qu\'à leur propre service. Une clé n\'est enregistrée qu\'une fois acceptée par le service.</string>
     <string name="tool_brave_title">Brave Search (recherche web)</string>
     <string name="tool_brave_note">Lina s\'en sert pour chercher des faits actuels (actualités, météo, prix). Clé sur api-dashboard.search.brave.com.</string>
@@ -284,7 +300,7 @@
     <string name="tool_twilio_sid_hint">Account SID (commence par AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Enregistrer et vérifier</string>
-    <string name="assistant_back">Retour à l\'assistant</string>
+    <string name="assistant_back">Retour</string>
     <string name="tool_forget">Retirer</string>
     <string name="tool_connected">Connecté</string>
     <string name="tool_not_connected">Non connecté</string>

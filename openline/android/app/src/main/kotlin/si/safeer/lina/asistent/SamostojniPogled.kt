@@ -30,6 +30,7 @@ import si.safeer.lina.samostojna.SistemskoNavodilo
 import si.safeer.lina.samostojna.dodajZapisek
 import si.safeer.lina.samostojna.izbrisiZapisek
 import si.safeer.lina.samostojna.vidniZapiski
+import si.safeer.lina.samostojna.Zapisek
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
@@ -42,8 +43,8 @@ import java.util.concurrent.Executors
 class SamostojniPogled(
     private val a: Activity,
     private val odpriNastavitve: () -> Unit = {},
-    /** Nazaj na zavihek Asistent iz nastavitev kljucev. */
-    private val nazajNaAsistenta: () -> Unit = {},
+    /** Nazaj na zavihek, iz katerega so bile odprte Nastavitve. */
+    private val nazaj: () -> Unit = {},
 ) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
@@ -62,7 +63,7 @@ class SamostojniPogled(
     private val pogovor = StringBuilder()
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
-    // Ponudnik in kljuci so v Nastavitvah (zavihek Lina); tu samo namig in bližnjica (lastnik 18. 11. 2026).
+    // Pogovor je v zavihku Lina, izbira ponudnika v zavihku Asistent, kljuci v Nastavitvah (lastnik 19. 11. 2026).
     private val namig: TextView = a.findViewById(R.id.assistantSetupHint)
     private val namigGumb: Button = a.findViewById(R.id.assistantOpenSettings)
     private val kljucBlok: View = a.findViewById(R.id.assistantKeyBlock)
@@ -74,8 +75,17 @@ class SamostojniPogled(
     private val klepetPosli: Button = a.findViewById(R.id.assistantChatSend)
     private val zapisekNaslov: TextView = a.findViewById(R.id.assistantNotesTitle)
     private val zapiskiSeznam: LinearLayout = a.findViewById(R.id.assistantNotesList)
+    // Kopija zapiskov v Dokumentih ali v mapi, ki jo izbere uporabnik (lastnik 19. 11. 2026).
+    private val izvoz = ZapiskiIzvoz(a)
+    private val izvozInfo: TextView = a.findViewById(R.id.notesStorageInfo)
+    private val izvozStanje: TextView = a.findViewById(R.id.notesStorageStatus)
+    private val izvozIzberi: Button = a.findViewById(R.id.notesStoragePick)
+    private val izvozPrivzeto: Button = a.findViewById(R.id.notesStorageDefault)
     private val kljucPozabi: Button = a.findViewById(R.id.assistantKeyForget)
     private val ponudnikVrstica: LinearLayout = a.findViewById(R.id.assistantProviderRow)
+    private val ponudnikStanje: TextView = a.findViewById(R.id.assistantProviderStatus)
+    private val ponudnikNastavitve: Button = a.findViewById(R.id.assistantProvidersOpenSettings)
+    private val kljucZaPonudnika: TextView = a.findViewById(R.id.assistantKeyProviderInfo)
     private val googleBlok: View = a.findViewById(R.id.assistantGoogleBlock)
     private val googleInfo: TextView = a.findViewById(R.id.assistantGoogleInfo)
     private val googleGumb: Button = a.findViewById(R.id.assistantGoogleSignIn)
@@ -87,8 +97,15 @@ class SamostojniPogled(
     init {
         kljucShrani.setOnClickListener { shraniKljuc() }
         namigGumb.setOnClickListener { odpriNastavitve() }
-        a.findViewById<Button>(R.id.assistantBackToAssistant).setOnClickListener { nazajNaAsistenta() }
+        ponudnikNastavitve.setOnClickListener { odpriNastavitve() }
+        a.findViewById<Button>(R.id.assistantBackToAssistant).setOnClickListener { nazaj() }
         klepetPosli.setOnClickListener { poslji() }
+        izvozIzberi.setOnClickListener {
+            try { a.startActivityForResult(ZapiskiIzvoz.izbiraMape(), ZapiskiIzvoz.ZAHTEVA_MAPA) }
+            catch (e: ActivityNotFoundException) { izvozStanje.text = a.getString(R.string.notes_storage_no_picker) }
+        }
+        izvozPrivzeto.setOnClickListener { izvoz.nastaviMapo(null); izvoziZapiske(); osveziIzvoz() }
+        if (vidniZapiski(zapiski.beri()).isNotEmpty()) izvoziZapiske()
         googleGumb.setOnClickListener { zacniPrijavoGoogle() }
         kljucPozabi.setOnClickListener {
             if (ponudnik == Ponudnik.VERTEX) { google.odjava(); googleShramba.shraniProjekt(null); googleSporocilo = null } else kljuci.izbrisi()
@@ -173,6 +190,8 @@ class SamostojniPogled(
         info.text = a.getString(R.string.local_info)
         namig.text = if (imaKljuc) a.getString(R.string.assistant_setup_hint_active_fmt, ponudnik.oznaka) else a.getString(R.string.assistant_setup_hint_missing)
         kljucVnos.hint = a.getString(R.string.local_key_hint_fmt, ponudnik.oznaka)
+        ponudnikStanje.text = a.getString(if (imaKljuc) R.string.assistant_provider_ready_fmt else R.string.assistant_provider_missing_fmt, ponudnik.oznaka)
+        kljucZaPonudnika.text = a.getString(R.string.assistant_key_provider_fmt, ponudnik.oznaka)
         for (i in 0 until ponudnikVrstica.childCount) {
             val b = ponudnikVrstica.getChildAt(i) as Button
             val p = b.tag as Ponudnik
@@ -194,21 +213,66 @@ class SamostojniPogled(
         klepetDnevnik.visibility = if (pogovor.isEmpty()) View.GONE else View.VISIBLE
         klepetPosli.isEnabled = !caka
         osveziZapiske()
+        osveziIzvoz()
+    }
+
+    /** Vsak zapis zapiskov se zrcali v datoteko (Dokumenti ali izbrana mapa). */
+    private fun shraniZapiske(novi: List<Zapisek>) {
+        zapiski.shrani(novi)
+        izvoziZapiske()
+    }
+
+    private fun izvoziZapiske() {
+        val seznam = zapiski.beri()
+        nit.execute {
+            izvoz.izvozi(seznam)
+            glavna.post { if (!a.isFinishing) osveziIzvoz() }
+        }
+    }
+
+    /** Uporabnik je izbral mapo za datoteko z zapiski (vrnitev iz izbirnika map). */
+    fun obdelajMapo(uri: Uri) {
+        try {
+            a.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        } catch (e: SecurityException) {
+            izvozStanje.text = a.getString(R.string.notes_storage_fail)
+            return
+        }
+        izvoz.nastaviMapo(uri)
+        izvoziZapiske()
+        osveziIzvoz()
+    }
+
+    private fun osveziIzvoz() {
+        izvozInfo.text = a.getString(R.string.notes_storage_info_fmt, izvoz.opis())
+        val (cas, uspelo) = izvoz.zadnji()
+        izvozStanje.text = when {
+            cas == 0L -> a.getString(R.string.notes_storage_empty)
+            uspelo -> a.getString(R.string.notes_storage_ok_fmt, izvoz.oblikaCasa(cas))
+            else -> a.getString(R.string.notes_storage_fail)
+        }
+        izvozPrivzeto.visibility = if (izvoz.mapa() != null) View.VISIBLE else View.GONE
     }
 
     private fun osveziZapiske() {
         val vidni = vidniZapiski(zapiski.beri())
         zapisekNaslov.visibility = if (vidni.isEmpty()) View.GONE else View.VISIBLE
+        // Lastnik 19. 11. 2026: zapiski niso bili urejeni. Naslov s stevilom, vsak zapisek z datumom in uro (najnovejsi zgoraj).
+        zapisekNaslov.text = a.getString(R.string.local_notes_title) + " (" + vidni.size + ")"
+        val oblika = java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT)
         zapiskiSeznam.removeAllViews()
         for (z in vidni) {
             val vrstica = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
-            vrstica.addView(
-                TextView(a).apply { text = z.besedilo; setTextIsSelectable(true); setTextAppearance(R.style.Gw_Body) },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-            )
+            val vsebina = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            vsebina.addView(TextView(a).apply {
+                text = oblika.format(java.time.Instant.ofEpochMilli(z.cas).atZone(java.time.ZoneId.systemDefault()))
+                setTextAppearance(R.style.Gw_Muted)
+            })
+            vsebina.addView(TextView(a).apply { text = z.besedilo; setTextIsSelectable(true); setTextAppearance(R.style.Gw_Body) })
+            vrstica.addView(vsebina, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             vrstica.addView(Button(a, null, 0, R.style.Gw_Button).apply {
                 text = a.getString(R.string.local_note_delete)
-                setOnClickListener { zapiski.shrani(izbrisiZapisek(zapiski.beri(), z.id, System.currentTimeMillis())); osveziZapiske() }
+                setOnClickListener { shraniZapiske(izbrisiZapisek(zapiski.beri(), z.id, System.currentTimeMillis())); osveziZapiske() }
             })
             zapiskiSeznam.addView(vrstica)
         }
@@ -253,13 +317,13 @@ class SamostojniPogled(
                 val besedilo = when (odgovor) {
                     is Odgovor.Besedilo -> odgovor.besedilo
                     is Odgovor.Zapisek -> {
-                        zapiski.shrani(dodajZapisek(zapiski.beri(), odgovor.besedilo, System.currentTimeMillis(), UUID.randomUUID().toString()))
+                        shraniZapiske(dodajZapisek(zapiski.beri(), odgovor.besedilo, System.currentTimeMillis(), UUID.randomUUID().toString()))
                         a.getString(R.string.local_note_saved, odgovor.besedilo)
                     }
                     is Odgovor.Opomnik -> {
                         // Opomnikov ob casu ta aplikacija se ne sprozi: model ga ne bi smel napovedati, ce pa ga, ga shranimo kot zapisek s casom.
                         val tekst = "${odgovor.besedilo} (${odgovor.cas})"
-                        zapiski.shrani(dodajZapisek(zapiski.beri(), tekst, System.currentTimeMillis(), UUID.randomUUID().toString()))
+                        shraniZapiske(dodajZapisek(zapiski.beri(), tekst, System.currentTimeMillis(), UUID.randomUUID().toString()))
                         a.getString(R.string.local_note_saved, tekst)
                     }
                     is Odgovor.Napaka -> when (odgovor.sporocilo) {

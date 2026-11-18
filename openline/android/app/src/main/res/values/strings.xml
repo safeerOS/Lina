@@ -269,9 +269,25 @@
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Web search and connections</string>
     <string name="assistant_setup_title">Assistant: provider and keys</string>
-    <string name="assistant_setup_hint_missing">To chat, choose a provider and enter its key in Settings (Lina tab).</string>
-    <string name="assistant_setup_hint_active_fmt">Provider: %1$s. Change the provider and keys in Settings (Lina tab).</string>
+    <string name="assistant_setup_hint_missing">To chat, choose a provider in the Assistant tab and enter its key in Settings (button at the top).</string>
+    <string name="assistant_setup_hint_active_fmt">Provider: %1$s. Choose the provider in the Assistant tab and keys in Settings (button at the top).</string>
     <string name="assistant_open_settings">Key settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="lina_chat_title">Chat with Lina</string>
+    <string name="assistant_providers_note">Choose which provider answers for Lina. Enter the key for the chosen provider in Settings.</string>
+    <string name="assistant_provider_ready_fmt">Provider %1$s is ready.</string>
+    <string name="assistant_provider_missing_fmt">Provider %1$s is not ready yet. Enter its key or sign in under Settings.</string>
+    <string name="assistant_key_provider_fmt">Key for provider: %1$s. Choose the provider in the Assistant tab.</string>
+    <string name="notes_storage_title">Notes: where they are saved</string>
+    <string name="notes_storage_info_fmt">A copy of the notes is written to this file as you go: %1$s. Editing the file does not change the notes in the app.</string>
+    <string name="notes_storage_pick">Choose another folder</string>
+    <string name="notes_storage_default">Back to Documents</string>
+    <string name="notes_storage_empty">The file is created with the first note.</string>
+    <string name="notes_storage_ok_fmt">Last written: %1$s.</string>
+    <string name="notes_storage_fail">Writing the file failed. Choose the folder again.</string>
+    <string name="notes_storage_no_picker">This phone has no folder picker.</string>
+    <string name="notes_file_title">Lina notes</string>
+    <string name="notes_file_note">A copy of the notes from the app. Editing this file does not change the notes in the app.</string>
     <string name="tool_info">Optional. Keys stay encrypted on the phone and are sent only to their own service. A key is saved only after the service accepts it.</string>
     <string name="tool_brave_title">Brave Search (web search)</string>
     <string name="tool_brave_note">Lina uses it to look up current facts (news, weather, prices). Get a key at api-dashboard.search.brave.com.</string>
@@ -284,7 +300,7 @@
     <string name="tool_twilio_sid_hint">Account SID (starts with AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Save and check</string>
-    <string name="assistant_back">Back to the assistant</string>
+    <string name="assistant_back">Back</string>
     <string name="tool_forget">Remove</string>
     <string name="tool_connected">Connected</string>
     <string name="tool_not_connected">Not connected</string>

@@ -29,6 +29,18 @@ class ContactSearch(private val context: Context) {
         return ContactMatches.top(rows)
     }
 
+    /** Ime iz imenika za stevilko (null, ce je ni ali ni dovoljenja READ_CONTACTS). Ena hitra poizvedba, lahko z glavne niti. */
+    fun nameOf(number: String): String? {
+        if (number.isBlank()) return null
+        if (context.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
+        val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+        return runCatching {
+            context.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0)?.takeIf { it.isNotBlank() } else null
+            }
+        }.getOrNull()
+    }
+
     /** Ali je stevilka v imeniku (brez dovoljenja za imenik vedno false). Lahko z glavne niti: ena hitra poizvedba. */
     fun isKnown(number: String): Boolean {
         if (number.isBlank()) return false

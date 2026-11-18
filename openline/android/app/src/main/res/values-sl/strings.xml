@@ -269,9 +269,25 @@
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Spletno iskanje in povezave</string>
     <string name="assistant_setup_title">Asistentka: ponudnik in ključi</string>
-    <string name="assistant_setup_hint_missing">Za pogovor izberite ponudnika in vnesite ključ v Nastavitvah (zavihek Lina).</string>
-    <string name="assistant_setup_hint_active_fmt">Ponudnik: %1$s. Ponudnika in ključe spremenite v Nastavitvah (zavihek Lina).</string>
+    <string name="assistant_setup_hint_missing">Za pogovor izberite ponudnika v zavihku Asistent in vnesite ključ v Nastavitvah (gumb zgoraj).</string>
+    <string name="assistant_setup_hint_active_fmt">Ponudnik: %1$s. Ponudnika izberete v zavihku Asistent, ključe v Nastavitvah (gumb zgoraj).</string>
     <string name="assistant_open_settings">Nastavitve ključev</string>
+    <string name="settings_title">Nastavitve</string>
+    <string name="lina_chat_title">Pogovor z Lino</string>
+    <string name="assistant_providers_note">Izberite ponudnika, ki odgovarja namesto Line. Ključ izbranega ponudnika vnesete v Nastavitvah.</string>
+    <string name="assistant_provider_ready_fmt">Ponudnik %1$s je pripravljen.</string>
+    <string name="assistant_provider_missing_fmt">Ponudnik %1$s še ni pripravljen. Ključ ali prijavo vnesite v Nastavitvah.</string>
+    <string name="assistant_key_provider_fmt">Ključ za ponudnika: %1$s. Ponudnika izberete v zavihku Asistent.</string>
+    <string name="notes_storage_title">Zapiski: kam se shranjujejo</string>
+    <string name="notes_storage_info_fmt">Kopija zapiskov se sproti zapiše v datoteko: %1$s. Urejanje datoteke ne spremeni zapiskov v aplikaciji.</string>
+    <string name="notes_storage_pick">Izberi drugo mapo</string>
+    <string name="notes_storage_default">Vrni na Dokumente</string>
+    <string name="notes_storage_empty">Datoteka nastane ob prvem zapisku.</string>
+    <string name="notes_storage_ok_fmt">Zadnji zapis: %1$s.</string>
+    <string name="notes_storage_fail">Zapis v datoteko ni uspel. Izberite mapo znova.</string>
+    <string name="notes_storage_no_picker">Telefon nima izbirnika map.</string>
+    <string name="notes_file_title">Zapiski Line</string>
+    <string name="notes_file_note">Kopija zapiskov iz aplikacije. Urejanje te datoteke ne spremeni zapiskov v aplikaciji.</string>
     <string name="tool_info">Neobvezno. Ključi ostanejo šifrirani v telefonu in gredo samo na naslov svoje storitve. Ključ se shrani šele, ko ga storitev sprejme.</string>
     <string name="tool_brave_title">Brave Search (iskanje po spletu)</string>
     <string name="tool_brave_note">Lina z njim poišče aktualna dejstva (novice, vreme, cene). Ključ dobite na api-dashboard.search.brave.com.</string>
@@ -284,7 +300,7 @@
     <string name="tool_twilio_sid_hint">Account SID (začne se z AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Shrani in preveri</string>
-    <string name="assistant_back">Nazaj na Asistenta</string>
+    <string name="assistant_back">Nazaj</string>
     <string name="tool_forget">Odstrani</string>
     <string name="tool_connected">Povezano</string>
     <string name="tool_not_connected">Ni povezano</string>

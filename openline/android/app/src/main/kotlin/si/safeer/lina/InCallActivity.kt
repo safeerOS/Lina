@@ -47,7 +47,11 @@ class InCallActivity : Activity(), CallRegistry.Listener {
 
     private lateinit var stateDot: View
     private lateinit var stateText: TextView
+    private lateinit var nameText: TextView
     private lateinit var numberText: TextView
+    private lateinit var endButton: Button
+    private val contactLookup by lazy { ContactSearch(this) }
+    private val imena = HashMap<String, String?>()
     private lateinit var timerText: TextView
     private lateinit var routedText: TextView
     private lateinit var ringingRow: View
@@ -88,7 +92,9 @@ class InCallActivity : Activity(), CallRegistry.Listener {
         }
         stateDot = findViewById(R.id.stateDot)
         stateText = findViewById(R.id.stateText)
+        nameText = findViewById(R.id.nameText)
         numberText = findViewById(R.id.numberText)
+        endButton = findViewById(R.id.endButton)
         timerText = findViewById(R.id.timerText)
         routedText = findViewById(R.id.routedText)
         ringingRow = findViewById(R.id.ringingRow)
@@ -100,7 +106,7 @@ class InCallActivity : Activity(), CallRegistry.Listener {
 
         findViewById<Button>(R.id.answerButton).setOnClickListener { execute(CommandAction.ANSWER) }
         findViewById<Button>(R.id.declineButton).setOnClickListener { execute(CommandAction.REJECT) }
-        findViewById<Button>(R.id.endButton).setOnClickListener { execute(CommandAction.HANGUP) }
+        endButton.setOnClickListener { execute(CommandAction.HANGUP) }
         callPicker.setOnClickListener {
             val ids = CallRegistry.snapshot().map { it.callId }
             selectedCallId = CallScreen.nextId(ids, selectedCallId)
@@ -191,7 +197,13 @@ class InCallActivity : Activity(), CallRegistry.Listener {
         val canHold = (call.details.callCapabilities and Call.Details.CAPABILITY_HOLD) != 0
         val ids = CallRegistry.snapshot().map { it.callId }
 
-        numberText.text = call.details.handle?.schemeSpecificPart?.takeIf { it.isNotBlank() } ?: getString(R.string.unknown_number)
+        // Lastnik 19. 11. 2026: pri klicu ni bilo imena iz imenika. Ime nad stevilko; brez imena stevilka kot prej.
+        val broj = call.details.handle?.schemeSpecificPart?.takeIf { it.isNotBlank() }
+        val ime = broj?.let { b -> if (!imena.containsKey(b)) imena[b] = contactLookup.nameOf(b); imena[b] }
+        nameText.text = ime.orEmpty()
+        nameText.visibility = if (ime != null) View.VISIBLE else View.GONE
+        numberText.text = broj ?: getString(R.string.unknown_number)
+        numberText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, if (ime != null) 20f else 38f)
         val (color, label) = when (state) {
             Call.STATE_RINGING -> R.color.ring to getString(R.string.incoming_call)
             Call.STATE_DIALING, Call.STATE_CONNECTING -> R.color.ring to getString(R.string.calling)
@@ -207,6 +219,8 @@ class InCallActivity : Activity(), CallRegistry.Listener {
         val connected = state == Call.STATE_ACTIVE || state == Call.STATE_AUDIO_PROCESSING || state == Call.STATE_HOLDING
         routedText.visibility = if (state == Call.STATE_AUDIO_PROCESSING) View.VISIBLE else View.GONE
         ringingRow.visibility = if (state == Call.STATE_RINGING) View.VISIBLE else View.GONE
+        // Lastnik 19. 11. 2026: med zvonjenjem sta bila hkrati Zavrni in Koncaj klic; Koncaj je samo, ko klic ne zvoni.
+        endButton.visibility = if (state == Call.STATE_RINGING) View.GONE else View.VISIBLE
         activeRow.visibility = if (connected) View.VISIBLE else View.GONE
         holdButton.visibility = if (canHold || state == Call.STATE_HOLDING) View.VISIBLE else View.GONE
         holdButton.text = if (state == Call.STATE_HOLDING) getString(R.string.resume) else getString(R.string.hold)

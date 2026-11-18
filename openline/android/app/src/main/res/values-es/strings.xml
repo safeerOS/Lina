@@ -269,9 +269,25 @@
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Búsqueda web y conexiones</string>
     <string name="assistant_setup_title">Asistente: proveedor y claves</string>
-    <string name="assistant_setup_hint_missing">Para chatear, elija un proveedor e introduzca su clave en Ajustes (pestaña Lina).</string>
-    <string name="assistant_setup_hint_active_fmt">Proveedor: %1$s. Cambie el proveedor y las claves en Ajustes (pestaña Lina).</string>
+    <string name="assistant_setup_hint_missing">Para chatear, elija un proveedor en la pestaña Asistente e introduzca su clave en Ajustes (botón de arriba).</string>
+    <string name="assistant_setup_hint_active_fmt">Proveedor: %1$s. El proveedor se elige en la pestaña Asistente y las claves en Ajustes (botón de arriba).</string>
     <string name="assistant_open_settings">Ajustes de claves</string>
+    <string name="settings_title">Ajustes</string>
+    <string name="lina_chat_title">Conversación con Lina</string>
+    <string name="assistant_providers_note">Elija qué proveedor responde por Lina. La clave del proveedor elegido se introduce en Ajustes.</string>
+    <string name="assistant_provider_ready_fmt">El proveedor %1$s está listo.</string>
+    <string name="assistant_provider_missing_fmt">El proveedor %1$s aún no está listo. Introduzca su clave o inicie sesión en Ajustes.</string>
+    <string name="assistant_key_provider_fmt">Clave del proveedor: %1$s. El proveedor se elige en la pestaña Asistente.</string>
+    <string name="notes_storage_title">Notas: dónde se guardan</string>
+    <string name="notes_storage_info_fmt">Una copia de las notas se escribe en este archivo sobre la marcha: %1$s. Editar el archivo no cambia las notas de la aplicación.</string>
+    <string name="notes_storage_pick">Elegir otra carpeta</string>
+    <string name="notes_storage_default">Volver a Documentos</string>
+    <string name="notes_storage_empty">El archivo se crea con la primera nota.</string>
+    <string name="notes_storage_ok_fmt">Última escritura: %1$s.</string>
+    <string name="notes_storage_fail">No se pudo escribir el archivo. Elija la carpeta de nuevo.</string>
+    <string name="notes_storage_no_picker">Este teléfono no tiene selector de carpetas.</string>
+    <string name="notes_file_title">Notas de Lina</string>
+    <string name="notes_file_note">Copia de las notas de la aplicación. Editar este archivo no cambia las notas de la aplicación.</string>
     <string name="tool_info">Opcional. Las claves quedan cifradas en el teléfono y solo se envían a su propio servicio. Una clave se guarda solo cuando el servicio la acepta.</string>
     <string name="tool_brave_title">Brave Search (búsqueda web)</string>
     <string name="tool_brave_note">Lina lo usa para buscar datos actuales (noticias, tiempo, precios). Clave en api-dashboard.search.brave.com.</string>
@@ -284,7 +300,7 @@
     <string name="tool_twilio_sid_hint">Account SID (empieza por AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Guardar y comprobar</string>
-    <string name="assistant_back">Volver al asistente</string>
+    <string name="assistant_back">Atrás</string>
     <string name="tool_forget">Quitar</string>
     <string name="tool_connected">Conectado</string>
     <string name="tool_not_connected">No conectado</string>

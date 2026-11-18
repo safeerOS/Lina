@@ -31,6 +31,17 @@
     </LinearLayout>
 
     <TextView
+        android:id="@+id/nameText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:letterSpacing="-0.02"
+        android:textColor="@color/ink"
+        android:textFontWeight="600"
+        android:textSize="38sp"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/numberText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

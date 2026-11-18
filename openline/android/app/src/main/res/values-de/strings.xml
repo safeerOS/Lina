@@ -269,9 +269,25 @@
     <!-- Spletna orodja in Twilio v zavihku Asistent -->
     <string name="tool_title">Websuche und Verbindungen</string>
     <string name="assistant_setup_title">Assistentin: Anbieter und Schlüssel</string>
-    <string name="assistant_setup_hint_missing">Wählen Sie zum Chatten einen Anbieter und geben Sie den Schlüssel in den Einstellungen ein (Tab Lina).</string>
-    <string name="assistant_setup_hint_active_fmt">Anbieter: %1$s. Anbieter und Schlüssel ändern Sie in den Einstellungen (Tab Lina).</string>
+    <string name="assistant_setup_hint_missing">Wählen Sie zum Chatten im Tab Assistent einen Anbieter und geben Sie den Schlüssel in den Einstellungen ein (Schaltfläche oben).</string>
+    <string name="assistant_setup_hint_active_fmt">Anbieter: %1$s. Den Anbieter wählen Sie im Tab Assistent, Schlüssel in den Einstellungen (Schaltfläche oben).</string>
     <string name="assistant_open_settings">Schlüsseleinstellungen</string>
+    <string name="settings_title">Einstellungen</string>
+    <string name="lina_chat_title">Gespräch mit Lina</string>
+    <string name="assistant_providers_note">Wählen Sie, welcher Anbieter für Lina antwortet. Den Schlüssel des gewählten Anbieters geben Sie in den Einstellungen ein.</string>
+    <string name="assistant_provider_ready_fmt">Anbieter %1$s ist bereit.</string>
+    <string name="assistant_provider_missing_fmt">Anbieter %1$s ist noch nicht bereit. Schlüssel oder Anmeldung in den Einstellungen eingeben.</string>
+    <string name="assistant_key_provider_fmt">Schlüssel für Anbieter: %1$s. Den Anbieter wählen Sie im Tab Assistent.</string>
+    <string name="notes_storage_title">Notizen: Speicherort</string>
+    <string name="notes_storage_info_fmt">Eine Kopie der Notizen wird laufend in diese Datei geschrieben: %1$s. Das Bearbeiten der Datei ändert die Notizen in der App nicht.</string>
+    <string name="notes_storage_pick">Anderen Ordner wählen</string>
+    <string name="notes_storage_default">Zurück zu Dokumenten</string>
+    <string name="notes_storage_empty">Die Datei entsteht mit der ersten Notiz.</string>
+    <string name="notes_storage_ok_fmt">Zuletzt geschrieben: %1$s.</string>
+    <string name="notes_storage_fail">Schreiben der Datei fehlgeschlagen. Ordner erneut wählen.</string>
+    <string name="notes_storage_no_picker">Dieses Telefon hat keine Ordnerauswahl.</string>
+    <string name="notes_file_title">Lina-Notizen</string>
+    <string name="notes_file_note">Kopie der Notizen aus der App. Das Bearbeiten dieser Datei ändert die Notizen in der App nicht.</string>
     <string name="tool_info">Optional. Schlüssel bleiben verschlüsselt auf dem Telefon und gehen nur an den eigenen Dienst. Ein Schlüssel wird erst gespeichert, wenn der Dienst ihn akzeptiert.</string>
     <string name="tool_brave_title">Brave Search (Websuche)</string>
     <string name="tool_brave_note">Lina sucht damit aktuelle Fakten (Nachrichten, Wetter, Preise). Schlüssel auf api-dashboard.search.brave.com.</string>
@@ -284,7 +300,7 @@
     <string name="tool_twilio_sid_hint">Account SID (beginnt mit AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Speichern und prüfen</string>
-    <string name="assistant_back">Zurück zum Assistenten</string>
+    <string name="assistant_back">Zurück</string>
     <string name="tool_forget">Entfernen</string>
     <string name="tool_connected">Verbunden</string>
     <string name="tool_not_connected">Nicht verbunden</string>

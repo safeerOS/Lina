@@ -113,11 +113,15 @@ class DialerActivity : Activity() {
     private lateinit var tabPhone: View
     private lateinit var tabLina: View
     private lateinit var tabAssistant: View
+    private lateinit var tabSettings: View
     private lateinit var tabComputer: View
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
-    private enum class Zavihek { KLICI, TELEFON, LINA, ASISTENT, RACUNALNIK }
+    private enum class Zavihek { KLICI, TELEFON, LINA, ASISTENT, RACUNALNIK, NASTAVITVE }
+
+    /** Zavihek pred odprtimi Nastavitvami: gumb Nazaj ga obnovi. */
+    private var zavihekPred = Zavihek.LINA
     private lateinit var assistantStatus: TextView
     private lateinit var assistantDeviceId: TextView
     private lateinit var assistantTaskInput: EditText
@@ -191,7 +195,7 @@ class DialerActivity : Activity() {
         setIntent(intent)
         // Vrnitev prijave z Google (shema ID odjemalca): samo to povezavo obdela asistent, drugo gre po starem.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
-            odpriNastavitveKljucev()   // prijava Google je v Nastavitvah (zavihek Lina)
+            odpriNastavitveKljucev()   // prijava Google je v Nastavitvah
             samostojniPogled.obdelajPovezavo(intent.data.toString())
             return
         }
@@ -373,6 +377,8 @@ class DialerActivity : Activity() {
         tabPhone = findViewById(R.id.tabPhone)
         tabLina = findViewById(R.id.tabLina)
         tabAssistant = findViewById(R.id.tabAssistant)
+        tabSettings = findViewById(R.id.tabSettings)
+        findViewById<View>(R.id.openSettings).setOnClickListener { showTab(Zavihek.NASTAVITVE) }
         tabComputer = findViewById(R.id.tabComputer)
         navButtons = mapOf(
             Zavihek.KLICI to findViewById<Button>(R.id.navCalls),
@@ -395,12 +401,12 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this, { odpriNastavitveKljucev() }, { showTab(Zavihek.ASISTENT) })
+        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this, { odpriNastavitveKljucev() }, { showTab(zavihekPred) })
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
         assistantApprovalDescription = findViewById(R.id.assistantApprovalDescription)
-        asistent = AsistentKontroler(this) { if (tabAssistant.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
+        asistent = AsistentKontroler(this) { if (tabLina.visibility == View.VISIBLE || tabAssistant.visibility == View.VISIBLE || tabSettings.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
         // En gumb »Skeniraj QR« za obe poti (lastnik 14. 11. 2026): isti bralnik kot v koraku 2.
         assistantPairButton.setOnClickListener { scanPairingQr() }
         assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
@@ -410,28 +416,31 @@ class DialerActivity : Activity() {
         showTab(Zavihek.KLICI)
         // Proces je bil med prijavo v brskalniku ubit: vrnitev pride v onCreate namesto onNewIntent.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
-            odpriNastavitveKljucev()   // prijava Google je v Nastavitvah (zavihek Lina)
+            odpriNastavitveKljucev()   // prijava Google je v Nastavitvah
             samostojniPogled.obdelajPovezavo(intent.data.toString())
         }
     }
 
-    /** Nastavitve ključev so v zavihku Lina: odpri ga in drsi do ploščice ponudnika (lastnik 18. 11. 2026). */
+    /** Kljuci so v Nastavitvah (lastnik 19. 11. 2026: zavihek Lina je pogovor): odpri jih in drsi do ploscice kljucev. */
     private fun odpriNastavitveKljucev() {
-        showTab(Zavihek.LINA)
+        showTab(Zavihek.NASTAVITVE)
         val drsno = findViewById<android.widget.ScrollView>(R.id.root)
         val plosca = findViewById<View>(R.id.assistantSetupPanel)
-        drsno.post { drsno.smoothScrollTo(0, (tabLina.top + plosca.top).coerceAtLeast(0)) }
+        drsno.post { drsno.smoothScrollTo(0, (tabSettings.top + plosca.top).coerceAtLeast(0)) }
     }
 
     private fun showTab(z: Zavihek) {
+        if (z != Zavihek.NASTAVITVE) zavihekPred = z
         tabCalls.visibility = if (z == Zavihek.KLICI) View.VISIBLE else View.GONE
         tabPhone.visibility = if (z == Zavihek.TELEFON) View.VISIBLE else View.GONE
         tabLina.visibility = if (z == Zavihek.LINA) View.VISIBLE else View.GONE
+        tabSettings.visibility = if (z == Zavihek.NASTAVITVE) View.VISIBLE else View.GONE
         tabAssistant.visibility = if (z == Zavihek.ASISTENT) View.VISIBLE else View.GONE
         tabComputer.visibility = if (z == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
         for ((t, b) in navButtons) { b.isSelected = t == z; b.contentDescription = b.text }
         findViewById<View>(R.id.root).scrollTo(0, 0)
-        if (z == Zavihek.ASISTENT || z == Zavihek.RACUNALNIK) { renderAssistant(); asistent.preveriSejo() }
+        if (z != Zavihek.KLICI && z != Zavihek.TELEFON) renderAssistant()
+        if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
     }
 
     private fun renderAssistant() {
@@ -523,6 +532,10 @@ class DialerActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == si.safeer.lina.asistent.ZapiskiIzvoz.ZAHTEVA_MAPA) {
+            if (resultCode == RESULT_OK) data?.data?.let { samostojniPogled.obdelajMapo(it) }
+            return
+        }
         if (requestCode != OzjiKrogSafeerLepilo.ZAHTEVA) return
         assistantCircleButton.isEnabled = true
         val izid = OzjiKrogSafeer.izid(resultCode == RESULT_OK, data?.getStringExtra(OzjiKrogSafeer.POLJE_IZID))
