@@ -11,7 +11,7 @@ Stanje: 18. 11. 2026, veja `lina-klicalnik-1811`, paket `si.safeer.lina`. Vir re
 | `:samostojna` | Samostojna asistentka (brez računalnika): ponudniki AI, Google Cloud (OAuth PKCE, Vertex), zapiski, dnevnik klicev, spletna orodja, besedila, teme (Aura) | testi 194/194 |
 
 ## 2. Zasloni in zavihki (`DialerActivity`, 1268 vrstic, `activity_dialer.xml`)
-Spodnja navigacija (`navBar`) ima pet zavihkov: **Klici** (`tabCalls`), **Telefon** (`tabPhone`: čarovnik 4 korakov, nastavitve Line, jezik, SIM, seznam dovoljenih), **Lina** (`tabLina`: klicalnik, iskanje stikov, številčnica), **Asistent** (`tabAssistant`: ponudniki, ključi, pogovor, zapiski, spletna orodja), **Računalnik** (`tabComputer`: povezava Safeer Link). Poleg: `InCallActivity` (zaslon klica). Odmiki sistemskih vrstic in tipkovnice: `SistemskeVrstice` + `OnApplyWindowInsetsListener` na `root`.
+Spodnja navigacija (`navBar`) ima pet zavihkov: **Klici** (`tabCalls`: klicalnik, iskanje stikov po imenu, številčnica), **Telefon** (`tabPhone`: čarovnik 4 korakov in napredne nastavitve prehoda), **Lina** (`tabLina`: nastavitve Line: jezik, čas zvonjenja, seznam dovoljenih številk, izbira SIM/eSIM), **Asistent** (`tabAssistant`: ponudniki, ključi, pogovor, zapiski, spletna orodja), **Računalnik** (`tabComputer`: povezava Safeer Link). Poleg: `InCallActivity` (zaslon klica). Odmiki sistemskih vrstic in tipkovnice: `SistemskeVrstice` + `OnApplyWindowInsetsListener` na `root`.
 
 ## 3. Funkcije, ki jih Mobile 2.0 NE SME pokvariti (seznam za preverbo po vsaki fazi)
 1. Lina kot privzeta telefonska aplikacija (vloga dialer), `GatewayInCallService`, `LinaCallGate`, `CallRegistry`, prevzem klica po politiki (`TakeoverPolicy`, `CallCommandPolicy`, `CallPrivacy`).

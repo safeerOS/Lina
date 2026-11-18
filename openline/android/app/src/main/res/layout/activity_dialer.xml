@@ -816,6 +816,7 @@
     android:orientation="horizontal">
         <Button
             android:id="@+id/navCalls"
+            android:drawableTop="@drawable/ic_nav_calls"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -823,6 +824,7 @@
             android:text="@string/tab_calls" />
         <Button
             android:id="@+id/navPhone"
+            android:drawableTop="@drawable/ic_nav_phone"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -830,13 +832,19 @@
             android:text="@string/tab_phone" />
         <Button
             android:id="@+id/navLina"
-            style="@style/Gw.Nav"
+            android:drawableTop="@drawable/ic_nav_lina"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            style="@style/Gw.Nav.Lina"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/tab_lina" />
         <Button
             android:id="@+id/navAssistant"
+            android:drawableTop="@drawable/ic_nav_assistant"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -844,6 +852,7 @@
             android:text="@string/tab_assistant" />
         <Button
             android:id="@+id/navComputer"
+            android:drawableTop="@drawable/ic_nav_computer"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
