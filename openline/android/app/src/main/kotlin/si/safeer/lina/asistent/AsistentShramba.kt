@@ -21,6 +21,10 @@ object AsistentShramba {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("naslov", a.naslov).putInt("vrata", a.vrata).putString("odtis", a.odtis).commit()
 
+    /**
+     * Pozabi samo seznanitev z racunalnikom. Datoteka »lina_asistent« hrani tudi tajnopise kljucev (Gemini, Brave, TinyFish,
+     * Twilio, Google), zato NIKOLI clear(): 19. 11. 2026 je gumb »Pozabi racunalnik« zbrisal vse vnesene kljuce.
+     */
     fun pozabi(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("naslov").remove("vrata").remove("odtis").commit()
 }

@@ -395,7 +395,7 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this) { odpriNastavitveKljucev() }
+        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this, { odpriNastavitveKljucev() }, { showTab(Zavihek.ASISTENT) })
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)

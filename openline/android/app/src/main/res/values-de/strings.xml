@@ -284,6 +284,7 @@
     <string name="tool_twilio_sid_hint">Account SID (beginnt mit AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Speichern und prüfen</string>
+    <string name="assistant_back">Zurück zum Assistenten</string>
     <string name="tool_forget">Entfernen</string>
     <string name="tool_connected">Verbunden</string>
     <string name="tool_not_connected">Nicht verbunden</string>

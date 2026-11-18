@@ -39,7 +39,12 @@ import java.util.concurrent.Executors
  * Samostojna asistentka v zavihku Asistent (lastnik 18. 11. 2026: mora delovati tudi brez racunalnika).
  * Pogovor je v pomnilniku (trajen zapis pogovora je naslednji sklop), zapiski in kljuc sta trajna na telefonu.
  */
-class SamostojniPogled(private val a: Activity, private val odpriNastavitve: () -> Unit = {}) {
+class SamostojniPogled(
+    private val a: Activity,
+    private val odpriNastavitve: () -> Unit = {},
+    /** Nazaj na zavihek Asistent iz nastavitev kljucev. */
+    private val nazajNaAsistenta: () -> Unit = {},
+) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
     private val ponudnikShramba = PonudnikShramba(a)
@@ -75,13 +80,14 @@ class SamostojniPogled(private val a: Activity, private val odpriNastavitve: () 
     private val googleInfo: TextView = a.findViewById(R.id.assistantGoogleInfo)
     private val googleGumb: Button = a.findViewById(R.id.assistantGoogleSignIn)
     // Kljuci Brave/TinyFish/Twilio; ob spremembi se asistentka zgradi znova (navodilo omeni samo orodja, ki so na voljo).
-    private val orodjaPogled = OrodjaPogled(a, a.findViewById(R.id.assistantToolsList), prenos, nit, glavna) {
+    private val orodjaPogled = OrodjaPogled(a, a.findViewById(R.id.assistantToolsList), prenos, nit, glavna, {
         asistent = null; pogovor.setLength(0); osvezi()
-    }
+    })
 
     init {
         kljucShrani.setOnClickListener { shraniKljuc() }
         namigGumb.setOnClickListener { odpriNastavitve() }
+        a.findViewById<Button>(R.id.assistantBackToAssistant).setOnClickListener { nazajNaAsistenta() }
         klepetPosli.setOnClickListener { poslji() }
         googleGumb.setOnClickListener { zacniPrijavoGoogle() }
         kljucPozabi.setOnClickListener {

@@ -284,6 +284,7 @@
     <string name="tool_twilio_sid_hint">Account SID (začne se z AC)</string>
     <string name="tool_twilio_token_hint">Auth Token</string>
     <string name="tool_save">Shrani in preveri</string>
+    <string name="assistant_back">Nazaj na Asistenta</string>
     <string name="tool_forget">Odstrani</string>
     <string name="tool_connected">Povezano</string>
     <string name="tool_not_connected">Ni povezano</string>

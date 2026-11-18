@@ -129,7 +129,13 @@ class OrodjaPogled(
                     if (a.isFinishing) return@post
                     caka = false
                     when (izid) {
-                        is IzidOrodja.Besedilo -> { shrani(v, izid); vnosi.forEach { it.setText("") }; sporocilo = null; obSpremembi() }
+                        is IzidOrodja.Besedilo -> {
+                            shrani(v, izid); vnosi.forEach { it.setText("") }; sporocilo = null; obSpremembi()
+                            // Tipkovnica zakrije spodnjo navigacijo: po uspesnem shranjevanju se zapre, da je pot nazaj vidna.
+                            vnosi.forEach { it.clearFocus() }
+                            (a.getSystemService(Activity.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                                ?.hideSoftInputFromWindow(vsebnik.windowToken, 0)
+                        }
                         is IzidOrodja.Napaka -> sporocilo = a.getString(
                             when (izid.razlog) {
                                 "kljuc" -> R.string.tool_err_key
