@@ -262,4 +262,7 @@
     <string name="local_google_err_fmt">Google-Anmeldung fehlgeschlagen: %1$s</string>
     <string name="local_google_sign_out">Abmelden</string>
     <string name="local_google_relogin">Google-Anmeldung abgelaufen. Bitte erneut anmelden.</string>
+    <string name="tab_phone">Telefon</string>
+    <string name="tab_lina">Lina</string>
+    <string name="tab_computer">Computer</string>
 </resources>

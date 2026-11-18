@@ -262,4 +262,7 @@
     <string name="local_google_err_fmt">Error al iniciar sesión con Google: %1$s</string>
     <string name="local_google_sign_out">Cerrar sesión</string>
     <string name="local_google_relogin">La sesión de Google caducó. Inicia sesión de nuevo.</string>
+    <string name="tab_phone">Teléfono</string>
+    <string name="tab_lina">Lina</string>
+    <string name="tab_computer">Ordenador</string>
 </resources>

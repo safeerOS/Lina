@@ -262,4 +262,7 @@
     <string name="local_google_err_fmt">Google sign-in failed: %1$s</string>
     <string name="local_google_sign_out">Sign out</string>
     <string name="local_google_relogin">Google sign-in expired. Please sign in again.</string>
+    <string name="tab_phone">Phone</string>
+    <string name="tab_lina">Lina</string>
+    <string name="tab_computer">Computer</string>
 </resources>

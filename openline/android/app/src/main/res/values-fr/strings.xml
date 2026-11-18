@@ -262,4 +262,7 @@
     <string name="local_google_err_fmt">Échec de la connexion Google : %1$s</string>
     <string name="local_google_sign_out">Se déconnecter</string>
     <string name="local_google_relogin">La connexion Google a expiré. Reconnectez-vous.</string>
+    <string name="tab_phone">Téléphone</string>
+    <string name="tab_lina">Lina</string>
+    <string name="tab_computer">Ordinateur</string>
 </resources>

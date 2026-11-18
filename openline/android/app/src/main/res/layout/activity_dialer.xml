@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/root"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical">
+
+<ScrollView
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
     android:fillViewport="true">
 
     <LinearLayout
@@ -44,35 +50,11 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <!-- Zavihka: Klici (prevzem klicev) in Asistent (naloge za Claude Code). Lastnik 14. 11. 2026: ena aplikacija. -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/tabCallsButton"
-                style="@style/Gw.Button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/tab_calls" />
-
-            <Button
-                android:id="@+id/tabAssistantButton"
-                style="@style/Gw.Button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="@string/tab_assistant" />
-        </LinearLayout>
-
         <LinearLayout
             android:id="@+id/tabCalls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:orientation="vertical">
 
             <!-- Dial -->
@@ -150,12 +132,22 @@
                     android:visibility="gone" />
             </LinearLayout>
 
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabPhone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
             <!-- Setup: a real sequence, so the steps are numbered -->
             <LinearLayout
                 style="@style/Gw.Panel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="0dp"
                 android:paddingTop="16dp"
                 android:paddingBottom="4dp">
 
@@ -182,12 +174,128 @@
                     layout="@layout/item_setup_step" />
             </LinearLayout>
 
+            <!-- Advanced: manual connection, rarely needed after QR pairing -->
+            <TextView
+                android:id="@+id/advancedToggle"
+                style="@style/Gw.Muted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:text="@string/show_advanced"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/advanced"
+                style="@style/Gw.Panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Gw.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/server_address" />
+
+                <EditText
+                    android:id="@+id/wsUrlInput"
+                    style="@style/Gw.Field"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/server_address_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textUri" />
+
+                <TextView
+                    style="@style/Gw.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/phone_id" />
+
+                <EditText
+                    android:id="@+id/deviceIdInput"
+                    style="@style/Gw.Field"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:importantForAutofill="no"
+                    android:inputType="text" />
+
+                <TextView
+                    style="@style/Gw.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/phone_token" />
+
+                <EditText
+                    android:id="@+id/deviceTokenInput"
+                    style="@style/Gw.Field"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword" />
+
+                <TextView
+                    style="@style/Gw.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/cert_fingerprint" />
+
+                <EditText
+                    android:id="@+id/certInput"
+                    style="@style/Gw.Field"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:importantForAutofill="no"
+                    android:inputType="text" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/saveConfigButton"
+                        style="@style/Gw.Button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/save_reconnect" />
+
+                    <Button
+                        android:id="@+id/restartAudioButton"
+                        style="@style/Gw.Button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/restart_audio" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabLina"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
             <!-- Lina: cas zvonjenja, seznam in ustavitev lupine -->
             <LinearLayout
                 style="@style/Gw.Panel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp">
+                android:layout_marginTop="0dp">
 
                 <TextView
                     style="@style/Gw.Heading"
@@ -300,112 +408,6 @@
                     android:text="@string/stop_clean" />
             </LinearLayout>
 
-            <!-- Advanced: manual connection, rarely needed after QR pairing -->
-            <TextView
-                android:id="@+id/advancedToggle"
-                style="@style/Gw.Muted"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:background="?android:attr/selectableItemBackground"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:text="@string/show_advanced"
-                android:textSize="14sp" />
-
-            <LinearLayout
-                android:id="@+id/advanced"
-                style="@style/Gw.Panel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="gone">
-
-                <TextView
-                    style="@style/Gw.Muted"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/server_address" />
-
-                <EditText
-                    android:id="@+id/wsUrlInput"
-                    style="@style/Gw.Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:hint="@string/server_address_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="textUri" />
-
-                <TextView
-                    style="@style/Gw.Muted"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/phone_id" />
-
-                <EditText
-                    android:id="@+id/deviceIdInput"
-                    style="@style/Gw.Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
-
-                <TextView
-                    style="@style/Gw.Muted"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/phone_token" />
-
-                <EditText
-                    android:id="@+id/deviceTokenInput"
-                    style="@style/Gw.Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:importantForAutofill="no"
-                    android:inputType="textPassword" />
-
-                <TextView
-                    style="@style/Gw.Muted"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/cert_fingerprint" />
-
-                <EditText
-                    android:id="@+id/certInput"
-                    style="@style/Gw.Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/saveConfigButton"
-                        style="@style/Gw.Button"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/save_reconnect" />
-
-                    <Button
-                        android:id="@+id/restartAudioButton"
-                        style="@style/Gw.Button"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="@string/restart_audio" />
-                </LinearLayout>
-            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout
@@ -413,7 +415,7 @@
             style="@style/Gw.Panel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="16dp"
             android:visibility="gone">
 
             <TextView
@@ -557,11 +559,21 @@
                 android:text="@string/local_key_forget"
                 android:visibility="gone" />
 
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tabComputer"
+            style="@style/Gw.Panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone">
+
             <TextView
                 style="@style/Gw.Heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="0dp"
                 android:text="@string/assistant_computer_title" />
 
             <TextView
@@ -734,3 +746,47 @@
         </LinearLayout>
     </LinearLayout>
 </ScrollView>
+<!-- Spodnja navigacija: pet podmenijev namesto enega dolgega zaslona (lastnik 18. 11. 2026). -->
+<LinearLayout
+    android:id="@+id/navBar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/surface"
+    android:orientation="horizontal">
+        <Button
+            android:id="@+id/navCalls"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_calls" />
+        <Button
+            android:id="@+id/navPhone"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_phone" />
+        <Button
+            android:id="@+id/navLina"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_lina" />
+        <Button
+            android:id="@+id/navAssistant"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_assistant" />
+        <Button
+            android:id="@+id/navComputer"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_computer" />
+</LinearLayout>
+</LinearLayout>

@@ -262,4 +262,7 @@
     <string name="local_google_err_fmt">Accesso Google non riuscito: %1$s</string>
     <string name="local_google_sign_out">Esci</string>
     <string name="local_google_relogin">L\'accesso Google è scaduto. Accedi di nuovo.</string>
+    <string name="tab_phone">Telefono</string>
+    <string name="tab_lina">Lina</string>
+    <string name="tab_computer">Computer</string>
 </resources>

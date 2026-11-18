@@ -109,9 +109,14 @@ class DialerActivity : Activity() {
     private lateinit var linePermissionButton: Button
     private lateinit var lineSpinner: Spinner
     private lateinit var tabCalls: View
+    private lateinit var tabPhone: View
+    private lateinit var tabLina: View
     private lateinit var tabAssistant: View
-    private lateinit var tabCallsButton: Button
-    private lateinit var tabAssistantButton: Button
+    private lateinit var tabComputer: View
+    private lateinit var navButtons: Map<Zavihek, Button>
+
+    /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
+    private enum class Zavihek { KLICI, TELEFON, LINA, ASISTENT, RACUNALNIK }
     private lateinit var assistantStatus: TextView
     private lateinit var assistantDeviceId: TextView
     private lateinit var assistantTaskInput: EditText
@@ -185,7 +190,7 @@ class DialerActivity : Activity() {
         setIntent(intent)
         // Vrnitev prijave z Google (shema ID odjemalca): samo to povezavo obdela asistent, drugo gre po starem.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
-            showTab(assistant = true)
+            showTab(Zavihek.ASISTENT)
             samostojniPogled.obdelajPovezavo(intent.data.toString())
             return
         }
@@ -224,9 +229,11 @@ class DialerActivity : Activity() {
     }
 
     private fun bindViews() {
+        // Zgoraj in ob straneh odmik dobi vsebina, spodnji odmik (navigacijska vrstica sistema) spodnja navigacija.
         findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { view, insets ->
             val b = SistemskeVrstice.odmiki(insets)
-            view.setPadding(b[0], b[1], b[2], b[3])
+            view.setPadding(b[0], b[1], b[2], 0)
+            findViewById<View>(R.id.navBar).setPadding(b[0], 0, b[2], b[3])
             insets
         }
         connectionDot = findViewById(R.id.connectionDot)
@@ -346,15 +353,22 @@ class DialerActivity : Activity() {
      */
     private fun bindTabs() {
         tabCalls = findViewById(R.id.tabCalls)
+        tabPhone = findViewById(R.id.tabPhone)
+        tabLina = findViewById(R.id.tabLina)
         tabAssistant = findViewById(R.id.tabAssistant)
-        tabCallsButton = findViewById(R.id.tabCallsButton)
-        tabAssistantButton = findViewById(R.id.tabAssistantButton)
+        tabComputer = findViewById(R.id.tabComputer)
+        navButtons = mapOf(
+            Zavihek.KLICI to findViewById<Button>(R.id.navCalls),
+            Zavihek.TELEFON to findViewById<Button>(R.id.navPhone),
+            Zavihek.LINA to findViewById<Button>(R.id.navLina),
+            Zavihek.ASISTENT to findViewById<Button>(R.id.navAssistant),
+            Zavihek.RACUNALNIK to findViewById<Button>(R.id.navComputer),
+        )
+        for ((z, b) in navButtons) b.setOnClickListener { showTab(z) }
         assistantStatus = findViewById(R.id.assistantStatus)
         assistantDeviceId = findViewById(R.id.assistantDeviceId)
         assistantTaskInput = findViewById(R.id.assistantTaskInput)
         assistantSendButton = findViewById(R.id.assistantSendButton)
-        tabCallsButton.setOnClickListener { showTab(assistant = false) }
-        tabAssistantButton.setOnClickListener { showTab(assistant = true) }
         assistantSendButton.setOnClickListener { sendTask() }
         assistantPairButton = findViewById(R.id.assistantPairButton)
         assistantCodeButton = findViewById(R.id.assistantCodeButton)
@@ -369,29 +383,30 @@ class DialerActivity : Activity() {
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
         assistantApprovalDescription = findViewById(R.id.assistantApprovalDescription)
-        asistent = AsistentKontroler(this) { if (tabAssistant.visibility == View.VISIBLE) renderAssistant() }
+        asistent = AsistentKontroler(this) { if (tabAssistant.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
         // En gumb »Skeniraj QR« za obe poti (lastnik 14. 11. 2026): isti bralnik kot v koraku 2.
         assistantPairButton.setOnClickListener { scanPairingQr() }
         assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
         assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
         findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
         findViewById<Button>(R.id.assistantDenyButton).setOnClickListener { asistent.odgovori(dovoli = false) }
-        showTab(assistant = false)
+        showTab(Zavihek.KLICI)
         // Proces je bil med prijavo v brskalniku ubit: vrnitev pride v onCreate namesto onNewIntent.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
-            showTab(assistant = true)
+            showTab(Zavihek.ASISTENT)
             samostojniPogled.obdelajPovezavo(intent.data.toString())
         }
     }
 
-    private fun showTab(assistant: Boolean) {
-        tabCalls.visibility = if (assistant) View.GONE else View.VISIBLE
-        tabAssistant.visibility = if (assistant) View.VISIBLE else View.GONE
-        tabCallsButton.isSelected = !assistant
-        tabAssistantButton.isSelected = assistant
-        tabCallsButton.alpha = if (assistant) 0.6f else 1f
-        tabAssistantButton.alpha = if (assistant) 1f else 0.6f
-        if (assistant) { renderAssistant(); asistent.preveriSejo() }
+    private fun showTab(z: Zavihek) {
+        tabCalls.visibility = if (z == Zavihek.KLICI) View.VISIBLE else View.GONE
+        tabPhone.visibility = if (z == Zavihek.TELEFON) View.VISIBLE else View.GONE
+        tabLina.visibility = if (z == Zavihek.LINA) View.VISIBLE else View.GONE
+        tabAssistant.visibility = if (z == Zavihek.ASISTENT) View.VISIBLE else View.GONE
+        tabComputer.visibility = if (z == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
+        for ((t, b) in navButtons) { b.isSelected = t == z; b.contentDescription = b.text }
+        findViewById<View>(R.id.root).scrollTo(0, 0)
+        if (z == Zavihek.ASISTENT || z == Zavihek.RACUNALNIK) { renderAssistant(); asistent.preveriSejo() }
     }
 
     private fun renderAssistant() {
@@ -621,7 +636,7 @@ class DialerActivity : Activity() {
             .setPositiveButton(getString(R.string.assistant_pair_ok)) { _, _ ->
                 // Shrani se sele, ko lastnik telefon potrdi v Lini na racunalniku (AsistentKontroler.seznani).
                 asistent.seznani(v)
-                showTab(assistant = true)
+                showTab(Zavihek.RACUNALNIK)
             }
             .setNegativeButton(getString(R.string.pair_cancel), null)
             .show()

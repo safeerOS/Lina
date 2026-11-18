@@ -262,4 +262,7 @@
     <string name="local_google_err_fmt">Prijava z Google ni uspela: %1$s</string>
     <string name="local_google_sign_out">Odjava</string>
     <string name="local_google_relogin">Prijava z Google je potekla. Prijavi se znova.</string>
+    <string name="tab_phone">Telefon</string>
+    <string name="tab_lina">Lina</string>
+    <string name="tab_computer">Računalnik</string>
 </resources>
