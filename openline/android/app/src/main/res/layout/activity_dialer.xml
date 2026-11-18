@@ -270,6 +270,26 @@
                         android:layout_marginBottom="4dp"
                         android:text="@string/call" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/contactsAllow"
+                    style="@style/Gw.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="48dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/contacts_allow"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/contactResults"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- Advanced: manual connection, rarely needed after QR pairing -->

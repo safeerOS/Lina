@@ -26,6 +26,8 @@
     <string name="call_from_phone">Appeler depuis ce téléphone</string>
     <string name="number_hint">Numéro</string>
     <string name="call">Appeler</string>
+    <string name="contacts_allow">Autoriser l’accès aux contacts pour chercher par nom</string>
+    <string name="contacts_none">Aucun contact correspondant</string>
     <string name="saved_allowlist_on">Enregistré. Prise en charge uniquement pour les numéros de la liste.</string>
     <string name="saved_allowlist_off">Enregistré. La liste est désactivée : tous les appels entrants, sauf les numéros d’urgence.</string>
     <string name="stop_title">Arrêter et effacer</string>

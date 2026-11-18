@@ -26,6 +26,8 @@
     <string name="call_from_phone">Klic s tega telefona</string>
     <string name="number_hint">Številka</string>
     <string name="call">Pokliči</string>
+    <string name="contacts_allow">Dovoli dostop do imenika za iskanje po imenu</string>
+    <string name="contacts_none">Ni ujemajočih stikov</string>
     <string name="saved_allowlist_on">Shranjeno. Prevzem samo za številke na seznamu.</string>
     <string name="saved_allowlist_off">Shranjeno. Seznam je izklopljen: vsi dohodni razen številk v sili.</string>
     <string name="stop_title">Ustavi in počisti</string>

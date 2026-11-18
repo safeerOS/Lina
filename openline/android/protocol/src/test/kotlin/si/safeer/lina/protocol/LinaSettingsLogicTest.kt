@@ -62,6 +62,7 @@ class LinaSettingsLogicTest {
         val s = LinaSettingsLogic(kv)
         val empty = s.load()
         assertEquals(LinaSettingsLogic.DEFAULT_RING_SEC, empty.ringTimeoutSec)
+        assertEquals(25, empty.ringTimeoutSec, "lastnik 18. 11. 2026: Lina se oglasi po 25 s")
         assertTrue(empty.allowlistEnabled, "seznam je privzeto vklopljen (prazen = noben klic)")
         assertTrue(empty.allowlist.isEmpty())
         s.save(1, "")

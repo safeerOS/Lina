@@ -63,7 +63,8 @@ class LinaSettingsLogic(
     }
 
     companion object {
-        const val DEFAULT_RING_SEC = 20
+        // Lastnik 18. 11. 2026: Lina se oglasi, ko klica ne sprejme 25 s (prej 20 s).
+        const val DEFAULT_RING_SEC = 25
         const val MIN_RING_SEC = 5
         const val MAX_RING_SEC = 120
         const val KEY_RING = "ring_timeout_sec"

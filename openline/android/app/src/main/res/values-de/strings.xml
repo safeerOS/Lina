@@ -26,6 +26,8 @@
     <string name="call_from_phone">Anruf von diesem Telefon</string>
     <string name="number_hint">Nummer</string>
     <string name="call">Anrufen</string>
+    <string name="contacts_allow">Zugriff auf Kontakte erlauben, um nach Namen zu suchen</string>
+    <string name="contacts_none">Keine passenden Kontakte</string>
     <string name="saved_allowlist_on">Gespeichert. Übernahme nur für Nummern auf der Liste.</string>
     <string name="saved_allowlist_off">Gespeichert. Die Liste ist aus: alle eingehenden Anrufe außer Notrufnummern.</string>
     <string name="stop_title">Stoppen und löschen</string>

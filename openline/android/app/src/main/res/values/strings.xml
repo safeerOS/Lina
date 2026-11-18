@@ -26,6 +26,8 @@
     <string name="call_from_phone">Call from this phone</string>
     <string name="number_hint">Number</string>
     <string name="call">Call</string>
+    <string name="contacts_allow">Allow access to contacts to search by name</string>
+    <string name="contacts_none">No matching contacts</string>
     <string name="saved_allowlist_on">Saved. Takeover only for numbers on the list.</string>
     <string name="saved_allowlist_off">Saved. The list is off: every incoming call except emergency numbers.</string>
     <string name="stop_title">Stop and wipe</string>

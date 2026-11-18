@@ -26,6 +26,8 @@
     <string name="call_from_phone">Chiama da questo telefono</string>
     <string name="number_hint">Numero</string>
     <string name="call">Chiama</string>
+    <string name="contacts_allow">Consenti l’accesso ai contatti per cercare per nome</string>
+    <string name="contacts_none">Nessun contatto corrispondente</string>
     <string name="saved_allowlist_on">Salvato. Presa in carico solo per i numeri dell’elenco.</string>
     <string name="saved_allowlist_off">Salvato. L’elenco è disattivato: tutte le chiamate in arrivo, tranne i numeri di emergenza.</string>
     <string name="stop_title">Interrompi e cancella</string>

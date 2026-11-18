@@ -241,6 +241,7 @@ class DialerActivity : Activity() {
 
         numberInput = findViewById(R.id.numberInput)
         findViewById<Button>(R.id.callButton).setOnClickListener { requestOrDial(numberInput.text.toString().trim()) }
+        setupContactSearch()
 
         wsUrlInput = findViewById(R.id.wsUrlInput)
         deviceIdInput = findViewById(R.id.deviceIdInput)
@@ -918,6 +919,7 @@ class DialerActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         if (requestCode == REQUEST_CALL_PHONE && granted) pendingPermissionNumber?.let(::dialLocally)
+        if (requestCode == REQUEST_CONTACTS) refreshContactSearch()
         if (requestCode == REQUEST_NOTIFICATIONS && granted) startAudioSetup()
         if (requestCode == REQUEST_PHONE_STATE) {
             // Prazen izid je preklic (okno se ni pokazalo), ne zavrnitev: zapis se spremeni samo ob pravem izidu.
@@ -928,6 +930,75 @@ class DialerActivity : Activity() {
         }
         pendingPermissionNumber = null
     }
+
+    // Lastnik 18. 11. 2026: klicalnik Line mora iskati po imeniku. Brez dovoljenja se pokaze samo povezava za dovoljenje.
+    private val contactSearch by lazy { ContactSearch(this) }
+    private val contactExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var contactSeq = 0
+    private var contactSuppress = false
+
+    private fun setupContactSearch() {
+        findViewById<TextView>(R.id.contactsAllow).setOnClickListener {
+            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), REQUEST_CONTACTS)
+        }
+        numberInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (!contactSuppress) refreshContactSearch()
+            }
+        })
+        refreshContactSearch()
+    }
+
+    private fun refreshContactSearch() {
+        val allow = findViewById<TextView>(R.id.contactsAllow)
+        val results = findViewById<android.widget.LinearLayout>(R.id.contactResults)
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            allow.visibility = View.VISIBLE
+            results.visibility = View.GONE
+            return
+        }
+        allow.visibility = View.GONE
+        val query = numberInput.text.toString()
+        val seq = ++contactSeq
+        if (query.trim().length < 2) {
+            results.removeAllViews(); results.visibility = View.GONE
+            return
+        }
+        contactExecutor.execute {
+            val rows = contactSearch.search(query)
+            runOnUiThread {
+                if (seq != contactSeq || isFinishing) return@runOnUiThread
+                results.removeAllViews()
+                if (rows.isEmpty()) {
+                    results.addView(TextView(this).apply {
+                        text = getString(R.string.contacts_none); setTextColor(getColor(R.color.hint)); textSize = 14f
+                        setPadding(0, dp(8), 0, dp(8))
+                    })
+                }
+                rows.forEach { row ->
+                    results.addView(TextView(this).apply {
+                        text = row.name + "  " + row.number
+                        setTextColor(getColor(R.color.ink)); textSize = 17f
+                        minHeight = dp(48); gravity = android.view.Gravity.CENTER_VERTICAL
+                        setPadding(0, dp(4), 0, dp(4))
+                        isClickable = true; isFocusable = true
+                        setBackgroundResource(android.R.drawable.list_selector_background)
+                        setOnClickListener {
+                            contactSuppress = true
+                            numberInput.setText(row.number); numberInput.setSelection(numberInput.text.length)
+                            contactSuppress = false
+                            results.removeAllViews(); results.visibility = View.GONE
+                        }
+                    })
+                }
+                results.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun requestOrDial(number: String) {
         if (number.isBlank()) {
@@ -1065,6 +1136,7 @@ class DialerActivity : Activity() {
         const val REQUEST_NOTIFICATIONS = 1003
         const val REQUEST_NOTIFICATIONS_MISSED = 1004
         const val REQUEST_PHONE_STATE = 1005
+        const val REQUEST_CONTACTS = 1006
         private const val PREFS_UI = "lina_ui"
         private const val KEY_PHONE_DENIED = "phone_permission_denied"
     }

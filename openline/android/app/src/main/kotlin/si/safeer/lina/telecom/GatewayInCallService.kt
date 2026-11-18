@@ -14,6 +14,7 @@ import android.util.Log
 import si.safeer.lina.InCallActivity
 import si.safeer.lina.audio.CallAudioBridge
 import si.safeer.lina.config.LinaSettingsStore
+import si.safeer.lina.protocol.ScamBurstPolicy
 import si.safeer.lina.transport.GatewayRuntime
 import si.safeer.lina.shell.ShellClient
 import si.safeer.lina.protocol.EmergencyLock
@@ -51,6 +52,68 @@ class GatewayInCallService : InCallService() {
 
     /** Klici, zavrnjeni z zasedenim znakom, dokler jih Telecom ne odstrani. Samo glavna nit. */
     private val busyRejected = mutableSetOf<String>()
+
+    /**
+     * Lastnik 18. 11. 2026: val prevar (3 razlicne neznane stevilke v 15 s) se tiho zavrne in zapomni; stevilke
+     * ostanejo samo na telefonu (SharedPreferences), nikoli v dnevniku ali repozitoriju.
+     */
+    private val scamChecked = mutableSetOf<String>()
+    private val scamPolicy by lazy {
+        val prefs = getSharedPreferences("lina_scam", MODE_PRIVATE)
+        ScamBurstPolicy(initialBlocked = prefs.getString("blocked", "").orEmpty().split('\n').filter { it.isNotBlank() })
+    }
+    private val contactLookup by lazy { si.safeer.lina.ContactSearch(this) }
+
+    /** Wangiri: neodgovorjen klic iz tuje neznane stevilke, ki je zvonil < 5 s, se zapomni (naslednjic tiho zavrnjen). */
+    private fun learnWangiri(callId: String, call: Call) {
+        val started = ringStartedAt[callId] ?: return
+        if (callId in busyRejected || directionOf(call) != TakeoverDirection.INCOMING) return
+        if (call.details.connectTimeMillis != 0L) return
+        val number = numberOf(call)
+        val settings = LinaSettingsStore(this).load()
+        val exempt = TakeoverPolicy.onAllowlist(number, settings.allowlist) || contactLookup.isKnown(number)
+        if (scamPolicy.onUnansweredShortRing(number, SystemClock.elapsedRealtime() - started, exempt)) {
+            getSharedPreferences("lina_scam", MODE_PRIVATE).edit().putString("blocked", scamPolicy.blockedNumbers().joinToString("\n")).apply()
+        }
+    }
+
+    private fun rejectIfScam(callId: String, call: Call): Boolean {
+        if (callId in busyRejected) return true
+        if (callId in scamChecked) return false
+        if (directionOf(call) != TakeoverDirection.INCOMING || phaseOf(call) != TakeoverPhase.RINGING) return false
+        scamChecked += callId
+        val number = numberOf(call)
+        val settings = LinaSettingsStore(this).load()
+        val emergency = emergencyCallback(call) || carrierEmergency(number) || TakeoverPolicy.isEmergency(number) ||
+            TakeoverPolicy.inEmergencyCooldown(emergencyAt(), System.currentTimeMillis())
+        val exempt = emergency || TakeoverPolicy.onAllowlist(number, settings.allowlist) || contactLookup.isKnown(number)
+        val malformed = scamPolicy.onMalformed(number, exempt) == ScamBurstPolicy.Verdict.BLOCK
+        if (!malformed && scamPolicy.onIncoming(number, System.currentTimeMillis(), exempt) != ScamBurstPolicy.Verdict.BLOCK) return false
+        run {
+            getSharedPreferences("lina_scam", MODE_PRIVATE).edit().putString("blocked", scamPolicy.blockedNumbers().joinToString("\n")).apply()
+        }
+        LinaCallGate.markManual(callId)
+        if (runCatching { call.reject(false, null) }.isFailure) {
+            Log.w(TAG, "zavrnitev prevare za $callId ni uspela")
+            return false
+        }
+        busyRejected += callId
+        CallRegistry.markBusyRejected(callId)
+        // Prejsnji klici istega vala, ki se zvonijo, gredo za njim (stevilke so ze zapomnjene).
+        for (entry in CallRegistry.snapshot()) {
+            if (entry.callId == callId || entry.callId in busyRejected) continue
+            if (phaseOf(entry.call) == TakeoverPhase.RINGING && directionOf(entry.call) == TakeoverDirection.INCOMING &&
+                scamPolicy.isBlocked(numberOf(entry.call)) && !TakeoverPolicy.isEmergency(numberOf(entry.call))
+            ) {
+                LinaCallGate.markManual(entry.callId)
+                if (runCatching { entry.call.reject(false, null) }.isSuccess) {
+                    busyRejected += entry.callId
+                    CallRegistry.markBusyRejected(entry.callId)
+                }
+            }
+        }
+        return true
+    }
 
     /**
      * Zajem zadrzanega Lininega klica oceni ista politika na glavni niti (po koncu tujega klica in
@@ -108,7 +171,9 @@ class GatewayInCallService : InCallService() {
         val callId = CallRegistry.callIdFor(call)
         callbacks.remove(call)?.let(call::unregisterCallback)
         if (callId != null) {
+            learnWangiri(callId, call)
             busyRejected.remove(callId)
+            scamChecked.remove(callId)
             IncomingCallNotice.cancel(this, callId)
             cancelTimer(callId)
             ringStartedAt.remove(callId)
@@ -186,7 +251,7 @@ class GatewayInCallService : InCallService() {
     }
 
     private fun onCallUpdated(callId: String, call: Call) {
-        if (rejectIfLinaBusy(callId, call)) {
+        if (rejectIfScam(callId, call) || rejectIfLinaBusy(callId, call)) {
             refreshIncomingNotice(callId, call)
             CallRegistry.notifyChanged()
             return

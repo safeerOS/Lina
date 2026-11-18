@@ -26,6 +26,8 @@
     <string name="call_from_phone">Llamar desde este teléfono</string>
     <string name="number_hint">Número</string>
     <string name="call">Llamar</string>
+    <string name="contacts_allow">Permitir el acceso a los contactos para buscar por nombre</string>
+    <string name="contacts_none">Ningún contacto coincide</string>
     <string name="saved_allowlist_on">Guardado. Solo se atienden los números de la lista.</string>
     <string name="saved_allowlist_off">Guardado. La lista está desactivada: todas las llamadas entrantes excepto los números de emergencia.</string>
     <string name="stop_title">Detener y borrar</string>

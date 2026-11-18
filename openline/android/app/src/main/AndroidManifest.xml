@@ -16,6 +16,8 @@
         <package android:name="si.safeer.tablet" />
     </queries>
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Lastnik 18. 11. 2026: klicalnik Line mora iskati po imeniku (dovoljenje potrdi uporabnik sam). -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
