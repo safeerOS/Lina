@@ -11,7 +11,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import si.safeer.lina.R
 import si.safeer.lina.samostojna.Asistent
-import si.safeer.lina.samostojna.GeminiOdjemalec
+import si.safeer.lina.samostojna.Ponudnik
+import si.safeer.lina.samostojna.ustvariOdjemalca
 import si.safeer.lina.samostojna.KljucGemini
 import si.safeer.lina.samostojna.Odgovor
 import si.safeer.lina.samostojna.SistemskoNavodilo
@@ -30,9 +31,10 @@ import java.util.concurrent.Executors
 class SamostojniPogled(private val a: Activity) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
-    private val kljuci = KeystoreShranjevalnik(a)
+    private val ponudnikShramba = PonudnikShramba(a)
+    private var ponudnik = ponudnikShramba.beri()
+    private var kljuci = KeystoreShranjevalnik(a, ponudnik)
     private val zapiski = ZapiskiShramba(a)
-    private val odjemalec = GeminiOdjemalec(kljuci, prenos = AndroidPrenos())
     private var asistent: Asistent? = null
     private var asistentDan: LocalDate? = null
     private var caka = false
@@ -49,16 +51,47 @@ class SamostojniPogled(private val a: Activity) {
     private val zapisekNaslov: TextView = a.findViewById(R.id.assistantNotesTitle)
     private val zapiskiSeznam: LinearLayout = a.findViewById(R.id.assistantNotesList)
     private val kljucPozabi: Button = a.findViewById(R.id.assistantKeyForget)
+    private val ponudnikVrstica: LinearLayout = a.findViewById(R.id.assistantProviderRow)
 
     init {
         kljucShrani.setOnClickListener { shraniKljuc() }
         klepetPosli.setOnClickListener { poslji() }
         kljucPozabi.setOnClickListener { kljuci.izbrisi(); asistent = null; pogovor.setLength(0); osvezi() }
+        for (p in Ponudnik.entries) {
+            ponudnikVrstica.addView(
+                Button(a, null, 0, R.style.Gw_Button).apply { tag = p; setOnClickListener { izberiPonudnika(p) } },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+    }
+
+    /** Vsak ponudnik ima svoj kljuc; menjava ne izbrise kljuca drugega ponudnika, pogovor pa se zacne znova (drug model). */
+    private fun izberiPonudnika(p: Ponudnik) {
+        if (p == ponudnik || caka) return
+        ponudnik = p
+        ponudnikShramba.shrani(p)
+        kljuci = KeystoreShranjevalnik(a, p)
+        asistent = null
+        pogovor.setLength(0)
+        kljucVnos.setText("")
+        kljucVnos.error = null
+        osvezi()
     }
 
     fun osvezi() {
         val imaKljuc = kljuci.preberi() != null
         info.text = a.getString(R.string.local_info)
+        kljucVnos.hint = a.getString(R.string.local_key_hint_fmt, ponudnik.oznaka)
+        for (i in 0 until ponudnikVrstica.childCount) {
+            val b = ponudnikVrstica.getChildAt(i) as Button
+            val p = b.tag as Ponudnik
+            val izbran = p == ponudnik
+            b.text = if (izbran) "\u2713 ${p.oznaka}" else p.oznaka
+            b.isSelected = izbran
+            b.alpha = if (izbran) 1f else 0.6f
+            b.contentDescription = if (izbran) "${p.oznaka}, ${a.getString(R.string.local_provider_selected)}" else p.oznaka
+            b.isEnabled = !caka
+        }
         kljucBlok.visibility = if (imaKljuc) View.GONE else View.VISIBLE
         klepetBlok.visibility = if (imaKljuc) View.VISIBLE else View.GONE
         kljucPozabi.visibility = if (imaKljuc) View.VISIBLE else View.GONE
@@ -88,7 +121,7 @@ class SamostojniPogled(private val a: Activity) {
 
     private fun shraniKljuc() {
         val k = kljucVnos.text.toString().trim()
-        // Kljuci Google AI Studio so brez presledkov in dolgi vsaj 20 znakov; vse drugo je napacen vnos.
+        // Kljuci ponudnikov so brez presledkov in dolgi vsaj 20 znakov; vse drugo je napacen vnos.
         if (k.length < 20 || k.any { it.isWhitespace() }) { kljucVnos.error = a.getString(R.string.local_key_bad); return }
         kljuci.shrani(KljucGemini(k))
         kljucVnos.setText("")
@@ -101,7 +134,7 @@ class SamostojniPogled(private val a: Activity) {
         val obstojeci = asistent
         if (obstojeci != null && asistentDan == danes) return obstojeci
         // Navodilo vsebuje cas, zato se ob novem dnevu pogovor zacne znova.
-        return Asistent(odjemalec, SistemskoNavodilo.zgradi(zdaj)).also { asistent = it; asistentDan = danes }
+        return Asistent(ustvariOdjemalca(ponudnik, kljuci, AndroidPrenos()), SistemskoNavodilo.zgradi(zdaj)).also { asistent = it; asistentDan = danes }
     }
 
     private fun poslji() {

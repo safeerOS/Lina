@@ -235,8 +235,10 @@
     <string name="circle_done">Lina est connectée à Safeer et ajoutée au cercle de confiance de Safeer Link.</string>
     <string name="circle_refused">Lina n’a pas été connectée à Safeer.</string>
     <string name="circle_failed">Safeer n’a pas pu connecter Lina. Mettez Safeer à jour et réessayez.</string>
-    <string name="local_info">Lina fonctionne seule sur ce téléphone, sans ordinateur. Votre clé Gemini reste chiffrée sur ce téléphone et n’est envoyée qu’à Google.</string>
-    <string name="local_key_hint">Clé API Gemini (Google AI Studio)</string>
+    <string name="local_info">Lina fonctionne seule sur ce téléphone, sans ordinateur. Votre clé reste chiffrée sur ce téléphone et n’est envoyée qu’au fournisseur choisi.</string>
+    <string name="local_key_hint_fmt">Clé API : %1$s</string>
+    <string name="local_provider">Fournisseur</string>
+    <string name="local_provider_selected">sélectionné</string>
     <string name="local_key_save">Enregistrer la clé</string>
     <string name="local_key_bad">Cela ne ressemble pas à une clé Gemini.</string>
     <string name="local_key_forget">Oublier la clé</string>

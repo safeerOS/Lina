@@ -11,7 +11,7 @@ sealed class Odgovor {
 }
 
 class Asistent(
-    private val odjemalec: GeminiOdjemalec,
+    private val odjemalec: PonudnikOdjemalec,
     private val sistemskoNavodilo: String,
     private val najvecSporocil: Int = 40
 ) {

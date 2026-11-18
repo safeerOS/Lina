@@ -430,6 +430,21 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp" />
 
+            <TextView
+                android:id="@+id/assistantProviderLabel"
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/local_provider" />
+
+            <LinearLayout
+                android:id="@+id/assistantProviderRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal" />
+
             <LinearLayout
                 android:id="@+id/assistantKeyBlock"
                 android:layout_width="match_parent"
@@ -442,7 +457,7 @@
                     style="@style/Gw.Field"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/local_key_hint"
+                    android:hint=""
                     android:importantForAutofill="no"
                     android:inputType="textPassword"
                     android:maxLength="200" />

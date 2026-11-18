@@ -34,15 +34,20 @@ class JavaHttpPrenos : Prenos {
     }
 }
 
+/** Skupni vmesnik ponudnikov (Gemini, OpenAI, Claude, Grok): asistentka ne ve, kdo odgovarja. */
+interface PonudnikOdjemalec {
+    fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat
+}
+
 class GeminiOdjemalec(
     private val shramba: ShranjevalnikKljuca,
     private val osnovniNaslov: String = "https://generativelanguage.googleapis.com",
     private val model: String = "gemini-2.5-flash",
     private val prenos: Prenos = JavaHttpPrenos()
-) {
+) : PonudnikOdjemalec {
     var spanje: (Long) -> Unit = { Thread.sleep(it) }
 
-    fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
+    override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
         val kljuc = shramba.preberi() ?: return Rezultat.Napaka(null, "Manjka kljuc")
         
         val url = "${osnovniNaslov.trimEnd('/')}/v1beta/models/$model:generateContent"

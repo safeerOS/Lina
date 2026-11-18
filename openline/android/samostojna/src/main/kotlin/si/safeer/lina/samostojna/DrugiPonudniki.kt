@@ -1,0 +1,150 @@
+package si.safeer.lina.samostojna
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import java.io.IOException
+import java.net.http.HttpTimeoutException
+
+/**
+ * Ponudniki, ki jih uporabnik izbere s svojim kljucem (lastnik 18. 11. 2026: na telefonu manjkajo kljuci drugih agentov).
+ * Naslovi so vgrajeni in nespremenljivi: kljuc nikoli ne gre na naslov, ki bi ga vnesel uporabnik ali napadalec.
+ */
+enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
+    GEMINI("gemini", "Gemini", "gemini-2.5-flash"),
+    OPENAI("openai", "OpenAI", "gpt-4.1-mini"),
+    CLAUDE("claude", "Claude", "claude-sonnet-4-5"),
+    GROK("grok", "Grok", "grok-4");
+
+    companion object {
+        fun izId(id: String?): Ponudnik = entries.firstOrNull { it.id == id } ?: GEMINI
+    }
+}
+
+private val json = Json { ignoreUnknownKeys = true }
+
+/** Skupna zanka: do 3 poskusov pri 429 in 5xx, drugace takoj; odgovor nad 1 MB je zavrnjen. Kljuca nikoli ne vstavi v sporocilo napake. */
+private fun posljiZPonovitvami(
+    prenos: Prenos, url: String, glave: Map<String, String>, telo: String, spanje: (Long) -> Unit,
+    razberi: (String) -> Rezultat,
+): Rezultat {
+    var poskusi = 0
+    var odlogMs = 500L
+    while (true) {
+        val odgovor = try {
+            prenos.post(url, glave, telo, 30000L)
+        } catch (e: IOException) {
+            return Rezultat.Napaka(null, "Brez povezave")
+        } catch (e: InterruptedException) {
+            return Rezultat.Napaka(null, "Brez povezave")
+        } catch (e: HttpTimeoutException) {
+            return Rezultat.Napaka(null, "Brez povezave")
+        }
+        if (odgovor.telo.length > 1024 * 1024) return Rezultat.Napaka(null, "Odgovor prevelik")
+        val ponovi = odgovor.koda == 429 || odgovor.koda >= 500
+        if (odgovor.koda == 200 || !ponovi) {
+            val r = razberi(odgovor.telo)
+            return if (odgovor.koda != 200 && r is Rezultat.Besedilo) Rezultat.Napaka(odgovor.koda, "Napaka ${odgovor.koda}") else r
+        }
+        poskusi++
+        if (poskusi >= 3) return razberi(odgovor.telo).let { if (it is Rezultat.Besedilo) Rezultat.Napaka(odgovor.koda, "Napaka ${odgovor.koda}") else it }
+        spanje(odlogMs)
+        odlogMs += 1000L
+    }
+}
+
+private fun napakaIzTelesa(o: JsonObject): Rezultat.Napaka? {
+    val e = o["error"] ?: return null
+    val sporocilo = when (e) {
+        is JsonObject -> (e["message"] as? JsonPrimitive)?.contentOrNull
+        is JsonPrimitive -> e.contentOrNull
+        else -> null
+    }
+    return Rezultat.Napaka(null, sporocilo?.take(300) ?: "Neznana napaka")
+}
+
+/** OpenAI in Grok (xAI) govorita isti protokol chat/completions. */
+class OpenAiOdjemalec(
+    private val shramba: ShranjevalnikKljuca,
+    private val osnovniNaslov: String = "https://api.openai.com",
+    private val model: String = Ponudnik.OPENAI.model,
+    private val prenos: Prenos = JavaHttpPrenos(),
+) : PonudnikOdjemalec {
+    var spanje: (Long) -> Unit = { Thread.sleep(it) }
+
+    fun gradiTelo(zgodovina: List<Sporocilo>, sistemsko: String): String = buildJsonObject {
+        put("model", model)
+        put("messages", buildJsonArray {
+            if (sistemsko.isNotEmpty()) add(buildJsonObject { put("role", "system"); put("content", sistemsko) })
+            for (s in zgodovina) add(buildJsonObject {
+                put("role", if (s.vloga == "model") "assistant" else "user"); put("content", s.besedilo)
+            })
+        })
+    }.toString()
+
+    override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
+        val kljuc = shramba.preberi() ?: return Rezultat.Napaka(null, "Manjka kljuc")
+        val url = "${osnovniNaslov.trimEnd('/')}/v1/chat/completions"
+        return posljiZPonovitvami(prenos, url, mapOf("Authorization" to "Bearer ${kljuc.izpostavi()}"), gradiTelo(zgodovina, sistemsko), spanje, ::razberi)
+    }
+
+    fun razberi(telo: String): Rezultat {
+        val o = try { json.parseToJsonElement(telo).jsonObject } catch (e: Exception) { return Rezultat.Napaka(null, "Neveljaven JSON") }
+        napakaIzTelesa(o)?.let { return it }
+        val izbira = ((o["choices"] as? JsonArray)?.firstOrNull() as? JsonObject) ?: return Rezultat.Napaka(null, "Prazen odgovor")
+        if ((izbira["finish_reason"] as? JsonPrimitive)?.contentOrNull == "content_filter") return Rezultat.Zavrnjeno("content_filter")
+        val besedilo = ((izbira["message"] as? JsonObject)?.get("content") as? JsonPrimitive)?.contentOrNull
+        return if (besedilo.isNullOrEmpty()) Rezultat.Napaka(null, "Manjka besedilo") else Rezultat.Besedilo(besedilo)
+    }
+}
+
+class ClaudeOdjemalec(
+    private val shramba: ShranjevalnikKljuca,
+    private val osnovniNaslov: String = "https://api.anthropic.com",
+    private val model: String = Ponudnik.CLAUDE.model,
+    private val prenos: Prenos = JavaHttpPrenos(),
+) : PonudnikOdjemalec {
+    var spanje: (Long) -> Unit = { Thread.sleep(it) }
+
+    fun gradiTelo(zgodovina: List<Sporocilo>, sistemsko: String): String = buildJsonObject {
+        put("model", model)
+        put("max_tokens", 1024)
+        if (sistemsko.isNotEmpty()) put("system", sistemsko)
+        put("messages", buildJsonArray {
+            for (s in zgodovina) add(buildJsonObject {
+                put("role", if (s.vloga == "model") "assistant" else "user"); put("content", s.besedilo)
+            })
+        })
+    }.toString()
+
+    override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
+        val kljuc = shramba.preberi() ?: return Rezultat.Napaka(null, "Manjka kljuc")
+        val url = "${osnovniNaslov.trimEnd('/')}/v1/messages"
+        val glave = mapOf("x-api-key" to kljuc.izpostavi(), "anthropic-version" to "2023-06-01")
+        return posljiZPonovitvami(prenos, url, glave, gradiTelo(zgodovina, sistemsko), spanje, ::razberi)
+    }
+
+    fun razberi(telo: String): Rezultat {
+        val o = try { json.parseToJsonElement(telo).jsonObject } catch (e: Exception) { return Rezultat.Napaka(null, "Neveljaven JSON") }
+        napakaIzTelesa(o)?.let { return it }
+        if ((o["stop_reason"] as? JsonPrimitive)?.contentOrNull == "refusal") return Rezultat.Zavrnjeno("refusal")
+        val besedilo = (o["content"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.takeIf { b -> (b["type"] as? JsonPrimitive)?.contentOrNull == "text" }?.get("text")?.jsonPrimitive?.contentOrNull }?.joinToString("")
+        return if (besedilo.isNullOrEmpty()) Rezultat.Napaka(null, "Manjka besedilo") else Rezultat.Besedilo(besedilo)
+    }
+}
+
+/** Odjemalec za izbranega ponudnika; naslovi so vgrajeni (Grok: xAI). */
+fun ustvariOdjemalca(p: Ponudnik, shramba: ShranjevalnikKljuca, prenos: Prenos): PonudnikOdjemalec = when (p) {
+    Ponudnik.GEMINI -> GeminiOdjemalec(shramba, prenos = prenos)
+    Ponudnik.OPENAI -> OpenAiOdjemalec(shramba, "https://api.openai.com", Ponudnik.OPENAI.model, prenos)
+    Ponudnik.CLAUDE -> ClaudeOdjemalec(shramba, prenos = prenos)
+    Ponudnik.GROK -> OpenAiOdjemalec(shramba, "https://api.x.ai", Ponudnik.GROK.model, prenos)
+}

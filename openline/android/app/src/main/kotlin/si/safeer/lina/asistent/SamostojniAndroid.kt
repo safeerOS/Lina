@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import si.safeer.lina.samostojna.KljucGemini
 import si.safeer.lina.samostojna.OdgovorHttp
+import si.safeer.lina.samostojna.Ponudnik
 import si.safeer.lina.samostojna.Prenos
 import si.safeer.lina.samostojna.ShranjevalnikKljuca
 import si.safeer.lina.samostojna.Zapisek
@@ -60,7 +61,11 @@ class AndroidPrenos : Prenos {
 private const val SHRAMBA = "lina_asistent"
 
 /** Kljuc Gemini je v shrambi samo kot AES-GCM tajnopis; AES kljuc ne zapusti AndroidKeyStore. Kljuca ne zapisemo nikamor drugam. */
-class KeystoreShranjevalnik(private val context: Context) : ShranjevalnikKljuca {
+class KeystoreShranjevalnik(private val context: Context, ponudnik: Ponudnik = Ponudnik.GEMINI) : ShranjevalnikKljuca {
+    // Gemini ohrani stara imena, da ze shranjen kljuc ostane veljaven po nadgradnji; vsak drug ponudnik ima svoj AES kljuc in zapis.
+    private val ALIAS = if (ponudnik == Ponudnik.GEMINI) "lina_asistent_gemini" else "lina_asistent_${ponudnik.id}"
+    private val KLJUC = if (ponudnik == Ponudnik.GEMINI) "gemini_kljuc" else "${ponudnik.id}_kljuc"
+
     private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
 
     private fun kljucAes(ustvari: Boolean): SecretKey? {
@@ -99,7 +104,13 @@ class KeystoreShranjevalnik(private val context: Context) : ShranjevalnikKljuca 
         try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) } catch (_: Exception) {}
     }
 
-    private companion object { const val ALIAS = "lina_asistent_gemini"; const val KLJUC = "gemini_kljuc" }
+}
+
+/** Izbran ponudnik (ni skrivnost, zato navadne nastavitve). */
+class PonudnikShramba(private val context: Context) {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+    fun beri(): Ponudnik = Ponudnik.izId(prefs().getString("ponudnik", null))
+    fun shrani(p: Ponudnik) { prefs().edit().putString("ponudnik", p.id).apply() }
 }
 
 /** Zapiski na telefonu. Poskodovan zapis se pred prvim novim zapisom shrani kot varnostna kopija, nikoli ne izgine tiho. */

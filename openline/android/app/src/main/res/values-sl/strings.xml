@@ -235,8 +235,10 @@
     <string name="circle_done">Lina je povezana s Safeerjem in vpisana v krog zaupanja Safeer Linka.</string>
     <string name="circle_refused">Lina ni povezana s Safeerjem.</string>
     <string name="circle_failed">Safeer ni mogel povezati Line. Posodobite Safeer in poskusite znova.</string>
-    <string name="local_info">Lina deluje samo v tem telefonu, računalnika ne potrebujete. Ključ Gemini ostane šifriran v telefonu in se pošilja samo Googlu.</string>
-    <string name="local_key_hint">Ključ Gemini API (Google AI Studio)</string>
+    <string name="local_info">Lina deluje samo v tem telefonu, računalnika ne potrebujete. Ključ ostane šifriran v telefonu in se pošilja samo ponudniku, ki ga izberete.</string>
+    <string name="local_key_hint_fmt">Ključ API: %1$s</string>
+    <string name="local_provider">Ponudnik</string>
+    <string name="local_provider_selected">izbran</string>
     <string name="local_key_save">Shrani ključ</string>
     <string name="local_key_bad">To ni videti kot ključ Gemini.</string>
     <string name="local_key_forget">Pozabi ključ</string>
