@@ -243,6 +243,7 @@ class DialerActivity : Activity() {
         numberInput = findViewById(R.id.numberInput)
         findViewById<Button>(R.id.callButton).setOnClickListener { requestOrDial(numberInput.text.toString().trim()) }
         setupContactSearch()
+        setupDialPad()
 
         wsUrlInput = findViewById(R.id.wsUrlInput)
         deviceIdInput = findViewById(R.id.deviceIdInput)
@@ -939,6 +940,45 @@ class DialerActivity : Activity() {
     private val contactExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var contactSeq = 0
     private var contactSuppress = false
+
+    /**
+     * Tipkovnica 3x4 s tipko za brisanje (lastnik 18. 11. 2026: »se vedno mi ne pokaze tipkovnice da lahko klicem«).
+     * Polje za stevilko ne odpira sistemske tipkovnice, da ta ne prekrije tipk; lepljenje in izbira ostaneta.
+     */
+    private fun setupDialPad() {
+        val pad = findViewById<android.widget.GridLayout>(R.id.dialPad)
+        numberInput.showSoftInputOnFocus = false
+        fun tipka(besedilo: String, cinek: () -> Unit, razpon: Boolean = false): Button =
+            Button(this, null, 0, R.style.Gw_Button).apply {
+                text = besedilo
+                textSize = 24f
+                minHeight = dp(56)
+                minimumHeight = dp(56)
+                setOnClickListener { cinek() }
+            }.also {
+                val stolpec = if (razpon) android.widget.GridLayout.spec(0, 3, 1f) else android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1, 1f)
+                pad.addView(it, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED), stolpec).apply { width = 0 })
+            }
+        for (znak in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) {
+            tipka(znak, { vstaviZnak(znak) })
+        }
+        val brisi = tipka("\u232B", { izbrisiZnak() }, razpon = true)
+        brisi.contentDescription = getString(R.string.dial_backspace)
+        brisi.setOnLongClickListener { numberInput.setText(""); true }
+    }
+
+    private fun vstaviZnak(znak: String) {
+        val zacetek = numberInput.selectionStart.coerceAtLeast(0)
+        val konec = numberInput.selectionEnd.coerceAtLeast(zacetek)
+        numberInput.text.replace(zacetek, konec, znak)
+    }
+
+    private fun izbrisiZnak() {
+        val zacetek = numberInput.selectionStart.coerceAtLeast(0)
+        val konec = numberInput.selectionEnd.coerceAtLeast(zacetek)
+        if (konec > zacetek) numberInput.text.delete(zacetek, konec)
+        else if (zacetek > 0) numberInput.text.delete(zacetek - 1, zacetek)
+    }
 
     private fun setupContactSearch() {
         findViewById<TextView>(R.id.contactsAllow).setOnClickListener {

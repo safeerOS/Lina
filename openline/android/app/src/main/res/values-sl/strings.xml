@@ -251,4 +251,5 @@
     <string name="local_err_offline">Ni povezave z Googlom.</string>
     <string name="local_err_generic">Lina ni mogla odgovoriti: %1$s</string>
     <string name="assistant_computer_title">Računalnik (neobvezno)</string>
+    <string name="dial_backspace">Izbriši številko (dolg pritisk izbriše vse)</string>
 </resources>

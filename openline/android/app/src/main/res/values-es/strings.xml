@@ -251,4 +251,5 @@
     <string name="local_err_offline">Sin conexión con Google.</string>
     <string name="local_err_generic">Lina no pudo responder: %1$s</string>
     <string name="assistant_computer_title">Ordenador (opcional)</string>
+    <string name="dial_backspace">Borrar dígito (mantener para borrar todo)</string>
 </resources>

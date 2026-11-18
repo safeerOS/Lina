@@ -251,4 +251,5 @@
     <string name="local_err_offline">Keine Verbindung zu Google.</string>
     <string name="local_err_generic">Lina konnte nicht antworten: %1$s</string>
     <string name="assistant_computer_title">Computer (optional)</string>
+    <string name="dial_backspace">Ziffer löschen (lang drücken: alles löschen)</string>
 </resources>

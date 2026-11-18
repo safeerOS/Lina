@@ -75,6 +75,81 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Dial -->
+            <LinearLayout
+                style="@style/Gw.Panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp">
+
+                <TextView
+                    style="@style/Gw.Heading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/call_from_phone" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="bottom"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/numberInput"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/dial_underline"
+                        android:hint="@string/number_hint"
+                        android:importantForAutofill="no"
+                        android:inputType="phone"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="8dp"
+                        android:textColor="@color/ink"
+                        android:textColorHint="@color/hint"
+                        android:textFontWeight="600"
+                        android:textSize="30sp" />
+
+                    <Button
+                        android:id="@+id/callButton"
+                        style="@style/Gw.Button.Solid"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginBottom="4dp"
+                        android:text="@string/call" />
+                </LinearLayout>
+
+                <!-- Tipkovnica za klicanje: vedno vidna, sistemska tipkovnica se ne odpira (lastnik 18. 11. 2026). -->
+                <GridLayout
+                    android:id="@+id/dialPad"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:columnCount="3" />
+
+                <TextView
+                    android:id="@+id/contactsAllow"
+                    style="@style/Gw.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="48dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/contacts_allow"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/contactResults"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
+            </LinearLayout>
+
             <!-- Setup: a real sequence, so the steps are numbered -->
             <LinearLayout
                 style="@style/Gw.Panel"
@@ -223,73 +298,6 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/stop_clean" />
-            </LinearLayout>
-
-            <!-- Dial -->
-            <LinearLayout
-                style="@style/Gw.Panel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp">
-
-                <TextView
-                    style="@style/Gw.Heading"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/call_from_phone" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="bottom"
-                    android:orientation="horizontal">
-
-                    <EditText
-                        android:id="@+id/numberInput"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:background="@drawable/dial_underline"
-                        android:hint="@string/number_hint"
-                        android:importantForAutofill="no"
-                        android:inputType="phone"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="8dp"
-                        android:textColor="@color/ink"
-                        android:textColorHint="@color/hint"
-                        android:textFontWeight="600"
-                        android:textSize="30sp" />
-
-                    <Button
-                        android:id="@+id/callButton"
-                        style="@style/Gw.Button.Solid"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_marginBottom="4dp"
-                        android:text="@string/call" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/contactsAllow"
-                    style="@style/Gw.Muted"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="?android:attr/selectableItemBackground"
-                    android:minHeight="48dp"
-                    android:gravity="center_vertical"
-                    android:text="@string/contacts_allow"
-                    android:textSize="14sp"
-                    android:visibility="gone" />
-
-                <LinearLayout
-                    android:id="@+id/contactResults"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- Advanced: manual connection, rarely needed after QR pairing -->
