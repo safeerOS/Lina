@@ -83,7 +83,9 @@ class SamostojniPogled(private val a: Activity) {
         for (p in Ponudnik.entries) {
             ponudnikVrstica.addView(
                 Button(a, null, 0, R.style.Gw_Button).apply { tag = p; setOnClickListener { izberiPonudnika(p) } },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                // Gumbi eden pod drugim: pet ponudnikov v eni vrstici se je na telefonu lomilo po crkah (lastnik 18. 11. 2026).
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply { topMargin = (6 * a.resources.displayMetrics.density).toInt() },
             )
         }
     }
