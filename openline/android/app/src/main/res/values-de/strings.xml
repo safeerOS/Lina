@@ -265,4 +265,29 @@
     <string name="tab_phone">Telefon</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
+
+    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <string name="tool_title">Websuche und Verbindungen</string>
+    <string name="tool_info">Optional. Schlüssel bleiben verschlüsselt auf dem Telefon und gehen nur an den eigenen Dienst. Ein Schlüssel wird erst gespeichert, wenn der Dienst ihn akzeptiert.</string>
+    <string name="tool_brave_title">Brave Search (Websuche)</string>
+    <string name="tool_brave_note">Lina sucht damit aktuelle Fakten (Nachrichten, Wetter, Preise). Schlüssel auf api-dashboard.search.brave.com.</string>
+    <string name="tool_brave_hint">Brave-Search-Schlüssel</string>
+    <string name="tool_tinyfish_title">TinyFish (Seiten lesen)</string>
+    <string name="tool_tinyfish_note">Lina liest damit eine öffentliche Webseite, nach der Sie fragen. Schlüssel auf agent.tinyfish.ai/api-keys.</string>
+    <string name="tool_tinyfish_hint">TinyFish-Schlüssel</string>
+    <string name="tool_twilio_title">Twilio (Kontoverbindung)</string>
+    <string name="tool_twilio_note">Das Telefon prüft vorerst nur, ob das Konto funktioniert. Anrufe und SMS über Twilio sind noch nicht enthalten.</string>
+    <string name="tool_twilio_sid_hint">Account SID (beginnt mit AC)</string>
+    <string name="tool_twilio_token_hint">Auth Token</string>
+    <string name="tool_save">Speichern und prüfen</string>
+    <string name="tool_forget">Entfernen</string>
+    <string name="tool_connected">Verbunden</string>
+    <string name="tool_not_connected">Nicht verbunden</string>
+    <string name="tool_checking">Prüfe …</string>
+    <string name="tool_err_key">Der Dienst hat den Schlüssel nicht akzeptiert.</string>
+    <string name="tool_err_net">Keine Verbindung oder der Dienst antwortet nicht.</string>
+    <string name="tool_err_format">Die Eingabe hat nicht das richtige Format.</string>
+    <string name="tool_err_limit">Das Limit des Dienstes ist erreicht. Später erneut versuchen.</string>
+    <string name="tool_err_account">Das Konto ist nicht aktiv.</string>
+    <string name="tool_twilio_connected_fmt">Verbunden: %1$s</string>
 </resources>

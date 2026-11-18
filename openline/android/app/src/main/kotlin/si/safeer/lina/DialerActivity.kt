@@ -229,12 +229,28 @@ class DialerActivity : Activity() {
         super.onPause()
     }
 
+    /** Pomakne polje v fokusu v vidni del drsnega obmocja (nad tipkovnico). */
+    private fun pokaziVDrsnemObmocju(drsno: android.widget.ScrollView, pogled: View) {
+        val r = android.graphics.Rect()
+        pogled.getDrawingRect(r)
+        drsno.offsetDescendantRectToMyCoords(pogled, r)
+        r.inset(0, -(16 * resources.displayMetrics.density).toInt())
+        drsno.requestChildRectangleOnScreen(drsno.getChildAt(0), r, false)
+    }
+
     private fun bindViews() {
         // Zgoraj in ob straneh odmik dobi vsebina, spodnji odmik (navigacijska vrstica sistema) spodnja navigacija.
         findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { view, insets ->
             val b = SistemskeVrstice.odmiki(insets)
-            view.setPadding(b[0], b[1], b[2], 0)
-            findViewById<View>(R.id.navBar).setPadding(b[0], 0, b[2], b[3])
+            // Tipkovnica: ob robu do roba je zaslon ne zmanjsa sam, zato drsno obmocje dobi spodnji odmik v visini tipkovnice,
+            // spodnja navigacija se skrije, polje v fokusu pa se pomakne nad tipkovnico (lastnik 18. 11. 2026: ni videl, kaj tipka).
+            val tipkovnica = SistemskeVrstice.visinaTipkovnice(insets)
+            val nav = findViewById<View>(R.id.navBar)
+            nav.visibility = if (tipkovnica > 0) View.GONE else View.VISIBLE
+            (view as android.view.ViewGroup).clipToPadding = false
+            view.setPadding(b[0], b[1], b[2], tipkovnica)
+            nav.setPadding(b[0], 0, b[2], b[3])
+            if (tipkovnica > 0) view.post { currentFocus?.let { pokaziVDrsnemObmocju(view as android.widget.ScrollView, it) } }
             insets
         }
         connectionDot = findViewById(R.id.connectionDot)

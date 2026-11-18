@@ -265,4 +265,29 @@
     <string name="tab_phone">Teléfono</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Ordenador</string>
+
+    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <string name="tool_title">Búsqueda web y conexiones</string>
+    <string name="tool_info">Opcional. Las claves quedan cifradas en el teléfono y solo se envían a su propio servicio. Una clave se guarda solo cuando el servicio la acepta.</string>
+    <string name="tool_brave_title">Brave Search (búsqueda web)</string>
+    <string name="tool_brave_note">Lina lo usa para buscar datos actuales (noticias, tiempo, precios). Clave en api-dashboard.search.brave.com.</string>
+    <string name="tool_brave_hint">Clave de Brave Search</string>
+    <string name="tool_tinyfish_title">TinyFish (lectura de páginas)</string>
+    <string name="tool_tinyfish_note">Lina lo usa para leer una página web pública que usted pregunte. Clave en agent.tinyfish.ai/api-keys.</string>
+    <string name="tool_tinyfish_hint">Clave de TinyFish</string>
+    <string name="tool_twilio_title">Twilio (vínculo de cuenta)</string>
+    <string name="tool_twilio_note">Por ahora el teléfono solo comprueba que la cuenta funciona. Las llamadas y SMS por Twilio aún no están incluidos.</string>
+    <string name="tool_twilio_sid_hint">Account SID (empieza por AC)</string>
+    <string name="tool_twilio_token_hint">Auth Token</string>
+    <string name="tool_save">Guardar y comprobar</string>
+    <string name="tool_forget">Quitar</string>
+    <string name="tool_connected">Conectado</string>
+    <string name="tool_not_connected">No conectado</string>
+    <string name="tool_checking">Comprobando …</string>
+    <string name="tool_err_key">El servicio no aceptó la clave.</string>
+    <string name="tool_err_net">Sin conexión o el servicio no responde.</string>
+    <string name="tool_err_format">La entrada no tiene el formato correcto.</string>
+    <string name="tool_err_limit">Se alcanzó el límite del servicio. Inténtelo más tarde.</string>
+    <string name="tool_err_account">La cuenta no está activa.</string>
+    <string name="tool_twilio_connected_fmt">Conectado: %1$s</string>
 </resources>

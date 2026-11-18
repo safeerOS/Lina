@@ -71,6 +71,10 @@ class SamostojniPogled(private val a: Activity) {
     private val googleBlok: View = a.findViewById(R.id.assistantGoogleBlock)
     private val googleInfo: TextView = a.findViewById(R.id.assistantGoogleInfo)
     private val googleGumb: Button = a.findViewById(R.id.assistantGoogleSignIn)
+    // Kljuci Brave/TinyFish/Twilio; ob spremembi se asistentka zgradi znova (navodilo omeni samo orodja, ki so na voljo).
+    private val orodjaPogled = OrodjaPogled(a, a.findViewById(R.id.assistantToolsList), prenos, nit, glavna) {
+        asistent = null; pogovor.setLength(0); osvezi()
+    }
 
     init {
         kljucShrani.setOnClickListener { shraniKljuc() }
@@ -215,7 +219,9 @@ class SamostojniPogled(private val a: Activity) {
         if (obstojeci != null && asistentDan == danes) return obstojeci
         // Navodilo vsebuje cas, zato se ob novem dnevu pogovor zacne znova.
         val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(ponudnik, kljuci, prenos)
-        return Asistent(odjemalec, SistemskoNavodilo.zgradi(zdaj)).also { asistent = it; asistentDan = danes }
+        val orodja = orodjaPogled.orodja()
+        val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo)
+        return Asistent(odjemalec, navodilo, orodja = orodja).also { asistent = it; asistentDan = danes }
     }
 
     private fun poslji() {

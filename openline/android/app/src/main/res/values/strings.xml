@@ -265,4 +265,29 @@
     <string name="tab_phone">Phone</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
+
+    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <string name="tool_title">Web search and connections</string>
+    <string name="tool_info">Optional. Keys stay encrypted on the phone and are sent only to their own service. A key is saved only after the service accepts it.</string>
+    <string name="tool_brave_title">Brave Search (web search)</string>
+    <string name="tool_brave_note">Lina uses it to look up current facts (news, weather, prices). Get a key at api-dashboard.search.brave.com.</string>
+    <string name="tool_brave_hint">Brave Search key</string>
+    <string name="tool_tinyfish_title">TinyFish (page reading)</string>
+    <string name="tool_tinyfish_note">Lina uses it to read a public web page you ask about. Get a key at agent.tinyfish.ai/api-keys.</string>
+    <string name="tool_tinyfish_hint">TinyFish key</string>
+    <string name="tool_twilio_title">Twilio (account link)</string>
+    <string name="tool_twilio_note">For now the phone only checks that the account works. Calls and SMS through Twilio are not included yet.</string>
+    <string name="tool_twilio_sid_hint">Account SID (starts with AC)</string>
+    <string name="tool_twilio_token_hint">Auth Token</string>
+    <string name="tool_save">Save and check</string>
+    <string name="tool_forget">Remove</string>
+    <string name="tool_connected">Connected</string>
+    <string name="tool_not_connected">Not connected</string>
+    <string name="tool_checking">Checking …</string>
+    <string name="tool_err_key">The service did not accept the key.</string>
+    <string name="tool_err_net">No connection or the service is not responding.</string>
+    <string name="tool_err_format">The input is not in the right format.</string>
+    <string name="tool_err_limit">The service limit was reached. Try again later.</string>
+    <string name="tool_err_account">The account is not active.</string>
+    <string name="tool_twilio_connected_fmt">Connected: %1$s</string>
 </resources>

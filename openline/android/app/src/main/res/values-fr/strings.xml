@@ -265,4 +265,29 @@
     <string name="tab_phone">Téléphone</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Ordinateur</string>
+
+    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <string name="tool_title">Recherche web et connexions</string>
+    <string name="tool_info">Facultatif. Les clés restent chiffrées sur le téléphone et ne sont envoyées qu\'à leur propre service. Une clé n\'est enregistrée qu\'une fois acceptée par le service.</string>
+    <string name="tool_brave_title">Brave Search (recherche web)</string>
+    <string name="tool_brave_note">Lina s\'en sert pour chercher des faits actuels (actualités, météo, prix). Clé sur api-dashboard.search.brave.com.</string>
+    <string name="tool_brave_hint">Clé Brave Search</string>
+    <string name="tool_tinyfish_title">TinyFish (lecture de pages)</string>
+    <string name="tool_tinyfish_note">Lina s\'en sert pour lire une page web publique que vous demandez. Clé sur agent.tinyfish.ai/api-keys.</string>
+    <string name="tool_tinyfish_hint">Clé TinyFish</string>
+    <string name="tool_twilio_title">Twilio (lien du compte)</string>
+    <string name="tool_twilio_note">Pour l\'instant, le téléphone vérifie seulement que le compte fonctionne. Les appels et SMS via Twilio ne sont pas encore inclus.</string>
+    <string name="tool_twilio_sid_hint">Account SID (commence par AC)</string>
+    <string name="tool_twilio_token_hint">Auth Token</string>
+    <string name="tool_save">Enregistrer et vérifier</string>
+    <string name="tool_forget">Retirer</string>
+    <string name="tool_connected">Connecté</string>
+    <string name="tool_not_connected">Non connecté</string>
+    <string name="tool_checking">Vérification …</string>
+    <string name="tool_err_key">Le service n\'a pas accepté la clé.</string>
+    <string name="tool_err_net">Pas de connexion ou le service ne répond pas.</string>
+    <string name="tool_err_format">La saisie n\'est pas au bon format.</string>
+    <string name="tool_err_limit">La limite du service est atteinte. Réessayez plus tard.</string>
+    <string name="tool_err_account">Le compte n\'est pas actif.</string>
+    <string name="tool_twilio_connected_fmt">Connecté : %1$s</string>
 </resources>

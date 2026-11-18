@@ -265,4 +265,29 @@
     <string name="tab_phone">Telefon</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Računalnik</string>
+
+    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <string name="tool_title">Spletno iskanje in povezave</string>
+    <string name="tool_info">Neobvezno. Ključi ostanejo šifrirani v telefonu in gredo samo na naslov svoje storitve. Ključ se shrani šele, ko ga storitev sprejme.</string>
+    <string name="tool_brave_title">Brave Search (iskanje po spletu)</string>
+    <string name="tool_brave_note">Lina z njim poišče aktualna dejstva (novice, vreme, cene). Ključ dobite na api-dashboard.search.brave.com.</string>
+    <string name="tool_brave_hint">Ključ Brave Search</string>
+    <string name="tool_tinyfish_title">TinyFish (branje spletnih strani)</string>
+    <string name="tool_tinyfish_note">Lina z njim prebere javno spletno stran, ki jo vprašate. Ključ dobite na agent.tinyfish.ai/api-keys.</string>
+    <string name="tool_tinyfish_hint">Ključ TinyFish</string>
+    <string name="tool_twilio_title">Twilio (povezava računa)</string>
+    <string name="tool_twilio_note">Telefon za zdaj samo preveri, da račun deluje. Klici in SMS prek Twilio še niso vključeni.</string>
+    <string name="tool_twilio_sid_hint">Account SID (začne se z AC)</string>
+    <string name="tool_twilio_token_hint">Auth Token</string>
+    <string name="tool_save">Shrani in preveri</string>
+    <string name="tool_forget">Odstrani</string>
+    <string name="tool_connected">Povezano</string>
+    <string name="tool_not_connected">Ni povezano</string>
+    <string name="tool_checking">Preverjam …</string>
+    <string name="tool_err_key">Storitev ključa ni sprejela.</string>
+    <string name="tool_err_net">Ni povezave ali storitev ne odgovarja.</string>
+    <string name="tool_err_format">Vnos ni v pravi obliki.</string>
+    <string name="tool_err_limit">Dosežena je omejitev storitve. Poskusite pozneje.</string>
+    <string name="tool_err_account">Račun ni aktiven.</string>
+    <string name="tool_twilio_connected_fmt">Povezano: %1$s</string>
 </resources>

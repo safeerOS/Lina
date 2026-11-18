@@ -265,4 +265,29 @@
     <string name="tab_phone">Telefono</string>
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
+
+    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <string name="tool_title">Ricerca web e collegamenti</string>
+    <string name="tool_info">Facoltativo. Le chiavi restano cifrate sul telefono e vanno solo al proprio servizio. Una chiave viene salvata solo quando il servizio la accetta.</string>
+    <string name="tool_brave_title">Brave Search (ricerca web)</string>
+    <string name="tool_brave_note">Lina lo usa per cercare fatti attuali (notizie, meteo, prezzi). Chiave su api-dashboard.search.brave.com.</string>
+    <string name="tool_brave_hint">Chiave Brave Search</string>
+    <string name="tool_tinyfish_title">TinyFish (lettura di pagine)</string>
+    <string name="tool_tinyfish_note">Lina lo usa per leggere una pagina web pubblica che chiedete. Chiave su agent.tinyfish.ai/api-keys.</string>
+    <string name="tool_tinyfish_hint">Chiave TinyFish</string>
+    <string name="tool_twilio_title">Twilio (collegamento account)</string>
+    <string name="tool_twilio_note">Per ora il telefono verifica solo che l\'account funzioni. Chiamate e SMS tramite Twilio non sono ancora inclusi.</string>
+    <string name="tool_twilio_sid_hint">Account SID (inizia con AC)</string>
+    <string name="tool_twilio_token_hint">Auth Token</string>
+    <string name="tool_save">Salva e verifica</string>
+    <string name="tool_forget">Rimuovi</string>
+    <string name="tool_connected">Collegato</string>
+    <string name="tool_not_connected">Non collegato</string>
+    <string name="tool_checking">Verifica …</string>
+    <string name="tool_err_key">Il servizio non ha accettato la chiave.</string>
+    <string name="tool_err_net">Nessuna connessione o il servizio non risponde.</string>
+    <string name="tool_err_format">L\'input non è nel formato giusto.</string>
+    <string name="tool_err_limit">Limite del servizio raggiunto. Riprova più tardi.</string>
+    <string name="tool_err_account">L\'account non è attivo.</string>
+    <string name="tool_twilio_connected_fmt">Collegato: %1$s</string>
 </resources>

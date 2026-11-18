@@ -67,10 +67,20 @@ class AndroidPrenos : Prenos {
 private const val SHRAMBA = "lina_asistent"
 
 /** Kljuc Gemini je v shrambi samo kot AES-GCM tajnopis; AES kljuc ne zapusti AndroidKeyStore. Kljuca ne zapisemo nikamor drugam. */
-class KeystoreShranjevalnik(private val context: Context, ponudnik: Ponudnik = Ponudnik.GEMINI) : ShranjevalnikKljuca {
+class KeystoreShranjevalnik private constructor(
+    private val context: Context,
+    private val ALIAS: String,
+    private val KLJUC: String,
+) : ShranjevalnikKljuca {
     // Gemini ohrani stara imena, da ze shranjen kljuc ostane veljaven po nadgradnji; vsak drug ponudnik ima svoj AES kljuc in zapis.
-    private val ALIAS = if (ponudnik == Ponudnik.GEMINI) "lina_asistent_gemini" else "lina_asistent_${ponudnik.id}"
-    private val KLJUC = if (ponudnik == Ponudnik.GEMINI) "gemini_kljuc" else "${ponudnik.id}_kljuc"
+    constructor(context: Context, ponudnik: Ponudnik = Ponudnik.GEMINI) : this(
+        context,
+        if (ponudnik == Ponudnik.GEMINI) "lina_asistent_gemini" else "lina_asistent_${ponudnik.id}",
+        if (ponudnik == Ponudnik.GEMINI) "gemini_kljuc" else "${ponudnik.id}_kljuc",
+    )
+
+    /** Spletna orodja in Twilio (lastnik 18. 11. 2026): vsak svoj AES kljuc in zapis, loceno od kljucev ponudnikov. */
+    constructor(context: Context, orodje: VrstaOrodja) : this(context, "lina_orodje_${orodje.id}", "orodje_${orodje.id}_kljuc")
 
     private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
 
@@ -132,6 +142,18 @@ class GoogleShramba(private val context: Context) {
         p.edit().remove("google_preverjalnik").remove("google_stanje").remove("google_do").apply()
         return if (prev != null && st != null && zdaj < doMs) prev to st else null
     }
+}
+
+/** Orodja s kljucem, ki niso ponudniki AI. */
+enum class VrstaOrodja(val id: String) { BRAVE("brave"), TINYFISH("tinyfish"), TWILIO_ZETON("twilio_zeton") }
+
+/** Twilio Account SID ni skrivnost (zeton je v Keystore), zato navadne nastavitve. */
+class TwilioShramba(private val context: Context) {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+    fun sid(): String? = prefs().getString("twilio_sid", null)
+    fun ime(): String? = prefs().getString("twilio_ime", null)
+    fun shrani(sid: String, ime: String) { prefs().edit().putString("twilio_sid", sid).putString("twilio_ime", ime).apply() }
+    fun izbrisi() { prefs().edit().remove("twilio_sid").remove("twilio_ime").apply() }
 }
 
 /** Izbran ponudnik (ni skrivnost, zato navadne nastavitve). */
