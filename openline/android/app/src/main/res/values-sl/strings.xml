@@ -254,4 +254,12 @@
     <string name="local_err_generic">Lina ni mogla odgovoriti: %1$s</string>
     <string name="assistant_computer_title">Računalnik (neobvezno)</string>
     <string name="dial_backspace">Izbriši številko (dolg pritisk izbriše vse)</string>
+    <string name="local_google_sign_in">Prijava z Google</string>
+    <string name="local_google_info">Prijavi se enkrat. Aplikacija sama poišče tvoj projekt Google Cloud in vklopi Vertex AI.</string>
+    <string name="local_google_working">Prijava poteka…</string>
+    <string name="local_google_pick">Izberi projekt Google Cloud</string>
+    <string name="local_google_signed_in_fmt">Prijavljen v Google Cloud, projekt: %1$s</string>
+    <string name="local_google_err_fmt">Prijava z Google ni uspela: %1$s</string>
+    <string name="local_google_sign_out">Odjava</string>
+    <string name="local_google_relogin">Prijava z Google je potekla. Prijavi se znova.</string>
 </resources>

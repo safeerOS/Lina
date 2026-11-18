@@ -12,6 +12,9 @@ class OdgovorHttp(val koda: Int, val telo: String)
 
 interface Prenos {
     fun post(url: String, glave: Map<String, String>, telo: String, casMs: Long): OdgovorHttp
+
+    /** GET za branje (seznam projektov); privzeto ni podprt, da stari preizkusni prenosi ostanejo veljavni. */
+    fun get(url: String, glave: Map<String, String>, casMs: Long): OdgovorHttp = throw UnsupportedOperationException("get")
 }
 
 class JavaHttpPrenos : Prenos {
@@ -24,12 +27,19 @@ class JavaHttpPrenos : Prenos {
             .uri(URI.create(url))
             .timeout(Duration.ofSeconds(30))
             .POST(HttpRequest.BodyPublishers.ofString(telo))
-            .header("Content-Type", "application/json")
-            
+        // Glava iz klicatelja (npr. obrazec pri zetonu Google) ima prednost pred privzetim JSON.
+        if (glave.keys.none { it.equals("Content-Type", ignoreCase = true) }) zahtevaGraditelj.header("Content-Type", "application/json")
         glave.forEach { (k, v) -> zahtevaGraditelj.header(k, v) }
 
         val zahteva = zahtevaGraditelj.build()
         val odgovor = odjemalec.send(zahteva, HttpResponse.BodyHandlers.ofString())
+        return OdgovorHttp(odgovor.statusCode(), odgovor.body())
+    }
+
+    override fun get(url: String, glave: Map<String, String>, casMs: Long): OdgovorHttp {
+        val g = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofMillis(casMs)).GET()
+        glave.forEach { (k, v) -> g.header(k, v) }
+        val odgovor = odjemalec.send(g.build(), HttpResponse.BodyHandlers.ofString())
         return OdgovorHttp(odgovor.statusCode(), odgovor.body())
     }
 }

@@ -254,4 +254,12 @@
     <string name="local_err_generic">Lina n’a pas pu répondre : %1$s</string>
     <string name="assistant_computer_title">Ordinateur (facultatif)</string>
     <string name="dial_backspace">Effacer le chiffre (appui long : tout effacer)</string>
+    <string name="local_google_sign_in">Se connecter avec Google</string>
+    <string name="local_google_info">Connectez-vous une fois. L\'application trouve votre projet Google Cloud et active Vertex AI elle-même.</string>
+    <string name="local_google_working">Connexion en cours…</string>
+    <string name="local_google_pick">Choisissez un projet Google Cloud</string>
+    <string name="local_google_signed_in_fmt">Connecté à Google Cloud, projet : %1$s</string>
+    <string name="local_google_err_fmt">Échec de la connexion Google : %1$s</string>
+    <string name="local_google_sign_out">Se déconnecter</string>
+    <string name="local_google_relogin">La connexion Google a expiré. Reconnectez-vous.</string>
 </resources>

@@ -472,6 +472,30 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/assistantGoogleBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/assistantGoogleInfo"
+                    style="@style/Gw.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/local_google_info" />
+
+                <Button
+                    android:id="@+id/assistantGoogleSignIn"
+                    style="@style/Gw.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/local_google_sign_in" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/assistantChatBlock"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

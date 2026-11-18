@@ -254,4 +254,12 @@
     <string name="local_err_generic">Lina no pudo responder: %1$s</string>
     <string name="assistant_computer_title">Ordenador (opcional)</string>
     <string name="dial_backspace">Borrar dígito (mantener para borrar todo)</string>
+    <string name="local_google_sign_in">Iniciar sesión con Google</string>
+    <string name="local_google_info">Inicia sesión una vez. La aplicación encuentra tu proyecto de Google Cloud y activa Vertex AI por sí sola.</string>
+    <string name="local_google_working">Iniciando sesión…</string>
+    <string name="local_google_pick">Elige un proyecto de Google Cloud</string>
+    <string name="local_google_signed_in_fmt">Sesión iniciada en Google Cloud, proyecto: %1$s</string>
+    <string name="local_google_err_fmt">Error al iniciar sesión con Google: %1$s</string>
+    <string name="local_google_sign_out">Cerrar sesión</string>
+    <string name="local_google_relogin">La sesión de Google caducó. Inicia sesión de nuevo.</string>
 </resources>

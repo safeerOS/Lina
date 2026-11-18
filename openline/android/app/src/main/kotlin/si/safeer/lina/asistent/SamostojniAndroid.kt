@@ -23,18 +23,24 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Prenos za samostojno asistentko: samo https, brez preusmeritev (kljuc je v glavi zahteve), odgovor omejen na 1 MB + 1 bajt. */
 class AndroidPrenos : Prenos {
-    override fun post(url: String, glave: Map<String, String>, telo: String, casMs: Long): OdgovorHttp {
+    override fun get(url: String, glave: Map<String, String>, casMs: Long): OdgovorHttp = zahteva("GET", url, glave, null, casMs)
+
+    override fun post(url: String, glave: Map<String, String>, telo: String, casMs: Long): OdgovorHttp = zahteva("POST", url, glave, telo, casMs)
+
+    private fun zahteva(metoda: String, url: String, glave: Map<String, String>, telo: String?, casMs: Long): OdgovorHttp {
         if (!url.startsWith("https://")) throw IOException("samo https")
         val c = URL(url).openConnection() as HttpURLConnection
         try {
-            c.requestMethod = "POST"
+            c.requestMethod = metoda
             c.instanceFollowRedirects = false
             c.connectTimeout = 10_000
             c.readTimeout = casMs.toInt()
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json")
+            if (telo != null) {
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json")
+            }
             glave.forEach { (k, v) -> c.setRequestProperty(k, v) }
-            c.outputStream.use { it.write(telo.toByteArray(Charsets.UTF_8)) }
+            if (telo != null) c.outputStream.use { it.write(telo.toByteArray(Charsets.UTF_8)) }
             val koda = c.responseCode
             val tok = if (koda in 200..299) c.inputStream else c.errorStream
             val bajti = tok?.use { omejenoBranje(it, MEJA_ODGOVORA + 1) } ?: ByteArray(0)
@@ -104,6 +110,28 @@ class KeystoreShranjevalnik(private val context: Context, ponudnik: Ponudnik = P
         try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) } catch (_: Exception) {}
     }
 
+}
+
+/**
+ * Google Cloud: izbran projekt (ni skrivnost) in zacetek prijave (PKCE preverjalnik + state, veljata 10 min, po uporabi se
+ * pobriseta). Osvezitveni zeton NI tu, ampak v KeystoreShranjevalnik(Ponudnik.VERTEX).
+ */
+class GoogleShramba(private val context: Context) {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+    fun projekt(): String? = prefs().getString("google_projekt", null)
+    fun shraniProjekt(id: String?) { prefs().edit().apply { if (id == null) remove("google_projekt") else putString("google_projekt", id) }.apply() }
+
+    fun shraniZacetek(preverjalnik: String, stanje: String, doMs: Long) {
+        prefs().edit().putString("google_preverjalnik", preverjalnik).putString("google_stanje", stanje).putLong("google_do", doMs).apply()
+    }
+
+    /** Vrne (preverjalnik, stanje) samo enkrat in samo, dokler ne poteče; nato ga pobrise. */
+    fun vzemiZacetek(zdaj: Long): Pair<String, String>? {
+        val p = prefs()
+        val prev = p.getString("google_preverjalnik", null); val st = p.getString("google_stanje", null); val doMs = p.getLong("google_do", 0)
+        p.edit().remove("google_preverjalnik").remove("google_stanje").remove("google_do").apply()
+        return if (prev != null && st != null && zdaj < doMs) prev to st else null
+    }
 }
 
 /** Izbran ponudnik (ni skrivnost, zato navadne nastavitve). */

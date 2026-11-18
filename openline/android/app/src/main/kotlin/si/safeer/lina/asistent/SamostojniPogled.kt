@@ -10,7 +10,18 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import si.safeer.lina.R
+import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import si.safeer.lina.samostojna.Asistent
+import si.safeer.lina.samostojna.GoogleOAuth
+import si.safeer.lina.samostojna.GoogleZetonOsvezevalnik
+import si.safeer.lina.samostojna.PrijavaGoogle
+import si.safeer.lina.samostojna.ProjektGoogle
+import si.safeer.lina.samostojna.VertexOdjemalec
+import si.safeer.lina.samostojna.poPrijaviGoogle
+import si.safeer.lina.samostojna.vklopiVertex
 import si.safeer.lina.samostojna.Ponudnik
 import si.safeer.lina.samostojna.ustvariOdjemalca
 import si.safeer.lina.samostojna.KljucGemini
@@ -35,6 +46,11 @@ class SamostojniPogled(private val a: Activity) {
     private var ponudnik = ponudnikShramba.beri()
     private var kljuci = KeystoreShranjevalnik(a, ponudnik)
     private val zapiski = ZapiskiShramba(a)
+    private val googleShramba = GoogleShramba(a)
+    private val prenos = AndroidPrenos()
+    // Osvezitveni zeton Google je v Keystore (kot kljuci drugih ponudnikov), dostopni samo v pomnilniku.
+    private val google = GoogleZetonOsvezevalnik(KeystoreShranjevalnik(a, Ponudnik.VERTEX), prenos)
+    private var googleSporocilo: String? = null
     private var asistent: Asistent? = null
     private var asistentDan: LocalDate? = null
     private var caka = false
@@ -52,11 +68,18 @@ class SamostojniPogled(private val a: Activity) {
     private val zapiskiSeznam: LinearLayout = a.findViewById(R.id.assistantNotesList)
     private val kljucPozabi: Button = a.findViewById(R.id.assistantKeyForget)
     private val ponudnikVrstica: LinearLayout = a.findViewById(R.id.assistantProviderRow)
+    private val googleBlok: View = a.findViewById(R.id.assistantGoogleBlock)
+    private val googleInfo: TextView = a.findViewById(R.id.assistantGoogleInfo)
+    private val googleGumb: Button = a.findViewById(R.id.assistantGoogleSignIn)
 
     init {
         kljucShrani.setOnClickListener { shraniKljuc() }
         klepetPosli.setOnClickListener { poslji() }
-        kljucPozabi.setOnClickListener { kljuci.izbrisi(); asistent = null; pogovor.setLength(0); osvezi() }
+        googleGumb.setOnClickListener { zacniPrijavoGoogle() }
+        kljucPozabi.setOnClickListener {
+            if (ponudnik == Ponudnik.VERTEX) { google.odjava(); googleShramba.shraniProjekt(null); googleSporocilo = null } else kljuci.izbrisi()
+            asistent = null; pogovor.setLength(0); osvezi()
+        }
         for (p in Ponudnik.entries) {
             ponudnikVrstica.addView(
                 Button(a, null, 0, R.style.Gw_Button).apply { tag = p; setOnClickListener { izberiPonudnika(p) } },
@@ -75,11 +98,62 @@ class SamostojniPogled(private val a: Activity) {
         pogovor.setLength(0)
         kljucVnos.setText("")
         kljucVnos.error = null
+        googleSporocilo = null
         osvezi()
     }
 
+    private fun jeVertex() = ponudnik == Ponudnik.VERTEX
+    private fun imaDostop() = if (jeVertex()) google.prijavljen() && googleShramba.projekt() != null else kljuci.preberi() != null
+
+    /** Prijava v brskalniku (OAuth PKCE); brez gesla v aplikaciji. Vrnitev obdela obdelajPovezavo. */
+    private fun zacniPrijavoGoogle() {
+        if (caka) return
+        val z = GoogleOAuth.zacni()
+        googleShramba.shraniZacetek(z.preverjalnik, z.stanje, System.currentTimeMillis() + 10 * 60_000L)
+        googleSporocilo = a.getString(R.string.local_google_working)
+        osvezi()
+        try { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(z.naslov))) }
+        catch (e: ActivityNotFoundException) { googleSporocilo = a.getString(R.string.local_google_err_fmt, "brskalnik"); osvezi() }
+    }
+
+    /** Vrnitev iz brskalnika: koda -> zeton -> projekt -> Vertex. Napaka se pokaze z razlogom, ne tiho. */
+    fun obdelajPovezavo(povezava: String) {
+        val zacetek = googleShramba.vzemiZacetek(System.currentTimeMillis())
+        val koda = zacetek?.let { GoogleOAuth.kodaIzPovezave(povezava, it.second) }
+        if (zacetek == null || koda == null) { googleSporocilo = a.getString(R.string.local_google_err_fmt, "state"); osvezi(); return }
+        googleSporocilo = a.getString(R.string.local_google_working); osvezi()
+        nit.execute {
+            val zetona = GoogleOAuth.zamenjajKodo(prenos, koda, zacetek.first)
+            val izid = if (zetona == null) PrijavaGoogle.Napaka("koda")
+            else { google.nastavi(zetona); poPrijaviGoogle(zetona.dostop, prenos, googleShramba.projekt()) }
+            glavna.post { if (!a.isFinishing) obdelajIzid(izid, zetona?.dostop) }
+        }
+    }
+
+    private fun obdelajIzid(izid: PrijavaGoogle, zeton: String?) {
+        when (izid) {
+            is PrijavaGoogle.Pripravljeno -> { googleShramba.shraniProjekt(izid.projekt.id); googleSporocilo = null; asistent = null; pogovor.setLength(0) }
+            is PrijavaGoogle.Napaka -> { google.odjava(); googleSporocilo = a.getString(R.string.local_google_err_fmt, izid.sporocilo) }
+            is PrijavaGoogle.Izbira -> { izberiProjekt(izid.projekti, zeton ?: return); return }
+        }
+        osvezi()
+    }
+
+    private fun izberiProjekt(projekti: List<ProjektGoogle>, zeton: String) {
+        AlertDialog.Builder(a).setTitle(R.string.local_google_pick)
+            .setItems(projekti.map { "${it.ime} (${it.id})" }.toTypedArray()) { _, i ->
+                nit.execute {
+                    val izid = vklopiVertex(zeton, prenos, projekti[i])
+                    glavna.post { if (!a.isFinishing) obdelajIzid(izid, zeton) }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> google.odjava(); googleSporocilo = null; osvezi() }
+            .setOnCancelListener { google.odjava(); googleSporocilo = null; osvezi() }
+            .show()
+    }
+
     fun osvezi() {
-        val imaKljuc = kljuci.preberi() != null
+        val imaKljuc = imaDostop()
         info.text = a.getString(R.string.local_info)
         kljucVnos.hint = a.getString(R.string.local_key_hint_fmt, ponudnik.oznaka)
         for (i in 0 until ponudnikVrstica.childCount) {
@@ -92,7 +166,11 @@ class SamostojniPogled(private val a: Activity) {
             b.contentDescription = if (izbran) "${p.oznaka}, ${a.getString(R.string.local_provider_selected)}" else p.oznaka
             b.isEnabled = !caka
         }
-        kljucBlok.visibility = if (imaKljuc) View.GONE else View.VISIBLE
+        kljucBlok.visibility = if (imaKljuc || jeVertex()) View.GONE else View.VISIBLE
+        googleBlok.visibility = if (!imaKljuc && jeVertex()) View.VISIBLE else View.GONE
+        googleInfo.text = googleSporocilo ?: a.getString(R.string.local_google_info)
+        googleGumb.isEnabled = !caka
+        kljucPozabi.text = if (jeVertex()) a.getString(R.string.local_google_sign_out) else a.getString(R.string.local_key_forget)
         klepetBlok.visibility = if (imaKljuc) View.VISIBLE else View.GONE
         kljucPozabi.visibility = if (imaKljuc) View.VISIBLE else View.GONE
         klepetDnevnik.text = pogovor.toString()
@@ -134,7 +212,8 @@ class SamostojniPogled(private val a: Activity) {
         val obstojeci = asistent
         if (obstojeci != null && asistentDan == danes) return obstojeci
         // Navodilo vsebuje cas, zato se ob novem dnevu pogovor zacne znova.
-        return Asistent(ustvariOdjemalca(ponudnik, kljuci, AndroidPrenos()), SistemskoNavodilo.zgradi(zdaj)).also { asistent = it; asistentDan = danes }
+        val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(ponudnik, kljuci, prenos)
+        return Asistent(odjemalec, SistemskoNavodilo.zgradi(zdaj)).also { asistent = it; asistentDan = danes }
     }
 
     private fun poslji() {
@@ -164,8 +243,12 @@ class SamostojniPogled(private val a: Activity) {
                         zapiski.shrani(dodajZapisek(zapiski.beri(), tekst, System.currentTimeMillis(), UUID.randomUUID().toString()))
                         a.getString(R.string.local_note_saved, tekst)
                     }
-                    is Odgovor.Napaka -> if (odgovor.sporocilo == "Brez povezave") a.getString(R.string.local_err_offline)
-                        else a.getString(R.string.local_err_generic, odgovor.sporocilo)
+                    is Odgovor.Napaka -> when (odgovor.sporocilo) {
+                        "Brez povezave" -> a.getString(R.string.local_err_offline)
+                        // Google je preklical osvezitveni zeton: nazaj na prijavo, pogovor ostane.
+                        "Prijava poteka" -> { google.odjava(); googleSporocilo = a.getString(R.string.local_google_relogin); a.getString(R.string.local_google_relogin) }
+                        else -> a.getString(R.string.local_err_generic, odgovor.sporocilo)
+                    }
                 }
                 dodajVrstico(a.getString(R.string.local_lina), besedilo)
                 caka = false

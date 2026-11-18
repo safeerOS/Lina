@@ -57,6 +57,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Vrnitev prijave z Google (OAuth PKCE): shema je ID odjemalca Android, glej GoogleOAuth. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.googleusercontent.apps.292650165087-vqd78tu81h2o55i9vfa3uobs64m58hv4" android:path="/oauth2redirect" />
+            </intent-filter>
+
             <!-- ACTION_DIAL without a URI must resolve to the default dialer. -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />

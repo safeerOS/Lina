@@ -254,4 +254,12 @@
     <string name="local_err_generic">Lina could not answer: %1$s</string>
     <string name="assistant_computer_title">Computer (optional)</string>
     <string name="dial_backspace">Delete digit (hold to clear)</string>
+    <string name="local_google_sign_in">Sign in with Google</string>
+    <string name="local_google_info">Sign in once. The app finds your Google Cloud project and turns on Vertex AI by itself.</string>
+    <string name="local_google_working">Signing in…</string>
+    <string name="local_google_pick">Choose a Google Cloud project</string>
+    <string name="local_google_signed_in_fmt">Signed in to Google Cloud, project: %1$s</string>
+    <string name="local_google_err_fmt">Google sign-in failed: %1$s</string>
+    <string name="local_google_sign_out">Sign out</string>
+    <string name="local_google_relogin">Google sign-in expired. Please sign in again.</string>
 </resources>

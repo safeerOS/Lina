@@ -183,6 +183,12 @@ class DialerActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // Vrnitev prijave z Google (shema ID odjemalca): samo to povezavo obdela asistent, drugo gre po starem.
+        if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
+            showTab(assistant = true)
+            samostojniPogled.obdelajPovezavo(intent.data.toString())
+            return
+        }
         fillAdvancedFields()
         applyDialIntent(intent)
         applyPairingIntent(intent)
@@ -371,6 +377,11 @@ class DialerActivity : Activity() {
         findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
         findViewById<Button>(R.id.assistantDenyButton).setOnClickListener { asistent.odgovori(dovoli = false) }
         showTab(assistant = false)
+        // Proces je bil med prijavo v brskalniku ubit: vrnitev pride v onCreate namesto onNewIntent.
+        if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
+            showTab(assistant = true)
+            samostojniPogled.obdelajPovezavo(intent.data.toString())
+        }
     }
 
     private fun showTab(assistant: Boolean) {

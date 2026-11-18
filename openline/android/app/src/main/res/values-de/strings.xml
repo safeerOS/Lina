@@ -254,4 +254,12 @@
     <string name="local_err_generic">Lina konnte nicht antworten: %1$s</string>
     <string name="assistant_computer_title">Computer (optional)</string>
     <string name="dial_backspace">Ziffer löschen (lang drücken: alles löschen)</string>
+    <string name="local_google_sign_in">Mit Google anmelden</string>
+    <string name="local_google_info">Einmal anmelden. Die App findet Ihr Google-Cloud-Projekt und aktiviert Vertex AI selbst.</string>
+    <string name="local_google_working">Anmeldung läuft…</string>
+    <string name="local_google_pick">Google-Cloud-Projekt wählen</string>
+    <string name="local_google_signed_in_fmt">Bei Google Cloud angemeldet, Projekt: %1$s</string>
+    <string name="local_google_err_fmt">Google-Anmeldung fehlgeschlagen: %1$s</string>
+    <string name="local_google_sign_out">Abmelden</string>
+    <string name="local_google_relogin">Google-Anmeldung abgelaufen. Bitte erneut anmelden.</string>
 </resources>

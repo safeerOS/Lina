@@ -22,7 +22,9 @@ enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
     GEMINI("gemini", "Gemini", "gemini-2.5-flash"),
     OPENAI("openai", "OpenAI", "gpt-4.1-mini"),
     CLAUDE("claude", "Claude", "claude-sonnet-4-5"),
-    GROK("grok", "Grok", "grok-4");
+    GROK("grok", "Grok", "grok-4"),
+    /** Prijava z Google racunom (Vertex AI); namesto kljuca zeton Google. */
+    VERTEX("vertex", "Google Cloud", "gemini-2.5-flash");
 
     companion object {
         fun izId(id: String?): Ponudnik = entries.firstOrNull { it.id == id } ?: GEMINI
@@ -32,7 +34,7 @@ enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
 private val json = Json { ignoreUnknownKeys = true }
 
 /** Skupna zanka: do 3 poskusov pri 429 in 5xx, drugace takoj; odgovor nad 1 MB je zavrnjen. Kljuca nikoli ne vstavi v sporocilo napake. */
-private fun posljiZPonovitvami(
+internal fun posljiZPonovitvami(
     prenos: Prenos, url: String, glave: Map<String, String>, telo: String, spanje: (Long) -> Unit,
     razberi: (String) -> Rezultat,
 ): Rezultat {
@@ -147,4 +149,6 @@ fun ustvariOdjemalca(p: Ponudnik, shramba: ShranjevalnikKljuca, prenos: Prenos):
     Ponudnik.OPENAI -> OpenAiOdjemalec(shramba, "https://api.openai.com", Ponudnik.OPENAI.model, prenos)
     Ponudnik.CLAUDE -> ClaudeOdjemalec(shramba, prenos = prenos)
     Ponudnik.GROK -> OpenAiOdjemalec(shramba, "https://api.x.ai", Ponudnik.GROK.model, prenos)
+    // Vertex ne uporablja kljuca: odjemalca gradi aplikacija z zetonom Google (glej VertexOdjemalec).
+    Ponudnik.VERTEX -> throw IllegalArgumentException("Vertex: uporabi VertexOdjemalec")
 }
