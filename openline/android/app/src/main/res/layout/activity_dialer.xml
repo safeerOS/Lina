@@ -62,7 +62,7 @@
                 style="@style/Gw.Panel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp">
+                android:layout_marginTop="0dp">
 
                 <TextView
                     style="@style/Gw.Heading"
@@ -111,7 +111,7 @@
                     android:id="@+id/numberInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="4dp"
                     android:background="@null"
                     android:gravity="center"
                     android:hint="@string/number_hint"
@@ -123,7 +123,7 @@
                     android:textColor="@color/ink"
                     android:textColorHint="@color/hint"
                     android:textFontWeight="500"
-                    android:textSize="32sp" />
+                    android:textSize="30sp" />
 
                 <GridLayout
                     android:id="@+id/dialPad"
@@ -135,7 +135,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="4dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -146,8 +146,8 @@
 
                     <ImageButton
                         android:id="@+id/callButton"
-                        android:layout_width="72dp"
-                        android:layout_height="72dp"
+                        android:layout_width="68dp"
+                        android:layout_height="68dp"
                         android:background="@drawable/btn_call_round"
                         android:contentDescription="@string/call"
                         android:src="@drawable/ic_call" />
@@ -302,7 +302,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:orientation="horizontal">
+                    android:orientation="vertical">
 
                     <Button
                         android:id="@+id/saveConfigButton"
@@ -316,7 +316,7 @@
                         style="@style/Gw.Button"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="8dp"
                         android:text="@string/restart_audio" />
                 </LinearLayout>
             </LinearLayout>

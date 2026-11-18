@@ -1004,9 +1004,9 @@ class DialerActivity : Activity() {
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1, 1f),
             ).apply {
-                width = dp(72); height = dp(72)
+                width = dp(62); height = dp(62)
                 setGravity(android.view.Gravity.CENTER)
-                setMargins(0, dp(4), 0, dp(4))
+                setMargins(0, dp(2), 0, dp(2))
             })
         }
         val brisi = findViewById<View>(R.id.backspaceButton)
