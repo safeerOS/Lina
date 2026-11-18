@@ -24,6 +24,7 @@
     <string name="save_lina">Lina speichern</string>
     <string name="stop_clean">Stoppen und löschen</string>
     <string name="call_from_phone">Anruf von diesem Telefon</string>
+    <string name="contact_search_hint">Kontakte nach Namen suchen</string>
     <string name="number_hint">Nummer</string>
     <string name="call">Anrufen</string>
     <string name="contacts_allow">Zugriff auf Kontakte erlauben, um nach Namen zu suchen</string>
@@ -40,9 +41,8 @@
     <string name="role_done">Diese App verwaltet die Anrufe des Telefons.</string>
     <string name="role_needed">Erforderlich zum Telefonieren und Annehmen von Anrufen.</string>
     <string name="set">Festlegen</string>
-    <string name="battery_done">Erlaubt. Auf Vivo außerdem unter Akku, dann Stromverbrauch im Hintergrund, die Option „Zulassen“ für Lina wählen.</string>
+    <string name="battery_done">Erlaubt. Lina bleibt im Hintergrund verbunden.</string>
     <string name="battery_needed">Ohne dies verliert das Telefon nach wenigen Minuten die Verbindung zum Gateway.</string>
-    <string name="vivo_setting">Vivo-Einstellung</string>
     <string name="allow">Zulassen</string>
     <string name="battery_manual">Einstellungen öffnen, dann Apps, Lina, Akku</string>
     <string name="server_scan">Scannen Sie den QR-Code aus der Admin-Konsole.</string>
@@ -56,7 +56,7 @@
     <string name="audio_stopped_wifi">Gestoppt. Verbinden Sie sich einmal mit einem WLAN, um zu starten; danach genügen mobile Daten.</string>
     <string name="start">Starten</string>
     <string name="audio_stopped">Eingerichtet, aber gestoppt.</string>
-    <string name="audio_setup">Einmaliges Koppeln mit dem kabellosen Debugging.</string>
+    <string name="audio_setup">Damit Lina im Anruf hören und sprechen kann, erlaube einmalig eine besondere Verbindung in den Telefoneinstellungen. Die Schaltfläche führt dich Schritt für Schritt.</string>
     <string name="set_up">Einrichten</string>
     <string name="audio_starting">Wird gestartet …</string>
     <string name="wifi_title">Mit einem WLAN verbinden</string>

@@ -24,6 +24,7 @@
     <string name="save_lina">Salva Lina</string>
     <string name="stop_clean">Interrompi e cancella</string>
     <string name="call_from_phone">Chiama da questo telefono</string>
+    <string name="contact_search_hint">Cerca contatto per nome</string>
     <string name="number_hint">Numero</string>
     <string name="call">Chiama</string>
     <string name="contacts_allow">Consenti l’accesso ai contatti per cercare per nome</string>
@@ -40,9 +41,8 @@
     <string name="role_done">Questa app gestisce le chiamate del telefono.</string>
     <string name="role_needed">Necessario per effettuare e ricevere chiamate.</string>
     <string name="set">Imposta</string>
-    <string name="battery_done">Consentito. Su Vivo imposta anche Batteria, poi Consumo energetico in background, su Consenti per Lina.</string>
+    <string name="battery_done">Consentito. Lina resta connessa in background.</string>
     <string name="battery_needed">Senza questa impostazione il telefono si disconnette dal gateway dopo pochi minuti.</string>
-    <string name="vivo_setting">Impostazione Vivo</string>
     <string name="allow">Consenti</string>
     <string name="battery_manual">Apri Impostazioni, poi App, Lina, Batteria</string>
     <string name="server_scan">Scansiona il codice QR mostrato nella console di amministrazione.</string>
@@ -56,7 +56,7 @@
     <string name="audio_stopped_wifi">Interrotto. Connettiti una volta a una rete Wi-Fi per avviarlo; dopo bastano i dati mobili.</string>
     <string name="start">Avvia</string>
     <string name="audio_stopped">Configurato, ma interrotto.</string>
-    <string name="audio_setup">Associazione una tantum con il debug wireless.</string>
+    <string name="audio_setup">Perché Lina senta e parli durante la chiamata, consenti una sola volta una connessione speciale nelle impostazioni del telefono. Il pulsante ti guida passo dopo passo.</string>
     <string name="set_up">Configura</string>
     <string name="audio_starting">Avvio in corso…</string>
     <string name="wifi_title">Connettiti a una rete Wi-Fi</string>

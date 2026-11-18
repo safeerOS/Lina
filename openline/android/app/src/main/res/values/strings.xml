@@ -24,6 +24,7 @@
     <string name="save_lina">Save Lina</string>
     <string name="stop_clean">Stop and wipe</string>
     <string name="call_from_phone">Call from this phone</string>
+    <string name="contact_search_hint">Search contacts by name</string>
     <string name="number_hint">Number</string>
     <string name="call">Call</string>
     <string name="contacts_allow">Allow access to contacts to search by name</string>
@@ -40,9 +41,8 @@
     <string name="role_done">This app handles the phone\'s calls.</string>
     <string name="role_needed">Needed to place and answer calls.</string>
     <string name="set">Set</string>
-    <string name="battery_done">Allowed. On Vivo, also set Battery, then Background power consumption, to Allow for Lina.</string>
+    <string name="battery_done">Allowed. Lina stays connected in the background.</string>
     <string name="battery_needed">Without this the phone drops off the gateway after a few minutes.</string>
-    <string name="vivo_setting">Vivo setting</string>
     <string name="allow">Allow</string>
     <string name="battery_manual">Open Settings, then Apps, then Lina, then Battery</string>
     <string name="server_scan">Scan the QR code shown in the admin console.</string>
@@ -56,7 +56,7 @@
     <string name="audio_stopped_wifi">Stopped. Connect to a Wi-Fi network once to start it; mobile data is fine after that.</string>
     <string name="start">Start</string>
     <string name="audio_stopped">Set up, but stopped.</string>
-    <string name="audio_setup">One-time pairing with Wireless debugging.</string>
+    <string name="audio_setup">So Lina can hear and speak during a call, allow one special connection in the phone settings, once. The button guides you step by step.</string>
     <string name="set_up">Set up</string>
     <string name="audio_starting">Starting…</string>
     <string name="wifi_title">Connect to a Wi-Fi network</string>

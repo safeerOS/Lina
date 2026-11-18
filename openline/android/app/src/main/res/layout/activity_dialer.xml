@@ -57,7 +57,7 @@
             android:layout_marginTop="16dp"
             android:orientation="vertical">
 
-            <!-- Dial -->
+            <!-- Klicalnik po vzoru aplikacije Telefon (lastnik 18. 11. 2026): iskanje po imenu, stevilka, okrogle tipke, zeleni gumb. -->
             <LinearLayout
                 style="@style/Gw.Panel"
                 android:layout_width="match_parent"
@@ -70,57 +70,32 @@
                     android:layout_height="wrap_content"
                     android:text="@string/call_from_phone" />
 
-                <LinearLayout
+                <EditText
+                    android:id="@+id/contactQuery"
+                    style="@style/Gw.Field"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:gravity="bottom"
-                    android:orientation="horizontal">
-
-                    <EditText
-                        android:id="@+id/numberInput"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:background="@drawable/dial_underline"
-                        android:hint="@string/number_hint"
-                        android:importantForAutofill="no"
-                        android:inputType="phone"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="8dp"
-                        android:textColor="@color/ink"
-                        android:textColorHint="@color/hint"
-                        android:textFontWeight="600"
-                        android:textSize="30sp" />
-
-                    <Button
-                        android:id="@+id/callButton"
-                        style="@style/Gw.Button.Solid"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_marginBottom="4dp"
-                        android:text="@string/call" />
-                </LinearLayout>
-
-                <!-- Tipkovnica za klicanje: vedno vidna, sistemska tipkovnica se ne odpira (lastnik 18. 11. 2026). -->
-                <GridLayout
-                    android:id="@+id/dialPad"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:columnCount="3" />
+                    android:drawableStart="@android:drawable/ic_menu_search"
+                    android:drawablePadding="8dp"
+                    android:hint="@string/contact_search_hint"
+                    android:importantForAutofill="no"
+                    android:imeOptions="actionSearch"
+                    android:inputType="textPersonName|textCapWords"
+                    android:maxLines="1"
+                    android:textColorHint="@color/hint" />
 
                 <TextView
                     android:id="@+id/contactsAllow"
                     style="@style/Gw.Muted"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="4dp"
                     android:background="?android:attr/selectableItemBackground"
-                    android:minHeight="48dp"
                     android:gravity="center_vertical"
+                    android:minHeight="48dp"
                     android:text="@string/contacts_allow"
+                    android:textColor="@color/accent"
                     android:textSize="14sp"
                     android:visibility="gone" />
 
@@ -130,6 +105,71 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:visibility="gone" />
+
+                <!-- Stevilka: velika, na sredini; sistemska tipkovnica se tu ne odpira (tipke spodaj). -->
+                <EditText
+                    android:id="@+id/numberInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@null"
+                    android:gravity="center"
+                    android:hint="@string/number_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="phone"
+                    android:maxLines="1"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:textColor="@color/ink"
+                    android:textColorHint="@color/hint"
+                    android:textFontWeight="500"
+                    android:textSize="32sp" />
+
+                <GridLayout
+                    android:id="@+id/dialPad"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:columnCount="3" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <ImageButton
+                        android:id="@+id/callButton"
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:background="@drawable/btn_call_round"
+                        android:contentDescription="@string/call"
+                        android:src="@drawable/ic_call" />
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="72dp"
+                        android:layout_weight="1">
+
+                        <Button
+                            android:id="@+id/backspaceButton"
+                            style="@style/Gw.Button"
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            android:layout_gravity="center"
+                            android:background="@drawable/key_round"
+                            android:contentDescription="@string/dial_backspace"
+                            android:padding="0dp"
+                            android:text="⌫"
+                            android:textSize="22sp" />
+                    </FrameLayout>
+                </LinearLayout>
             </LinearLayout>
 
         </LinearLayout>

@@ -24,6 +24,7 @@
     <string name="save_lina">Guardar Lina</string>
     <string name="stop_clean">Detener y borrar</string>
     <string name="call_from_phone">Llamar desde este teléfono</string>
+    <string name="contact_search_hint">Buscar contacto por nombre</string>
     <string name="number_hint">Número</string>
     <string name="call">Llamar</string>
     <string name="contacts_allow">Permitir el acceso a los contactos para buscar por nombre</string>
@@ -40,9 +41,8 @@
     <string name="role_done">Esta aplicación gestiona las llamadas del teléfono.</string>
     <string name="role_needed">Necesario para hacer y recibir llamadas.</string>
     <string name="set">Establecer</string>
-    <string name="battery_done">Permitido. En Vivo, configure también Batería, luego Consumo de energía en segundo plano, en Permitir para Lina.</string>
+    <string name="battery_done">Permitido. Lina sigue conectada en segundo plano.</string>
     <string name="battery_needed">Sin esto, el teléfono se desconecta de la pasarela tras unos minutos.</string>
-    <string name="vivo_setting">Ajuste de Vivo</string>
     <string name="allow">Permitir</string>
     <string name="battery_manual">Abra Ajustes, luego Aplicaciones, Lina, Batería</string>
     <string name="server_scan">Escanee el código QR que se muestra en la consola de administración.</string>
@@ -56,7 +56,7 @@
     <string name="audio_stopped_wifi">Detenido. Conéctese una vez a una red Wi-Fi para iniciarlo; después bastan los datos móviles.</string>
     <string name="start">Iniciar</string>
     <string name="audio_stopped">Configurado, pero detenido.</string>
-    <string name="audio_setup">Vinculación única con la depuración inalámbrica.</string>
+    <string name="audio_setup">Para que Lina oiga y hable en la llamada, permite una vez una conexión especial en los ajustes del teléfono. El botón te guía paso a paso.</string>
     <string name="set_up">Configurar</string>
     <string name="audio_starting">Iniciando…</string>
     <string name="wifi_title">Conéctese a una red Wi-Fi</string>

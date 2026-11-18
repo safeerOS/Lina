@@ -24,6 +24,7 @@
     <string name="save_lina">Shrani Lina</string>
     <string name="stop_clean">Ustavi in počisti</string>
     <string name="call_from_phone">Klic s tega telefona</string>
+    <string name="contact_search_hint">Išči po imenu v imeniku</string>
     <string name="number_hint">Številka</string>
     <string name="call">Pokliči</string>
     <string name="contacts_allow">Dovoli dostop do imenika za iskanje po imenu</string>
@@ -40,9 +41,8 @@
     <string name="role_done">Ta aplikacija obravnava klice telefona.</string>
     <string name="role_needed">Potrebno za klicanje in sprejemanje.</string>
     <string name="set">Nastavi</string>
-    <string name="battery_done">Dovoljeno. Na Vivo še Baterija, nato Poraba v ozadju, dovoli za Lino.</string>
+    <string name="battery_done">Dovoljeno. Lina ostane povezana v ozadju.</string>
     <string name="battery_needed">Brez tega telefon po nekaj minutah pade s prehoda.</string>
-    <string name="vivo_setting">Nastavitev Vivo</string>
     <string name="allow">Dovoli</string>
     <string name="battery_manual">Odpri Nastavitve, Aplikacije, Lina, Baterija</string>
     <string name="server_scan">Skeniraj kodo QR iz skrbniške konzole.</string>
@@ -56,7 +56,7 @@
     <string name="audio_stopped_wifi">Ustavljeno. Enkrat se povežite na Wi-Fi; potem zadoščajo mobilni podatki.</string>
     <string name="start">Zaženi</string>
     <string name="audio_stopped">Nastavljeno, a ustavljeno.</string>
-    <string name="audio_setup">Enkratno seznanjanje z brezžičnim odpravljanjem napak.</string>
+    <string name="audio_setup">Da Lina v klicu sliši in govori, enkrat dovoli posebno povezavo v nastavitvah telefona. Gumb te vodi po korakih.</string>
     <string name="set_up">Nastavi</string>
     <string name="audio_starting">Zaganjam…</string>
     <string name="wifi_title">Povežite se na omrežje Wi-Fi</string>

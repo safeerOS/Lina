@@ -24,6 +24,7 @@
     <string name="save_lina">Enregistrer Lina</string>
     <string name="stop_clean">Arrêter et effacer</string>
     <string name="call_from_phone">Appeler depuis ce téléphone</string>
+    <string name="contact_search_hint">Rechercher un contact par nom</string>
     <string name="number_hint">Numéro</string>
     <string name="call">Appeler</string>
     <string name="contacts_allow">Autoriser l’accès aux contacts pour chercher par nom</string>
@@ -40,9 +41,8 @@
     <string name="role_done">Cette application gère les appels du téléphone.</string>
     <string name="role_needed">Nécessaire pour passer et recevoir des appels.</string>
     <string name="set">Définir</string>
-    <string name="battery_done">Autorisé. Sur Vivo, réglez aussi Batterie, puis Consommation d’énergie en arrière-plan, sur Autoriser pour Lina.</string>
+    <string name="battery_done">Autorisé. Lina reste connectée en arrière-plan.</string>
     <string name="battery_needed">Sans cela, le téléphone se déconnecte de la passerelle au bout de quelques minutes.</string>
-    <string name="vivo_setting">Réglage Vivo</string>
     <string name="allow">Autoriser</string>
     <string name="battery_manual">Ouvrez Paramètres, puis Applications, Lina, Batterie</string>
     <string name="server_scan">Scannez le code QR affiché dans la console d’administration.</string>
@@ -56,7 +56,7 @@
     <string name="audio_stopped_wifi">Arrêté. Connectez-vous une fois à un réseau Wi-Fi pour le démarrer ; ensuite, les données mobiles suffisent.</string>
     <string name="start">Démarrer</string>
     <string name="audio_stopped">Configuré, mais arrêté.</string>
-    <string name="audio_setup">Association unique avec le débogage sans fil.</string>
+    <string name="audio_setup">Pour que Lina entende et parle pendant l’appel, autorisez une seule fois une connexion spéciale dans les réglages du téléphone. Le bouton vous guide pas à pas.</string>
     <string name="set_up">Configurer</string>
     <string name="audio_starting">Démarrage…</string>
     <string name="wifi_title">Connectez-vous à un réseau Wi-Fi</string>

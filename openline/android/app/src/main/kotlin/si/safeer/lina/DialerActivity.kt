@@ -96,6 +96,7 @@ class DialerActivity : Activity() {
     private lateinit var connectionDot: View
     private lateinit var connectionText: TextView
     private lateinit var numberInput: EditText
+    private lateinit var contactQuery: EditText
     private lateinit var wsUrlInput: EditText
     private lateinit var deviceIdInput: EditText
     private lateinit var deviceTokenInput: EditText
@@ -254,7 +255,7 @@ class DialerActivity : Activity() {
         }
 
         numberInput = findViewById(R.id.numberInput)
-        findViewById<Button>(R.id.callButton).setOnClickListener { requestOrDial(numberInput.text.toString().trim()) }
+        findViewById<View>(R.id.callButton).setOnClickListener { requestOrDial(numberInput.text.toString().trim()) }
         setupContactSearch()
         setupDialPad()
 
@@ -770,7 +771,8 @@ class DialerActivity : Activity() {
             } else {
                 getString(R.string.battery_needed)
             },
-            actionText = if (exempt) getString(R.string.vivo_setting) else getString(R.string.allow),
+            // Ko je izjema za baterijo ze dovoljena (na Samsungu to pomeni »Neomejeno«), nadaljnjega koraka ni (lastnik 18. 11. 2026).
+            actionText = if (exempt) null else getString(R.string.allow),
         )
     }
 
@@ -974,22 +976,41 @@ class DialerActivity : Activity() {
     private fun setupDialPad() {
         val pad = findViewById<android.widget.GridLayout>(R.id.dialPad)
         numberInput.showSoftInputOnFocus = false
-        fun tipka(besedilo: String, cinek: () -> Unit, razpon: Boolean = false): Button =
-            Button(this, null, 0, R.style.Gw_Button).apply {
-                text = besedilo
-                textSize = 24f
-                minHeight = dp(56)
-                minimumHeight = dp(56)
-                setOnClickListener { cinek() }
-            }.also {
-                val stolpec = if (razpon) android.widget.GridLayout.spec(0, 3, 1f) else android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1, 1f)
-                pad.addView(it, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED), stolpec).apply { width = 0 })
+        val ink = getColor(R.color.ink)
+        val muted = getColor(R.color.muted)
+        for (tipka in si.safeer.lina.protocol.DialKeys.ALL) {
+            // Stevilka velika, crke pod njo majhne (kot v aplikaciji Telefon).
+            val besedilo = android.text.SpannableStringBuilder(tipka.digit).apply {
+                setSpan(android.text.style.AbsoluteSizeSpan(28, true), 0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(ink), 0, length, 0)
+                if (tipka.letters.isNotEmpty()) {
+                    val od = length
+                    append("\n").append(tipka.letters)
+                    setSpan(android.text.style.AbsoluteSizeSpan(10, true), od, length, 0)
+                    setSpan(android.text.style.ForegroundColorSpan(muted), od, length, 0)
+                }
             }
-        for (znak in listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")) {
-            tipka(znak, { vstaviZnak(znak) })
+            val gumb = Button(this, null, 0, R.style.Gw_Button).apply {
+                text = besedilo
+                background = getDrawable(R.drawable.key_round)
+                setPadding(0, 0, 0, 0)
+                minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
+                setLineSpacing(0f, 0.9f)
+                contentDescription = if (tipka.letters.isEmpty()) tipka.digit else tipka.digit + " " + tipka.letters
+                setOnClickListener { vstaviZnak(tipka.digit) }
+                if (tipka.digit == "0") setOnLongClickListener { vstaviZnak("+"); true }
+            }
+            pad.addView(gumb, android.widget.GridLayout.LayoutParams(
+                android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
+                android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1, 1f),
+            ).apply {
+                width = dp(72); height = dp(72)
+                setGravity(android.view.Gravity.CENTER)
+                setMargins(0, dp(4), 0, dp(4))
+            })
         }
-        val brisi = tipka("\u232B", { izbrisiZnak() }, razpon = true)
-        brisi.contentDescription = getString(R.string.dial_backspace)
+        val brisi = findViewById<View>(R.id.backspaceButton)
+        brisi.setOnClickListener { izbrisiZnak() }
         brisi.setOnLongClickListener { numberInput.setText(""); true }
     }
 
@@ -1007,19 +1028,28 @@ class DialerActivity : Activity() {
     }
 
     private fun setupContactSearch() {
+        contactQuery = findViewById(R.id.contactQuery)
         findViewById<TextView>(R.id.contactsAllow).setOnClickListener {
             requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), REQUEST_CONTACTS)
         }
-        numberInput.addTextChangedListener(object : android.text.TextWatcher {
+        val opazovalec = object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) {
                 if (!contactSuppress) refreshContactSearch()
             }
-        })
+        }
+        numberInput.addTextChangedListener(opazovalec)
+        contactQuery.addTextChangedListener(opazovalec)
+        contactQuery.setOnEditorActionListener { v, _, _ ->
+            getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                .hideSoftInputFromWindow(v.windowToken, 0)
+            true
+        }
         refreshContactSearch()
     }
 
+    /** Iskanje po imenu (polje na vrhu) ali po stevilkah, vpisanih na tipkovnici; prednost ima ime (lastnik 18. 11. 2026). */
     private fun refreshContactSearch() {
         val allow = findViewById<TextView>(R.id.contactsAllow)
         val results = findViewById<android.widget.LinearLayout>(R.id.contactResults)
@@ -1029,7 +1059,7 @@ class DialerActivity : Activity() {
             return
         }
         allow.visibility = View.GONE
-        val query = numberInput.text.toString()
+        val query = contactQuery.text.toString().ifBlank { numberInput.text.toString() }
         val seq = ++contactSeq
         if (query.trim().length < 2) {
             results.removeAllViews(); results.visibility = View.GONE
@@ -1047,18 +1077,28 @@ class DialerActivity : Activity() {
                     })
                 }
                 rows.forEach { row ->
-                    results.addView(TextView(this).apply {
-                        text = row.name + "  " + row.number
-                        setTextColor(getColor(R.color.ink)); textSize = 17f
-                        minHeight = dp(48); gravity = android.view.Gravity.CENTER_VERTICAL
-                        setPadding(0, dp(4), 0, dp(4))
+                    results.addView(android.widget.LinearLayout(this).apply {
+                        orientation = android.widget.LinearLayout.VERTICAL
+                        minimumHeight = dp(56)
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        setPadding(dp(4), dp(6), dp(4), dp(6))
                         isClickable = true; isFocusable = true
                         setBackgroundResource(android.R.drawable.list_selector_background)
+                        addView(TextView(context).apply {
+                            text = row.name; setTextColor(getColor(R.color.ink)); textSize = 17f
+                        })
+                        addView(TextView(context).apply {
+                            text = row.number; setTextColor(getColor(R.color.muted)); textSize = 14f
+                        })
                         setOnClickListener {
+                            // Stevilka iz imenika gre v polje za klicanje; ime se pocisti, da se seznam skrije.
                             contactSuppress = true
+                            contactQuery.setText("")
                             numberInput.setText(row.number); numberInput.setSelection(numberInput.text.length)
                             contactSuppress = false
                             results.removeAllViews(); results.visibility = View.GONE
+                            getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                                .hideSoftInputFromWindow(windowToken, 0)
                         }
                     })
                 }
