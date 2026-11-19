@@ -33,10 +33,11 @@ enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
 
 private val json = Json { ignoreUnknownKeys = true }
 
-/** Skupna zanka: do 3 poskusov pri 429 in 5xx, drugace takoj; odgovor nad 1 MB je zavrnjen. Kljuca nikoli ne vstavi v sporocilo napake. */
+/** Skupna zanka: privzeto do 3 poskusov pri 429 in 5xx, drugace takoj; odgovor nad 1 MB je zavrnjen. Kljuca nikoli ne vstavi v sporocilo napake. */
 internal fun posljiZPonovitvami(
     prenos: Prenos, url: String, glave: Map<String, String>, telo: String, spanje: (Long) -> Unit,
     razberi: (String) -> Rezultat,
+    najvecPoskusov: Int = 3,
 ): Rezultat {
     var poskusi = 0
     var odlogMs = 500L
@@ -57,7 +58,7 @@ internal fun posljiZPonovitvami(
             return if (odgovor.koda != 200 && r is Rezultat.Besedilo) Rezultat.Napaka(odgovor.koda, "Napaka ${odgovor.koda}") else r
         }
         poskusi++
-        if (poskusi >= 3) return razberi(odgovor.telo).let { if (it is Rezultat.Besedilo) Rezultat.Napaka(odgovor.koda, "Napaka ${odgovor.koda}") else it }
+        if (poskusi >= najvecPoskusov) return razberi(odgovor.telo).let { if (it is Rezultat.Besedilo) Rezultat.Napaka(odgovor.koda, "Napaka ${odgovor.koda}") else it }
         spanje(odlogMs)
         odlogMs += 1000L
     }

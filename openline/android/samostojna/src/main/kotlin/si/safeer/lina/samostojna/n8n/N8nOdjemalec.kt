@@ -56,7 +56,9 @@ class N8nOdjemalec(
             glave = glave,
             telo = teloJson,
             spanje = spanje,
-            razberi = { telo -> Rezultat.Besedilo(telo) }
+            razberi = { telo -> Rezultat.Besedilo(telo) },
+            // Webhook lahko sprozi dejanje, ki ni idempotentno (poslano sporocilo, rezervacija): brez samodejne ponovitve.
+            najvecPoskusov = 1
         )
 
         return when (rez) {

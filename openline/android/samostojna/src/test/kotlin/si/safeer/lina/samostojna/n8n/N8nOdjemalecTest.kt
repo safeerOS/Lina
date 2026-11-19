@@ -106,18 +106,17 @@ class N8nOdjemalecTest {
     }
 
     @Test
-    fun `ponovitev ob 503`() {
+    fun `ob 503 ni samodejne ponovitve, ker dejanje ni idempotentno`() {
         val prenos = LazenPrenos().apply {
             odgovori.add(OdgovorHttp(503, "Napaka"))
             odgovori.add(OdgovorHttp(200, "Uspelo"))
         }
         val odjemalec = N8nOdjemalec(prenos, N8nNastavitve("https://moj.n8n.com", null)).apply { spanje = {} }
-        
+
         val izid = odjemalec.sprozi("test", emptyMap(), true)
-        
-        assertTrue(izid is IzidN8n.Uspeh)
-        assertEquals("Uspelo", (izid as IzidN8n.Uspeh).odgovorKratek)
-        assertEquals(2, prenos.klici)
+
+        assertTrue(izid is IzidN8n.Napaka)
+        assertEquals(1, prenos.klici)
     }
 
     @Test
