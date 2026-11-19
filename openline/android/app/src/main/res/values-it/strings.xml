@@ -35,7 +35,10 @@
     <string name="stop_message">L’assistente audio è stato interrotto e la chiave locale è stata eliminata. La chiave sul telefono non è stata rimossa. In Impostazioni, Opzioni sviluppatore, Debug wireless, dimentica il dispositivo associato e disattiva il debug wireless.</string>
     <string name="open_wireless">Apri Debug wireless</string>
     <string name="close">Chiudi</string>
-    <string name="not_connected">Non connesso a un gateway</string>
+    <string name="lina_answers_pc">Lina risponde tramite il computer</string>
+    <string name="lina_answers_local">Lina risponde su questo telefono</string>
+    <string name="lina_silent_no_key">Lina resta in silenzio: aggiungi una chiave in Impostazioni</string>
+    <string name="lina_silent_no_role">Lina resta in silenzio: richiesta app per le chiamate predefinita</string>
     <string name="online_at">Online su %1$s</string>
     <string name="cant_reach">Impossibile raggiungere %1$s. Nuovo tentativo in corso.</string>
     <string name="role_done">Questa app gestisce le chiamate del telefono.</string>

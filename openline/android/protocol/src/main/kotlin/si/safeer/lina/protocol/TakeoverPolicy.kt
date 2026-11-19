@@ -11,6 +11,8 @@ enum class TakeoverPhase { RINGING, DIALING, ACTIVE, ENDED, OTHER }
 
 enum class TakeoverVerdict { TAKE, WAIT, REFUSE }
 
+enum class PotPrevzema { RACUNALNIK, SAMOSTOJNO, NI }
+
 data class TakeoverFacts(
     val direction: TakeoverDirection,
     val phase: TakeoverPhase,
@@ -65,6 +67,12 @@ object TakeoverPolicy {
         // Stikalo je za preizkus. Pred njim ostanejo sila, smer, rocni dvig in drug klic.
         if (!mayTakeOver(facts.number, facts.allowlist, facts.allowlistEnabled)) return TakeoverVerdict.REFUSE
         if (facts.ringingForMs < facts.ringTimeoutMs) return TakeoverVerdict.WAIT
+        return TakeoverVerdict.TAKE
+    }
+
+    fun allowTake(verdict: TakeoverVerdict, freshPingOk: Boolean, pot: PotPrevzema): TakeoverVerdict {
+        if (verdict != TakeoverVerdict.TAKE) return verdict
+        if (!freshPingOk || pot == PotPrevzema.NI) return TakeoverVerdict.REFUSE
         return TakeoverVerdict.TAKE
     }
 

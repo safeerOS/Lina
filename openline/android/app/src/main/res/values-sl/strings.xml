@@ -35,7 +35,10 @@
     <string name="stop_message">Lupina je ustavljena in lokalni ključ je izbrisan. Ključa na telefonu nisem odstranil. V Nastavitve, Možnosti za razvijalce, Brezžično odpravljanje napak odstrani seznanjeno napravo in izklopi brezžično odpravljanje napak.</string>
     <string name="open_wireless">Odpri brezžično odpravljanje napak</string>
     <string name="close">Zapri</string>
-    <string name="not_connected">Ni povezave s prehodom</string>
+    <string name="lina_answers_pc">Lina odgovarja prek računalnika</string>
+    <string name="lina_answers_local">Lina odgovarja sama v tem telefonu</string>
+    <string name="lina_silent_no_key">Lina se ne oglasi: dodajte ključ v Nastavitvah</string>
+    <string name="lina_silent_no_role">Lina se ne oglasi: potrebna je privzeta aplikacija za klice</string>
     <string name="online_at">Povezan na %1$s</string>
     <string name="cant_reach">%1$s ni dosegljiv. Ponovno poskušam.</string>
     <string name="role_done">Ta aplikacija obravnava klice telefona.</string>

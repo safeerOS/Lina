@@ -301,13 +301,25 @@ class GatewayInCallService : InCallService() {
         when (val verdict = evaluate(callId, call)) {
             TakeoverVerdict.TAKE -> Thread {
                 val fresh = runCatching { ShellClient(this).ping() != null }.getOrDefault(false)
+                
+                val pot = when {
+                    GatewayRuntime.isConnected() -> si.safeer.lina.protocol.PotPrevzema.RACUNALNIK
+                    SamostojnaPripravljenost.jePripravljena(this) -> si.safeer.lina.protocol.PotPrevzema.SAMOSTOJNO
+                    else -> si.safeer.lina.protocol.PotPrevzema.NI
+                }
+                
                 handler.post {
                     val still = CallRegistry.get(callId) ?: return@post
-                    if (!RingTimeoutGate.admit(verdict, fresh, GatewayRuntime.isConnected(), evaluate(callId, still))) {
+                    if (!RingTimeoutGate.admit(verdict, fresh, pot, evaluate(callId, still))) {
                         return@post
                     }
                     LinaCallGate.announce(callId)
-                    GatewayRuntime.emitCallAdded(callId, still)
+                    
+                    if (pot == si.safeer.lina.protocol.PotPrevzema.SAMOSTOJNO) {
+                        LokalniKrmilnik(this).emitCallAdded(callId, still)
+                    } else {
+                        GatewayRuntime.emitCallAdded(callId, still)
+                    }
                 }
             }.start()
             TakeoverVerdict.WAIT -> armRingTimer(callId, call, reschedule = true)

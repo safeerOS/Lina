@@ -25,7 +25,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-object GatewayRuntime {
+object GatewayRuntime : si.safeer.lina.telecom.CallEventSink {
     private const val MAX_QUEUED_EVENTS = 100
     private const val HEALTH_INTERVAL_SECONDS = 60L
 
@@ -143,7 +143,7 @@ object GatewayRuntime {
         connectFromStoredConfig()
     }
 
-    fun emitCallAdded(callId: String, call: Call) {
+    override fun emitCallAdded(callId: String, call: Call) {
         emit(
             callId = callId,
             event = "call.new",
@@ -152,7 +152,7 @@ object GatewayRuntime {
         emitCallState(callId, call)
     }
 
-    fun emitCallState(callId: String, call: Call) {
+    override fun emitCallState(callId: String, call: Call) {
         val state = CallRegistry.stateWireName(call)
         if (state == "unknown") return
         val event = if (state == "disconnected" && CallRegistry.wasRejected(callId)) {
@@ -167,7 +167,7 @@ object GatewayRuntime {
         )
     }
 
-    fun emitCallRemoved(callId: String, call: Call) {
+    override fun emitCallRemoved(callId: String, call: Call) {
         val disconnectCause = call.details.disconnectCause
         emit(
             callId = callId,

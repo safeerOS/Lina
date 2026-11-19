@@ -2,3 +2,12 @@ build/
 .gradle/
 local.properties
 node_modules/
+.naloge/
+*.keystore
+*.jks
+*.pem
+*.key
+*.p12
+.env
+*.log
+*.orig

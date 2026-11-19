@@ -35,7 +35,10 @@
     <string name="stop_message">Der Audio-Helfer wurde gestoppt und der lokale Schlüssel gelöscht. Der Schlüssel auf dem Telefon wurde nicht entfernt. Entfernen Sie unter Einstellungen, Entwickleroptionen, Kabelloses Debugging das gekoppelte Gerät und schalten Sie das kabellose Debugging aus.</string>
     <string name="open_wireless">Kabelloses Debugging öffnen</string>
     <string name="close">Schließen</string>
-    <string name="not_connected">Nicht mit einem Gateway verbunden</string>
+    <string name="lina_answers_pc">Lina antwortet über den Computer</string>
+    <string name="lina_answers_local">Lina antwortet auf diesem Telefon</string>
+    <string name="lina_silent_no_key">Lina bleibt stumm: Fügen Sie einen Schlüssel in den Einstellungen hinzu</string>
+    <string name="lina_silent_no_role">Lina bleibt stumm: Standard-Telefon-App erforderlich</string>
     <string name="online_at">Online bei %1$s</string>
     <string name="cant_reach">%1$s ist nicht erreichbar. Neuer Versuch läuft.</string>
     <string name="role_done">Diese App verwaltet die Anrufe des Telefons.</string>

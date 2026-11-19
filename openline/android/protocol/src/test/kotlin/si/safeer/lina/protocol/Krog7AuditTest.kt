@@ -351,10 +351,10 @@ class Krog7AuditTest {
         manual.markManual("klic")
         assertFalse(manual.confirmOwnedOnActive("klic"))
         assertFalse(manual.isOwned("klic"))
-        assertFalse(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = false, gatewayConnected = true, still = TakeoverVerdict.TAKE))
-        assertFalse(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = true, gatewayConnected = false, still = TakeoverVerdict.TAKE))
-        assertFalse(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = true, gatewayConnected = true, still = TakeoverVerdict.REFUSE))
-        assertTrue(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = true, gatewayConnected = true, still = TakeoverVerdict.TAKE))
+        assertFalse(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = false, pot = PotPrevzema.RACUNALNIK, still = TakeoverVerdict.TAKE))
+        assertFalse(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = true, pot = PotPrevzema.NI, still = TakeoverVerdict.TAKE))
+        assertFalse(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = true, pot = PotPrevzema.RACUNALNIK, still = TakeoverVerdict.REFUSE))
+        assertTrue(RingTimeoutGate.admit(TakeoverVerdict.TAKE, freshPing = true, pot = PotPrevzema.RACUNALNIK, still = TakeoverVerdict.TAKE))
     }
 
     @Test

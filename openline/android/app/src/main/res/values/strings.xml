@@ -35,7 +35,10 @@
     <string name="stop_message">The audio helper is stopped and the local key is deleted. The key on the phone was not removed. In Settings, Developer options, Wireless debugging, forget the paired device and turn wireless debugging off.</string>
     <string name="open_wireless">Open Wireless debugging</string>
     <string name="close">Close</string>
-    <string name="not_connected">Not connected to a gateway</string>
+    <string name="lina_answers_pc">Lina answers via computer</string>
+    <string name="lina_answers_local">Lina answers on this phone</string>
+    <string name="lina_silent_no_key">Lina stays silent: add a key in Settings</string>
+    <string name="lina_silent_no_role">Lina stays silent: default dialer required</string>
     <string name="online_at">Online at %1$s</string>
     <string name="cant_reach">Can\'t reach %1$s. Retrying.</string>
     <string name="role_done">This app handles the phone\'s calls.</string>

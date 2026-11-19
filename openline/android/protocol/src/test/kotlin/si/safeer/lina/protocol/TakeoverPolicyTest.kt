@@ -123,6 +123,33 @@ class TakeoverPolicyTest {
         )
     }
 
+    @Test
+    fun `dovoljenje za prevzem po poti prevzema in svezem pingu`() {
+        assertEquals(TakeoverVerdict.TAKE, TakeoverPolicy.allowTake(TakeoverVerdict.TAKE, freshPingOk = true, pot = PotPrevzema.RACUNALNIK))
+        assertEquals(TakeoverVerdict.TAKE, TakeoverPolicy.allowTake(TakeoverVerdict.TAKE, freshPingOk = true, pot = PotPrevzema.SAMOSTOJNO))
+        assertEquals(TakeoverVerdict.REFUSE, TakeoverPolicy.allowTake(TakeoverVerdict.TAKE, freshPingOk = true, pot = PotPrevzema.NI))
+        assertEquals(TakeoverVerdict.REFUSE, TakeoverPolicy.allowTake(TakeoverVerdict.TAKE, freshPingOk = false, pot = PotPrevzema.SAMOSTOJNO))
+        assertEquals(TakeoverVerdict.WAIT, TakeoverPolicy.allowTake(TakeoverVerdict.WAIT, freshPingOk = true, pot = PotPrevzema.SAMOSTOJNO))
+    }
+
+    @Test
+    fun `onRingTimeout z lazno potjo SAMOSTOJNO prevzame po 25 s`() {
+        // Tabela potPrevzema x verdict x sveza lupina za samostojno pot (25 s = privzeto)
+        val f = facts(ringingForMs = 25_000, allowlist = list)
+        val eval = TakeoverPolicy.evaluate(f)
+        assertEquals(TakeoverVerdict.TAKE, eval)
+        val koncni = TakeoverPolicy.allowTake(eval, freshPingOk = true, pot = PotPrevzema.SAMOSTOJNO)
+        assertEquals(TakeoverVerdict.TAKE, koncni)
+        
+        // Ob rocno dvignjenem klicu NE
+        val rocno = TakeoverPolicy.evaluate(facts(ringingForMs = 25_000, manuallyAnswered = true, phase = TakeoverPhase.ACTIVE))
+        assertEquals(TakeoverVerdict.REFUSE, rocno)
+        
+        // Nujna stevilka NE
+        val nujna = TakeoverPolicy.evaluate(facts(ringingForMs = 25_000, number = "112"))
+        assertEquals(TakeoverVerdict.REFUSE, nujna)
+    }
+
     private fun facts(
         direction: TakeoverDirection = TakeoverDirection.INCOMING,
         phase: TakeoverPhase = TakeoverPhase.RINGING,

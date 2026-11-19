@@ -141,11 +141,11 @@ object RingTimeoutGate {
     fun admit(
         evaluated: TakeoverVerdict,
         freshPing: Boolean,
-        gatewayConnected: Boolean,
+        pot: PotPrevzema,
         still: TakeoverVerdict,
     ): Boolean {
         if (evaluated != TakeoverVerdict.TAKE || still != TakeoverVerdict.TAKE) return false
-        return TakeoverPolicy.allowTake(TakeoverVerdict.TAKE, freshPing, gatewayConnected) == TakeoverVerdict.TAKE
+        return TakeoverPolicy.allowTake(TakeoverVerdict.TAKE, freshPing, pot) == TakeoverVerdict.TAKE
     }
 }
 

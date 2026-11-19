@@ -51,4 +51,6 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
     // QR pairing with the admin console (Google code scanner: no camera permission needed).
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
 }

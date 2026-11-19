@@ -35,7 +35,10 @@
     <string name="stop_message">El ayudante de audio se ha detenido y la clave local se ha borrado. La clave del teléfono no se ha eliminado. En Ajustes, Opciones de desarrollador, Depuración inalámbrica, olvide el dispositivo vinculado y desactive la depuración inalámbrica.</string>
     <string name="open_wireless">Abrir Depuración inalámbrica</string>
     <string name="close">Cerrar</string>
-    <string name="not_connected">Sin conexión con una pasarela</string>
+    <string name="lina_answers_pc">Lina contesta a través del ordenador</string>
+    <string name="lina_answers_local">Lina contesta en este teléfono</string>
+    <string name="lina_silent_no_key">Lina se queda en silencio: añada una clave en Ajustes</string>
+    <string name="lina_silent_no_role">Lina se queda en silencio: se requiere la aplicación de llamadas por defecto</string>
     <string name="online_at">En línea en %1$s</string>
     <string name="cant_reach">No se puede acceder a %1$s. Reintentando.</string>
     <string name="role_done">Esta aplicación gestiona las llamadas del teléfono.</string>

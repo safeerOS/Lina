@@ -35,7 +35,10 @@
     <string name="stop_message">L’assistant audio est arrêté et la clé locale est supprimée. La clé présente sur le téléphone n’a pas été retirée. Dans Paramètres, Options pour les développeurs, Débogage sans fil, oubliez l’appareil associé et désactivez le débogage sans fil.</string>
     <string name="open_wireless">Ouvrir le débogage sans fil</string>
     <string name="close">Fermer</string>
-    <string name="not_connected">Non connecté à une passerelle</string>
+    <string name="lina_answers_pc">Lina répond via l\'ordinateur</string>
+    <string name="lina_answers_local">Lina répond sur ce téléphone</string>
+    <string name="lina_silent_no_key">Lina reste silencieuse : ajoutez une clé dans les Paramètres</string>
+    <string name="lina_silent_no_role">Lina reste silencieuse : application d\'appel par défaut requise</string>
     <string name="online_at">En ligne sur %1$s</string>
     <string name="cant_reach">Impossible de joindre %1$s. Nouvelle tentative en cours.</string>
     <string name="role_done">Cette application gère les appels du téléphone.</string>

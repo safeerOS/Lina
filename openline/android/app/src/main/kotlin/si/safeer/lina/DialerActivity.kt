@@ -792,12 +792,17 @@ class DialerActivity : Activity() {
 
     private fun renderConnection() {
         val config = configStore.load()
+        val isDefault = getSystemService(android.app.role.RoleManager::class.java).isRoleHeld(android.app.role.RoleManager.ROLE_DIALER)
+        val pcConnected = GatewayRuntime.isConnected()
+        val localReady = si.safeer.lina.telecom.SamostojnaPripravljenost.jePripravljena(this)
+        
         val host = config.wsUrl.let { runCatching { Uri.parse(it).host }.getOrNull() } ?: config.wsUrl
         val (color, text) = when {
             pairingMessage != null -> R.color.ring to pairingMessage!!
-            config.deviceToken.isBlank() -> R.color.line to getString(R.string.not_connected)
-            GatewayRuntime.isConnected() -> R.color.live to getString(R.string.online_at, host)
-            else -> R.color.bad to getString(R.string.cant_reach, host)
+            pcConnected -> R.color.live to getString(R.string.lina_answers_pc)
+            !isDefault -> R.color.bad to getString(R.string.lina_silent_no_role)
+            localReady -> R.color.live to getString(R.string.lina_answers_local)
+            else -> R.color.line to getString(R.string.lina_silent_no_key)
         }
         connectionDot.backgroundTintList = ColorStateList.valueOf(getColor(color))
         connectionText.text = text
