@@ -16,14 +16,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Testi (JVM, brez prave seje in brez skrivnosti)
         run: ./gradlew :protocol:test :podpis:test :seznanitev:test :samostojna:test --no-daemon --stacktrace
       - name: Gradnja APK (debug, nepodpisan)
@@ -33,12 +33,12 @@ jobs:
           mkdir -p ../../izid
           cp app/build/outputs/apk/debug/*.apk ../../izid/ || true
           sha256sum ../../izid/*.apk | tee ../../izid/SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lina-apk-debug
           path: izid/
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: testna-porocila
