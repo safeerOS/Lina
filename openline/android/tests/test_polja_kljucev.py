@@ -73,6 +73,7 @@ def test_zavihek_lina_je_pogovor_kljuci_so_v_nastavitvah():
     assert "@+id/navSettings" in lay and "navAssistant" not in lay
     dej = (KOT / "DialerActivity.kt").read_text(encoding="utf-8")
     assert "Zavihek.NASTAVITVE to findViewById<Button>(R.id.navSettings)" in dej
+    assert "for ((z, b) in navButtons) b.setOnClickListener { showTab(z) }" in dej, "vsak gumb navigacije odpre svoj zavihek"
     assert "showTab(Zavihek.NASTAVITVE)" in dej.split("private fun odpriNastavitveKljucev()")[1].split("}")[0]
 
 
