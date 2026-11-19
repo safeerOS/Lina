@@ -399,12 +399,12 @@ class GeminiLiveOdjemalecTest {
         }
         
         // pred setupComplete ni bilo poslano se nobeno avdio sporocilo
-        assertTrue(ujetaSporocila.none { it.contains("realtimeInput") || it.contains("clientContent") })
+        assertTrue(ujetaSporocila.none { it.contains("audio/pcm") || it.contains("clientContent") })
         
         Thread.sleep(1000) // cakamo da nit klice setupComplete
         
         // Po setupComplete je bilo poslanih najvec 100 okvirjev (omejitev vrste)
-        val poslanihAudio = ujetaSporocila.count { it.contains("realtimeInput") }
+        val poslanihAudio = ujetaSporocila.count { it.contains("audio/pcm") }
         assertEquals(100, poslanihAudio)
         
         // prav tako ne sme biti clientContent

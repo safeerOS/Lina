@@ -229,19 +229,8 @@ class GeminiLiveOdjemalec(
             }
             if (doSend) {
                 // "Ob dvigu klica poslji modelu uvodni stavek (Lina se predstavi)"
-                val uvod = """
-                {
-                    "clientContent": {
-                        "turns": [
-                            {
-                                "role": "user",
-                                "parts": [{"text": "Lina se predstavi."}]
-                            }
-                        ],
-                        "turnComplete": true
-                    }
-                }
-                """.trimIndent()
+                // gemini-3.8-live: besedilo gre prek realtimeInput.text (ai.google.dev, get-started-websocket)
+                val uvod = """{"realtimeInput":{"text":"Lina se predstavi."}}"""
                 ws?.posiljiBesedilo(uvod)
                 
                 for (okvir in zaPosiljanje) {
