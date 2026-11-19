@@ -271,7 +271,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private val prenosPoPoti = si.safeer.lina.samostojna.PrenosPoPoti()
 
     /** Samodejna izbira poti (LAN, nato rele) kot v Safeer OS; rele za asistentko na telefonu se doda, ko obstaja prenos. */
-    private fun povezava(): IzbirnaPovezava? = AsistentShramba.beri(context)?.let { IzbirnaPovezava(HttpPovezavaZLino(it), null, prenosPoPoti) }
+    private fun povezava(): IzbirnaPovezava? = AsistentShramba.beri(context)?.let { IzbirnaPovezava(HttpPovezavaZLino(it), null, null, prenosPoPoti) }
 
     private fun naGlavni(delo: () -> Unit) = glavna.post { if (!ustavljen) { delo(); obSpremembi() } }
 

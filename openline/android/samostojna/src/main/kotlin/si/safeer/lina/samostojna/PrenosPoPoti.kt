@@ -1,21 +1,21 @@
 package si.safeer.lina.samostojna
 
 /**
- * Samodejna izbira poti kot v Safeer OS (core/link_neposredno.py, link_mesh.py): najprej kratek poskus domace poti (LAN),
- * ob neuspehu TAKOJ rezerva (rele Global Linka). Neuspeh poti se zapomni (IzbiraPoti: premor 300 s, podvaja do 1800 s,
- * sprememba omrezja ga izbrise); pot je "dobra" sele po uspesnem odgovoru. Uporabnik poti nikoli ne izbira.
- * [lan] / [rele] vrneta null, ce pot ni dosegljiva (strezniski odgovor, tudi napaka 4xx, je dosegljivost).
+ * Samodejna izbira poti kot v Safeer OS (core/link_neposredno.py, link_mesh.py). Vrstni red od najhitrejse:
+ * LAN -> GLOBAL_NEPOSREDNO (odhodna povezava TCP naravnost do doma, brez releja) -> RELE (rezerva). Pri pogovoru v zivo
+ * je pomemben vsak ms, zato rele ni nikoli pred neposredno potjo, ki deluje. Neuspeh poti se zapomni (IzbiraPoti: premor
+ * 300 s, podvaja do 1800 s, sprememba omrezja ga izbrise): uporabnik caka kvecjemu enkrat. Poti, ki je ni (null), ni.
+ * Vsaka pot vrne null, ce ni dosegljiva (strezniski odgovor, tudi napaka 4xx, je dosegljivost).
  */
 class PrenosPoPoti(private val izbira: IzbiraPoti = IzbiraPoti()) {
-    /** Vrne odgovor ali null, ce ni dosegljiva nobena pot. [rele] je null, ce Global Link ni nastavljen. */
-    fun <T : Any> izvedi(lan: () -> T?, rele: (() -> T?)?): T? {
-        val lanVPremoru = izbira.jeVPremoru(Pot.LAN)
-        val vrstniRed = if (lanVPremoru && rele != null) listOf(Pot.RELE to rele, Pot.LAN to lan)
-        else if (rele != null) listOf(Pot.LAN to lan, Pot.RELE to rele)
-        else listOf(Pot.LAN to lan)
-        for ((pot, klic) in vrstniRed) {
-            // Pot v premoru preskocimo, razen ce je to zadnja moznost (potem poskusimo, da uporabnik ne obtici).
-            if (izbira.jeVPremoru(pot) && pot != vrstniRed.last().first) continue
+    fun <T : Any> izvedi(lan: (() -> T?)?, neposredno: (() -> T?)?, rele: (() -> T?)?): T? {
+        val poti = listOfNotNull(
+            lan?.let { Pot.LAN to it }, neposredno?.let { Pot.GLOBAL_NEPOSREDNO to it }, rele?.let { Pot.RELE to it },
+        )
+        // Pot v premoru gre na konec (hitrejse poti so se vedno pred rezervo); ce je vse v premoru, poskusimo vse po vrsti,
+        // da uporabnik ne obtici.
+        val urejeno = poti.filterNot { izbira.jeVPremoru(it.first) } + poti.filter { izbira.jeVPremoru(it.first) }
+        for ((pot, klic) in urejeno) {
             val odg = try { klic() } catch (_: Exception) { null }
             if (odg != null) { izbira.uspeh(pot); return odg }
             izbira.neuspeh(pot)

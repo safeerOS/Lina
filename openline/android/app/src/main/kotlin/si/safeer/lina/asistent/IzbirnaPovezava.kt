@@ -5,18 +5,21 @@ import si.safeer.lina.podpis.PovezavaZLino
 import si.safeer.lina.samostojna.PrenosPoPoti
 
 /**
- * Povezava z Lino na racunalniku s samodejno izbiro poti kot v Safeer OS: najprej domaci naslov (LAN), ob nedosegljivosti
- * takoj rele Global Linka ([rele], null dokler prenosa prek releja na telefonu ni). Uporabnik poti ne izbira.
+ * Povezava z Lino na racunalniku s samodejno izbiro poti kot v Safeer OS: LAN, nato neposredna pot od zunaj
+ * ([neposredno], hitrejsa od releja), nato rele ([neposredno] in [rele] sta null, dokler prenosa na telefonu ni). Uporabnik poti ne izbira.
  * Streznikov odgovor (tudi napaka) pomeni dosegljivo pot; samo OdgovorLine.Nedosegljiva je neuspeh poti.
  */
 class IzbirnaPovezava(
     private val lan: PovezavaZLino,
+    private val neposredno: PovezavaZLino?,
     private val rele: PovezavaZLino?,
     private val prenos: PrenosPoPoti,
 ) : PovezavaZLino {
     private fun po(klic: (PovezavaZLino) -> OdgovorLine): OdgovorLine =
-        prenos.izvedi({ klic(lan).takeUnless { it is OdgovorLine.Nedosegljiva } },
-            rele?.let { r -> { klic(r).takeUnless { it is OdgovorLine.Nedosegljiva } } }) ?: OdgovorLine.Nedosegljiva
+        prenos.izvedi(pot(lan, klic), neposredno?.let { pot(it, klic) }, rele?.let { pot(it, klic) }) ?: OdgovorLine.Nedosegljiva
+
+    private fun pot(p: PovezavaZLino, klic: (PovezavaZLino) -> OdgovorLine): () -> OdgovorLine? =
+        { klic(p).takeUnless { it is OdgovorLine.Nedosegljiva } }
 
     override fun naloga(telo: String) = po { it.naloga(telo) }
     override fun dogodki(id: String, posiljatelj: String, cas: Long, enkratni: String, podpis: String, od: Long, cakaS: Int) =
@@ -31,6 +34,7 @@ class IzbirnaPovezava(
 
     fun zapri() {
         (lan as? HttpPovezavaZLino)?.zapri()
+        (neposredno as? HttpPovezavaZLino)?.zapri()
         (rele as? HttpPovezavaZLino)?.zapri()
     }
 }

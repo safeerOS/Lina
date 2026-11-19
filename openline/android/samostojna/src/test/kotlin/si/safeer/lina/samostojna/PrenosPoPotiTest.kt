@@ -7,50 +7,60 @@ import kotlin.test.assertNull
 class PrenosPoPotiTest {
     private var cas = 0L
     private fun prenos() = PrenosPoPoti(IzbiraPoti { cas })
+    private fun <T : Any> pot(log: MutableList<String>, ime: String, r: T?): () -> T? = { log += ime; r }
 
-    @Test fun domaGreLanBrezRelea() {
-        var releKlican = false
-        assertEquals("lan", prenos().izvedi({ "lan" }, { releKlican = true; "rele" }))
-        assertEquals(false, releKlican)
+    @Test fun domaGreLanBrezDrugih() {
+        val v = mutableListOf<String>()
+        assertEquals("l", prenos().izvedi(pot(v, "lan", "l"), pot(v, "nep", "n"), pot(v, "rele", "r")))
+        assertEquals(listOf("lan"), v)
     }
 
-    @Test fun zunajDomaLanPadeInTakojRele() {
-        assertEquals("rele", prenos().izvedi({ null }, { "rele" }))
+    @Test fun zunajDomaNeposrednaPotPredReleom() {
+        val v = mutableListOf<String>()
+        assertEquals("n", prenos().izvedi(pot(v, "lan", null), pot(v, "nep", "n"), pot(v, "rele", "r")))
+        assertEquals(listOf("lan", "nep"), v)
     }
 
-    @Test fun neuspehLanSeZapomniInNaslednjicReleNajprej() {
-        val p = prenos(); val vrstni = mutableListOf<String>()
-        p.izvedi({ vrstni += "lan"; null }, { vrstni += "rele"; "r" })
-        vrstni.clear()
-        p.izvedi({ vrstni += "lan"; "l" }, { vrstni += "rele"; "r" })
-        assertEquals(listOf("rele"), vrstni)
+    @Test fun neposrednaNiDosegljivaTakojRele() {
+        val v = mutableListOf<String>()
+        assertEquals("r", prenos().izvedi(pot(v, "lan", null), pot(v, "nep", null), pot(v, "rele", "r")))
+        assertEquals(listOf("lan", "nep", "rele"), v)
     }
 
-    @Test fun poPremoruSeLanSpetPoskusi() {
-        val p = prenos()
-        p.izvedi({ null }, { "r" })
+    @Test fun neuspehuSeNaslednjicIzognemoInReleNaPrviMesto() {
+        val p = prenos(); val v = mutableListOf<String>()
+        p.izvedi(pot(v, "lan", null), pot(v, "nep", null), pot(v, "rele", "r")); v.clear()
+        assertEquals("r", p.izvedi(pot(v, "lan", "l"), pot(v, "nep", "n"), pot(v, "rele", "r")))
+        assertEquals(listOf("rele"), v)
+    }
+
+    @Test fun poPremoruSeHitrejsaPotSpetPoskusi() {
+        val p = prenos(); val v = mutableListOf<String>()
+        p.izvedi(pot(v, "lan", null), pot(v, "nep", null), pot(v, "rele", "r")); v.clear()
         cas += 301
-        assertEquals("lan", p.izvedi({ "lan" }, { "r" }))
+        assertEquals("n", p.izvedi(pot(v, "lan", null), pot(v, "nep", "n"), pot(v, "rele", "r")))
     }
 
     @Test fun spremembaOmrezjaIzbrisePremor() {
-        val p = prenos()
-        p.izvedi({ null }, { "r" })
+        val p = prenos(); val v = mutableListOf<String>()
+        p.izvedi(pot(v, "lan", null), pot(v, "nep", null), pot(v, "rele", "r")); v.clear()
         p.spremembaOmrezja()
-        assertEquals("lan", p.izvedi({ "lan" }, { "r" }))
+        assertEquals("l", p.izvedi(pot(v, "lan", "l"), pot(v, "nep", "n"), pot(v, "rele", "r")))
     }
 
-    @Test fun brezReleaSeLanVednoPoskusiInNiObtica() {
+    @Test fun brezNeposredneInRelea() {
         val p = prenos()
-        assertNull(p.izvedi({ null }, null))
-        assertEquals("lan", p.izvedi({ "lan" }, null))
+        assertNull(p.izvedi<String>({ null }, null, null))
+        assertEquals("l", p.izvedi({ "l" }, null, null))
     }
 
-    @Test fun obaPadetaVrneNull() {
-        assertNull(prenos().izvedi({ null }, { null }))
+    @Test fun vsePotiVPremoruSeVednoPoskusijo() {
+        val p = prenos()
+        p.izvedi<String>({ null }, { null }, { null })
+        assertEquals("r", p.izvedi({ null }, { null }, { "r" }))
     }
 
     @Test fun izjemaJeNeuspehPoti() {
-        assertEquals("rele", prenos().izvedi({ error("x") }, { "rele" }))
+        assertEquals("r", prenos().izvedi({ error("x") }, null, { "r" }))
     }
 }
