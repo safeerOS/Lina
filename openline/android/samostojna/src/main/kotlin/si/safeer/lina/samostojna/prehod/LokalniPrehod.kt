@@ -12,6 +12,8 @@ import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLServerSocketFactory
 import kotlin.concurrent.thread
@@ -78,8 +80,11 @@ class LokalniPrehod(
     
     private val channelConnection = AtomicReference<Socket>(null)
     private val mediaConnection = AtomicReference<Socket>(null)
+    private val allSockets = Collections.newSetFromMap(ConcurrentHashMap<Socket, Boolean>())
     private var activeCallId: String? = null
     private val unauthenticatedCount = AtomicInteger(0)
+
+    private val cleanups = ConcurrentHashMap<Socket, () -> Unit>()
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
@@ -93,6 +98,7 @@ class LokalniPrehod(
             try {
                 while (running.get()) {
                     val client = socket.accept()
+                    allSockets.add(client)
                     val count = unauthenticatedCount.incrementAndGet()
                     if (count > 4) {
                         try { client.close() } catch (_: Exception) {}
@@ -117,8 +123,17 @@ class LokalniPrehod(
     fun stop() {
         if (running.compareAndSet(true, false)) {
             try { serverSocket?.close() } catch (_: Exception) {}
-            try { channelConnection.getAndSet(null)?.close() } catch (_: Exception) {}
-            try { mediaConnection.getAndSet(null)?.close() } catch (_: Exception) {}
+            
+            for (cleanup in cleanups.values) {
+                cleanup()
+            }
+            cleanups.clear()
+
+            val copy = allSockets.toTypedArray()
+            for (socket in copy) {
+                try { socket.close() } catch (_: Exception) {}
+            }
+            allSockets.clear()
         }
     }
     
@@ -178,6 +193,11 @@ class LokalniPrehod(
                 client.close()
                 return
             }
+            
+            if (!running.get()) {
+                client.close()
+                return
+            }
 
             if (wsKey == null) {
                 sendHttpError(output, 400, "Bad Request")
@@ -201,6 +221,20 @@ class LokalniPrehod(
                 return
             }
 
+            val cleanedUp = AtomicBoolean(false)
+            val cleanup = {
+                if (cleanedUp.compareAndSet(false, true)) {
+                    if (isMedia) {
+                        activeCallId = null
+                        zvocniMost.konecKlica()
+                        mediaConnection.compareAndSet(client, null)
+                    } else {
+                        channelConnection.compareAndSet(client, null)
+                    }
+                }
+            }
+            cleanups[client] = cleanup
+
             try {
                 client.soTimeout = 30000
 
@@ -222,15 +256,13 @@ class LokalniPrehod(
                 sendWsHandshake(output, wsKey)
                 readFrames(client, input, output, isChannel)
             } finally {
-                if (currentRef.compareAndSet(client, null)) {
-                    if (isMedia) {
-                        activeCallId = null
-                        zvocniMost.konecKlica()
-                    }
-                }
+                cleanup()
+                cleanups.remove(client)
             }
         } catch (e: Exception) {
             try { client.close() } catch (_: Exception) {}
+        } finally {
+            allSockets.remove(client)
         }
     }
 

@@ -285,6 +285,83 @@ class GeminiLiveOdjemalecTest {
     }
 
     @Test
+    fun `pravilna sestava url za api kljuc`() {
+        var prejetUrl = ""
+        val fabrika = object : WsFabrika {
+            override fun odpri(url: String, glave: Map<String, String>, poslusalec: WsPoslusalec): WsPovezava {
+                prejetUrl = url
+                return object : WsPovezava {
+                    override fun posiljiBesedilo(besedilo: String) {}
+                    override fun zapri(koda: Int, razlog: String) {}
+                }
+            }
+        }
+        val shramba = object : ShranjevalnikKljuca {
+            override fun shrani(kljuc: KljucGemini) {}
+            override fun preberi(): KljucGemini = KljucGemini("moj-kljuc")
+            override fun izbrisi() {}
+        }
+        val odj = GeminiLiveOdjemalec(
+            osnovniUrlApi = "wss://generativelanguage.googleapis.com",
+            apiKljuc = shramba,
+            googleZeton = GoogleZeton { "z" },
+            projekt = { "p" },
+            dnevnik = dnevnik,
+            izbiraPoti = IzbiraPotiLive(naVoljo = { it == PotLive.API_KLJUC }),
+            wsFabrika = fabrika
+        )
+        odj.vKlic(ByteArray(0))
+        assertEquals("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=moj-kljuc", prejetUrl)
+    }
+
+    @Test
+    fun `obdelaj vec avdio delov v enem sporocilu`() {
+        var receiveCount = 0
+        odjemalec.nastaviIzhod { 
+            receiveCount++
+        }
+        odjemalec.vKlic(ByteArray(640))
+        Thread.sleep(200)
+        strezhnik.poslji("""{"setupComplete":{}}""")
+        Thread.sleep(200)
+
+        // Dva avdio dela
+        val audioBytes = ByteArray(1200) // 24kHz = 1200, resampled to 16kHz = 800 (1 okvir 640, 1 padded)
+        val b64 = Base64.getEncoder().encodeToString(audioBytes)
+        strezhnik.poslji("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}, {"inlineData":{"data":"$b64"}}]}}}""")
+        Thread.sleep(200)
+        
+        // 2 parts, each produces 2 outputs (640 and 640 padded) -> total 4
+        assertEquals(4, receiveCount)
+    }
+
+    @Test
+    fun `zdruzitev nepopolnih okvirjev`() {
+        val rezultati = mutableListOf<ByteArray>()
+        odjemalec.nastaviIzhod { chunk ->
+            rezultati.add(chunk)
+        }
+        odjemalec.vKlic(ByteArray(640))
+        Thread.sleep(200)
+        strezhnik.poslji("""{"setupComplete":{}}""")
+        Thread.sleep(200)
+        
+        // 480 B (24 kHz) -> 320 B (16 kHz).
+        // 2 taksna okvirja dasta skupaj 640 B, kar pomeni en celoten okvir 16 kHz brez paddinga.
+        val audioBytes = ByteArray(480) 
+        val b64 = Base64.getEncoder().encodeToString(audioBytes)
+        
+        strezhnik.poslji("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}]}}}""")
+        Thread.sleep(100)
+        assertEquals(0, rezultati.size, "Prvi del ne sme sproziti izhoda, ker je premajhen (320 B)")
+        
+        strezhnik.poslji("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}]}}}""")
+        Thread.sleep(100)
+        assertEquals(1, rezultati.size, "Po drugem delu moramo dobiti tocno en poln okvir")
+        assertEquals(640, rezultati[0].size)
+    }
+
+    @Test
     fun `vrsta okvirjev pred setupComplete in max velikost`() {
         val ujetaSporocila = mutableListOf<String>()
         val fabrika = object : WsFabrika {

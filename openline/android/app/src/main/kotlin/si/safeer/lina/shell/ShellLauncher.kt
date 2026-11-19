@@ -136,7 +136,7 @@ object ShellLauncher {
                 }
             }
         }
-        if (!isPaired(context)) return Result.PairingRequired
+        if (!isPaired(context) && !si.safeer.lina.telecom.SamostojnaPripravljenost.jePripravljena(context)) return Result.PairingRequired
 
         val adb = GatewayAdbManager.get(context)
         return try {
@@ -149,11 +149,18 @@ object ShellLauncher {
             releaseHeld()
             client.rotateToken()
             val fresh = GatewayConfigStore(context).load()
+            val localPrehod = si.safeer.lina.telecom.LokalniPrehodUpravljalnik.prehod
+            val localPortStr = localPrehod?.getPort()?.toString() ?: ""
+            val localCert = if (localPrehod != null) si.safeer.lina.telecom.LokalniPrehodUpravljalnik.getCertFingerprint() else ""
+            val localToken = if (localPrehod != null) context.getSharedPreferences("lokalni_prehod", Context.MODE_PRIVATE).getString("zeton", "") ?: "" else ""
             val launch = client.launchConfig(
                 mediaUrl = fresh.wsUrl,
                 certSha256 = fresh.certSha256,
                 deviceId = fresh.deviceId,
                 deviceToken = fresh.deviceToken,
+                localPort = localPortStr,
+                localCertSha256 = localCert,
+                localDeviceToken = localToken
             )
             val apk = context.applicationInfo.sourceDir
             val main = ShellServerMain::class.java.name

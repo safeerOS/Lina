@@ -57,7 +57,10 @@ class ShellClient(context: Context) {
     val port: Int
         get() = prefs.getInt(KEY_PORT, -1)
 
-    fun launchConfig(mediaUrl: String, certSha256: String, deviceId: String, deviceToken: String): ShellAuth.LaunchConfig =
+    fun launchConfig(
+        mediaUrl: String, certSha256: String, deviceId: String, deviceToken: String,
+        localPort: String = "", localCertSha256: String = "", localDeviceToken: String = ""
+    ): ShellAuth.LaunchConfig =
         ShellAuth.LaunchConfig(
             token = token,
             appUid = android.os.Process.myUid(),
@@ -65,6 +68,9 @@ class ShellClient(context: Context) {
             certSha256 = certSha256,
             deviceId = deviceId,
             deviceToken = deviceToken,
+            localPort = localPort,
+            localCertSha256 = localCertSha256,
+            localDeviceToken = localDeviceToken,
         )
 
     fun ping(): JSONObject? = request(JSONObject().put("op", "ping"))
@@ -91,7 +97,7 @@ class ShellClient(context: Context) {
     }
 
     /** Samo id klica. mediaUrl in odtis sta ze v lupini. */
-    fun start(callId: String): JSONObject? = request(JSONObject().put("op", "start").put("callId", callId))
+    fun start(callId: String, local: Boolean = false): JSONObject? = request(JSONObject().put("op", "start").put("callId", callId).put("local", local))
 
     fun confirm(callId: String): JSONObject? =
         request(JSONObject().put("op", "confirm").put("callId", callId))

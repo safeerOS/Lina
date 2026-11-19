@@ -34,7 +34,7 @@ object ShellServerMain {
             .onFailure { Log.e(TAG, "shell context unavailable", it) }
             .getOrNull()
         val engine = CallAudioEngine(context)
-        engine.arm(config.mediaUrl, config.certSha256, config.deviceId, config.deviceToken)
+        engine.arm(config.mediaUrl, config.certSha256, config.deviceId, config.deviceToken, config.localCertSha256, config.localDeviceToken)
         val endpoint = try {
             ShellEndpoint(config) { op, raw -> handle(op, raw, version, engine, config).toString() }
         } catch (e: Exception) {
@@ -83,17 +83,17 @@ object ShellServerMain {
                 val callId = op["callId"] ?: return JSONObject().put("ok", false).put("error", "callId")
                 val gate = ShellAuth.targetForStart(config, callId, raw)
                     ?: return JSONObject().put("ok", false).put("error", "start zavrnjen")
-                val media = runCatching { MediaStream.deviceMediaUrl(gate.mediaUrl, callId) }.getOrNull()
+                val isLocal = raw.contains("\"local\":true") || raw.contains("\"local\": true")
+                val media = if (isLocal) gate.mediaUrl else runCatching { MediaStream.deviceMediaUrl(gate.mediaUrl, callId) }.getOrNull()
                     ?: return JSONObject().put("ok", false).put("error", "media url")
-                val started = engine.start(
-                    CallAudioEngine.Target(
-                        callId = callId,
-                        mediaUrl = media,
-                        deviceId = gate.deviceId,
-                        deviceToken = gate.deviceToken,
-                        certSha256 = gate.certSha256,
-                    ),
+                val target = CallAudioEngine.Target(
+                    callId = callId,
+                    mediaUrl = media,
+                    deviceId = gate.deviceId,
+                    deviceToken = gate.deviceToken,
+                    certSha256 = gate.certSha256,
                 )
+                val started = engine.start(target)
                 if (!StartReply.accepted(started)) {
                     return JSONObject().put("ok", false).put("error", "start zavrnjen")
                 }

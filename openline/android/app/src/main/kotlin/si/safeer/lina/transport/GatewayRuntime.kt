@@ -55,6 +55,16 @@ object GatewayRuntime : si.safeer.lina.telecom.CallEventSink {
         connectFromStoredConfig()
         watchNetwork(context.applicationContext)
         healthWorker.scheduleWithFixedDelay(::sendHealth, HEALTH_INTERVAL_SECONDS, HEALTH_INTERVAL_SECONDS, TimeUnit.SECONDS)
+        checkLokalniPrehod()
+    }
+
+    fun checkLokalniPrehod() {
+        val context = synchronized(lock) { appContext } ?: return
+        if (si.safeer.lina.telecom.SamostojnaPripravljenost.imaNastavljenKljuc(context)) {
+            si.safeer.lina.telecom.LokalniPrehodUpravljalnik.start(context)
+        } else {
+            si.safeer.lina.telecom.LokalniPrehodUpravljalnik.ustavi()
+        }
     }
 
     /** Sends a health report now (off the calling thread). */
@@ -141,6 +151,7 @@ object GatewayRuntime : si.safeer.lina.telecom.CallEventSink {
         }
         publishConnection(false)
         connectFromStoredConfig()
+        checkLokalniPrehod()
     }
 
     override fun emitCallAdded(callId: String, call: Call) {
@@ -168,6 +179,7 @@ object GatewayRuntime : si.safeer.lina.telecom.CallEventSink {
     }
 
     override fun emitCallRemoved(callId: String, call: Call) {
+        si.safeer.lina.telecom.LokalniPrehodUpravljalnik.most?.konecKlica()
         val disconnectCause = call.details.disconnectCause
         emit(
             callId = callId,

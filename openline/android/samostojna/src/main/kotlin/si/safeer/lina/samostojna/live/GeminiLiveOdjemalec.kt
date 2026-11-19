@@ -37,6 +37,8 @@ class GeminiLiveOdjemalec(
     }
 
     var naPrekinitev: (() -> Unit)? = null
+    var naNapako: ((String) -> Unit)? = null
+
     private var izhodniCallback: ((ByteArray) -> Unit)? = null
     
     private var ws: WsPovezava? = null
@@ -47,6 +49,8 @@ class GeminiLiveOdjemalec(
     private val vhodniMutex = Any()
     private val vhodnaVrsta = ArrayDeque<ByteArray>()
     private val MAKS_OKVIRJEV_V_VRSTI = 100 // max ~2 s pri 20ms
+
+    @Volatile private var nepopolnOkvir = ByteArray(0)
 
     private fun poskusiPovezavo(zacasnaNapaka: Boolean = false) {
         if (isClosed.get()) return
@@ -78,7 +82,7 @@ class GeminiLiveOdjemalec(
                     izbiraPoti.neuspeh(pot)
                     return poskusiPovezavo(zacasnaNapaka)
                 }
-                url = "${osnovniUrlApi}/ws/google.ai.generativelanguage.v1alpha.BidiService/BidiGenerateContent?key=$kljuc"
+                url = "${osnovniUrlApi}/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$kljuc"
                 modelPath = "models/$model"
                 jeApiKljuc = true
             }
@@ -100,10 +104,17 @@ class GeminiLiveOdjemalec(
 
         val listener = object : WsPoslusalec {
             override fun onOpen(povezava: WsPovezava) {
-                synchronized(vhodniMutex) {
-                    ws = povezava
-                    stanje = StanjePovezave.SETUP_POSLAN
+                val sendSetup = synchronized(vhodniMutex) {
+                    if (isClosed.get() || stanje == StanjePovezave.ZAPRT) {
+                        povezava.zapri(1000, "Konec klica")
+                        false
+                    } else {
+                        ws = povezava
+                        stanje = StanjePovezave.SETUP_POSLAN
+                        true
+                    }
                 }
+                if (!sendSetup) return
                 izbiraPoti.uspeh(pot)
                 val sysNav = SistemskoNavodilo.zgradi(ZonedDateTime.now())
                 
@@ -166,7 +177,11 @@ class GeminiLiveOdjemalec(
         try {
             val novaWs = wsFabrika.odpri(url, glave, listener)
             synchronized(vhodniMutex) {
-                ws = novaWs
+                if (isClosed.get() || stanje == StanjePovezave.ZAPRT) {
+                    novaWs.zapri(1000, "Konec klica")
+                } else {
+                    ws = novaWs
+                }
             }
             startTimeMs = System.currentTimeMillis()
         } catch (e: Exception) {
@@ -199,50 +214,82 @@ class GeminiLiveOdjemalec(
     private fun obdelajSporocilo(msg: String) {
         if (msg.contains("\"setupComplete\"")) {
             val zaPosiljanje = mutableListOf<ByteArray>()
-            synchronized(vhodniMutex) {
-                stanje = StanjePovezave.PRIPRAVLJEN
-                zaPosiljanje.addAll(vhodnaVrsta)
-                vhodnaVrsta.clear()
+            val doSend = synchronized(vhodniMutex) {
+                if (isClosed.get() || stanje == StanjePovezave.ZAPRT) {
+                    false
+                } else {
+                    stanje = StanjePovezave.PRIPRAVLJEN
+                    zaPosiljanje.addAll(vhodnaVrsta)
+                    vhodnaVrsta.clear()
+                    true
+                }
             }
-            for (okvir in zaPosiljanje) {
-                posljiOkvirModelu(okvir)
+            if (doSend) {
+                // "Ob dvigu klica poslji modelu uvodni stavek (Lina se predstavi)"
+                val uvod = """
+                {
+                    "clientContent": {
+                        "turns": [
+                            {
+                                "role": "user",
+                                "parts": [{"text": "Lina se predstavi."}]
+                            }
+                        ],
+                        "turnComplete": true
+                    }
+                }
+                """.trimIndent()
+                ws?.posiljiBesedilo(uvod)
+                
+                for (okvir in zaPosiljanje) {
+                    posljiOkvirModelu(okvir)
+                }
             }
         }
         if (msg.contains("\"interrupted\"")) {
+            nepopolnOkvir = ByteArray(0)
             naPrekinitev?.invoke()
         }
-        val dataStr = izlusciBase64Audio(msg)
-        if (dataStr != null) {
+        val dataStrs = izlusciBase64Audio(msg)
+        for (dataStr in dataStrs) {
             val decoded = Base64.getDecoder().decode(dataStr)
-            val resampled = resample24to16(decoded)
+            val skupaj = nepopolnOkvir + resample24to16(decoded)
             var offset = 0
-            while (offset < resampled.size) {
-                val chunkSize = minOf(640, resampled.size - offset)
-                val chunk = resampled.copyOfRange(offset, offset + chunkSize)
-                if (chunk.size == 640) {
-                    izhodniCallback?.invoke(chunk)
-                } else {
-                    val padded = ByteArray(640)
-                    System.arraycopy(chunk, 0, padded, 0, chunk.size)
-                    izhodniCallback?.invoke(padded)
-                }
-                offset += chunkSize
+            while (skupaj.size - offset >= 640) {
+                izhodniCallback?.invoke(skupaj.copyOfRange(offset, offset + 640))
+                offset += 640
             }
+            nepopolnOkvir = skupaj.copyOfRange(offset, skupaj.size)
+        }
+        // Ob koncu govora ostanek dopolnimo s tisino do polnega okvirja (20 ms = 640 B).
+        if (msg.contains("\"turnComplete\"")) {
+            izprazniOstanek()
         }
     }
 
-    private fun izlusciBase64Audio(msg: String): String? {
+    private fun izprazniOstanek() {
+        if (nepopolnOkvir.isNotEmpty()) {
+            val padded = ByteArray(640)
+            System.arraycopy(nepopolnOkvir, 0, padded, 0, minOf(640, nepopolnOkvir.size))
+            nepopolnOkvir = ByteArray(0)
+            izhodniCallback?.invoke(padded)
+        }
+    }
+
+    private fun izlusciBase64Audio(msg: String): List<String> {
+        val rezultati = mutableListOf<String>()
         try {
             val elem = Json.parseToJsonElement(msg)
-            val serverContent = elem.jsonObject["serverContent"]?.jsonObject ?: return null
-            val modelTurn = serverContent["modelTurn"]?.jsonObject ?: return null
-            val parts = modelTurn["parts"]?.jsonArray ?: return null
+            val serverContent = elem.jsonObject["serverContent"]?.jsonObject ?: return rezultati
+            val modelTurn = serverContent["modelTurn"]?.jsonObject ?: return rezultati
+            val parts = modelTurn["parts"]?.jsonArray ?: return rezultati
             for (p in parts) {
                 val inlineData = p.jsonObject["inlineData"]?.jsonObject ?: continue
-                return inlineData["data"]?.jsonPrimitive?.content
+                val data = inlineData["data"]?.jsonPrimitive?.content
+                if (data != null) rezultati.add(data)
             }
         } catch (e: Exception) { }
-        return null
+        return rezultati
     }
 
     override fun vKlic(okvir: ByteArray) {
@@ -271,6 +318,19 @@ class GeminiLiveOdjemalec(
             posljiOkvirModelu(okvir)
         }
         
+        if (stanje != StanjePovezave.PRIPRAVLJEN && startTimeMs > 0 && System.currentTimeMillis() - startTimeMs > 5000) {
+            dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
+                id = "sys-${System.currentTimeMillis()}",
+                casZacetka = System.currentTimeMillis(),
+                stevilka = "Sistem",
+                trajanjeS = 0,
+                povzetek = "Povezava z modelom ni bila vzpostavljena v 5 s",
+                prepis = ""
+            ))
+            naNapako?.invoke("Model se ni odzval v 5 s")
+            konecKlica()
+        }
+
         // Timeout 10 min
         if (startTimeMs > 0 && System.currentTimeMillis() - startTimeMs > 600000) {
             konecKlica()
@@ -302,8 +362,12 @@ class GeminiLiveOdjemalec(
 
     override fun konecKlica() {
         if (!isClosed.getAndSet(true)) {
-            ws?.zapri(1000, "Konec klica")
-            ws = null
+            nepopolnOkvir = ByteArray(0)
+            synchronized(vhodniMutex) {
+                ws?.zapri(1000, "Konec klica")
+                ws = null
+                stanje = StanjePovezave.ZAPRT
+            }
         }
     }
 

@@ -157,7 +157,8 @@ object CallAudioBridge {
 
         override fun start(callId: String): Boolean {
             val context = appContext ?: return false
-            val reply = ShellClient(context).start(callId)
+            val useLocal = si.safeer.lina.telecom.SamostojnaPripravljenost.jePripravljena(context) && !GatewayRuntime.isConnected()
+            val reply = ShellClient(context).start(callId, useLocal)
             val ok = reply?.optBoolean("ok") == true
             if (ok) Log.i(TAG, "start $callId -> $reply") else Log.w(TAG, "start $callId failed -> $reply")
             return ok

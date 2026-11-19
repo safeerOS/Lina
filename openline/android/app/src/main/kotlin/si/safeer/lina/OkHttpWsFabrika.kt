@@ -45,6 +45,11 @@ class OkHttpWsFabrika : WsFabrika {
                 poslusalec.onError(t)
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                val veljavnaKoda = if (code == 1005 || code == 1006) 1000 else code
+                webSocket.close(veljavnaKoda, reason)
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 poslusalec.onClose(code, reason)
             }

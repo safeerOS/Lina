@@ -53,19 +53,26 @@ class CallAudioEngine(private val context: Context?) {
     private var armedCert: String = ""
     private var armedDevice: String = ""
     private var armedToken: String = ""
+    private var localCert: String = ""
+    private var localDevice: String = "local"
+    private var localToken: String = ""
 
     /** Dovoljeni odtis in zetona naprave. Naslov klica se izpelje iz tega, ne iz zahteve. */
     @Synchronized
-    fun arm(mediaUrl: String, certSha256: String, deviceId: String, deviceToken: String) {
+    fun arm(mediaUrl: String, certSha256: String, deviceId: String, deviceToken: String, localCertSha256: String = "", localDeviceToken: String = "") {
         armedCert = certSha256
         armedDevice = deviceId
         armedToken = deviceToken
+        localCert = localCertSha256
+        localToken = localDeviceToken
         if (mediaUrl.isBlank()) Log.w(TAG, "ob zagonu ni naslova prehoda")
     }
 
     @Synchronized
     fun start(target: Target): Boolean {
-        if (!AudioArm.accepts(armedCert, armedToken, armedDevice, target.certSha256, target.deviceToken, target.deviceId)) {
+        val okMain = AudioArm.accepts(armedCert, armedToken, armedDevice, target.certSha256, target.deviceToken, target.deviceId)
+        val okLocal = localToken.isNotBlank() && AudioArm.accepts(localCert, localToken, localDevice, target.certSha256, target.deviceToken, target.deviceId)
+        if (!okMain && !okLocal) {
             Log.w(TAG, "odtis ali zeton ni tisti ob zagonu")
             return false
         }

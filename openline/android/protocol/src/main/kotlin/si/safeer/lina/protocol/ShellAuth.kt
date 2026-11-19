@@ -29,6 +29,9 @@ object ShellAuth {
         val certSha256: String,
         val deviceId: String,
         val deviceToken: String,
+        val localPort: String = "",
+        val localCertSha256: String = "",
+        val localDeviceToken: String = "",
     ) {
         override fun toString(): String = "LaunchConfig(appUid=$appUid,deviceId=$deviceId)"
     }
@@ -109,6 +112,9 @@ object ShellAuth {
         config.certSha256,
         config.deviceId,
         config.deviceToken,
+        config.localPort,
+        config.localCertSha256,
+        config.localDeviceToken,
     ).joinToString("\n", postfix = "\n")
 
     fun readConfig(lines: List<String>): LaunchConfig? {
@@ -123,16 +129,19 @@ object ShellAuth {
             certSha256 = lines[3].trim(),
             deviceId = lines[4].trim(),
             deviceToken = lines[5].trim(),
+            localPort = lines.getOrNull(6)?.trim() ?: "",
+            localCertSha256 = lines.getOrNull(7)?.trim() ?: "",
+            localDeviceToken = lines.getOrNull(8)?.trim() ?: "",
         )
     }
 
     /**
-     * Natanko 6 klicev readLine. Ne bere do konca vhoda: pty adb shell
+     * Natanko 9 klicev readLine. Ne bere do konca vhoda: pty adb shell
      * konca nima, dokler aplikacija toka ne zapre, takrat pa proces umre.
      */
     fun readConfigLines(reader: BufferedReader): LaunchConfig? {
-        val lines = ArrayList<String>(6)
-        repeat(6) {
+        val lines = ArrayList<String>(9)
+        repeat(9) {
             val line = reader.readLine() ?: return null
             lines.add(line)
         }
@@ -198,8 +207,14 @@ object ShellAuth {
         if (requestCarriesSecrets(requestLine)) return null
         val op = parseOp(requestLine) ?: return null
         if (op["op"] != "start" || op["callId"] != callId) return null
-        if (config.mediaUrl.isBlank() || config.certSha256.isBlank()) return null
-        return StartTarget(callId, config.mediaUrl, config.certSha256, config.deviceId, config.deviceToken)
+        val isLocal = requestLine.contains("\"local\":true") || requestLine.contains("\"local\": true")
+        if (isLocal) {
+            if (config.localPort.isBlank() || config.localCertSha256.isBlank()) return null
+            return StartTarget(callId, "wss://127.0.0.1:${config.localPort}/v1/device-media?callId=$callId", config.localCertSha256, "local", config.localDeviceToken)
+        } else {
+            if (config.mediaUrl.isBlank() || config.certSha256.isBlank()) return null
+            return StartTarget(callId, config.mediaUrl, config.certSha256, config.deviceId, config.deviceToken)
+        }
     }
 
     private fun field(line: String, name: String): String? {

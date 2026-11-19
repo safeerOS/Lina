@@ -1,0 +1,48 @@
+name: Gradnja Lina
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: openline/android
+
+jobs:
+  teste-in-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Testi (JVM, brez prave seje in brez skrivnosti)
+        run: ./gradlew :protocol:test :podpis:test :seznanitev:test :samostojna:test --no-daemon --stacktrace
+      - name: Gradnja APK (debug, nepodpisan)
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Izid
+        run: |
+          mkdir -p ../../izid
+          cp app/build/outputs/apk/debug/*.apk ../../izid/ || true
+          sha256sum ../../izid/*.apk | tee ../../izid/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lina-apk-debug
+          path: izid/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testna-porocila
+          path: |
+            openline/android/**/build/reports/tests/
+            openline/android/**/build/test-results/
+          retention-days: 14

@@ -340,6 +340,33 @@ class LokalniPrehodTest {
     }
     
     @Test
+    fun `stop zapre cakajoce povezave in izvede cleanup na aktivnih`() {
+        val socket = connect("/v1/device-media?callId=test-call", "123456")
+        
+        // handshake
+        assertEquals("HTTP/1.1 101 Switching Protocols", readResponseLine(socket))
+        while (readResponseLine(socket).isNotEmpty()) {}
+        
+        // Vzpostavljena povezava, preverimo ce je locked
+        val socket2 = try { connect("/v1/device-media?callId=test-call2", "123456") } catch (e: Exception) { null }
+        if (socket2 != null) {
+            assertEquals("HTTP/1.1 409 Conflict", readResponseLine(socket2))
+            socket2.close()
+        }
+        
+        // Sedaj stop(), to mora takoj zapreti prvi socket
+        prehod.stop()
+        
+        // Povezava mora biti zaprta in zvocniMost resetiran
+        try {
+            val r = socket.inputStream.read()
+            assertTrue(r == -1)
+        } catch (e: Exception) {
+            // Tudi to je ok (SocketException)
+        }
+    }
+
+    @Test
     fun `pocisti poslje clear in callback izKlica`() {
         val socket = connect("/v1/device-media?callId=test1", "zeton123")
         assertTrue(readResponseLine(socket).startsWith("HTTP/1.1 101"))
