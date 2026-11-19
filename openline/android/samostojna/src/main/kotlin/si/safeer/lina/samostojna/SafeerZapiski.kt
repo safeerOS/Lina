@@ -97,11 +97,19 @@ class SafeerZapiski(private val prenos: PrenosVmesnika) {
         return IzidPosiljanja(StanjeUsklajevanja.USKLAJENO, prevelikih)
     }
 
-    /** Preberi, zdruzi po skupnih pravilih, pocisti nagrobnike, poslji. Lokalnih zapiskov nikoli ne zavrze. */
+    /**
+     * Preberi, sestavi dele v zapiske, zdruzi po skupnih pravilih, pocisti nagrobnike, razrezi velike zapiske v dele in poslji.
+     * Lokalnih zapiskov nikoli ne zavrze.
+     */
     fun uskladi(lokalni: List<Zapisek>, zdajMs: Long): IzidUsklajevanja {
         val oddaljeno = preberi() ?: return IzidUsklajevanja(lokalni, StanjeUsklajevanja.NI_SAFEER_OS)
-        val zdruzeno = pocistiNagrobnike(zdruzi(lokalni, oddaljeno.zapiski), zdajMs).zapiski
-        val izid = poslji(zdruzeno)
+        val sestavljeno = sestavi(oddaljeno.zapiski)
+        val zdruzeno = pocistiNagrobnike(zdruzi(lokalni, sestavljeno.zapiski), zdajMs).zapiski
+        val zaPoslati = zdruzeno.flatMap { razrezi(it) }
+        // Cistilni nagrobniki se racunajo nad ZDRUZENIM stanjem (stanje Safeer + to, kar posiljamo): ko uporabnik velik zapisek
+        // skrajsa, mora stare dele skriti nagrobnik, ne samo stanje, ki ga je videl Safeer.
+        val ciscenje = sestavi(oddaljeno.zapiski + zaPoslati).ciscenje
+        val izid = poslji(zaPoslati + ciscenje)
         return IzidUsklajevanja(zdruzeno, izid.stanje, oddaljeno.izpuscenih, izid.prevelikih)
     }
 }

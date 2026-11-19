@@ -58,12 +58,13 @@ class SafeerZapiskiTest {
         assertTrue(safeer.klici.count { it == SafeerOp.ZAPISKI_POSLJI } >= 3)
     }
 
-    @Test fun `predolg lokalni zapisek ostane lokalno in se pristeje`() {
+    @Test fun `predolg lokalni zapisek gre cez v vec delih`() {
         val safeer = LazenSafeer()
         val izid = SafeerZapiski(safeer).uskladi(listOf(zapisek(1), zapisek(2, 125_000)), zdajMs = 2000L)
-        assertEquals(1, izid.prevelikihLokalno)
-        assertEquals(2, izid.zapiski.size) // lokalno ni izgubljen
-        assertEquals(1, safeer.stanje.size)
+        assertEquals(0, izid.prevelikihLokalno)
+        assertEquals(StanjeUsklajevanja.USKLAJENO, izid.stanje)
+        assertEquals(2, izid.zapiski.size)
+        assertTrue(safeer.stanje.size >= 3) // majhen zapisek + vsaj 2 dela
     }
 
     @Test fun `zavrnitev ni zanka in lokalno stanje ostane`() {
@@ -98,5 +99,75 @@ class SafeerZapiskiTest {
         val izid = SafeerZapiski(safeer).uskladi(emptyList(), zdajMs = 2000L)
         assertEquals(1, izid.izpuscenihOdSafeer)
         assertEquals(listOf("id00002"), izid.zapiski.map { it.id })
+    }
+}
+
+class RazrezZapiskovTest {
+    private fun velik(id: String, dolzina: Int, cas: Long = 5000L, znak: String = "a") = Zapisek(id, znak.repeat(dolzina), cas, false)
+
+    @Test fun `majhen zapisek se ne razreze`() {
+        val z = velik("u1", 100)
+        assertEquals(listOf(z), razrezi(z))
+    }
+
+    @Test fun `velik zapisek se razreze in sestavi nazaj enak`() {
+        val z = velik("u1", 250_000)
+        val deli = razrezi(z)
+        assertTrue(deli.size >= 3)
+        assertTrue(deli.all { zapiskiVJson(listOf(it)).length < 100_000 && it.cas == z.cas && !it.izbrisan })
+        assertEquals(listOf(z), sestavi(deli).zapiski)
+    }
+
+    @Test fun `surrogatni pari in znaki z ubegom se ne prelomijo`() {
+        val z = velik("u1", 60_000, znak = "😀\"\n")
+        val deli = razrezi(z)
+        assertTrue(deli.size >= 2)
+        assertTrue(deli.all { zapiskiVJson(listOf(it)).length < 100_000 })
+        assertEquals(z.besedilo, sestavi(deli).zapiski.single().besedilo)
+    }
+
+    @Test fun `nepopoln niz delov se ne pokaze in ne cisti`() {
+        val deli = razrezi(velik("u1", 250_000))
+        val izid = sestavi(deli.dropLast(1))
+        assertTrue(izid.zapiski.isEmpty())
+        assertTrue(izid.ciscenje.isEmpty())
+        assertEquals(1, izid.nepopolnih)
+    }
+
+    @Test fun `novejsa verzija zamenja staro in stari deli dobijo nagrobnik`() {
+        val stari = razrezi(velik("u1", 250_000, cas = 5000L))
+        val novi = Zapisek("u1", "kratko", 6000L, false)
+        val izid = sestavi(stari + novi)
+        assertEquals(listOf(novi), izid.zapiski)
+        assertEquals(stari.size, izid.ciscenje.size)
+        assertTrue(izid.ciscenje.all { it.izbrisan && it.cas == 6000L && it.besedilo.isEmpty() })
+    }
+
+    @Test fun `izbris velikega zapiska skrije dele`() {
+        val deli = razrezi(velik("u1", 250_000, cas = 5000L))
+        val izbris = razrezi(Zapisek("u1", "a".repeat(250_000), 6000L, true)).single()
+        assertEquals("", izbris.besedilo)
+        val izid = sestavi(deli + izbris)
+        assertEquals(1, izid.zapiski.size)
+        assertTrue(izid.zapiski.single().izbrisan)
+    }
+
+    @Test fun `dve napravi izmenjata velik zapisek prek lazne shrambe`() {
+        val safeer = LazenSafeer()
+        val z = velik("u1", 250_000, cas = 5000L)
+        val a = SafeerZapiski(safeer).uskladi(listOf(z), zdajMs = 6000L)
+        assertEquals(StanjeUsklajevanja.USKLAJENO, a.stanje)
+        val b = SafeerZapiski(safeer).uskladi(emptyList(), zdajMs = 6000L)
+        assertEquals(StanjeUsklajevanja.USKLAJENO, b.stanje)
+        assertEquals(listOf(z), b.zapiski)
+    }
+
+    @Test fun `urejanje velikega zapiska v kratkega po izmenjavi ne pusti starih delov zivih`() {
+        val safeer = LazenSafeer()
+        SafeerZapiski(safeer).uskladi(listOf(velik("u1", 250_000, cas = 5000L)), zdajMs = 6000L)
+        val kratek = Zapisek("u1", "kratko", 7000L, false)
+        val izid = SafeerZapiski(safeer).uskladi(listOf(kratek), zdajMs = 8000L)
+        assertEquals(listOf(kratek), izid.zapiski)
+        assertTrue(safeer.stanje.filter { razberiDel(it.id) != null }.all { it.izbrisan })
     }
 }
