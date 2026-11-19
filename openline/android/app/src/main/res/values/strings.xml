@@ -269,18 +269,18 @@
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
 
-    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Web search and connections</string>
     <string name="assistant_setup_title">Assistant: provider and keys</string>
-    <string name="assistant_setup_hint_missing">To chat, choose a provider in the Assistant tab and enter its key in Settings (button at the top).</string>
-    <string name="assistant_setup_hint_active_fmt">Provider: %1$s. Choose the provider in the Assistant tab and keys in Settings (button at the top).</string>
+    <string name="assistant_setup_hint_missing">To chat, choose a provider and enter its key in Settings.</string>
+    <string name="assistant_setup_hint_active_fmt">Provider: %1$s. Change the provider and keys in Settings.</string>
     <string name="assistant_open_settings">Key settings</string>
     <string name="settings_title">Settings</string>
     <string name="lina_chat_title">Chat with Lina</string>
     <string name="assistant_providers_note">Choose which provider answers for Lina. Enter the key for the chosen provider in Settings.</string>
     <string name="assistant_provider_ready_fmt">Provider %1$s is ready.</string>
     <string name="assistant_provider_missing_fmt">Provider %1$s is not ready yet. Enter its key or sign in under Settings.</string>
-    <string name="assistant_key_provider_fmt">Key for provider: %1$s. Choose the provider in the Assistant tab.</string>
+    <string name="assistant_key_provider_fmt">Key for provider: %1$s. Choose the provider above.</string>
     <string name="notes_storage_title">Notes: where they are saved</string>
     <string name="notes_storage_info_fmt">A copy of the notes is written to this file as you go: %1$s. Editing the file does not change the notes in the app.</string>
     <string name="notes_storage_pick">Choose another folder</string>

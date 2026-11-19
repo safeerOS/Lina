@@ -269,18 +269,18 @@
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
 
-    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Ricerca web e collegamenti</string>
     <string name="assistant_setup_title">Assistente: fornitore e chiavi</string>
-    <string name="assistant_setup_hint_missing">Per chattare, scegli un fornitore nella scheda Assistente e inserisci la chiave nelle Impostazioni (pulsante in alto).</string>
-    <string name="assistant_setup_hint_active_fmt">Fornitore: %1$s. Il fornitore si sceglie nella scheda Assistente, le chiavi nelle Impostazioni (pulsante in alto).</string>
+    <string name="assistant_setup_hint_missing">Per chattare, scegli un fornitore e inserisci la chiave nelle Impostazioni.</string>
+    <string name="assistant_setup_hint_active_fmt">Fornitore: %1$s. Fornitore e chiavi si cambiano nelle Impostazioni.</string>
     <string name="assistant_open_settings">Impostazioni chiavi</string>
     <string name="settings_title">Impostazioni</string>
     <string name="lina_chat_title">Conversazione con Lina</string>
     <string name="assistant_providers_note">Scegli quale fornitore risponde per Lina. La chiave del fornitore scelto si inserisce nelle Impostazioni.</string>
     <string name="assistant_provider_ready_fmt">Il fornitore %1$s è pronto.</string>
     <string name="assistant_provider_missing_fmt">Il fornitore %1$s non è ancora pronto. Inserisci la chiave o accedi nelle Impostazioni.</string>
-    <string name="assistant_key_provider_fmt">Chiave del fornitore: %1$s. Il fornitore si sceglie nella scheda Assistente.</string>
+    <string name="assistant_key_provider_fmt">Chiave del fornitore: %1$s. Il fornitore si sceglie sopra.</string>
     <string name="notes_storage_title">Note: dove vengono salvate</string>
     <string name="notes_storage_info_fmt">Una copia delle note viene scritta man mano in questo file: %1$s. Modificare il file non cambia le note nell\'app.</string>
     <string name="notes_storage_pick">Scegli un\'altra cartella</string>

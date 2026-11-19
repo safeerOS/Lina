@@ -269,18 +269,18 @@
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Ordinateur</string>
 
-    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Recherche web et connexions</string>
     <string name="assistant_setup_title">Assistante : fournisseur et clés</string>
-    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur dans l\'onglet Assistant et saisissez sa clé dans les Réglages (bouton en haut).</string>
-    <string name="assistant_setup_hint_active_fmt">Fournisseur : %1$s. Le fournisseur se choisit dans l\'onglet Assistant, les clés dans les Réglages (bouton en haut).</string>
+    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur et saisissez sa clé dans les Réglages.</string>
+    <string name="assistant_setup_hint_active_fmt">Fournisseur : %1$s. Le fournisseur et les clés se changent dans les Réglages.</string>
     <string name="assistant_open_settings">Réglages des clés</string>
     <string name="settings_title">Réglages</string>
     <string name="lina_chat_title">Conversation avec Lina</string>
     <string name="assistant_providers_note">Choisissez quel fournisseur répond pour Lina. La clé du fournisseur choisi se saisit dans les Réglages.</string>
     <string name="assistant_provider_ready_fmt">Le fournisseur %1$s est prêt.</string>
     <string name="assistant_provider_missing_fmt">Le fournisseur %1$s n\'est pas encore prêt. Saisissez sa clé ou connectez-vous dans les Réglages.</string>
-    <string name="assistant_key_provider_fmt">Clé du fournisseur : %1$s. Le fournisseur se choisit dans l\'onglet Assistant.</string>
+    <string name="assistant_key_provider_fmt">Clé du fournisseur : %1$s. Le fournisseur se choisit ci-dessus.</string>
     <string name="notes_storage_title">Notes : où elles sont enregistrées</string>
     <string name="notes_storage_info_fmt">Une copie des notes est écrite au fil de l\'eau dans ce fichier : %1$s. Modifier le fichier ne change pas les notes de l\'application.</string>
     <string name="notes_storage_pick">Choisir un autre dossier</string>

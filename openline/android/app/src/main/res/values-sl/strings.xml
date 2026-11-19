@@ -269,18 +269,18 @@
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Računalnik</string>
 
-    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Spletno iskanje in povezave</string>
     <string name="assistant_setup_title">Asistentka: ponudnik in ključi</string>
-    <string name="assistant_setup_hint_missing">Za pogovor izberite ponudnika v zavihku Asistent in vnesite ključ v Nastavitvah (gumb zgoraj).</string>
-    <string name="assistant_setup_hint_active_fmt">Ponudnik: %1$s. Ponudnika izberete v zavihku Asistent, ključe v Nastavitvah (gumb zgoraj).</string>
+    <string name="assistant_setup_hint_missing">Za pogovor v Nastavitvah izberite ponudnika in vnesite ključ.</string>
+    <string name="assistant_setup_hint_active_fmt">Ponudnik: %1$s. Ponudnika in ključe spremenite v Nastavitvah.</string>
     <string name="assistant_open_settings">Nastavitve ključev</string>
     <string name="settings_title">Nastavitve</string>
     <string name="lina_chat_title">Pogovor z Lino</string>
     <string name="assistant_providers_note">Izberite ponudnika, ki odgovarja namesto Line. Ključ izbranega ponudnika vnesete v Nastavitvah.</string>
     <string name="assistant_provider_ready_fmt">Ponudnik %1$s je pripravljen.</string>
     <string name="assistant_provider_missing_fmt">Ponudnik %1$s še ni pripravljen. Ključ ali prijavo vnesite v Nastavitvah.</string>
-    <string name="assistant_key_provider_fmt">Ključ za ponudnika: %1$s. Ponudnika izberete v zavihku Asistent.</string>
+    <string name="assistant_key_provider_fmt">Ključ za ponudnika: %1$s. Ponudnika izberete zgoraj.</string>
     <string name="notes_storage_title">Zapiski: kam se shranjujejo</string>
     <string name="notes_storage_info_fmt">Kopija zapiskov se sproti zapiše v datoteko: %1$s. Urejanje datoteke ne spremeni zapiskov v aplikaciji.</string>
     <string name="notes_storage_pick">Izberi drugo mapo</string>

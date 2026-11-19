@@ -269,18 +269,18 @@
     <string name="tab_lina">Lina</string>
     <string name="tab_computer">Computer</string>
 
-    <!-- Spletna orodja in Twilio v zavihku Asistent -->
+    <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Websuche und Verbindungen</string>
     <string name="assistant_setup_title">Assistentin: Anbieter und Schlüssel</string>
-    <string name="assistant_setup_hint_missing">Wählen Sie zum Chatten im Tab Assistent einen Anbieter und geben Sie den Schlüssel in den Einstellungen ein (Schaltfläche oben).</string>
-    <string name="assistant_setup_hint_active_fmt">Anbieter: %1$s. Den Anbieter wählen Sie im Tab Assistent, Schlüssel in den Einstellungen (Schaltfläche oben).</string>
+    <string name="assistant_setup_hint_missing">Wählen Sie zum Chatten in den Einstellungen einen Anbieter und geben Sie den Schlüssel ein.</string>
+    <string name="assistant_setup_hint_active_fmt">Anbieter: %1$s. Anbieter und Schlüssel ändern Sie in den Einstellungen.</string>
     <string name="assistant_open_settings">Schlüsseleinstellungen</string>
     <string name="settings_title">Einstellungen</string>
     <string name="lina_chat_title">Gespräch mit Lina</string>
     <string name="assistant_providers_note">Wählen Sie, welcher Anbieter für Lina antwortet. Den Schlüssel des gewählten Anbieters geben Sie in den Einstellungen ein.</string>
     <string name="assistant_provider_ready_fmt">Anbieter %1$s ist bereit.</string>
     <string name="assistant_provider_missing_fmt">Anbieter %1$s ist noch nicht bereit. Schlüssel oder Anmeldung in den Einstellungen eingeben.</string>
-    <string name="assistant_key_provider_fmt">Schlüssel für Anbieter: %1$s. Den Anbieter wählen Sie im Tab Assistent.</string>
+    <string name="assistant_key_provider_fmt">Schlüssel für Anbieter: %1$s. Den Anbieter wählen Sie oben.</string>
     <string name="notes_storage_title">Notizen: Speicherort</string>
     <string name="notes_storage_info_fmt">Eine Kopie der Notizen wird laufend in diese Datei geschrieben: %1$s. Das Bearbeiten der Datei ändert die Notizen in der App nicht.</string>
     <string name="notes_storage_pick">Anderen Ordner wählen</string>
