@@ -65,7 +65,9 @@ class LinaPogovorPogled(
     private val izvozStanje: TextView = a.findViewById(R.id.notesStorageStatus)
     private val izvozIzberi: Button = a.findViewById(R.id.notesStoragePick)
     private val izvozPrivzeto: Button = a.findViewById(R.id.notesStorageDefault)
-    private val nastavitveKljuci = NastavitveKljuciPogled(a, prenos, nit, glavna) { asistent = null; pogovor.setLength(0); osvezi() }
+    /** Povecamo ob spremembi nastavitev: odgovor, ki je bil zahtevan prej, se zavrze. */
+    private var rod = 0
+    private val nastavitveKljuci = NastavitveKljuciPogled(a, prenos, nit, glavna) { rod++; asistent = null; pogovor.setLength(0); osvezi() }
 
     init {
         namigGumb.setOnClickListener { odpriNastavitve() }
@@ -180,10 +182,12 @@ class LinaPogovorPogled(
         dodajVrstico(a.getString(R.string.local_lina), a.getString(R.string.local_thinking))
         osvezi()
         val asist = trenutniAsistent()
+        val mojRod = rod
         nit.execute {
             val odgovor = try { asist.povej(vnos) } catch (e: Exception) { Odgovor.Napaka(e.javaClass.simpleName) }
             glavna.post {
                 if (a.isFinishing) return@post
+                if (mojRod != rod) { caka = false; osvezi(); return@post }
                 odstraniZadnjo()
                 val besedilo = when (odgovor) {
                     is Odgovor.Besedilo -> odgovor.besedilo

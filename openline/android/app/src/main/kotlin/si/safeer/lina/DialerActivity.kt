@@ -127,6 +127,9 @@ class DialerActivity : Activity() {
     private lateinit var assistantTaskInput: EditText
     private lateinit var assistantSendButton: Button
     private lateinit var asistent: AsistentKontroler
+    private var odkrivanje: si.safeer.lina.asistent.OdkrivanjeLine? = null
+    private var iscemLino = false
+    private var ponovniVnosOdprt = false
     private lateinit var assistantOpenSetupButton: Button
     private lateinit var assistantCodeButton: Button
     private lateinit var assistantCircleButton: Button
