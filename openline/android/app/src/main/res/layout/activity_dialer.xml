@@ -33,14 +33,6 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/app_title" />
-
-            <!-- Nastavitve (kljuci, jezik, SIM) so ena stran, dosegljiva z vsakega zaslona (lastnik 19. 11. 2026). -->
-            <Button
-                android:id="@+id/openSettings"
-                style="@style/Gw.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_title" />
         </LinearLayout>
 
         <LinearLayout
@@ -422,6 +414,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:checked="true"
+                    android:textColor="@color/ink"
                     android:text="@string/allowlist_switch" />
 
                 <TextView
@@ -973,13 +966,13 @@
             android:layout_weight="1"
             android:text="@string/tab_lina" />
         <Button
-            android:id="@+id/navAssistant"
-            android:drawableTop="@drawable/ic_nav_assistant"
+            android:id="@+id/navSettings"
+            android:drawableTop="@drawable/ic_nav_settings"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/tab_assistant" />
+            android:text="@string/settings_title" />
         <Button
             android:id="@+id/navComputer"
             android:drawableTop="@drawable/ic_nav_computer"

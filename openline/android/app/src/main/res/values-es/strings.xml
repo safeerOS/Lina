@@ -167,7 +167,6 @@
     <string name="line_status_invalid">No se pudieron leer las líneas de forma fiable. Lina no responde a las llamadas.</string>
     <string name="line_saved">Línea guardada.</string>
     <string name="tab_calls">Llamadas</string>
-    <string name="tab_assistant">Asistente</string>
     <string name="assistant_title">Asistente Lina</string>
     <string name="assistant_open_setup">Abrir Preparar</string>
     <string name="assistant_no_link">Este teléfono no está vinculado con Lina en un ordenador. La vinculación es opcional: en Lina en el ordenador, muestre el código QR del teléfono y escanéelo en la pestaña «Preparar», paso 2.</string>

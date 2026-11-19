@@ -68,12 +68,11 @@ def test_zavihek_lina_je_pogovor_kljuci_so_v_nastavitvah():
     assert {"assistantSetupPanel", "assistantKeyInput", "assistantToolsList", "saveLinaButton", "assistantBackToAssistant"} <= nast
     assert "assistantChatBlock" not in nast
     assert "assistantProviderRow" in nast, "izbira ponudnika je del Nastavitev > Kljuci (lastnik 19. 11. 2026)"
-    # gumb Nastavitve je v glavi (zunaj zavihkov), z njim se Nastavitve odprejo z vsakega zaslona
-    for z in ("tabCalls", "tabPhone", "tabLina", "tabComputer", "tabSettings"):
-        assert "openSettings" not in _potomci_z_id(z), z
-    assert "@+id/openSettings" in (RES / "layout/activity_dialer.xml").read_text(encoding="utf-8")
+    # Nastavitve so v spodnji navigaciji namesto zavihka Asistent (lastnik 19. 11. 2026)
+    lay = (RES / "layout/activity_dialer.xml").read_text(encoding="utf-8")
+    assert "@+id/navSettings" in lay and "navAssistant" not in lay
     dej = (KOT / "DialerActivity.kt").read_text(encoding="utf-8")
-    assert "R.id.openSettings" in dej and "Zavihek.NASTAVITVE" in dej
+    assert "Zavihek.NASTAVITVE to findViewById<Button>(R.id.navSettings)" in dej
     assert "showTab(Zavihek.NASTAVITVE)" in dej.split("private fun odpriNastavitveKljucev()")[1].split("}")[0]
 
 

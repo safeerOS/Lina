@@ -377,13 +377,13 @@ class DialerActivity : Activity() {
         tabPhone = findViewById(R.id.tabPhone)
         tabLina = findViewById(R.id.tabLina)
         tabSettings = findViewById(R.id.tabSettings)
-        findViewById<View>(R.id.openSettings).setOnClickListener { showTab(Zavihek.NASTAVITVE) }
         tabComputer = findViewById(R.id.tabComputer)
         navButtons = mapOf(
             Zavihek.KLICI to findViewById<Button>(R.id.navCalls),
             Zavihek.TELEFON to findViewById<Button>(R.id.navPhone),
             Zavihek.LINA to findViewById<Button>(R.id.navLina),
             Zavihek.RACUNALNIK to findViewById<Button>(R.id.navComputer),
+            Zavihek.NASTAVITVE to findViewById<Button>(R.id.navSettings),
         )
         for ((z, b) in navButtons) b.setOnClickListener { showTab(z) }
         assistantStatus = findViewById(R.id.assistantStatus)

@@ -167,7 +167,6 @@
     <string name="line_status_invalid">Lines could not be read reliably. Lina does not answer calls.</string>
     <string name="line_saved">Line saved.</string>
     <string name="tab_calls">Calls</string>
-    <string name="tab_assistant">Assistant</string>
     <string name="assistant_title">Lina assistant</string>
     <string name="assistant_open_setup">Open Setup</string>
     <string name="assistant_no_link">Not paired with Lina on a computer. Pairing is optional: in Lina on the computer, show the QR code for the phone and scan it in the \u201cSetup\u201d tab, step 2.</string>

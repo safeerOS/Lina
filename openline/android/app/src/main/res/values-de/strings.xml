@@ -167,7 +167,6 @@
     <string name="line_status_invalid">Die Leitungen konnten nicht zuverlässig gelesen werden. Lina nimmt keine Anrufe an.</string>
     <string name="line_saved">Leitung gespeichert.</string>
     <string name="tab_calls">Anrufe</string>
-    <string name="tab_assistant">Assistentin</string>
     <string name="assistant_title">Assistentin Lina</string>
     <string name="assistant_open_setup">Einrichtung öffnen</string>
     <string name="assistant_no_link">Dieses Telefon ist nicht mit Lina auf einem Computer gekoppelt. Die Kopplung ist optional: Lassen Sie in Lina auf dem Computer den QR-Code für das Telefon anzeigen und scannen Sie ihn im Tab „Einrichtung“, Schritt 2.</string>
