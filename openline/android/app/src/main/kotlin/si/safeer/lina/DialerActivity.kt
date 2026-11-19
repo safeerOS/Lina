@@ -122,6 +122,7 @@ class DialerActivity : Activity() {
 
     /** Zavihek pred odprtimi Nastavitvami: gumb Nazaj ga obnovi. */
     private var zavihekPred = Zavihek.LINA
+    private var zavihekZdaj = Zavihek.LINA
     private lateinit var assistantStatus: TextView
     private lateinit var assistantDeviceId: TextView
     private lateinit var assistantTaskInput: EditText
@@ -409,6 +410,7 @@ class DialerActivity : Activity() {
         asistent = AsistentKontroler(this) { if (tabLina.visibility == View.VISIBLE || tabAssistant.visibility == View.VISIBLE || tabSettings.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
         // En gumb »Skeniraj QR« za obe poti (lastnik 14. 11. 2026): isti bralnik kot v koraku 2.
         assistantOpenSetupButton.setOnClickListener { showTab(Zavihek.TELEFON) }
+        findViewById<Button>(R.id.setupCodeButton).setOnClickListener { izberiNacinKode() }
         assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
         assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
         findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
@@ -429,8 +431,21 @@ class DialerActivity : Activity() {
         drsno.post { drsno.smoothScrollTo(0, (tabSettings.top + plosca.top).coerceAtLeast(0)) }
     }
 
+    /** Racunalnik ima opravilo samo med seznanjanjem, po seznanitvi ali ko je izid seznanitve se za prebrati (lastnik 19. 11. 2026); seznanjanje je v Pripravi. */
+    private fun racunalnikPotreben(): Boolean {
+        if (!::asistent.isInitialized) return false
+        val st = asistent.stanje()
+        return st.seznanjen || st.cakaPotrditev || iscemLino || asistent.korakKode != null || asistent.izidSeznanitve != null
+    }
+
+    private fun osveziNavRacunalnik() {
+        navButtons[Zavihek.RACUNALNIK]?.visibility =
+            if (racunalnikPotreben() || zavihekZdaj == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
+    }
+
     private fun showTab(z: Zavihek) {
         if (z != Zavihek.NASTAVITVE) zavihekPred = z
+        zavihekZdaj = z
         tabCalls.visibility = if (z == Zavihek.KLICI) View.VISIBLE else View.GONE
         tabPhone.visibility = if (z == Zavihek.TELEFON) View.VISIBLE else View.GONE
         tabLina.visibility = if (z == Zavihek.LINA) View.VISIBLE else View.GONE
@@ -441,6 +456,7 @@ class DialerActivity : Activity() {
         findViewById<View>(R.id.root).scrollTo(0, 0)
         if (z != Zavihek.KLICI && z != Zavihek.TELEFON) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
+        osveziNavRacunalnik()
     }
 
     private fun renderAssistant() {
@@ -490,6 +506,7 @@ class DialerActivity : Activity() {
         assistantStopButton.visibility = if (p.ustavi) View.VISIBLE else View.GONE
         assistantLog.text = asistent.dnevnik.joinToString("\n")
         assistantLog.visibility = if (asistent.dnevnik.isEmpty()) View.GONE else View.VISIBLE
+        osveziNavRacunalnik()
         val o = asistent.odprta
         assistantApproval.visibility = if (p.odobritev && o != null) View.VISIBLE else View.GONE
         if (o != null) {
@@ -563,7 +580,7 @@ class DialerActivity : Activity() {
         val nacini = arrayOf(getString(R.string.assistant_code_mode_pc), getString(R.string.assistant_code_mode_phone))
         AlertDialog.Builder(this, R.style.Gw_Dialog)
             .setTitle(getString(R.string.assistant_code_button))
-            .setItems(nacini) { _, i -> poisciLino(naTelefonu = i == 1) }
+            .setItems(nacini) { _, i -> showTab(Zavihek.RACUNALNIK); poisciLino(naTelefonu = i == 1) }
             .setNegativeButton(getString(R.string.pair_cancel), null)
             .show()
     }
