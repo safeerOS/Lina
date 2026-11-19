@@ -25,3 +25,9 @@ Stanje 19. 11. 2026. Cilj lastnika: zapiski delujejo na telefonu in racunalniku,
 - Vsebina zapiskov nikoli ni v dnevniku; sifrirano samo med clani kroga; rele vidi samo podpisane ponudbe.
 - Sinhronizacija se ne sprozi iz besedila klica ali sporocila; vkljucitev v krog samo z uporabnikovo potrditvijo.
 - Nobenega nesifriranega nadomestka (brez `cryptography` ni prenosa).
+
+## Odlocitev lastnika, 19. 11. 2026: Lina sama in skupaj s Safeer OS
+- Lina MORA delovati popolnoma sama (brez Safeer OS): zapiski lokalno, izvoz v Dokumente, brez opozoril o manjkajoci aplikaciji.
+- Ce je na istem telefonu Safeer OS, se Lina z njim poveze sama (neobvezno) in samo doprinese: zapiski potujejo po obstojecem krogu zaupanja in Global Linku. Lina ne dobi lastnega clanstva in ne podvaja kode Linka.
+- Zdaj preverjeno v Safeer OS za telefon (repozitorij Mobile-android, HEAD 6634a35): sinhronizacija zaznamkov po kategorijah (`ZaznamkiSync`, kategorija `bookmarks`, prek huba, vklop uporabnika, razlicica); nobena storitev ni izvozena (`exported=false`), torej lokalnega vmesnika za druge aplikacije ni. Zaznamki ne prenasajo brisanja; zapiski potrebujejo nagrobnike (izbrisan + cas), ki jih Lina ze ima.
+- Nacrt: (a) v Safeer OS nova kategorija `notes` z istim zdruzevanjem kot skupni vektorji (`skupni-vektorji/zapiski-zdruzitev-v1.json`); (b) lokalni vmesnik, zavarovan z dovoljenjem na ravni podpisa (samo aplikacije, podpisane z istim kljucem) ali z izrecno potrditvijo uporabnika; (c) Lina zazna Safeer OS (PackageManager + preverba podpisa) in ponudi povezavo; brez njega ostane sama; (d) nikoli ne iz besedila klica ali sporocila.
