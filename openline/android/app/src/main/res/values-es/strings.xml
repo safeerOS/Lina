@@ -166,7 +166,8 @@
     <string name="tab_calls">Llamadas</string>
     <string name="tab_assistant">Asistente</string>
     <string name="assistant_title">Asistente Lina</string>
-    <string name="assistant_no_link">Este teléfono no está vinculado con Lina en un ordenador. La vinculación es opcional: en Lina en el ordenador, muestre el código QR del teléfono y escanéelo con «Escanear QR».</string>
+    <string name="assistant_open_setup">Abrir Preparar</string>
+    <string name="assistant_no_link">Este teléfono no está vinculado con Lina en un ordenador. La vinculación es opcional: en Lina en el ordenador, muestre el código QR del teléfono y escanéelo en la pestaña «Preparar», paso 2.</string>
     <string name="assistant_ready">Conectado con Lina en su ordenador. Una tarea se firma con la clave de este teléfono.</string>
     <string name="assistant_device_id">Este teléfono en el círculo cercano de Safeer Link: %1$s</string>
     <string name="assistant_task_hint">Tarea para Claude Code</string>

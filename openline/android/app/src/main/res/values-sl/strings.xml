@@ -166,7 +166,8 @@
     <string name="tab_calls">Klici</string>
     <string name="tab_assistant">Asistent</string>
     <string name="assistant_title">Asistentka Lina</string>
-    <string name="assistant_no_link">Telefon ni seznanjen z Lino na računalniku. Seznanitev ni obvezna: v Lini na računalniku prikažite kodo QR za telefon in jo skenirajte z gumbom »Skeniraj QR«.</string>
+    <string name="assistant_open_setup">Odpri Pripravo</string>
+    <string name="assistant_no_link">Telefon ni seznanjen z Lino na računalniku. Seznanitev ni obvezna: v Lini na računalniku prikažite kodo QR za telefon in jo skenirajte v zavihku »Priprava«, korak 2.</string>
     <string name="assistant_ready">Povezano z Lino na računalniku. Naloga se podpiše s ključem tega telefona.</string>
     <string name="assistant_device_id">Ta telefon v ožjem krogu Safeer Linka: %1$s</string>
     <string name="assistant_task_hint">Naloga za Claude Code</string>

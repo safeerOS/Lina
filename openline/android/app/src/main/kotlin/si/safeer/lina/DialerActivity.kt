@@ -127,7 +127,7 @@ class DialerActivity : Activity() {
     private lateinit var assistantTaskInput: EditText
     private lateinit var assistantSendButton: Button
     private lateinit var asistent: AsistentKontroler
-    private lateinit var assistantPairButton: Button
+    private lateinit var assistantOpenSetupButton: Button
     private lateinit var assistantCodeButton: Button
     private lateinit var assistantCircleButton: Button
     private var odkrivanje: si.safeer.lina.asistent.OdkrivanjeLine? = null
@@ -393,7 +393,7 @@ class DialerActivity : Activity() {
         assistantTaskInput = findViewById(R.id.assistantTaskInput)
         assistantSendButton = findViewById(R.id.assistantSendButton)
         assistantSendButton.setOnClickListener { sendTask() }
-        assistantPairButton = findViewById(R.id.assistantPairButton)
+        assistantOpenSetupButton = findViewById(R.id.assistantOpenSetupButton)
         assistantCodeButton = findViewById(R.id.assistantCodeButton)
         assistantCodeButton.setOnClickListener { izberiNacinKode() }
         assistantCircleButton = findViewById(R.id.assistantCircleButton)
@@ -408,7 +408,7 @@ class DialerActivity : Activity() {
         assistantApprovalDescription = findViewById(R.id.assistantApprovalDescription)
         asistent = AsistentKontroler(this) { if (tabLina.visibility == View.VISIBLE || tabAssistant.visibility == View.VISIBLE || tabSettings.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
         // En gumb »Skeniraj QR« za obe poti (lastnik 14. 11. 2026): isti bralnik kot v koraku 2.
-        assistantPairButton.setOnClickListener { scanPairingQr() }
+        assistantOpenSetupButton.setOnClickListener { showTab(Zavihek.TELEFON) }
         assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
         assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
         findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
@@ -479,7 +479,7 @@ class DialerActivity : Activity() {
         }
         assistantStatus.text = if (seja == null) glavno else "$glavno\n$seja"
         // Kar ni narejeno, se ne pokaze: vsak gumb samo, ko ima ucinek (AsistentPrikaz, preizkusi v modulu podpis).
-        assistantPairButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
+        assistantOpenSetupButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
         assistantCodeButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
         if (asistent.korakKode == AsistentKontroler.KorakKode.VNESI_ZNOVA && !ponovniVnosOdprt) kodoZnova()
         // Razdelek klicev iz /koda/potrdi: ista potrditev kot pri QR (gostitelj in odtis na zaslonu).

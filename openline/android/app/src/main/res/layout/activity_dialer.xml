@@ -799,12 +799,12 @@
                 android:textIsSelectable="true" />
 
             <Button
-                android:id="@+id/assistantPairButton"
+                android:id="@+id/assistantOpenSetupButton"
                 style="@style/Gw.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/scan_qr"
+                android:text="@string/assistant_open_setup"
                 android:visibility="gone" />
 
             <Button
