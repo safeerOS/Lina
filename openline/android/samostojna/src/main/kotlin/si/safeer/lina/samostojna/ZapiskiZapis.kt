@@ -37,3 +37,29 @@ fun zapiskiVBesedilo(seznam: List<Zapisek>, naslov: String, opomba: String, obli
     }
     return sb.toString()
 }
+
+/** Skupne meje shrambe zapiskov (isti v Safeer OS): vec kot to shramba ne sprejme (sprejeto=false). */
+const val NAJVEC_ZAPISKOV = 5000
+const val NAJVEC_ZNAKOV = 262_144
+/** Nagrobnik (izbrisan=true) se po tem roku odstrani. Naprava, ki je dlje brez povezave, lahko izbrisan zapisek spet oživi. */
+const val ROK_NAGROBNIKA_MS = 90L * 24 * 60 * 60 * 1000
+
+data class IzidCiscenja(val zapiski: List<Zapisek>, val sprejeto: Boolean)
+
+private fun znakov(seznam: List<Zapisek>): Int = seznam.sumOf { it.besedilo.codePointCount(0, it.besedilo.length) }
+
+/**
+ * Ciscenje nagrobnikov po skupnih pravilih (skupni-vektorji/zapiski-zdruzitev-v1.json, razdelek ciscenje):
+ * stari nagrobniki gredo, ob preseku meje najprej najstarejsi nagrobnik (pri enakem casu manjsi id); zivi zapiski nikoli.
+ */
+fun pocistiNagrobnike(
+    seznam: List<Zapisek>, zdajMs: Long,
+    rokMs: Long = ROK_NAGROBNIKA_MS, najvecZapiskov: Int = NAJVEC_ZAPISKOV, najvecZnakov: Int = NAJVEC_ZNAKOV,
+): IzidCiscenja {
+    val s = seznam.filterNot { it.izbrisan && it.cas < zdajMs - rokMs }.toMutableList()
+    while (s.size > najvecZapiskov || znakov(s) > najvecZnakov) {
+        val najstarejsi = s.filter { it.izbrisan }.minWithOrNull(compareBy<Zapisek>({ it.cas }, { it.id })) ?: break
+        s.remove(najstarejsi)
+    }
+    return IzidCiscenja(s.sortedBy { it.id }, s.size <= najvecZapiskov && znakov(s) <= najvecZnakov)
+}

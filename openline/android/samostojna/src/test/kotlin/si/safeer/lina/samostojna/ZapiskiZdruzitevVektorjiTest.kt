@@ -34,4 +34,24 @@ class ZapiskiZdruzitevVektorjiTest {
             assertEquals(pricakovano, zdruzi(b, a), "b,a: $ime")
         }
     }
+
+    @Test
+    fun `ciscenje nagrobnikov ustreza skupnim vektorjem`() {
+        val koren = json.parseToJsonElement(File("../skupni-vektorji/zapiski-zdruzitev-v1.json").readText(Charsets.UTF_8)).jsonObject
+        val primeri = koren.getValue("ciscenje").jsonArray
+        assertTrue(primeri.size >= 7, "razdelek ciscenje je prazen ali okrnjen")
+        for (p in primeri) {
+            val o = p.jsonObject
+            val ime = o.getValue("ime").jsonPrimitive.content
+            val izid = pocistiNagrobnike(
+                json.decodeFromJsonElement(seznam, o.getValue("vhod")),
+                o.getValue("zdaj").jsonPrimitive.content.toLong(),
+                o.getValue("rok").jsonPrimitive.content.toLong(),
+                o.getValue("najvecZapiskov").jsonPrimitive.content.toInt(),
+                o.getValue("najvecZnakov").jsonPrimitive.content.toInt(),
+            )
+            assertEquals(json.decodeFromJsonElement(seznam, o.getValue("pricakovano")), izid.zapiski, ime)
+            assertEquals(o.getValue("sprejeto").jsonPrimitive.content.toBoolean(), izid.sprejeto, ime)
+        }
+    }
 }
