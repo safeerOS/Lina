@@ -530,6 +530,35 @@
                     android:layout_height="wrap_content"
                     android:text="@string/assistant_setup_title" />
 
+                <TextView
+                    style="@style/Gw.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/assistant_providers_note" />
+
+                <TextView
+                    android:id="@+id/assistantProviderLabel"
+                    style="@style/Gw.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/local_provider" />
+
+                <LinearLayout
+                    android:id="@+id/assistantProviderRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/assistantProviderStatus"
+                    style="@style/Gw.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" />
+
             <TextView
                 android:id="@+id/assistantKeyProviderInfo"
                 style="@style/Gw.Muted"
@@ -721,59 +750,6 @@
                 android:orientation="vertical" />
 
 
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/tabAssistant"
-            style="@style/Gw.Panel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <TextView
-                style="@style/Gw.Heading"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/assistant_title" />
-
-            <TextView
-                style="@style/Gw.Muted"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/assistant_providers_note" />
-
-            <TextView
-                android:id="@+id/assistantProviderLabel"
-                style="@style/Gw.Muted"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/local_provider" />
-
-            <LinearLayout
-                android:id="@+id/assistantProviderRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:orientation="vertical" />
-
-            <TextView
-                android:id="@+id/assistantProviderStatus"
-                style="@style/Gw.Body"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp" />
-
-            <Button
-                android:id="@+id/assistantProvidersOpenSettings"
-                style="@style/Gw.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/assistant_open_settings" />
         </LinearLayout>
 
         <LinearLayout

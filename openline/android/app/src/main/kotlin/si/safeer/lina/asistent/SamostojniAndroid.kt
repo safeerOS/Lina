@@ -163,6 +163,26 @@ class PonudnikShramba(private val context: Context) {
     fun shrani(p: Ponudnik) { prefs().edit().putString("ponudnik", p.id).apply() }
 }
 
+object SkupniKljuci {
+    var aktivniPonudnikTest: Ponudnik? = null
+    var shrambaZaPonudnikaTest: ((Ponudnik) -> ShranjevalnikKljuca)? = null
+
+    fun aktivniPonudnik(context: Context): Ponudnik = aktivniPonudnikTest ?: PonudnikShramba(context).beri()
+    fun nastaviAktivnegaPonudnika(context: Context, p: Ponudnik) {
+        if (aktivniPonudnikTest != null) aktivniPonudnikTest = p
+        else PonudnikShramba(context).shrani(p)
+    }
+
+    fun shrambaZaPonudnika(context: Context, p: Ponudnik): ShranjevalnikKljuca = 
+        shrambaZaPonudnikaTest?.invoke(p) ?: KeystoreShranjevalnik(context, p)
+    
+    fun shrambaZaOrodje(context: Context, o: VrstaOrodja): ShranjevalnikKljuca = KeystoreShranjevalnik(context, o)
+    
+    fun preberiKljucAktivnegaPonudnika(context: Context): KljucGemini? {
+        return shrambaZaPonudnika(context, aktivniPonudnik(context)).preberi()
+    }
+}
+
 /** Zapiski na telefonu. Poskodovan zapis se pred prvim novim zapisom shrani kot varnostna kopija, nikoli ne izgine tiho. */
 class ZapiskiShramba(private val context: Context) {
     private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)

@@ -2,7 +2,7 @@
 import pathlib
 import re
 
-POGLED = pathlib.Path(__file__).resolve().parents[1] / "app/src/main/kotlin/si/safeer/lina/asistent/OrodjaPogled.kt"
+POGLED = pathlib.Path(__file__).resolve().parents[1] / "app/src/main/kotlin/si/safeer/lina/asistent/NastavitveKljuciPogled.kt"
 
 
 def test_polja_za_kljuce_so_fokusabilna_z_dotikom():
@@ -30,7 +30,7 @@ def test_pot_nazaj_na_asistenta_po_vnosu_kljucev():
     assert "hideSoftInputFromWindow" in op, "tipkovnica se mora po uspesnem shranjevanju zapreti"
     # gumb vodi nazaj na zavihek, iz katerega so bile odprte Nastavitve
     assert "showTab(zavihekPred) })" in (KOT / "DialerActivity.kt").read_text(encoding="utf-8")
-    sp = (KOT / "asistent/SamostojniPogled.kt").read_text(encoding="utf-8")
+    sp = (KOT / "asistent/LinaPogovorPogled.kt").read_text(encoding="utf-8")
     assert "assistantBackToAssistant" in sp and "nazaj()" in sp
 
 
@@ -67,11 +67,9 @@ def test_zavihek_lina_je_pogovor_kljuci_so_v_nastavitvah():
     nast = _potomci_z_id("tabSettings")
     assert {"assistantSetupPanel", "assistantKeyInput", "assistantToolsList", "saveLinaButton", "assistantBackToAssistant"} <= nast
     assert "assistantChatBlock" not in nast
-    asist = _potomci_z_id("tabAssistant")
-    assert "assistantProviderRow" in asist, "izbira ponudnika je v zavihku Asistent"
-    assert "assistantProviderRow" not in nast
+    assert "assistantProviderRow" in nast, "izbira ponudnika je del Nastavitev > Kljuci (lastnik 19. 11. 2026)"
     # gumb Nastavitve je v glavi (zunaj zavihkov), z njim se Nastavitve odprejo z vsakega zaslona
-    for z in ("tabCalls", "tabPhone", "tabLina", "tabAssistant", "tabComputer", "tabSettings"):
+    for z in ("tabCalls", "tabPhone", "tabLina", "tabComputer", "tabSettings"):
         assert "openSettings" not in _potomci_z_id(z), z
     assert "@+id/openSettings" in (RES / "layout/activity_dialer.xml").read_text(encoding="utf-8")
     dej = (KOT / "DialerActivity.kt").read_text(encoding="utf-8")

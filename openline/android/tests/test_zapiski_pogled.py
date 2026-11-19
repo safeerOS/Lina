@@ -1,7 +1,7 @@
 """Zapiski asistentke na telefonu (lastnik 19. 11. 2026: »zapisek ni urejen«): stevilo v naslovu, datum in ura pri vsakem zapisku."""
 import pathlib
 
-POGLED = pathlib.Path(__file__).resolve().parents[1] / "app/src/main/kotlin/si/safeer/lina/asistent/SamostojniPogled.kt"
+POGLED = pathlib.Path(__file__).resolve().parents[1] / "app/src/main/kotlin/si/safeer/lina/asistent/LinaPogovorPogled.kt"
 
 
 def test_zapiski_imajo_stevilo_in_cas():
@@ -21,7 +21,7 @@ def test_zapiski_se_zrcalijo_v_dokumente_z_nastavljivo_mapo():
     assert 'PRIVZETA_MAPA = "Documents/Lina/"' in iz and "MediaStore.Files" in iz, "privzeto Dokumenti prek MediaStore"
     assert "ACTION_OPEN_DOCUMENT_TREE" in iz and "FLAG_GRANT_PERSISTABLE_URI_PERMISSION" in iz, "izbira mape s trajnim dovoljenjem"
     assert 'PREFS = "lina_zapiski_izvoz"' in iz, "nastavitve niso v datoteki s tajnopisi kljucev"
-    p = (KOT / "asistent/SamostojniPogled.kt").read_text(encoding="utf-8")
+    p = (KOT / "asistent/LinaPogovorPogled.kt").read_text(encoding="utf-8")
     zunaj = p.replace("zapiski.shrani(novi)", "")
     assert "zapiski.shrani(" not in zunaj, "vsak zapis zapiskov mora iti prek shraniZapiske (zrcaljenje v datoteko)"
     assert "obdelajMapo" in p and "ZAHTEVA_MAPA" in (KOT / "DialerActivity.kt").read_text(encoding="utf-8")

@@ -52,6 +52,10 @@ class GeminiLiveOdjemalec(
 
     @Volatile private var nepopolnOkvir = ByteArray(0)
 
+    private fun maskirajSkrivnosti(besedilo: String): String {
+        return besedilo.replace(Regex("key=[^&\\s]+"), "key=SKRITO").replace(Regex("Bearer\\s+[^&\\s]+"), "Bearer SKRITO")
+    }
+
     private fun poskusiPovezavo(zacasnaNapaka: Boolean = false) {
         if (isClosed.get()) return
         val pot = izbiraPoti.izberi()
@@ -138,7 +142,7 @@ class GeminiLiveOdjemalec(
             override fun onError(napaka: Throwable) {
                 izbiraPoti.neuspeh(pot)
                 val msg = napaka.message ?: napaka.javaClass.simpleName
-                val varnoSporocilo = msg.replace(Regex("key=[^&\\s]+"), "key=SKRITO").replace(Regex("Bearer\\s+[^&\\s]+"), "Bearer SKRITO")
+                val varnoSporocilo = maskirajSkrivnosti(msg)
                 dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
                     id = "sys-${System.currentTimeMillis()}",
                     casZacetka = System.currentTimeMillis(),
@@ -150,11 +154,10 @@ class GeminiLiveOdjemalec(
                 synchronized(vhodniMutex) {
                     stanje = StanjePovezave.ZAPRT
                 }
-                // TODO: retry once
             }
 
             override fun onClose(koda: Int, razlog: String) {
-                val maskiran = razlog.replace(Regex("key=[^&\\s]+"), "key=SKRITO").replace(Regex("Bearer\\s+[^&\\s]+"), "Bearer SKRITO")
+                val maskiran = maskirajSkrivnosti(razlog)
                 val textRazlog = if (maskiran.isBlank()) "brez razloga" else maskiran
                 dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
                     id = "sys-${System.currentTimeMillis()}",
@@ -187,7 +190,7 @@ class GeminiLiveOdjemalec(
         } catch (e: Exception) {
             izbiraPoti.neuspeh(pot)
             val msg = e.message ?: e.javaClass.simpleName
-            val varnoSporocilo = msg.replace(Regex("key=[^&\\s]+"), "key=SKRITO").replace(Regex("Bearer\\s+[^&\\s]+"), "Bearer SKRITO")
+            val varnoSporocilo = maskirajSkrivnosti(msg)
             dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
                 id = "sys-${System.currentTimeMillis()}",
                 casZacetka = System.currentTimeMillis(),
@@ -293,6 +296,7 @@ class GeminiLiveOdjemalec(
     }
 
     override fun vKlic(okvir: ByteArray) {
+        if (isClosed.get()) return
         var needsConnect = false
         var isReady = false
         synchronized(vhodniMutex) {
@@ -353,6 +357,17 @@ class GeminiLiveOdjemalec(
     }
 
     override fun nastaviIzhod(posljiOkvir: (ByteArray) -> Unit) {
+        // Prehod to pokliče ob vsaki novi medijski povezavi = začetek novega klica:
+        // odjemalec se zato vrne v izhodiščno stanje in ga je mogoče uporabiti znova.
+        synchronized(vhodniMutex) {
+            ws?.zapri(1000, "Nov klic")
+            ws = null
+            stanje = StanjePovezave.ZAPRT
+            vhodnaVrsta.clear()
+            startTimeMs = 0L
+            nepopolnOkvir = ByteArray(0)
+            isClosed.set(false)
+        }
         izhodniCallback = posljiOkvir
     }
 

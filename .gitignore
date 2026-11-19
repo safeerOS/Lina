@@ -12,3 +12,5 @@ node_modules/
 *.log
 *.orig
 izid/
+__pycache__/
+.pytest_cache/

@@ -15,7 +15,6 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import si.safeer.lina.samostojna.Asistent
-import si.safeer.lina.samostojna.GoogleOAuth
 import si.safeer.lina.samostojna.GoogleZetonOsvezevalnik
 import si.safeer.lina.samostojna.PrijavaGoogle
 import si.safeer.lina.samostojna.ProjektGoogle
@@ -36,68 +35,40 @@ import java.time.ZonedDateTime
 import java.util.UUID
 import java.util.concurrent.Executors
 
-/**
- * Samostojna asistentka v zavihku Asistent (lastnik 18. 11. 2026: mora delovati tudi brez racunalnika).
- * Pogovor je v pomnilniku (trajen zapis pogovora je naslednji sklop), zapiski in kljuc sta trajna na telefonu.
- */
-class SamostojniPogled(
+class LinaPogovorPogled(
     private val a: Activity,
     private val odpriNastavitve: () -> Unit = {},
-    /** Nazaj na zavihek, iz katerega so bile odprte Nastavitve. */
     private val nazaj: () -> Unit = {},
 ) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
-    private val ponudnikShramba = PonudnikShramba(a)
-    private var ponudnik = ponudnikShramba.beri()
-    private var kljuci = KeystoreShranjevalnik(a, ponudnik)
     private val zapiski = ZapiskiShramba(a)
     private val googleShramba = GoogleShramba(a)
     private val prenos = AndroidPrenos()
-    // Osvezitveni zeton Google je v Keystore (kot kljuci drugih ponudnikov), dostopni samo v pomnilniku.
-    private val google = GoogleZetonOsvezevalnik(KeystoreShranjevalnik(a, Ponudnik.VERTEX), prenos)
-    private var googleSporocilo: String? = null
+    private val google = GoogleZetonOsvezevalnik(SkupniKljuci.shrambaZaPonudnika(a, Ponudnik.VERTEX), prenos)
     private var asistent: Asistent? = null
     private var asistentDan: LocalDate? = null
     private var caka = false
     private val pogovor = StringBuilder()
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
-    // Pogovor je v zavihku Lina, izbira ponudnika v zavihku Asistent, kljuci v Nastavitvah (lastnik 19. 11. 2026).
     private val namig: TextView = a.findViewById(R.id.assistantSetupHint)
     private val namigGumb: Button = a.findViewById(R.id.assistantOpenSettings)
-    private val kljucBlok: View = a.findViewById(R.id.assistantKeyBlock)
-    private val kljucVnos: EditText = a.findViewById(R.id.assistantKeyInput)
-    private val kljucShrani: Button = a.findViewById(R.id.assistantKeySave)
     private val klepetBlok: View = a.findViewById(R.id.assistantChatBlock)
     private val klepetDnevnik: TextView = a.findViewById(R.id.assistantChatLog)
     private val klepetVnos: EditText = a.findViewById(R.id.assistantChatInput)
     private val klepetPosli: Button = a.findViewById(R.id.assistantChatSend)
     private val zapisekNaslov: TextView = a.findViewById(R.id.assistantNotesTitle)
     private val zapiskiSeznam: LinearLayout = a.findViewById(R.id.assistantNotesList)
-    // Kopija zapiskov v Dokumentih ali v mapi, ki jo izbere uporabnik (lastnik 19. 11. 2026).
     private val izvoz = ZapiskiIzvoz(a)
     private val izvozInfo: TextView = a.findViewById(R.id.notesStorageInfo)
     private val izvozStanje: TextView = a.findViewById(R.id.notesStorageStatus)
     private val izvozIzberi: Button = a.findViewById(R.id.notesStoragePick)
     private val izvozPrivzeto: Button = a.findViewById(R.id.notesStorageDefault)
-    private val kljucPozabi: Button = a.findViewById(R.id.assistantKeyForget)
-    private val ponudnikVrstica: LinearLayout = a.findViewById(R.id.assistantProviderRow)
-    private val ponudnikStanje: TextView = a.findViewById(R.id.assistantProviderStatus)
-    private val ponudnikNastavitve: Button = a.findViewById(R.id.assistantProvidersOpenSettings)
-    private val kljucZaPonudnika: TextView = a.findViewById(R.id.assistantKeyProviderInfo)
-    private val googleBlok: View = a.findViewById(R.id.assistantGoogleBlock)
-    private val googleInfo: TextView = a.findViewById(R.id.assistantGoogleInfo)
-    private val googleGumb: Button = a.findViewById(R.id.assistantGoogleSignIn)
-    // Kljuci Brave/TinyFish/Twilio; ob spremembi se asistentka zgradi znova (navodilo omeni samo orodja, ki so na voljo).
-    private val orodjaPogled = OrodjaPogled(a, a.findViewById(R.id.assistantToolsList), prenos, nit, glavna, {
-        asistent = null; pogovor.setLength(0); osvezi()
-    })
+    private val nastavitveKljuci = NastavitveKljuciPogled(a, prenos, nit, glavna) { asistent = null; pogovor.setLength(0); osvezi() }
 
     init {
-        kljucShrani.setOnClickListener { shraniKljuc() }
         namigGumb.setOnClickListener { odpriNastavitve() }
-        ponudnikNastavitve.setOnClickListener { odpriNastavitve() }
         a.findViewById<Button>(R.id.assistantBackToAssistant).setOnClickListener { nazaj() }
         klepetPosli.setOnClickListener { poslji() }
         izvozIzberi.setOnClickListener {
@@ -106,117 +77,29 @@ class SamostojniPogled(
         }
         izvozPrivzeto.setOnClickListener { izvoz.nastaviMapo(null); izvoziZapiske(); osveziIzvoz() }
         if (vidniZapiski(zapiski.beri()).isNotEmpty()) izvoziZapiske()
-        googleGumb.setOnClickListener { zacniPrijavoGoogle() }
-        kljucPozabi.setOnClickListener {
-            if (ponudnik == Ponudnik.VERTEX) { google.odjava(); googleShramba.shraniProjekt(null); googleSporocilo = null } else kljuci.izbrisi()
-            asistent = null; pogovor.setLength(0); osvezi()
-        }
-        for (p in Ponudnik.entries) {
-            ponudnikVrstica.addView(
-                Button(a, null, 0, R.style.Gw_Button).apply { tag = p; setOnClickListener { izberiPonudnika(p) } },
-                // Gumbi eden pod drugim: pet ponudnikov v eni vrstici se je na telefonu lomilo po crkah (lastnik 18. 11. 2026).
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                    .apply { topMargin = (6 * a.resources.displayMetrics.density).toInt() },
-            )
-        }
     }
 
-    /** Vsak ponudnik ima svoj kljuc; menjava ne izbrise kljuca drugega ponudnika, pogovor pa se zacne znova (drug model). */
-    private fun izberiPonudnika(p: Ponudnik) {
-        if (p == ponudnik || caka) return
-        ponudnik = p
-        ponudnikShramba.shrani(p)
-        kljuci = KeystoreShranjevalnik(a, p)
-        asistent = null
-        pogovor.setLength(0)
-        kljucVnos.setText("")
-        kljucVnos.error = null
-        googleSporocilo = null
-        osvezi()
-    }
+    private fun jeVertex() = SkupniKljuci.aktivniPonudnik(a) == Ponudnik.VERTEX
+    private fun imaDostop() = if (jeVertex()) google.prijavljen() && googleShramba.projekt() != null else SkupniKljuci.preberiKljucAktivnegaPonudnika(a) != null
 
-    private fun jeVertex() = ponudnik == Ponudnik.VERTEX
-    private fun imaDostop() = if (jeVertex()) google.prijavljen() && googleShramba.projekt() != null else kljuci.preberi() != null
-
-    /** Prijava v brskalniku (OAuth PKCE); brez gesla v aplikaciji. Vrnitev obdela obdelajPovezavo. */
-    private fun zacniPrijavoGoogle() {
-        if (caka) return
-        val z = GoogleOAuth.zacni()
-        googleShramba.shraniZacetek(z.preverjalnik, z.stanje, System.currentTimeMillis() + 10 * 60_000L)
-        googleSporocilo = a.getString(R.string.local_google_working)
-        osvezi()
-        try { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(z.naslov))) }
-        catch (e: ActivityNotFoundException) { googleSporocilo = a.getString(R.string.local_google_err_fmt, "brskalnik"); osvezi() }
-    }
-
-    /** Vrnitev iz brskalnika: koda -> zeton -> projekt -> Vertex. Napaka se pokaze z razlogom, ne tiho. */
     fun obdelajPovezavo(povezava: String) {
-        val zacetek = googleShramba.vzemiZacetek(System.currentTimeMillis())
-        val koda = zacetek?.let { GoogleOAuth.kodaIzPovezave(povezava, it.second) }
-        if (zacetek == null || koda == null) { googleSporocilo = a.getString(R.string.local_google_err_fmt, "state"); osvezi(); return }
-        googleSporocilo = a.getString(R.string.local_google_working); osvezi()
-        nit.execute {
-            val zetona = GoogleOAuth.zamenjajKodo(prenos, koda, zacetek.first)
-            val izid = if (zetona == null) PrijavaGoogle.Napaka("koda")
-            else { google.nastavi(zetona); poPrijaviGoogle(zetona.dostop, prenos, googleShramba.projekt()) }
-            glavna.post { if (!a.isFinishing) obdelajIzid(izid, zetona?.dostop) }
-        }
-    }
-
-    private fun obdelajIzid(izid: PrijavaGoogle, zeton: String?) {
-        when (izid) {
-            is PrijavaGoogle.Pripravljeno -> { googleShramba.shraniProjekt(izid.projekt.id); googleSporocilo = null; asistent = null; pogovor.setLength(0) }
-            is PrijavaGoogle.Napaka -> { google.odjava(); googleSporocilo = a.getString(R.string.local_google_err_fmt, izid.sporocilo) }
-            is PrijavaGoogle.Izbira -> { izberiProjekt(izid.projekti, zeton ?: return); return }
-        }
-        osvezi()
-    }
-
-    private fun izberiProjekt(projekti: List<ProjektGoogle>, zeton: String) {
-        AlertDialog.Builder(a).setTitle(R.string.local_google_pick)
-            .setItems(projekti.map { "${it.ime} (${it.id})" }.toTypedArray()) { _, i ->
-                nit.execute {
-                    val izid = vklopiVertex(zeton, prenos, projekti[i])
-                    glavna.post { if (!a.isFinishing) obdelajIzid(izid, zeton) }
-                }
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> google.odjava(); googleSporocilo = null; osvezi() }
-            .setOnCancelListener { google.odjava(); googleSporocilo = null; osvezi() }
-            .show()
+        nastavitveKljuci.obdelajPovezavo(povezava)
     }
 
     fun osvezi() {
         val imaKljuc = imaDostop()
+        val ponudnik = SkupniKljuci.aktivniPonudnik(a)
         info.text = a.getString(R.string.local_info)
         namig.text = if (imaKljuc) a.getString(R.string.assistant_setup_hint_active_fmt, ponudnik.oznaka) else a.getString(R.string.assistant_setup_hint_missing)
-        kljucVnos.hint = a.getString(R.string.local_key_hint_fmt, ponudnik.oznaka)
-        ponudnikStanje.text = a.getString(if (imaKljuc) R.string.assistant_provider_ready_fmt else R.string.assistant_provider_missing_fmt, ponudnik.oznaka)
-        kljucZaPonudnika.text = a.getString(R.string.assistant_key_provider_fmt, ponudnik.oznaka)
-        for (i in 0 until ponudnikVrstica.childCount) {
-            val b = ponudnikVrstica.getChildAt(i) as Button
-            val p = b.tag as Ponudnik
-            val izbran = p == ponudnik
-            b.text = if (izbran) "\u2713 ${p.oznaka}" else p.oznaka
-            b.isSelected = izbran
-            b.alpha = if (izbran) 1f else 0.6f
-            b.contentDescription = if (izbran) "${p.oznaka}, ${a.getString(R.string.local_provider_selected)}" else p.oznaka
-            b.isEnabled = !caka
-        }
-        kljucBlok.visibility = if (imaKljuc || jeVertex()) View.GONE else View.VISIBLE
-        googleBlok.visibility = if (!imaKljuc && jeVertex()) View.VISIBLE else View.GONE
-        googleInfo.text = googleSporocilo ?: a.getString(R.string.local_google_info)
-        googleGumb.isEnabled = !caka
-        kljucPozabi.text = if (jeVertex()) a.getString(R.string.local_google_sign_out) else a.getString(R.string.local_key_forget)
         klepetBlok.visibility = if (imaKljuc) View.VISIBLE else View.GONE
-        kljucPozabi.visibility = if (imaKljuc) View.VISIBLE else View.GONE
         klepetDnevnik.text = pogovor.toString()
         klepetDnevnik.visibility = if (pogovor.isEmpty()) View.GONE else View.VISIBLE
         klepetPosli.isEnabled = !caka
+        nastavitveKljuci.osvezi()
         osveziZapiske()
         osveziIzvoz()
     }
 
-    /** Vsak zapis zapiskov se zrcali v datoteko (Dokumenti ali izbrana mapa). */
     private fun shraniZapiske(novi: List<Zapisek>) {
         zapiski.shrani(novi)
         izvoziZapiske()
@@ -230,7 +113,6 @@ class SamostojniPogled(
         }
     }
 
-    /** Uporabnik je izbral mapo za datoteko z zapiski (vrnitev iz izbirnika map). */
     fun obdelajMapo(uri: Uri) {
         try {
             a.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -257,7 +139,6 @@ class SamostojniPogled(
     private fun osveziZapiske() {
         val vidni = vidniZapiski(zapiski.beri())
         zapisekNaslov.visibility = if (vidni.isEmpty()) View.GONE else View.VISIBLE
-        // Lastnik 19. 11. 2026: zapiski niso bili urejeni. Naslov s stevilom, vsak zapisek z datumom in uro (najnovejsi zgoraj).
         zapisekNaslov.text = a.getString(R.string.local_notes_title) + " (" + vidni.size + ")"
         val oblika = java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT)
         zapiskiSeznam.removeAllViews()
@@ -278,23 +159,13 @@ class SamostojniPogled(
         }
     }
 
-    private fun shraniKljuc() {
-        val k = kljucVnos.text.toString().trim()
-        // Kljuci ponudnikov so brez presledkov in dolgi vsaj 20 znakov; vse drugo je napacen vnos.
-        if (k.length < 20 || k.any { it.isWhitespace() }) { kljucVnos.error = a.getString(R.string.local_key_bad); return }
-        kljuci.shrani(KljucGemini(k))
-        kljucVnos.setText("")
-        osvezi()
-    }
-
     private fun trenutniAsistent(): Asistent {
         val zdaj = ZonedDateTime.now()
         val danes = zdaj.toLocalDate()
         val obstojeci = asistent
         if (obstojeci != null && asistentDan == danes) return obstojeci
-        // Navodilo vsebuje cas, zato se ob novem dnevu pogovor zacne znova.
-        val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(ponudnik, kljuci, prenos)
-        val orodja = orodjaPogled.orodja()
+        val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
+        val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo)
         return Asistent(odjemalec, navodilo, orodja = orodja).also { asistent = it; asistentDan = danes }
     }
@@ -321,15 +192,13 @@ class SamostojniPogled(
                         a.getString(R.string.local_note_saved, odgovor.besedilo)
                     }
                     is Odgovor.Opomnik -> {
-                        // Opomnikov ob casu ta aplikacija se ne sprozi: model ga ne bi smel napovedati, ce pa ga, ga shranimo kot zapisek s casom.
                         val tekst = "${odgovor.besedilo} (${odgovor.cas})"
                         shraniZapiske(dodajZapisek(zapiski.beri(), tekst, System.currentTimeMillis(), UUID.randomUUID().toString()))
                         a.getString(R.string.local_note_saved, tekst)
                     }
                     is Odgovor.Napaka -> when (odgovor.sporocilo) {
                         "Brez povezave" -> a.getString(R.string.local_err_offline)
-                        // Google je preklical osvezitveni zeton: nazaj na prijavo, pogovor ostane.
-                        "Prijava poteka" -> { google.odjava(); googleSporocilo = a.getString(R.string.local_google_relogin); a.getString(R.string.local_google_relogin) }
+                        "Prijava poteka" -> { google.odjava(); a.getString(R.string.local_google_relogin) }
                         else -> a.getString(R.string.local_err_generic, odgovor.sporocilo)
                     }
                 }

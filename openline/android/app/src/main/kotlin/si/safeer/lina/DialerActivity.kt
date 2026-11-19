@@ -112,13 +112,12 @@ class DialerActivity : Activity() {
     private lateinit var tabCalls: View
     private lateinit var tabPhone: View
     private lateinit var tabLina: View
-    private lateinit var tabAssistant: View
     private lateinit var tabSettings: View
     private lateinit var tabComputer: View
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
-    private enum class Zavihek { KLICI, TELEFON, LINA, ASISTENT, RACUNALNIK, NASTAVITVE }
+    private enum class Zavihek { KLICI, TELEFON, LINA, RACUNALNIK, NASTAVITVE }
 
     /** Zavihek pred odprtimi Nastavitvami: gumb Nazaj ga obnovi. */
     private var zavihekPred = Zavihek.LINA
@@ -131,13 +130,10 @@ class DialerActivity : Activity() {
     private lateinit var assistantOpenSetupButton: Button
     private lateinit var assistantCodeButton: Button
     private lateinit var assistantCircleButton: Button
-    private var odkrivanje: si.safeer.lina.asistent.OdkrivanjeLine? = null
-    private var iscemLino = false
-    private var ponovniVnosOdprt = false
     private lateinit var assistantForgetButton: Button
     private lateinit var assistantStopButton: Button
     private lateinit var assistantLog: TextView
-    private lateinit var samostojniPogled: si.safeer.lina.asistent.SamostojniPogled
+    private lateinit var samostojniPogled: si.safeer.lina.asistent.LinaPogovorPogled
     private lateinit var assistantApproval: View
     private lateinit var assistantApprovalTool: TextView
     private lateinit var assistantApprovalPreview: TextView
@@ -377,7 +373,6 @@ class DialerActivity : Activity() {
         tabCalls = findViewById(R.id.tabCalls)
         tabPhone = findViewById(R.id.tabPhone)
         tabLina = findViewById(R.id.tabLina)
-        tabAssistant = findViewById(R.id.tabAssistant)
         tabSettings = findViewById(R.id.tabSettings)
         findViewById<View>(R.id.openSettings).setOnClickListener { showTab(Zavihek.NASTAVITVE) }
         tabComputer = findViewById(R.id.tabComputer)
@@ -385,7 +380,6 @@ class DialerActivity : Activity() {
             Zavihek.KLICI to findViewById<Button>(R.id.navCalls),
             Zavihek.TELEFON to findViewById<Button>(R.id.navPhone),
             Zavihek.LINA to findViewById<Button>(R.id.navLina),
-            Zavihek.ASISTENT to findViewById<Button>(R.id.navAssistant),
             Zavihek.RACUNALNIK to findViewById<Button>(R.id.navComputer),
         )
         for ((z, b) in navButtons) b.setOnClickListener { showTab(z) }
@@ -402,12 +396,12 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.SamostojniPogled(this, { odpriNastavitveKljucev() }, { showTab(zavihekPred) })
+        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, { odpriNastavitveKljucev() }, { showTab(zavihekPred) })
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
         assistantApprovalDescription = findViewById(R.id.assistantApprovalDescription)
-        asistent = AsistentKontroler(this) { if (tabLina.visibility == View.VISIBLE || tabAssistant.visibility == View.VISIBLE || tabSettings.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
+        asistent = AsistentKontroler(this) { if (tabLina.visibility == View.VISIBLE || tabSettings.visibility == View.VISIBLE || tabComputer.visibility == View.VISIBLE) renderAssistant() }
         // En gumb »Skeniraj QR« za obe poti (lastnik 14. 11. 2026): isti bralnik kot v koraku 2.
         assistantOpenSetupButton.setOnClickListener { showTab(Zavihek.TELEFON) }
         findViewById<Button>(R.id.setupCodeButton).setOnClickListener { izberiNacinKode() }
@@ -450,7 +444,6 @@ class DialerActivity : Activity() {
         tabPhone.visibility = if (z == Zavihek.TELEFON) View.VISIBLE else View.GONE
         tabLina.visibility = if (z == Zavihek.LINA) View.VISIBLE else View.GONE
         tabSettings.visibility = if (z == Zavihek.NASTAVITVE) View.VISIBLE else View.GONE
-        tabAssistant.visibility = if (z == Zavihek.ASISTENT) View.VISIBLE else View.GONE
         tabComputer.visibility = if (z == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
         for ((t, b) in navButtons) { b.isSelected = t == z; b.contentDescription = b.text }
         findViewById<View>(R.id.root).scrollTo(0, 0)

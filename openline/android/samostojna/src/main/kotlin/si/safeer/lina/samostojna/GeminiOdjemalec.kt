@@ -62,41 +62,6 @@ class GeminiOdjemalec(
         
         val url = "${osnovniNaslov.trimEnd('/')}/v1beta/models/$model:generateContent"
         val glave = mapOf("x-goog-api-key" to kljuc.izpostavi())
-        val telo = gradiTelo(zgodovina, sistemsko)
-
-        var poskusi = 0
-        val maxPoskusov = 3
-        var odlogMs = 500L
-
-        while (poskusi < maxPoskusov) {
-            val odgovor = try {
-                prenos.post(url, glave, telo, 30000L)
-            } catch (e: IOException) {
-                return Rezultat.Napaka(null, "Brez povezave")
-            } catch (e: InterruptedException) {
-                return Rezultat.Napaka(null, "Brez povezave")
-            } catch (e: HttpTimeoutException) {
-                return Rezultat.Napaka(null, "Brez povezave")
-            }
-
-            if (odgovor.telo.length > 1024 * 1024) {
-                return Rezultat.Napaka(null, "Odgovor prevelik")
-            }
-
-            if (odgovor.koda == 200) {
-                return razberiOdgovor(odgovor.telo)
-            } else if (odgovor.koda == 429 || odgovor.koda >= 500) {
-                poskusi++
-                if (poskusi >= maxPoskusov) {
-                    return razberiOdgovor(odgovor.telo)
-                }
-                spanje(odlogMs)
-                odlogMs += 1000L // 500 -> 1500
-            } else {
-                return razberiOdgovor(odgovor.telo)
-            }
-        }
-        
-        return Rezultat.Napaka(null, "Neznana napaka")
+        return posljiZPonovitvami(prenos, url, glave, gradiTelo(zgodovina, sistemsko), spanje, ::razberiOdgovor)
     }
 }

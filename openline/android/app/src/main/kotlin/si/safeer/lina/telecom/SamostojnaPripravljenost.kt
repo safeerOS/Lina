@@ -1,18 +1,11 @@
 package si.safeer.lina.telecom
 
 import android.content.Context
-import si.safeer.lina.asistent.KeystoreShranjevalnik
-import si.safeer.lina.asistent.PonudnikShramba
-import si.safeer.lina.samostojna.Ponudnik
+import si.safeer.lina.asistent.SkupniKljuci
 
 object SamostojnaPripravljenost {
     fun imaNastavljenKljuc(context: Context): Boolean {
-        val ponudnik = PonudnikShramba(context).beri()
-        return if (ponudnik == Ponudnik.VERTEX) {
-            KeystoreShranjevalnik(context, Ponudnik.VERTEX).preberi() != null
-        } else {
-            KeystoreShranjevalnik(context, ponudnik).preberi() != null
-        }
+        return SkupniKljuci.preberiKljucAktivnegaPonudnika(context) != null
     }
 
     fun jePripravljena(context: Context): Boolean {

@@ -341,14 +341,14 @@ class LokalniPrehodTest {
     
     @Test
     fun `stop zapre cakajoce povezave in izvede cleanup na aktivnih`() {
-        val socket = connect("/v1/device-media?callId=test-call", "123456")
+        val socket = connect("/v1/device-media?callId=test-call", "zeton123")
         
         // handshake
         assertEquals("HTTP/1.1 101 Switching Protocols", readResponseLine(socket))
         while (readResponseLine(socket).isNotEmpty()) {}
         
         // Vzpostavljena povezava, preverimo ce je locked
-        val socket2 = try { connect("/v1/device-media?callId=test-call2", "123456") } catch (e: Exception) { null }
+        val socket2 = try { connect("/v1/device-media?callId=test-call2", "zeton123") } catch (e: Exception) { null }
         if (socket2 != null) {
             assertEquals("HTTP/1.1 409 Conflict", readResponseLine(socket2))
             socket2.close()

@@ -14,7 +14,7 @@ import java.security.KeyPairGenerator
 import si.safeer.lina.OkHttpWsFabrika
 import si.safeer.lina.asistent.AndroidPrenos
 import si.safeer.lina.asistent.GoogleShramba
-import si.safeer.lina.asistent.KeystoreShranjevalnik
+import si.safeer.lina.asistent.SkupniKljuci
 import si.safeer.lina.samostojna.DnevnikKlicev
 import si.safeer.lina.samostojna.DatotecnaShramba
 import si.safeer.lina.samostojna.GoogleZetonOsvezevalnik
@@ -41,6 +41,7 @@ object LokalniPrehodUpravljalnik {
                 KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
                     .setCertificateSubject(javax.security.auth.x500.X500Principal("CN=LokalniPrehod"))
                     .setKeySize(256)
+                    .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA384, KeyProperties.DIGEST_SHA512)
                     .build()
             )
             kpg.generateKeyPair()
@@ -59,8 +60,9 @@ object LokalniPrehodUpravljalnik {
             prefs.edit().putString("zeton", zeton).apply()
         }
 
-        val apiKljuc = KeystoreShranjevalnik(context, Ponudnik.GEMINI)
-        val googleZeton = GoogleZetonOsvezevalnik(KeystoreShranjevalnik(context, Ponudnik.VERTEX), AndroidPrenos())
+        val aktivni = SkupniKljuci.aktivniPonudnik(context)
+        val apiKljuc = SkupniKljuci.shrambaZaPonudnika(context, aktivni)
+        val googleZeton = GoogleZetonOsvezevalnik(SkupniKljuci.shrambaZaPonudnika(context, Ponudnik.VERTEX), AndroidPrenos())
         val shramba = GoogleShramba(context)
         val projekt = { shramba.projekt() }
         val dnevnik = DnevnikKlicev(DatotecnaShramba(File(context.filesDir, "dnevnik_klicev.json")))

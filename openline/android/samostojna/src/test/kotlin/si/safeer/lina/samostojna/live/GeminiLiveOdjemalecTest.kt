@@ -331,8 +331,8 @@ class GeminiLiveOdjemalecTest {
         strezhnik.poslji("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}, {"inlineData":{"data":"$b64"}}]}}}""")
         Thread.sleep(200)
         
-        // 2 parts, each produces 2 outputs (640 and 640 padded) -> total 4
-        assertEquals(4, receiveCount)
+        // 2 dela po 800 B (16 kHz) = 1600 B -> 2 polna okvira, 320 B ostane v medpomnilniku do turnComplete
+        assertEquals(2, receiveCount)
     }
 
     @Test

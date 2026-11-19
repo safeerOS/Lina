@@ -102,6 +102,7 @@ class LokalniPrehod(
                     val count = unauthenticatedCount.incrementAndGet()
                     if (count > 4) {
                         try { client.close() } catch (_: Exception) {}
+                        allSockets.remove(client)
                         unauthenticatedCount.decrementAndGet()
                         continue
                     }
