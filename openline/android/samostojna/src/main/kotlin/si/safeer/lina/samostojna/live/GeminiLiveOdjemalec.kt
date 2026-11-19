@@ -43,6 +43,9 @@ class GeminiLiveOdjemalec(
     
     private var ws: WsPovezava? = null
     private val isClosed = AtomicBoolean(false)
+    private val stevecSistemskih = java.util.concurrent.atomic.AtomicLong(0)
+    /** Enolicen id sistemskega zapisa (dva zapisa v isti milisekundi se sicer prepiseta). */
+    private fun sistemskiId() = "sys-${System.currentTimeMillis()}-${stevecSistemskih.incrementAndGet()}"
     private var startTimeMs = 0L
 
     private var stanje = StanjePovezave.ZAPRT
@@ -61,7 +64,7 @@ class GeminiLiveOdjemalec(
         val pot = izbiraPoti.izberi()
         if (pot == null) {
             dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
-                id = "sys-${System.currentTimeMillis()}",
+                id = sistemskiId(),
                 casZacetka = System.currentTimeMillis(),
                 stevilka = "Sistem",
                 trajanjeS = 0,
@@ -144,7 +147,7 @@ class GeminiLiveOdjemalec(
                 val msg = napaka.message ?: napaka.javaClass.simpleName
                 val varnoSporocilo = maskirajSkrivnosti(msg)
                 dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
-                    id = "sys-${System.currentTimeMillis()}",
+                    id = sistemskiId(),
                     casZacetka = System.currentTimeMillis(),
                     stevilka = "Sistem",
                     trajanjeS = 0,
@@ -160,7 +163,7 @@ class GeminiLiveOdjemalec(
                 val maskiran = maskirajSkrivnosti(razlog)
                 val textRazlog = if (maskiran.isBlank()) "brez razloga" else maskiran
                 dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
-                    id = "sys-${System.currentTimeMillis()}",
+                    id = sistemskiId(),
                     casZacetka = System.currentTimeMillis(),
                     stevilka = "Sistem",
                     trajanjeS = 0,
@@ -192,7 +195,7 @@ class GeminiLiveOdjemalec(
             val msg = e.message ?: e.javaClass.simpleName
             val varnoSporocilo = maskirajSkrivnosti(msg)
             dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
-                id = "sys-${System.currentTimeMillis()}",
+                id = sistemskiId(),
                 casZacetka = System.currentTimeMillis(),
                 stevilka = "Sistem",
                 trajanjeS = 0,
@@ -204,7 +207,7 @@ class GeminiLiveOdjemalec(
             }
             if (!zacasnaNapaka) poskusiPovezavo(true) // ponovitev enkrat
             else dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
-                id = "sys-${System.currentTimeMillis()}",
+                id = sistemskiId(),
                 casZacetka = System.currentTimeMillis(),
                 stevilka = "Sistem",
                 trajanjeS = 0,
@@ -313,7 +316,7 @@ class GeminiLiveOdjemalec(
         
         if (stanje != StanjePovezave.PRIPRAVLJEN && startTimeMs > 0 && System.currentTimeMillis() - startTimeMs > 5000) {
             dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
-                id = "sys-${System.currentTimeMillis()}",
+                id = sistemskiId(),
                 casZacetka = System.currentTimeMillis(),
                 stevilka = "Sistem",
                 trajanjeS = 0,
