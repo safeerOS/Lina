@@ -2,6 +2,12 @@ package si.safeer.lina.samostojna.live
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -123,18 +129,20 @@ class GeminiLiveOdjemalec(
                 }
                 if (!sendSetup) return
                 izbiraPoti.uspeh(pot)
-                val sysNav = SistemskoNavodilo.zgradi(ZonedDateTime.now())
+                val sysNav = SistemskoNavodilo.zgradiZaKlic(ZonedDateTime.now())
                 
                 val keySetupStr = if (UPORABI_CONFIG_NAMESTO_SETUP && jeApiKljuc) "config" else "setup"
-                val setup = """
-                {
-                    "$keySetupStr": {
-                        "model": "$modelPath",
-                        "systemInstruction": { "parts": [{"text": "${sysNav.replace("\"", "\\\"")}"}] },
-                        "generationConfig": { "responseModalities": ["AUDIO"] }
+                val setup = buildJsonObject {
+                    putJsonObject(keySetupStr) {
+                        put("model", modelPath)
+                        putJsonObject("systemInstruction") {
+                            putJsonArray("parts") { add(buildJsonObject { put("text", sysNav) }) }
+                        }
+                        putJsonObject("generationConfig") {
+                            putJsonArray("responseModalities") { add(JsonPrimitive("AUDIO")) }
+                        }
                     }
-                }
-                """.trimIndent()
+                }.toString()
                 povezava.posiljiBesedilo(setup)
             }
 
