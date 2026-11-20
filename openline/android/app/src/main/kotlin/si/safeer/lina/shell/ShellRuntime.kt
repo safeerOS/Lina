@@ -25,6 +25,7 @@ internal object ShellRuntime {
             thread = atClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
             atClass.field("sCurrentActivityThread").set(null, thread)
             atClass.field("mSystemThread").setBoolean(thread, true)
+            napolniKonfiguracijo(atClass, thread)
         }
         val system = atClass.getDeclaredMethod("getSystemContext").invoke(thread) as Context
         val shell = ShellContext(system)
@@ -42,6 +43,23 @@ internal object ShellRuntime {
             atClass.field("mInitialApplication").set(thread, app)
         }
         return shell
+    }
+
+    /**
+     * Od Androida 14 ActivityThread bere nastavitve zaslona prek ConfigurationController. Na novo narejen ActivityThread ga
+     * nima (mConfigurationController == null), zato getSystemContext pade z NullPointerException (izmerjeno 20. 11. 2026 na
+     * Samsungu z Androidom 17: "shell context unavailable", zvok klica se ne zacne). Enak obvod kot scrcpy: ustvarimo ga sami.
+     * Napaka tu ni usodna: ce polja ali razreda ni (starejsi Android), nadaljujemo kot prej.
+     */
+    private fun napolniKonfiguracijo(atClass: Class<*>, thread: Any) {
+        runCatching {
+            val polje = atClass.field("mConfigurationController")
+            if (polje.get(thread) != null) return
+            val krmilnik = Class.forName("android.app.ConfigurationController")
+            val notranji = Class.forName("android.app.ActivityThreadInternal")
+            val ctor = krmilnik.getDeclaredConstructor(notranji).apply { isAccessible = true }
+            polje.set(thread, ctor.newInstance(thread))
+        }
     }
 
     private fun Class<*>.field(name: String) = getDeclaredField(name).apply { isAccessible = true }

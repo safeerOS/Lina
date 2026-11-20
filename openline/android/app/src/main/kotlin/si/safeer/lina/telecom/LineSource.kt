@@ -31,7 +31,11 @@ class LineSource(private val context: Context, private val key: ByteArray) {
 
 
     /** Vse SIM/eSIM linije; brez dovoljenja READ_PHONE_STATE prazen seznam (Lina potem ne prevzema, N1/N4). */
-    fun getLines(): List<Line> {
+    fun getLines(): List<Line> =
+        // Na Androidu 13+ branje racunov zahteva tudi READ_PHONE_NUMBERS: brez njega prazen seznam, ne sesutje (Lina potem ne prevzema).
+        try { preberiLinije() } catch (e: SecurityException) { emptyList() }
+
+    private fun preberiLinije(): List<Line> {
         // Preverimo dovoljenje preden poskusamo brati linije
         if (!hasPermission()) return emptyList()
 

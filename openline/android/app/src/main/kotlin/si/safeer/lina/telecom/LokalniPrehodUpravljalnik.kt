@@ -26,6 +26,7 @@ import java.security.cert.X509Certificate
 object LokalniPrehodUpravljalnik {
     var prehod: LokalniPrehod? = null
     var most: si.safeer.lina.samostojna.prehod.ZvocniMost? = null
+    @Volatile var gemini: GeminiLiveOdjemalec? = null
 
     fun tece(): Boolean = prehod?.getPort()?.let { it > 0 } ?: false
 
@@ -91,6 +92,11 @@ object LokalniPrehodUpravljalnik {
             }
         }
         most = zvocniMost
+        gemini = zvocniMost
+        // Zapis klica: ob koncu klica gre v datoteko v mapi uporabnika (z ozadne niti; neuspeh zapisa ne izgubi zapisa v dnevniku).
+        zvocniMost.naKlicZakljucen = { zapis ->
+            Thread({ runCatching { si.safeer.lina.asistent.KlicIzvoz(context).zapisi(zapis) } }, "klic-izvoz").start()
+        }
 
         val novPrehod = LokalniPrehod(sslContext, zeton, zvocniMost)
         novPrehod.start()

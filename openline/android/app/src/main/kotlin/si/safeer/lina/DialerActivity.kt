@@ -110,6 +110,7 @@ class DialerActivity : Activity() {
     private lateinit var linePermissionButton: Button
     private lateinit var lineSpinner: Spinner
     private lateinit var tabCalls: View
+    private val linaKlici by lazy { si.safeer.lina.asistent.LinaKlicPogled(this) }
     private lateinit var tabPhone: View
     private lateinit var tabLina: View
     private lateinit var tabSettings: View
@@ -207,6 +208,7 @@ class DialerActivity : Activity() {
     override fun onResume() {
         super.onResume()
         wifiPromptShown = false
+        if (zavihekZdaj == Zavihek.KLICI) linaKlici.osvezi()
         notifyMissedWithoutPermission()
         renderSteps()
         renderLines()
@@ -298,7 +300,7 @@ class DialerActivity : Activity() {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                 }.onFailure { toast(getString(R.string.line_permission_settings)) }
             } else {
-                requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
+                requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS), REQUEST_PHONE_STATE)
             }
         }
         fillAdvancedFields()
@@ -374,6 +376,8 @@ class DialerActivity : Activity() {
      */
     private fun bindTabs() {
         tabCalls = findViewById(R.id.tabCalls)
+        // Klici, ki jih je sprejela Lina: na vrhu zavihka Klici (lastnik 20. 11. 2026).
+        (tabCalls as android.view.ViewGroup).addView(linaKlici.pogled, 0)
         tabPhone = findViewById(R.id.tabPhone)
         tabLina = findViewById(R.id.tabLina)
         tabSettings = findViewById(R.id.tabSettings)
@@ -450,6 +454,7 @@ class DialerActivity : Activity() {
         tabComputer.visibility = if (z == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
         for ((t, b) in navButtons) { b.isSelected = t == z; b.contentDescription = b.text }
         findViewById<View>(R.id.root).scrollTo(0, 0)
+        if (z == Zavihek.KLICI) linaKlici.osvezi()
         if (z != Zavihek.KLICI && z != Zavihek.TELEFON) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
         osveziNavRacunalnik()

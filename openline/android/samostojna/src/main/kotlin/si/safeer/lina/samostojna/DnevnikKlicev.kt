@@ -68,7 +68,15 @@ data class ZapisKlica(
     val nujno: Boolean = false,
     val povzetek: String,
     val prepis: String = "",
-    val nacin: NacinKlica = NacinKlica.OSEBNA
+    val nacin: NacinKlica = NacinKlica.OSEBNA,
+    /** Ime in priimek klicatelja, kot ju je povedal (prazno = klicatelj ni povedal). Stevilka je vedno poleg imena. */
+    val klicatelj: String = "",
+    val podjetje: String = "",
+    /** Kratek povzetek sporocila klicatelja (Lina) in dobesedno, kar je klicatelj povedal. */
+    val sporocilo: String = "",
+    val sporociloDobesedno: String = "",
+    /** Zakaj sporocila ni (klicatelj je prekinil, zvok ni deloval ...); prazno, kadar sporocilo obstaja. */
+    val brezSporocilaRazlog: String = ""
 ) {
     constructor(
         id: String,
@@ -104,7 +112,7 @@ data class ZapisKlica(
             Jezik.EN -> "Urgent"
         }
 
-    // Pretvori zapis v obliko za sinhronizacijo z racunalnikom brez prepisa (prepis ostane na telefonu).
+    // Pretvori zapis v obliko za sinhronizacijo z racunalnikom: brez celotnega prepisa pogovora (ta ostane na telefonu), s sporocilom klicatelja (lastnik 20. 11. 2026).
     fun zaSinhronizacijo(): ZapisKlicaSinhronizacija = ZapisKlicaSinhronizacija(
         id = id,
         casZacetka = casZacetka,
@@ -112,11 +120,16 @@ data class ZapisKlica(
         trajanjeS = trajanjeS,
         nujno = nujno,
         povzetek = povzetek,
-        nacin = nacin
+        nacin = nacin,
+        klicatelj = klicatelj,
+        podjetje = podjetje,
+        sporocilo = sporocilo,
+        sporociloDobesedno = sporociloDobesedno,
+        brezSporocilaRazlog = brezSporocilaRazlog
     )
 }
 
-// Zapis klica za sinhronizacijo z racunalnikom: brez polja prepis, ker prepis ostane samo na telefonu.
+// Zapis klica za sinhronizacijo z racunalnikom: brez polja prepis, a s sporocilom klicatelja in razlogom, ce ga ni.
 @Serializable
 data class ZapisKlicaSinhronizacija(
     val id: String,
@@ -125,7 +138,12 @@ data class ZapisKlicaSinhronizacija(
     val trajanjeS: Int,
     val nujno: Boolean,
     val povzetek: String,
-    val nacin: NacinKlica
+    val nacin: NacinKlica,
+    val klicatelj: String = "",
+    val podjetje: String = "",
+    val sporocilo: String = "",
+    val sporociloDobesedno: String = "",
+    val brezSporocilaRazlog: String = ""
 )
 
 @Serializable
@@ -277,7 +295,8 @@ fun jeVeljavenZapisKlica(zapis: ZapisKlica): Boolean {
     if (zapis.stevilka.isBlank()) return false
     if (zapis.casZacetka < 0L) return false
     if (zapis.trajanjeS < 0) return false
-    if (vsebujeCenoAliObljubo(zapis.povzetek)) return false
+    // Pravilo o cenah in obljubah velja za Linine izjave. Sporocilo klicatelja je njegovo (lahko omeni ceno): zavrnitev bi zapis klica izgubila.
+    if (zapis.sporocilo.isBlank() && vsebujeCenoAliObljubo(zapis.povzetek)) return false
     if (vsebujeCenoAliObljubo(zapis.prepis)) return false
     return true
 }

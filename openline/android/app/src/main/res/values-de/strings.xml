@@ -281,8 +281,8 @@
     <string name="assistant_provider_ready_fmt">Anbieter %1$s ist bereit.</string>
     <string name="assistant_provider_missing_fmt">Anbieter %1$s ist noch nicht bereit. Schlüssel oder Anmeldung in den Einstellungen eingeben.</string>
     <string name="assistant_key_provider_fmt">Schlüssel für Anbieter: %1$s. Den Anbieter wählen Sie oben.</string>
-    <string name="notes_storage_title">Notizen: Speicherort</string>
-    <string name="notes_storage_info_fmt">Eine Kopie der Notizen wird laufend in diese Datei geschrieben: %1$s. Das Bearbeiten der Datei ändert die Notizen in der App nicht.</string>
+    <string name="notes_storage_title">Notizen und Anrufe: wo sie gespeichert werden</string>
+    <string name="notes_storage_info_fmt">Eine Kopie der Notizen wird laufend in diese Datei geschrieben: %1$s. Das Bearbeiten der Datei ändert die Notizen in der App nicht. Jeder von Lina angenommene Anruf wird als eigene Datei im selben Ordner gespeichert (standardmäßig im Unterordner Klici).</string>
     <string name="notes_storage_pick">Anderen Ordner wählen</string>
     <string name="notes_storage_default">Zurück zu Dokumenten</string>
     <string name="notes_storage_empty">Die Datei entsteht mit der ersten Notiz.</string>
@@ -314,4 +314,7 @@
     <string name="tool_err_limit">Das Limit des Dienstes ist erreicht. Später erneut versuchen.</string>
     <string name="tool_err_account">Das Konto ist nicht aktiv.</string>
     <string name="tool_twilio_connected_fmt">Verbunden: %1$s</string>
+    <string name="lina_calls_title">Von Lina angenommene Anrufe</string>
+    <string name="lina_calls_folder_fmt">Anrufdateien: %1$s</string>
+    <string name="lina_calls_unknown">Unbekannter Anrufer</string>
 </resources>

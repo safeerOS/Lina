@@ -281,8 +281,8 @@
     <string name="assistant_provider_ready_fmt">El proveedor %1$s está listo.</string>
     <string name="assistant_provider_missing_fmt">El proveedor %1$s aún no está listo. Introduzca su clave o inicie sesión en Ajustes.</string>
     <string name="assistant_key_provider_fmt">Clave del proveedor: %1$s. El proveedor se elige arriba.</string>
-    <string name="notes_storage_title">Notas: dónde se guardan</string>
-    <string name="notes_storage_info_fmt">Una copia de las notas se escribe en este archivo sobre la marcha: %1$s. Editar el archivo no cambia las notas de la aplicación.</string>
+    <string name="notes_storage_title">Notas y llamadas: dónde se guardan</string>
+    <string name="notes_storage_info_fmt">Una copia de las notas se escribe en este archivo sobre la marcha: %1$s. Editar el archivo no cambia las notas de la aplicación. Cada llamada que atiende Lina se guarda en su propio archivo en la misma carpeta (por defecto en la subcarpeta Klici).</string>
     <string name="notes_storage_pick">Elegir otra carpeta</string>
     <string name="notes_storage_default">Volver a Documentos</string>
     <string name="notes_storage_empty">El archivo se crea con la primera nota.</string>
@@ -314,4 +314,7 @@
     <string name="tool_err_limit">Se alcanzó el límite del servicio. Inténtelo más tarde.</string>
     <string name="tool_err_account">La cuenta no está activa.</string>
     <string name="tool_twilio_connected_fmt">Conectado: %1$s</string>
+    <string name="lina_calls_title">Llamadas atendidas por Lina</string>
+    <string name="lina_calls_folder_fmt">Archivos de llamadas: %1$s</string>
+    <string name="lina_calls_unknown">Llamante desconocido</string>
 </resources>

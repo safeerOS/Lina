@@ -67,7 +67,12 @@ class LinaPogovorPogled(
     private val izvozPrivzeto: Button = a.findViewById(R.id.notesStorageDefault)
     /** Povecamo ob spremembi nastavitev: odgovor, ki je bil zahtevan prej, se zavrze. */
     private var rod = 0
-    private val nastavitveKljuci = NastavitveKljuciPogled(a, prenos, nit, glavna) { rod++; asistent = null; pogovor.setLength(0); osvezi() }
+    private val nastavitveKljuci = NastavitveKljuciPogled(a, prenos, nit, glavna) {
+        rod++; asistent = null; pogovor.setLength(0)
+        // Ključ ali prijava sta se spremenila: lokalni prehod mora steči takoj (19. 11. 2026 je bil po vnosu ključa zagnan šele ob ponovnem zagonu aplikacije).
+        Thread({ si.safeer.lina.transport.GatewayRuntime.checkLokalniPrehod() }, "lokalni-prehod-zagon").start()
+        osvezi()
+    }
 
     init {
         namigGumb.setOnClickListener { odpriNastavitve() }

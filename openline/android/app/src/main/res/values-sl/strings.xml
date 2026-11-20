@@ -281,8 +281,8 @@
     <string name="assistant_provider_ready_fmt">Ponudnik %1$s je pripravljen.</string>
     <string name="assistant_provider_missing_fmt">Ponudnik %1$s še ni pripravljen. Ključ ali prijavo vnesite v Nastavitvah.</string>
     <string name="assistant_key_provider_fmt">Ključ za ponudnika: %1$s. Ponudnika izberete zgoraj.</string>
-    <string name="notes_storage_title">Zapiski: kam se shranjujejo</string>
-    <string name="notes_storage_info_fmt">Kopija zapiskov se sproti zapiše v datoteko: %1$s. Urejanje datoteke ne spremeni zapiskov v aplikaciji.</string>
+    <string name="notes_storage_title">Zapiski in klici: kam se shranjujejo</string>
+    <string name="notes_storage_info_fmt">Kopija zapiskov se sproti zapiše v datoteko: %1$s. Urejanje datoteke ne spremeni zapiskov v aplikaciji. Vsak klic, ki ga sprejme Lina, se zapiše v svojo datoteko v isti mapi (privzeto v podmapi Klici).</string>
     <string name="notes_storage_pick">Izberi drugo mapo</string>
     <string name="notes_storage_default">Vrni na Dokumente</string>
     <string name="notes_storage_empty">Datoteka nastane ob prvem zapisku.</string>
@@ -314,4 +314,7 @@
     <string name="tool_err_limit">Dosežena je omejitev storitve. Poskusite pozneje.</string>
     <string name="tool_err_account">Račun ni aktiven.</string>
     <string name="tool_twilio_connected_fmt">Povezano: %1$s</string>
+    <string name="lina_calls_title">Klici, ki jih je sprejela Lina</string>
+    <string name="lina_calls_folder_fmt">Datoteke klicev: %1$s</string>
+    <string name="lina_calls_unknown">Neznan klicatelj</string>
 </resources>

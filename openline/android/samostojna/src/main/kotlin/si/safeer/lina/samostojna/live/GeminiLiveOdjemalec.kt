@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -14,6 +15,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import si.safeer.lina.samostojna.DnevnikKlicev
 import si.safeer.lina.samostojna.GoogleZeton
+import si.safeer.lina.samostojna.SejaKlica
+import si.safeer.lina.samostojna.ZapisKlica
 import si.safeer.lina.samostojna.ShranjevalnikKljuca
 import si.safeer.lina.samostojna.SistemskoNavodilo
 import si.safeer.lina.samostojna.prehod.ZvocniMost
@@ -35,6 +38,7 @@ class GeminiLiveOdjemalec(
 ) : ZvocniMost {
 
     companion object {
+        const val ORODJE_SPOROCILO = "shrani_sporocilo"
         const val UPORABI_CONFIG_NAMESTO_SETUP = false // uradna dokumentacija (get-started-websocket, 19. 11. 2026): vsi primeri uporabljajo "setup"
     }
 
@@ -44,6 +48,11 @@ class GeminiLiveOdjemalec(
 
     var naPrekinitev: (() -> Unit)? = null
     var naNapako: ((String) -> Unit)? = null
+    /** Ob koncu klica: zapis (ime, stevilka, podjetje, sporocilo). Aplikacija ga zapise tudi v datoteko v mapi uporabnika. */
+    var naKlicZakljucen: ((ZapisKlica) -> Unit)? = null
+    /** Stevilka klicatelja za naslednji klic; nastavi jo aplikacija, preden se klic zacne. */
+    @Volatile var stevilkaNaslednjegaKlica: String = ""
+    @Volatile private var seja: SejaKlica? = null
 
     private var izhodniCallback: ((ByteArray) -> Unit)? = null
     
@@ -140,6 +149,35 @@ class GeminiLiveOdjemalec(
                         }
                         putJsonObject("generationConfig") {
                             putJsonArray("responseModalities") { add(JsonPrimitive("AUDIO")) }
+                            // Izmerjeno 11. 11. 2026 (racunalniska pot, live/navodilo.ts): brez languageCode sl-SI model del izrekov razume kot hrvascino.
+                            putJsonObject("speechConfig") {
+                                put("languageCode", "sl-SI")
+                                putJsonObject("voiceConfig") {
+                                    putJsonObject("prebuiltVoiceConfig") { put("voiceName", "Kore") }
+                                }
+                            }
+                        }
+                        // Prepis govora klicatelja in Line: podlaga za dobesedni zapis klica.
+                        putJsonObject("inputAudioTranscription") {}
+                        putJsonObject("outputAudioTranscription") {}
+                        putJsonArray("tools") {
+                            add(buildJsonObject {
+                                putJsonArray("functionDeclarations") {
+                                    add(buildJsonObject {
+                                        put("name", ORODJE_SPOROCILO)
+                                        put("description", "Zapise sporocilo klicatelja. Poklici ga, ko klicatelj pove sporocilo, in ga pred koncem klica se enkrat dopolni z imenom, priimkom in podjetjem, ce so znani.")
+                                        putJsonObject("parameters") {
+                                            put("type", "OBJECT")
+                                            putJsonObject("properties") {
+                                                putJsonObject("ime") { put("type", "STRING"); put("description", "Ime klicatelja.") }
+                                                putJsonObject("priimek") { put("type", "STRING"); put("description", "Priimek klicatelja.") }
+                                                putJsonObject("podjetje") { put("type", "STRING"); put("description", "Podjetje klicatelja, samo ce ga je povedal.") }
+                                                putJsonObject("sporocilo") { put("type", "STRING"); put("description", "Kratek povzetek sporocila, ki ga je klicatelj pustil.") }
+                                            }
+                                        }
+                                    })
+                                }
+                            })
                         }
                     }
                 }.toString()
@@ -225,7 +263,56 @@ class GeminiLiveOdjemalec(
         }
     }
 
+    /** Prepis govora (vhod = klicatelj, izhod = Lina) in klic orodja shrani_sporocilo; odgovor orodja gre modelu nazaj. */
+    private fun obdelajPrepisInOrodje(msg: String) {
+        if (!msg.contains("Transcription") && !msg.contains("toolCall")) return
+        val s = seja ?: return
+        try {
+            val koren = Json.parseToJsonElement(msg).jsonObject
+            koren["serverContent"]?.jsonObject?.let { sc ->
+                sc["inputTranscription"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.let { s.dodajVhod(it) }
+                sc["outputTranscription"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.let { s.dodajIzhod(it) }
+            }
+            if (msg.contains("\"turnComplete\"")) s.konecObrata()
+            val klici = koren["toolCall"]?.jsonObject?.get("functionCalls")?.jsonArray ?: return
+            val odgovori = klici.mapNotNull { k ->
+                val f = k.jsonObject
+                val ime = f["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val id = f["id"]?.jsonPrimitive?.contentOrNull
+                if (ime == ORODJE_SPOROCILO) {
+                    val a = f["args"]?.jsonObject
+                    fun polje(n: String) = a?.get(n)?.jsonPrimitive?.contentOrNull
+                    s.shraniSporocilo(polje("ime"), polje("priimek"), polje("podjetje"), polje("sporocilo"))
+                }
+                buildJsonObject {
+                    if (id != null) put("id", id)
+                    put("name", ime)
+                    putJsonObject("response") { put("izid", if (ime == ORODJE_SPOROCILO) "zapisano" else "neznano orodje") }
+                }
+            }
+            if (odgovori.isNotEmpty()) {
+                val odg = buildJsonObject {
+                    putJsonObject("toolResponse") { putJsonArray("functionResponses") { odgovori.forEach { add(it) } } }
+                }.toString()
+                ws?.posiljiBesedilo(odg)
+            }
+        } catch (e: Exception) { }
+    }
+
+    /** Zapis klica ob koncu: vedno nastane, tudi ce zvok ni deloval (takrat z razlogom). */
+    private fun zakljuciKlic() {
+        val s = seja ?: return
+        seja = null
+        val zapis = s.zakljuci(System.currentTimeMillis())
+        if (!dnevnik.dodaj(zapis)) {
+            naNapako?.invoke("Zapisa klica ni bilo mogoče shraniti")
+            return
+        }
+        try { naKlicZakljucen?.invoke(zapis) } catch (e: Exception) { }
+    }
+
     private fun obdelajSporocilo(msg: String) {
+        obdelajPrepisInOrodje(msg)
         if (msg.contains("\"setupComplete\"")) {
             val zaPosiljanje = mutableListOf<ByteArray>()
             val doSend = synchronized(vhodniMutex) {
@@ -368,6 +455,9 @@ class GeminiLiveOdjemalec(
             nepopolnOkvir = ByteArray(0)
             isClosed.set(false)
         }
+        // Klic, ki je ostal odprt (brez konecKlica), se zapise, preden se zacne nov.
+        zakljuciKlic()
+        seja = SejaKlica(System.currentTimeMillis(), stevilkaNaslednjegaKlica)
         izhodniCallback = posljiOkvir
     }
 
@@ -383,6 +473,7 @@ class GeminiLiveOdjemalec(
                 ws = null
                 stanje = StanjePovezave.ZAPRT
             }
+            zakljuciKlic()
         }
     }
 

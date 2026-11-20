@@ -281,8 +281,8 @@
     <string name="assistant_provider_ready_fmt">Provider %1$s is ready.</string>
     <string name="assistant_provider_missing_fmt">Provider %1$s is not ready yet. Enter its key or sign in under Settings.</string>
     <string name="assistant_key_provider_fmt">Key for provider: %1$s. Choose the provider above.</string>
-    <string name="notes_storage_title">Notes: where they are saved</string>
-    <string name="notes_storage_info_fmt">A copy of the notes is written to this file as you go: %1$s. Editing the file does not change the notes in the app.</string>
+    <string name="notes_storage_title">Notes and calls: where they are saved</string>
+    <string name="notes_storage_info_fmt">A copy of the notes is written to this file as you go: %1$s. Editing the file does not change the notes in the app. Each call Lina answers is saved as its own file in the same folder (by default in the Klici subfolder).</string>
     <string name="notes_storage_pick">Choose another folder</string>
     <string name="notes_storage_default">Back to Documents</string>
     <string name="notes_storage_empty">The file is created with the first note.</string>
@@ -314,4 +314,7 @@
     <string name="tool_err_limit">The service limit was reached. Try again later.</string>
     <string name="tool_err_account">The account is not active.</string>
     <string name="tool_twilio_connected_fmt">Connected: %1$s</string>
+    <string name="lina_calls_title">Calls answered by Lina</string>
+    <string name="lina_calls_folder_fmt">Call files: %1$s</string>
+    <string name="lina_calls_unknown">Unknown caller</string>
 </resources>

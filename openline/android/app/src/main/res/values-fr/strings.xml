@@ -281,8 +281,8 @@
     <string name="assistant_provider_ready_fmt">Le fournisseur %1$s est prêt.</string>
     <string name="assistant_provider_missing_fmt">Le fournisseur %1$s n\'est pas encore prêt. Saisissez sa clé ou connectez-vous dans les Réglages.</string>
     <string name="assistant_key_provider_fmt">Clé du fournisseur : %1$s. Le fournisseur se choisit ci-dessus.</string>
-    <string name="notes_storage_title">Notes : où elles sont enregistrées</string>
-    <string name="notes_storage_info_fmt">Une copie des notes est écrite au fil de l\'eau dans ce fichier : %1$s. Modifier le fichier ne change pas les notes de l\'application.</string>
+    <string name="notes_storage_title">Notes et appels : où ils sont enregistrés</string>
+    <string name="notes_storage_info_fmt">Une copie des notes est écrite au fil de l\'eau dans ce fichier : %1$s. Modifier le fichier ne change pas les notes de l\'application. Chaque appel pris par Lina est enregistré dans son propre fichier dans le même dossier (par défaut dans le sous-dossier Klici).</string>
     <string name="notes_storage_pick">Choisir un autre dossier</string>
     <string name="notes_storage_default">Revenir à Documents</string>
     <string name="notes_storage_empty">Le fichier est créé avec la première note.</string>
@@ -314,4 +314,7 @@
     <string name="tool_err_limit">La limite du service est atteinte. Réessayez plus tard.</string>
     <string name="tool_err_account">Le compte n\'est pas actif.</string>
     <string name="tool_twilio_connected_fmt">Connecté : %1$s</string>
+    <string name="lina_calls_title">Appels pris par Lina</string>
+    <string name="lina_calls_folder_fmt">Fichiers d’appels : %1$s</string>
+    <string name="lina_calls_unknown">Appelant inconnu</string>
 </resources>
