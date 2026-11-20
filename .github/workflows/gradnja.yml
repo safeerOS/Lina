@@ -28,6 +28,21 @@ jobs:
         run: ./gradlew :protocol:test :podpis:test :seznanitev:test :samostojna:test --no-daemon --stacktrace
       - name: Gradnja APK (debug, nepodpisan)
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Podpis APK s stalnim kljucem (posodobitve cez staro brez izgube podatkov)
+        env:
+          LINA_PODPIS_JKS: ${{ secrets.LINA_PODPIS_JKS }}
+          LINA_PODPIS_GESLO: ${{ secrets.LINA_PODPIS_GESLO }}
+        run: |
+          set -euo pipefail
+          if [ -z "${LINA_PODPIS_JKS}" ]; then echo "::warning::Stalni kljuc ni nastavljen: APK ostane s podpisom debug (posodobitev cez staro ne bo mogoca)"; exit 0; fi
+          KS="$RUNNER_TEMP/lina-podpis.jks"
+          echo "${LINA_PODPIS_JKS}" | base64 -d > "$KS"
+          AS="$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/*/apksigner | sort -V | tail -1)"
+          for apk in app/build/outputs/apk/debug/*.apk; do
+            "$AS" sign --ks "$KS" --ks-key-alias lina --ks-pass env:LINA_PODPIS_GESLO --key-pass env:LINA_PODPIS_GESLO "$apk"
+            "$AS" verify --print-certs "$apk" | grep -E "SHA-256|Verifies"
+          done
+          rm -f "$KS"
       - name: Izid
         run: |
           mkdir -p ../../izid
