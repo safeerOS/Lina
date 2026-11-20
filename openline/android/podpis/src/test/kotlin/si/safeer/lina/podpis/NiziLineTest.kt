@@ -14,7 +14,7 @@ class NiziLineTest {
     private val podpisNaloge = "MEYCIQDgj5XLP7ebbO/m1DcGtOWT1sekXK9MYuxzextK6E8IRAIhAPDwr4MLBVRFssJVayIgutJuoLT2GkT4cQ8iX53q/9sH"
     private val id = "n-5ef0fcb562008e97"
     private val cas = 1763120000000L
-    private val zgostitev = "c5025d4faa94214a1823632373b50be3e059e1953e86067c8d2906d40e491914"
+    private val zgostitev = "1ff96f9b02dde42794cc31a2f482cd354dceb99f074788ed51db8b1575772981"
 
     @Test
     fun `id iz kljuca kot Python in TS`() {
@@ -33,14 +33,14 @@ class NiziLineTest {
     }
 
     @Test
-    fun `zgostitev prikaza in odobritev v2 enako kot TS`() {
+    fun `zgostitev prikaza in odobritev v3 enako kot TS`() {
         assertEquals(zgostitev, NiziLine.zgostitevPrikaza("Bash", "git status\nčšž ✓", "Izpis stanja"))
         assertEquals(
-            "safeer-lina-odobritev-v2\nabcde\nallow\n$id\n$cas\nenkratni-vektor-0002\nnaloga-vektor-01\n$zgostitev",
+            "safeer-lina-odobritev-v3\nabcde\nallow\n$id\n$cas\nenkratni-vektor-0002\nnaloga-vektor-01\n$zgostitev",
             NiziLine.nizOdobritve("abcde", true, id, cas, "enkratni-vektor-0002", "naloga-vektor-01", zgostitev),
         )
         assertEquals(
-            "safeer-lina-odobritev-v2\nabcde\ndeny\n$id\n$cas\nenkratni-vektor-0002\nnaloga-vektor-01\n$zgostitev",
+            "safeer-lina-odobritev-v3\nabcde\ndeny\n$id\n$cas\nenkratni-vektor-0002\nnaloga-vektor-01\n$zgostitev",
             NiziLine.nizOdobritve("abcde", false, id, cas, "enkratni-vektor-0002", "naloga-vektor-01", zgostitev),
         )
         assertEquals(
@@ -69,5 +69,18 @@ class NiziLineTest {
         assertFalse(NiziLine.praviUnicode("a\uDE00"))
         assertTrue(NiziLine.ENKRATNI.matches("enkratni-vektor-0001"))
         assertFalse(NiziLine.ENKRATNI.matches("kratek"))
+    }
+
+    @Test
+    fun `sinhronizacija enako kot TS (vektor 20 11 2026)`() {
+        val vsebina = "{\"rev\":0,\"klici\":[]}"
+        val z = NiziLine.zgostitevSinhron(vsebina)
+        assertEquals("2e2061a39b66a6602255b0df766ca95c2229a96cbdfae7423c77fdd32f2b02e4", z)
+        assertEquals(
+            "safeer-lina-sinhron-v1\n$id\n$cas\nenkratni-vektor-0004\n$z",
+            NiziLine.nizSinhron(id, cas, "enkratni-vektor-0004", z),
+        )
+        assertEquals(null, NiziLine.nizSinhron("tuja\nnaprava", cas, "enkratni-vektor-0004", z))
+        assertEquals(null, NiziLine.nizSinhron(id, cas, "enkratni-vektor-0004", "ni-zgostitev"))
     }
 }

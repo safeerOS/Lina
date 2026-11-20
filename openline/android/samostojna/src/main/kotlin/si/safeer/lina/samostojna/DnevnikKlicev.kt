@@ -439,27 +439,55 @@ class DnevnikKlicev(
         } catch (e: Exception) {
             false
         }
-        if (uspeh) {
-            synchronized(this) {
-                // Po neuspeli ponovni nalozitvi shramba morda hrani novejsi posnetek, ki ga nismo mogli prebrati:
-                // potrditve ne zapisemo (revizija ostane cakajoca; ponovno posiljanje je varnejse od prepisa).
-                if (branjeSpodletelo) return@synchronized
-                var sprememba = false
-                val predlagani = vrstaSinhronizacije.toMutableMap()
-                for (element in zaPosiljanje) {
-                    if (predlagani[element.id] == element) {
-                        predlagani.remove(element.id)
-                        sprememba = true
-                    }
-                }
-                if (sprememba) {
-                    shraniVShrambo(zapisi.values, predlagani.values)
-                    vrstaSinhronizacije.clear()
-                    vrstaSinhronizacije.putAll(predlagani)
+        if (uspeh) potrdiPoslane(zaPosiljanje)
+        return uspeh
+    }
+
+    // Po uspesni izmenjavi z racunalnikom odstrani iz vrste SAMO tiste zapise, ki so bili poslani in se medtem niso spremenili.
+    fun potrdiPoslane(zaPosiljanje: List<ZapisKlicaSinhronizacija>) {
+        synchronized(this) {
+            // Po neuspeli ponovni nalozitvi shramba morda hrani novejsi posnetek, ki ga nismo mogli prebrati:
+            // potrditve ne zapisemo (revizija ostane cakajoca; ponovno posiljanje je varnejse od prepisa).
+            if (branjeSpodletelo) return
+            var sprememba = false
+            val predlagani = vrstaSinhronizacije.toMutableMap()
+            for (element in zaPosiljanje) {
+                if (predlagani[element.id] == element) {
+                    predlagani.remove(element.id)
+                    sprememba = true
                 }
             }
+            if (sprememba) {
+                shraniVShrambo(zapisi.values, predlagani.values)
+                vrstaSinhronizacije.clear()
+                vrstaSinhronizacije.putAll(predlagani)
+            }
         }
-        return uspeh
+    }
+
+    // Zapisi klicev, ki jih racunalnik pozna, telefon pa ne (npr. ob ponovni namestitvi): se dodajo brez prepisa in NE gredo v vrsto za posiljanje.
+    @Synchronized
+    fun sprejmiIzRacunalnika(prejeti: List<ZapisKlicaSinhronizacija>): Int {
+        if (branjeSpodletelo) return 0
+        val predlagani = zapisi.toMutableMap()
+        var dodanih = 0
+        for (p in prejeti) {
+            if (predlagani.containsKey(p.id)) continue
+            val zapis = ZapisKlica(
+                id = p.id, casZacetka = p.casZacetka, stevilka = p.stevilka, trajanjeS = p.trajanjeS, nujno = p.nujno,
+                povzetek = p.povzetek, nacin = p.nacin, klicatelj = p.klicatelj, podjetje = p.podjetje, sporocilo = p.sporocilo,
+                sporociloDobesedno = p.sporociloDobesedno, brezSporocilaRazlog = p.brezSporocilaRazlog,
+            )
+            if (!jeVeljavenZapisKlica(zapis)) continue
+            predlagani[zapis.id] = zapis
+            dodanih++
+        }
+        if (dodanih > 0) {
+            shraniVShrambo(predlagani.values, vrstaSinhronizacije.values)
+            zapisi.clear()
+            zapisi.putAll(predlagani)
+        }
+        return dodanih
     }
 
     // Prebere zapise iz lokalne shrambe; poskodovano datoteko ali poskodovane posamezne vnose varno zavrne brez izgube ostalih zapisov.

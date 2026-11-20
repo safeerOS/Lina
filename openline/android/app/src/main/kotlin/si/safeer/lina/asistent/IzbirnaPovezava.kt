@@ -25,6 +25,7 @@ class IzbirnaPovezava(
     override fun dogodki(id: String, posiljatelj: String, cas: Long, enkratni: String, podpis: String, od: Long, cakaS: Int) =
         po { it.dogodki(id, posiljatelj, cas, enkratni, podpis, od, cakaS) }
     override fun klici(telo: String) = po { it.klici(telo) }
+    override fun sinhron(telo: String) = po { it.sinhron(telo) }
     override fun odobritev(telo: String) = po { it.odobritev(telo) }
     override fun ustavi(telo: String) = po { it.ustavi(telo) }
     override fun seznani(telo: String) = po { it.seznani(telo) }

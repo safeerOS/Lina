@@ -20,7 +20,7 @@ class PodpisnikTest {
         assertNotNull(p.podpisiUstavitev("naloga-0001-aaaaaaaaaaaa", 1, enkratni))
         assertEquals(3, podpisano.size)
         assertTrue(podpisano[0].startsWith("safeer-lina-naloga-v1\n"))
-        assertTrue(podpisano[1].startsWith("safeer-lina-odobritev-v2\n"))
+        assertTrue(podpisano[1].startsWith("safeer-lina-odobritev-v3\n"))
         assertTrue(podpisano[2].startsWith("safeer-lina-ustavi-v1\n"))
         assertTrue(podpisano.none { it.startsWith("safeer-krog-") })
     }

@@ -65,6 +65,9 @@ object NapravaKljuc {
     /** Prevzem poti klicev po lastnikovem »Dodaj« (T1-S1). */
     fun podpisiKlice(koda: String, cas: Long, enkratni: String): String? = podpisnik.podpisiKlice(koda, cas, enkratni)
 
+    /** Sinhronizacija klicev, pogovora in navodil (podpis zgostitve vsebine). */
+    fun podpisiSinhron(vsebina: String, cas: Long, enkratni: String): String? = podpisnik.podpisiSinhron(vsebina, cas, enkratni)
+
     /** Naloga za Claude Code; null, ce vnos ni veljaven. */
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
         podpisnik.podpisiNalogo(id, vnos, cas, enkratni)

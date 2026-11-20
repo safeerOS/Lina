@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
  */
 class SkupniVektorjiTest {
     private companion object {
-        const val SHA256 = "bd39c40105ce1f64128dced831c702795c696b110caaf8374340bdeac97fc728"
+        const val SHA256 = "76d49c1df06e4373dec9689b9d3e2cff20194bcccaa6b69c47a9653ff883f52b"
     }
 
     private val v: JsonObject by lazy {

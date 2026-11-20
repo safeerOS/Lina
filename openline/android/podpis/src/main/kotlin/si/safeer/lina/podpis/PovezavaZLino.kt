@@ -16,6 +16,8 @@ interface PovezavaZLino {
     fun dogodki(id: String, posiljatelj: String, cas: Long, enkratni: String, podpis: String, od: Long, cakaS: Int): OdgovorLine
     /** POST /seznani/klici (T1-S1): pot klicev OpenLine po lastnikovem »Dodaj«. */
     fun klici(telo: String): OdgovorLine
+    /** POST /sinhron (20. 11. 2026): podpisana izmenjava klicev, pogovora in navodil z racunalnikom. */
+    fun sinhron(telo: String): OdgovorLine
     fun odobritev(telo: String): OdgovorLine
     fun ustavi(telo: String): OdgovorLine
     fun seznani(telo: String): OdgovorLine

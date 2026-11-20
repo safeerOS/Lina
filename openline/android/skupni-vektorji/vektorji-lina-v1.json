@@ -506,37 +506,73 @@
    "orodje": "Bash",
    "predogled": "{\"command\":\"git status\"}",
    "opis": "Pokaže stanje map: čšž 😀",
-   "sha256": "37aeee35e48c2cd5205b4e21f7c517759e53885733093bbdb72dfa0e378c9ffe"
+   "sha256": "38774d2357d3cb7720b1e4ab704c7eb799dba9ea6031303c02614b88e8833ccc"
   },
   {
    "orodje": "Edit",
    "predogled": "a\nb\r\nc",
    "opis": "",
-   "sha256": "c35092bfbf35516d5df61eaf22d0b01de16d8fb44b01686e32f3d10e9d3813f7"
+   "sha256": "7e7119493a3fc31a8edb2899a5f288474e1a65a7b81efa995ea2701397291b6e"
   },
   {
    "orodje": "Write",
    "predogled": "čšž ☃ 😀",
    "opis": "Ustvari datoteko »x«",
-   "sha256": "c6bdb2c9985d56105fcbb5262e4fbc36614fa45b50167bf0fe35ae825a99a431"
+   "sha256": "64fcc95269886685c1043ba2d1693eb3c77a166f94b953fdccd46ebca10e8546"
+  },
+  {
+   "orodje": "Bash",
+   "predogled": "a\nb",
+   "opis": "c",
+   "sha256": "92749c6bf98c77404d628ffc1dfc68e99c6adf23742e06262ae36de6413d7ee5"
+  },
+  {
+   "orodje": "Bash",
+   "predogled": "a",
+   "opis": "b\nc",
+   "sha256": "d5dcc6c429443d865ab2af358838f23d24681f1c4fc1783e718d6fbe093d6ff2"
+  },
+  {
+   "orodje": "é",
+   "predogled": "",
+   "opis": "x",
+   "sha256": "a7f9b2363f6701b8bb1fee2551800d9e839aec30457a3e94d9b99dad4272fe52"
+  },
+  {
+   "orodje": "",
+   "predogled": "é",
+   "opis": "x",
+   "sha256": "c97582dea8cdab100364112c34b77d5db23619039215ba7259fba52287a39497"
+  },
+  {
+   "orodje": "A",
+   "predogled": "1:b",
+   "opis": "c",
+   "sha256": "c1b62c4d521db3c418023799000bda373ace1f43b35367a4d6ae5723c8f3c8e5"
+  },
+  {
+   "orodje": "A1:b",
+   "predogled": "",
+   "opis": "c",
+   "sha256": "c4c433a7b783a20b711e5ca2a6d8677685131e5d15423565f38e5af7f6739cbc"
   }
  ],
  "podpis": {
-  "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
-  "id": "n-9427e6e5d28ff3c4",
+  "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
+  "id": "n-d402b0b2bd8a9e7b",
   "nizi": [
    {
     "ime": "naloga",
     "vrsta": "naloga",
     "vhod": {
      "id": "vektorNaloga0123456789abc",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "besedilo": "Pokliči Anžeta in mu povej:\n  »ob 15:00« 😀 {\"a\":1}\n\nHvala!",
      "cas": 1763130000000,
      "enkratni": "enkratniNaloga-0001"
     },
-    "niz": "safeer-lina-naloga-v1\nvektorNaloga0123456789abc\nn-9427e6e5d28ff3c4\n1763130000000\nenkratniNaloga-0001\nPokliči Anžeta in mu povej:\n  »ob 15:00« 😀 {\"a\":1}\n\nHvala!",
-    "podpis": "MEUCIFot5gkRfZsrYkBjrVm+LMWlCdOHIcRm3T8TB/L8NtQHAiEAqFS0+p5Nhe6KBDlv6N1iHLv3xWupw5AahbSeY5IVfb4="
+    "niz": "safeer-lina-naloga-v1\nvektorNaloga0123456789abc\nn-d402b0b2bd8a9e7b\n1763130000000\nenkratniNaloga-0001\nPokliči Anžeta in mu povej:\n  »ob 15:00« 😀 {\"a\":1}\n\nHvala!",
+    "podpis": "MEUCIQDEHmY+bVVbTxefnpUttcVipcrY9IQnHX8cprbxq0asSAIgUvt1imL/MK7PlyRaub8dSflGaRHAmZAt9qfZyi+XFQE="
    },
    {
     "ime": "odobritev_dovoli",
@@ -544,14 +580,14 @@
     "vhod": {
      "zahtevaId": "abcde",
      "dovoli": true,
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130001000,
      "enkratni": "enkratniOdobr-0002",
      "chatId": "vektorNaloga0123456789abc",
-     "zgostitev": "37aeee35e48c2cd5205b4e21f7c517759e53885733093bbdb72dfa0e378c9ffe"
+     "zgostitev": "38774d2357d3cb7720b1e4ab704c7eb799dba9ea6031303c02614b88e8833ccc"
     },
-    "niz": "safeer-lina-odobritev-v2\nabcde\nallow\nn-9427e6e5d28ff3c4\n1763130001000\nenkratniOdobr-0002\nvektorNaloga0123456789abc\n37aeee35e48c2cd5205b4e21f7c517759e53885733093bbdb72dfa0e378c9ffe",
-    "podpis": "MEYCIQDX+y82wCXttMt1hb8wT33l2Z9ChlOLOHhgNnHH7o4AfgIhAKWPfUCAVlz29hKm4jQws51sn1itS4K7BmHZy+9AvQ8T"
+    "niz": "safeer-lina-odobritev-v3\nabcde\nallow\nn-d402b0b2bd8a9e7b\n1763130001000\nenkratniOdobr-0002\nvektorNaloga0123456789abc\n38774d2357d3cb7720b1e4ab704c7eb799dba9ea6031303c02614b88e8833ccc",
+    "podpis": "MEQCICGOOhBabYGPAWTdD5v/b71J17DzJcz8zb8Gw4z0E0u6AiAbeZAvWSM3MldlXxTvfleBtCc7PvBcAvSIhPEtTLUTMA=="
    },
    {
     "ime": "odobritev_zavrni",
@@ -559,75 +595,75 @@
     "vhod": {
      "zahtevaId": "abcde",
      "dovoli": false,
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130001500,
      "enkratni": "enkratniOdobr-0003",
      "chatId": "vektorNaloga0123456789abc",
-     "zgostitev": "37aeee35e48c2cd5205b4e21f7c517759e53885733093bbdb72dfa0e378c9ffe"
+     "zgostitev": "38774d2357d3cb7720b1e4ab704c7eb799dba9ea6031303c02614b88e8833ccc"
     },
-    "niz": "safeer-lina-odobritev-v2\nabcde\ndeny\nn-9427e6e5d28ff3c4\n1763130001500\nenkratniOdobr-0003\nvektorNaloga0123456789abc\n37aeee35e48c2cd5205b4e21f7c517759e53885733093bbdb72dfa0e378c9ffe",
-    "podpis": "MEUCIFC0dgKMrsKaunZFCjXnBct2bqfIt5BWJZDOt/BIDAaJAiEAivxvJK+S+OuAAz1kxY7tLyjOgWi1j8VxqDzp7kLIErs="
+    "niz": "safeer-lina-odobritev-v3\nabcde\ndeny\nn-d402b0b2bd8a9e7b\n1763130001500\nenkratniOdobr-0003\nvektorNaloga0123456789abc\n38774d2357d3cb7720b1e4ab704c7eb799dba9ea6031303c02614b88e8833ccc",
+    "podpis": "MEQCIBysP0IoYwW0b01+TOO8MBYp2Yo+9tBgZ9G3YZgUp4zNAiBAV2GF5IJtuazNAgoduJ7MZlSgh/y5y19sTGzRdEP/fA=="
    },
    {
     "ime": "ustavitev",
     "vrsta": "ustavitev",
     "vhod": {
      "id": "vektorNaloga0123456789abc",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130002000,
      "enkratni": "enkratniUstav-0004"
     },
-    "niz": "safeer-lina-ustavi-v1\nvektorNaloga0123456789abc\nn-9427e6e5d28ff3c4\n1763130002000\nenkratniUstav-0004",
-    "podpis": "MEUCIDxRxrZwyB1S7HW85VxiDth4uUM4wEe7Oh3WHx9xULZ1AiEAq5zlLo8/0b62L42wwaTx91DKDztxvnzxHbj5wnmsb7s="
+    "niz": "safeer-lina-ustavi-v1\nvektorNaloga0123456789abc\nn-d402b0b2bd8a9e7b\n1763130002000\nenkratniUstav-0004",
+    "podpis": "MEQCICAs3WQXZHwjSl8aIj1oqWa1PXkH8uVf18Zlo+1XuWQ7AiBP2TIkb8RuBtx+LCsgF2KXC+Feu9/OdqD+IwWHrJ7mwg=="
    },
    {
     "ime": "stanje",
     "vrsta": "stanje",
     "vhod": {
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000500,
      "enkratni": "enkratniStanje-0005"
     },
-    "niz": "safeer-lina-stanje-v1\nn-9427e6e5d28ff3c4\n1763130000500\nenkratniStanje-0005",
-    "podpis": "MEUCIQD7vhhAVST8O3vU4Bf0NW/4ZZAyf2o+zX+sGJfLc5/9/QIgTtw78jnYldPCJjalomykNUtMa+d8DEWiAcUVF+Tr//I="
+    "niz": "safeer-lina-stanje-v1\nn-d402b0b2bd8a9e7b\n1763130000500\nenkratniStanje-0005",
+    "podpis": "MEUCIFRGQLKk/Cburf/E59OiB0J6GN8sS1B7FxvRK7lvUk0aAiEA7YOXxoth82awh4wNLqEbu1n8aQm5uh4bkoMT39z9UAU="
    },
    {
     "ime": "seznanitev_qr",
     "vrsta": "seznanitev",
     "vhod": {
      "koda": "AbCdEfGhIjKlMnOpQrStUv",
-     "id": "n-9427e6e5d28ff3c4",
-     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+     "id": "n-d402b0b2bd8a9e7b",
+     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
      "ime": "Anžetov telefon 📱",
      "cas": 1763130000100,
      "enkratni": "enkratniSezn-0006"
     },
-    "niz": "safeer-lina-seznani-v1\nAbCdEfGhIjKlMnOpQrStUv\nn-9427e6e5d28ff3c4\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==\n1763130000100\nenkratniSezn-0006\nAnžetov telefon 📱",
-    "podpis": "MEUCIQD4l/fZ94kub74Z7B+/FIcXWQ5BymE+rknKTnp9+zae9gIga6OWCviPPIXMGs6lMgf2ViAQCUHjOWUzjzHMXSaARIk="
+    "niz": "safeer-lina-seznani-v1\nAbCdEfGhIjKlMnOpQrStUv\nn-d402b0b2bd8a9e7b\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==\n1763130000100\nenkratniSezn-0006\nAnžetov telefon 📱",
+    "podpis": "MEQCICtwJ6F/ZmKNJH5qBFGvA0SFpmvH+XKxoFEBZoUu6Vy4AiBepPiulN2LD6mkVxmOvv/3d68Gs1h8PUo3+m6y60sAZQ=="
    },
    {
     "ime": "dogodki",
     "vrsta": "dogodki",
     "vhod": {
      "id": "vektorNaloga0123456789abc",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000600,
      "enkratni": "enkratniDogod-0007"
     },
-    "niz": "safeer-lina-dogodki-v1\nvektorNaloga0123456789abc\nn-9427e6e5d28ff3c4\n1763130000600\nenkratniDogod-0007",
-    "podpis": "MEUCIEdvaYp5Dcyh83IyBs2iVDUUY6efgcOv0uPcAOLd6vPyAiEAzRdJY6WBFUp46qVdLVq+NL0kyWK0FkpZGBBDhl/QwVw="
+    "niz": "safeer-lina-dogodki-v1\nvektorNaloga0123456789abc\nn-d402b0b2bd8a9e7b\n1763130000600\nenkratniDogod-0007",
+    "podpis": "MEUCIQDU6jJz3r5m4NzoF2EKcURKgotSV3vhXGjQEHgw0rGyrAIgNlmoEKAw293huRd/ZE9XYWOpXQlH0hgPN1FVl9PVTjM="
    },
    {
     "ime": "klici",
     "vrsta": "klici",
     "vhod": {
      "koda": "AbCdEfGhIjKlMnOpQrStUv",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000700,
      "enkratni": "enkratniKlici-0008"
     },
-    "niz": "safeer-lina-klici-v1\nAbCdEfGhIjKlMnOpQrStUv\nn-9427e6e5d28ff3c4\n1763130000700\nenkratniKlici-0008",
-    "podpis": "MEQCICrmfYJ0AvtUS+FzSVdmOFFVLuKdTOzdFO5YH/oHCPa/AiAph79icMEt1dmb2Wa/GhGU4pAJWDZx8+KXd6kJ/rc4OQ=="
+    "niz": "safeer-lina-klici-v1\nAbCdEfGhIjKlMnOpQrStUv\nn-d402b0b2bd8a9e7b\n1763130000700\nenkratniKlici-0008",
+    "podpis": "MEUCIBCP+Hr7PArrePw9eSsLLI9dEbIUHZvn89Mnftm0boQUAiEArybbvkvSH/tKW1ssxSyfINrfKmfUcSXJicShMMc1T2M="
    }
   ],
   "zavrnjeni": [
@@ -636,7 +672,7 @@
     "vrsta": "naloga",
     "vhod": {
      "id": "vektorNaloga0123456789abc",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "besedilo": "Pozdrav",
      "cas": 1763130000000,
      "enkratni": "kratek"
@@ -647,7 +683,7 @@
     "vrsta": "ustavitev",
     "vhod": {
      "id": "vektorNaloga0123456789abc",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000000,
      "enkratni": "enkratni z presledkom 12"
     }
@@ -666,7 +702,7 @@
     "vrsta": "naloga",
     "vhod": {
      "id": "vektorNaloga0123456789abc",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "besedilo": "a\ud800b",
      "cas": 1763130000000,
      "enkratni": "enkratniNaloga-0001"
@@ -678,11 +714,11 @@
     "vhod": {
      "zahtevaId": "abcdl",
      "dovoli": true,
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000000,
      "enkratni": "enkratniOdobr-0002",
      "chatId": "vektorNaloga0123456789abc",
-     "zgostitev": "37aeee35e48c2cd5205b4e21f7c517759e53885733093bbdb72dfa0e378c9ffe"
+     "zgostitev": "38774d2357d3cb7720b1e4ab704c7eb799dba9ea6031303c02614b88e8833ccc"
     }
    },
    {
@@ -691,11 +727,11 @@
     "vhod": {
      "zahtevaId": "abcde",
      "dovoli": true,
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000000,
      "enkratni": "enkratniOdobr-0002",
      "chatId": "vektorNaloga0123456789abc",
-     "zgostitev": "37AEEE35E48C2CD5205B4E21F7C517759E53885733093BBDB72DFA0E378C9FFE"
+     "zgostitev": "38774D2357D3CB7720B1E4AB704C7EB799DBA9EA6031303C02614B88E8833CCC"
     }
    },
    {
@@ -703,8 +739,8 @@
     "vrsta": "seznanitev",
     "vhod": {
      "koda": "bCdEfGhIjKlMnOpQrStUv",
-     "id": "n-9427e6e5d28ff3c4",
-     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+     "id": "n-d402b0b2bd8a9e7b",
+     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
      "ime": "Anžetov telefon 📱",
      "cas": 1763130000000,
      "enkratni": "enkratniSezn-0006"
@@ -716,7 +752,7 @@
     "vhod": {
      "koda": "AbCdEfGhIjKlMnOpQrStUv",
      "id": "n-0000000000000000",
-     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
      "ime": "Anžetov telefon 📱",
      "cas": 1763130000000,
      "enkratni": "enkratniSezn-0006"
@@ -727,8 +763,8 @@
     "vrsta": "seznanitev",
     "vhod": {
      "koda": "AbCdEfGhIjKlMnOpQrStUv",
-     "id": "n-9427e6e5d28ff3c4",
-     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+     "id": "n-d402b0b2bd8a9e7b",
+     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
      "ime": "   ",
      "cas": 1763130000000,
      "enkratni": "enkratniSezn-0006"
@@ -739,7 +775,7 @@
     "vrsta": "klici",
     "vhod": {
      "koda": "bCdEfGhIjKlMnOpQrStUv",
-     "posiljatelj": "n-9427e6e5d28ff3c4",
+     "posiljatelj": "n-d402b0b2bd8a9e7b",
      "cas": 1763130000000,
      "enkratni": "enkratniKlici-0008"
     }
@@ -785,14 +821,14 @@
     "koda_vnos_lastnika": "",
     "koda_telefon": "482913",
     "pair_id": "pairVektorA-0123456789",
-    "id": "n-9427e6e5d28ff3c4",
+    "id": "n-d402b0b2bd8a9e7b",
     "ime_telefona": "Anžetov telefon 📱",
     "odtis": "0a93367017ca6051e24a764eefaa96b459e842a41cd74274ebbbbc3ffad97ed7",
     "x_lina": "5da9a86e04339393a8729d9da24f555c5e895cf480f8c350acae277f2c7ffd81",
     "y_telefon": "c474e150f15022e83c6af689c92a58c745369dbc33b5b1b769578556fbe0e3f8",
     "w_telefon": "34a53fbab4aea69232b0fb9f845e679f4af903586664c91ebc495b208eb24c7a",
     "zacni_telo": {
-     "id": "n-9427e6e5d28ff3c4",
+     "id": "n-d402b0b2bd8a9e7b",
      "ime": "Anžetov telefon 📱"
     },
     "zacni_odgovor": {
@@ -804,36 +840,36 @@
     },
     "spake_telo": {
      "pair_id": "pairVektorA-0123456789",
-     "id": "n-9427e6e5d28ff3c4",
+     "id": "n-d402b0b2bd8a9e7b",
      "pb": "0488e0ef37b247d05eded5e7533e7e97eb2260b18f1dfa6dcb3447db6d736f7d9fbcec68cce32bf45b1fa05d490d5507774ed4ee94d0a53521ad0f15e31a258693"
     },
     "spake_odgovor": {
      "pa": "04f5cd8f466cc5c208125f67eac854221387e7d888b7543d3734f9b2254dd3c996a151b00b1e81e8afb0f6449bb706081c50000edfea9b5d81eb1cb15e2062b99a",
-     "ca": "ea584a99b87b1b4d8e7cc477993c456318212a007ff36a50c18396b3ca609f12"
+     "ca": "f3f08390304eb91106d8365e257637cc3c561fe49cbdd9c4a2e2573a187cca75"
     },
     "ca_velja": true,
     "odpovej_telo": {
      "pair_id": "pairVektorA-0123456789",
-     "id": "n-9427e6e5d28ff3c4"
+     "id": "n-d402b0b2bd8a9e7b"
     },
     "odpovej_odgovor": {
      "stanje": "odpovedano"
     },
-    "ke": "d8c61d7b08ac2e08635d2f6eeba0d87e",
-    "cb": "3c135ce6eed904767f40fad59cb08c5af9351f7713f398fb4cfc78d53bf48d8b",
-    "mac": "f398abccb7f132713b072dfa34fd565253721edb05f0134fb116847747ace78f",
+    "ke": "5b0e723244c3a63d3e06623fb24ab5c5",
+    "cb": "3a7794a4dba13a2193d10b08e290517ba331df998c76dfdd929f4fb2e4b3cc46",
+    "mac": "57755c3a2cebdfce2d317f7a917962c27e6edf7b54ca4140d124202595b88414",
     "podpis_ime": "seznanitev_koda_A",
-    "niz_podpisa": "safeer-lina-seznani-v1\npairVektorA-0123456789\nn-9427e6e5d28ff3c4\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==\n1763130000200\nenkratniKodaA-0007\nAnžetov telefon 📱",
+    "niz_podpisa": "safeer-lina-seznani-v1\npairVektorA-0123456789\nn-d402b0b2bd8a9e7b\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==\n1763130000200\nenkratniKodaA-0007\nAnžetov telefon 📱",
     "potrdi_telo": {
      "pair_id": "pairVektorA-0123456789",
-     "id": "n-9427e6e5d28ff3c4",
-     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+     "id": "n-d402b0b2bd8a9e7b",
+     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
      "ime": "Anžetov telefon 📱",
      "cas": 1763130000200,
      "enkratni": "enkratniKodaA-0007",
-     "podpis": "MEUCIQDA7QRUbdTwxcbDIm9+kLR1DP7gvVS/ylEcM1Xjkhh5bAIgS+VfkB8L+s2cxlWKI6BAXbmSSk/4l8bPslTByHjzCX4=",
-     "cb": "3c135ce6eed904767f40fad59cb08c5af9351f7713f398fb4cfc78d53bf48d8b",
-     "mac": "f398abccb7f132713b072dfa34fd565253721edb05f0134fb116847747ace78f"
+     "podpis": "MEUCIQC1yI3UeDP4j0db4NISxz1kAtKUTKsRjDPHQmou27hnZgIgBwHXPdUwlGKg+QgEwfhgBDeeU7dnjJQs7nWW1zIv0Ys=",
+     "cb": "3a7794a4dba13a2193d10b08e290517ba331df998c76dfdd929f4fb2e4b3cc46",
+     "mac": "57755c3a2cebdfce2d317f7a917962c27e6edf7b54ca4140d124202595b88414"
     },
     "potrdi_odgovor": {
      "stanje": "caka"
@@ -846,14 +882,14 @@
     "koda_vnos_lastnika": "731 905",
     "koda_telefon": "731905",
     "pair_id": "pairVektorB-0123456789",
-    "id": "n-9427e6e5d28ff3c4",
+    "id": "n-d402b0b2bd8a9e7b",
     "ime_telefona": "Anžetov telefon 📱",
     "odtis": "0a93367017ca6051e24a764eefaa96b459e842a41cd74274ebbbbc3ffad97ed7",
     "x_lina": "8e935fb45b199cc386449bd694e923de1f5a0913a565b3ea4cdf80c4d353c02e",
     "y_telefon": "db687d24edab96c00844f62ec50db269b5d2ddf9ff354ca5aeea0e08933d9418",
     "w_telefon": "513c71bf58a1fb6fb1ff68a83d7d807a26d30e1314d955194dbfa6c72d62ceab",
     "zacni_telo": {
-     "id": "n-9427e6e5d28ff3c4",
+     "id": "n-d402b0b2bd8a9e7b",
      "ime": "Anžetov telefon 📱",
      "kodaNaTelefonu": true
     },
@@ -866,36 +902,36 @@
     },
     "spake_telo": {
      "pair_id": "pairVektorB-0123456789",
-     "id": "n-9427e6e5d28ff3c4",
+     "id": "n-d402b0b2bd8a9e7b",
      "pb": "04633d69e309e15f50a98a901ab768fd41297b990d5180fc7689e0b67a2398bea76e84b5d2475ec176feb9be526f33506ba0d41ddf395563892be983f5798a7cad"
     },
     "spake_odgovor": {
      "pa": "04e881636253190ca7d47a3fd130e1706a1f192db3649c3778696b901d16fd837b4866d605d2b0d1271544232a93ad04ad335fe90e2225cbe7bfcbf4ef5508137b",
-     "ca": "ea3dc5db734b422055322f75864850d99f94670adfe029f673798a1e302a5483"
+     "ca": "15fe078c120c8f88b8b0ccbebc1da5c50056a35078d23b8eb3c64d8f277337a2"
     },
     "ca_velja": true,
     "odpovej_telo": {
      "pair_id": "pairVektorB-0123456789",
-     "id": "n-9427e6e5d28ff3c4"
+     "id": "n-d402b0b2bd8a9e7b"
     },
     "odpovej_odgovor": {
      "stanje": "odpovedano"
     },
-    "ke": "1286349aeb20a724132ad3dd3c4e387a",
-    "cb": "7a65d64e0009b628d9c03ad6f29272c1ca7d2d4dca82b51f4812e60b9365baf0",
-    "mac": "455ae6d88ffa325cf2fc97c5301caa7da765549762e83c73fd2cc95f40b42c76",
+    "ke": "c4b7d903afd24dbfe7090d700535bc1a",
+    "cb": "d93198ec262305fee8c44dc37a4b8f62b0188bd28b26fce3c21bb1a7bad39fde",
+    "mac": "f684b4f265c40a1585a8611f6b1e6aaaade43650278c41119e4bc400a04f3fa1",
     "podpis_ime": "seznanitev_koda_B",
-    "niz_podpisa": "safeer-lina-seznani-v1\npairVektorB-0123456789\nn-9427e6e5d28ff3c4\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==\n1763130000300\nenkratniKodaB-0008\nAnžetov telefon 📱",
+    "niz_podpisa": "safeer-lina-seznani-v1\npairVektorB-0123456789\nn-d402b0b2bd8a9e7b\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==\n1763130000300\nenkratniKodaB-0008\nAnžetov telefon 📱",
     "potrdi_telo": {
      "pair_id": "pairVektorB-0123456789",
-     "id": "n-9427e6e5d28ff3c4",
-     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+     "id": "n-d402b0b2bd8a9e7b",
+     "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
      "ime": "Anžetov telefon 📱",
      "cas": 1763130000300,
      "enkratni": "enkratniKodaB-0008",
-     "podpis": "MEQCIQDKf0MJJ4yxaOkk8hvfSn1N+2bzw2X2/PFWyoRp7O79AAIfN90XNU1tDj1wunqMkX/N58vQLwNOicgY38XI56+T9w==",
-     "cb": "7a65d64e0009b628d9c03ad6f29272c1ca7d2d4dca82b51f4812e60b9365baf0",
-     "mac": "455ae6d88ffa325cf2fc97c5301caa7da765549762e83c73fd2cc95f40b42c76"
+     "podpis": "MEQCIAOrRofu2v1c5MOW1dDaD0m+0+/LBLhWAOAzk7EV+4YpAiB29hRJjUaaTVFjjsEpIHcdndXIMr/nN1EcJA+rR/tE5A==",
+     "cb": "d93198ec262305fee8c44dc37a4b8f62b0188bd28b26fce3c21bb1a7bad39fde",
+     "mac": "f684b4f265c40a1585a8611f6b1e6aaaade43650278c41119e4bc400a04f3fa1"
     },
     "potrdi_odgovor": {
      "stanje": "caka"
@@ -908,14 +944,14 @@
     "koda_vnos_lastnika": "",
     "koda_telefon": "482914",
     "pair_id": "pairVektorC-0123456789",
-    "id": "n-9427e6e5d28ff3c4",
+    "id": "n-d402b0b2bd8a9e7b",
     "ime_telefona": "Anžetov telefon 📱",
     "odtis": "0a93367017ca6051e24a764eefaa96b459e842a41cd74274ebbbbc3ffad97ed7",
     "x_lina": "51c5280e8d80b759aca24f4113e1323968746d8c7e980a856180848fb3c6603e",
     "y_telefon": "87ea3adaec862b6bd5a93b2b6204bc49238e56b4e0173bb7bfbc89c315a4b66e",
     "w_telefon": "706bdce822587d6000d558f5bfaa62b106a6e2646fd473a93bf89101f5d648a1",
     "zacni_telo": {
-     "id": "n-9427e6e5d28ff3c4",
+     "id": "n-d402b0b2bd8a9e7b",
      "ime": "Anžetov telefon 📱"
     },
     "zacni_odgovor": {
@@ -927,17 +963,17 @@
     },
     "spake_telo": {
      "pair_id": "pairVektorC-0123456789",
-     "id": "n-9427e6e5d28ff3c4",
+     "id": "n-d402b0b2bd8a9e7b",
      "pb": "04dad2e298eca9501e04c0bacc40dba1d2dc398aafd2690b5ca10a2d542c595ad8f6b2adf1fa14585d1b4d2368a2d40e75c93963172e6ed4095d9a4f08e5fea3df"
     },
     "spake_odgovor": {
      "pa": "04cb6ea2e000888b9ee2c85fd2a24ef3374f6563bba64b858a928b7c680d868e5c701935308ff8d55dc7805973c6fb20180d9df827daa121aa69a937cea64776eb",
-     "ca": "11ee8b8655aa56d0c2ee3e4439e45a700cb51fdcdca2aeac29b85513d69d74f5"
+     "ca": "b743b2d2705406aa9248d726fa2331d60c368cc3a0b8c733c4bd495dca7012e1"
     },
     "ca_velja": false,
     "odpovej_telo": {
      "pair_id": "pairVektorC-0123456789",
-     "id": "n-9427e6e5d28ff3c4"
+     "id": "n-d402b0b2bd8a9e7b"
     },
     "odpovej_odgovor": {
      "stanje": "odpovedano"
@@ -1016,56 +1052,56 @@
   },
   "naloga_telo": {
    "id": "vektorNaloga0123456789abc",
-   "posiljatelj": "n-9427e6e5d28ff3c4",
+   "posiljatelj": "n-d402b0b2bd8a9e7b",
    "besedilo": "Pokliči Anžeta in mu povej:\n  »ob 15:00« 😀 {\"a\":1}\n\nHvala!",
    "cas": 1763130000000,
    "enkratni": "enkratniNaloga-0001",
-   "podpis": "MEUCIFot5gkRfZsrYkBjrVm+LMWlCdOHIcRm3T8TB/L8NtQHAiEAqFS0+p5Nhe6KBDlv6N1iHLv3xWupw5AahbSeY5IVfb4="
+   "podpis": "MEUCIQDEHmY+bVVbTxefnpUttcVipcrY9IQnHX8cprbxq0asSAIgUvt1imL/MK7PlyRaub8dSflGaRHAmZAt9qfZyi+XFQE="
   },
   "odobritev_telo": {
    "nalogaId": "vektorNaloga0123456789abc",
    "zahtevaId": "abcde",
    "dovoli": true,
-   "posiljatelj": "n-9427e6e5d28ff3c4",
+   "posiljatelj": "n-d402b0b2bd8a9e7b",
    "cas": 1763130001000,
    "enkratni": "enkratniOdobr-0002",
-   "podpis": "MEYCIQDX+y82wCXttMt1hb8wT33l2Z9ChlOLOHhgNnHH7o4AfgIhAKWPfUCAVlz29hKm4jQws51sn1itS4K7BmHZy+9AvQ8T"
+   "podpis": "MEQCICGOOhBabYGPAWTdD5v/b71J17DzJcz8zb8Gw4z0E0u6AiAbeZAvWSM3MldlXxTvfleBtCc7PvBcAvSIhPEtTLUTMA=="
   },
   "ustavitev_telo": {
    "id": "vektorNaloga0123456789abc",
-   "posiljatelj": "n-9427e6e5d28ff3c4",
+   "posiljatelj": "n-d402b0b2bd8a9e7b",
    "cas": 1763130002000,
    "enkratni": "enkratniUstav-0004",
-   "podpis": "MEUCIDxRxrZwyB1S7HW85VxiDth4uUM4wEe7Oh3WHx9xULZ1AiEAq5zlLo8/0b62L42wwaTx91DKDztxvnzxHbj5wnmsb7s="
+   "podpis": "MEQCICAs3WQXZHwjSl8aIj1oqWa1PXkH8uVf18Zlo+1XuWQ7AiBP2TIkb8RuBtx+LCsgF2KXC+Feu9/OdqD+IwWHrJ7mwg=="
   },
   "seznanitev_telo": {
    "koda": "AbCdEfGhIjKlMnOpQrStUv",
-   "id": "n-9427e6e5d28ff3c4",
-   "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHZ92BvSkHWk+s5P7KHu7T6l1ufFZRzETNg0vyrdf8ZIcZvKh6u/+Ua7uVZnhp7oGZmb4d1Ebi/mFBEN7w5yfsQ==",
+   "id": "n-d402b0b2bd8a9e7b",
+   "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERFl+ppLFDI16WbBxlFhJD1dNBj8cgnSCMxF9z31TnK4tfAaNTtzTRd3JgYAUJ40l3vzxn24miulF1MlRnVmM8w==",
    "ime": "Anžetov telefon 📱",
    "cas": 1763130000100,
    "enkratni": "enkratniSezn-0006",
-   "podpis": "MEUCIQD4l/fZ94kub74Z7B+/FIcXWQ5BymE+rknKTnp9+zae9gIga6OWCviPPIXMGs6lMgf2ViAQCUHjOWUzjzHMXSaARIk="
+   "podpis": "MEQCICtwJ6F/ZmKNJH5qBFGvA0SFpmvH+XKxoFEBZoUu6Vy4AiBepPiulN2LD6mkVxmOvv/3d68Gs1h8PUo3+m6y60sAZQ=="
   },
   "stanje_poizvedba": {
-   "posiljatelj": "n-9427e6e5d28ff3c4",
+   "posiljatelj": "n-d402b0b2bd8a9e7b",
    "cas": 1763130000500,
    "enkratni": "enkratniStanje-0005",
-   "podpis": "MEUCIQD7vhhAVST8O3vU4Bf0NW/4ZZAyf2o+zX+sGJfLc5/9/QIgTtw78jnYldPCJjalomykNUtMa+d8DEWiAcUVF+Tr//I="
+   "podpis": "MEUCIFRGQLKk/Cburf/E59OiB0J6GN8sS1B7FxvRK7lvUk0aAiEA7YOXxoth82awh4wNLqEbu1n8aQm5uh4bkoMT39z9UAU="
   },
   "dogodki_poizvedba": {
    "id": "vektorNaloga0123456789abc",
-   "posiljatelj": "n-9427e6e5d28ff3c4",
+   "posiljatelj": "n-d402b0b2bd8a9e7b",
    "cas": 1763130000600,
    "enkratni": "enkratniDogod-0007",
-   "podpis": "MEUCIEdvaYp5Dcyh83IyBs2iVDUUY6efgcOv0uPcAOLd6vPyAiEAzRdJY6WBFUp46qVdLVq+NL0kyWK0FkpZGBBDhl/QwVw="
+   "podpis": "MEUCIQDU6jJz3r5m4NzoF2EKcURKgotSV3vhXGjQEHgw0rGyrAIgNlmoEKAw293huRd/ZE9XYWOpXQlH0hgPN1FVl9PVTjM="
   },
   "klici_telo": {
    "koda": "AbCdEfGhIjKlMnOpQrStUv",
-   "id": "n-9427e6e5d28ff3c4",
+   "id": "n-d402b0b2bd8a9e7b",
    "cas": 1763130000700,
    "enkratni": "enkratniKlici-0008",
-   "podpis": "MEQCICrmfYJ0AvtUS+FzSVdmOFFVLuKdTOzdFO5YH/oHCPa/AiAph79icMEt1dmb2Wa/GhGU4pAJWDZx8+KXd6kJ/rc4OQ=="
+   "podpis": "MEUCIBCP+Hr7PArrePw9eSsLLI9dEbIUHZvn89Mnftm0boQUAiEArybbvkvSH/tKW1ssxSyfINrfKmfUcSXJicShMMc1T2M="
   },
   "klici_odgovori": [
    {
