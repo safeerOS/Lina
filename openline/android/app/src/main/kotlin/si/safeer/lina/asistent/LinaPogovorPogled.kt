@@ -212,6 +212,12 @@ class LinaPogovorPogled(
                     }
                 }
                 dodajVrstico(a.getString(R.string.local_lina), besedilo)
+                if (odgovor !is Odgovor.Napaka) runCatching {
+                    val trajen = PogovorSkupni.dobi(a)
+                    trajen.dodaj("lastnik", vnos)
+                    trajen.dodaj("lina", besedilo)
+                    SinhronizacijaZLino.zazeni(a, takoj = true)
+                }
                 caka = false
                 osvezi()
             }

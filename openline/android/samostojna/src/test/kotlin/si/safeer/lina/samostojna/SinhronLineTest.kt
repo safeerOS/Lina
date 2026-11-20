@@ -30,7 +30,7 @@ class SinhronLineTest {
         assertTrue(poslano[0].contains("\"klic-1\"") && poslano[0].contains("\"rev\":0"))
         assertTrue(poslano[0].contains("\"nacin\":\"osebna\""))
         assertTrue(d.cakajociZaSinhronizacijo().isEmpty())
-        assertEquals("5", rev.preberi())
+        assertEquals("5:", rev.preberi())
         assertEquals(1, d.seznam().size)
     }
 
@@ -56,7 +56,7 @@ class SinhronLineTest {
         assertTrue(d.cakajociZaSinhronizacijo().isEmpty())
         assertEquals("Ana Novak", d.seznam().first { it.id == "klic-rac" }.klicatelj)
         assertEquals("Miha Horvat", d.seznam().first { it.id == "klic-1" }.klicatelj)
-        assertEquals("7", rev.preberi())
+        assertEquals("7:", rev.preberi())
     }
 
     @Test
@@ -68,7 +68,7 @@ class SinhronLineTest {
         assertTrue(SinhronLine.izmenjaj(d, rev, poslji = { telesa.add(it); odgovori.removeFirst() }))
         assertEquals(2, telesa.size)
         assertTrue(telesa[1].contains("\"rev\":10"))
-        assertEquals("12", rev.preberi())
+        assertEquals("12:", rev.preberi())
         assertEquals(2, d.seznam().size)
     }
 
@@ -96,5 +96,36 @@ class SinhronLineTest {
         val slab = racKlic("slab").replace("\"+38641222333\"", "\" \"")
         SinhronLine.izmenjaj(d, PomnilniskaShramba(), poslji = { odgovor(1, "[$slab]") })
         assertTrue(d.seznam().isEmpty())
+    }
+
+    @Test
+    fun `nova epoha racunalnika ponastavi revizijo telefona`() {
+        val d = DnevnikKlicev(PomnilniskaShramba())
+        val rev = PomnilniskaShramba("50:aaaaaaaaaaaaaaaa")
+        val telesa = mutableListOf<String>()
+        SinhronLine.izmenjaj(d, rev, poslji = { telesa.add(it); """{"epoha":"bbbbbbbbbbbbbbbb","rev":3,"klici":[${racKlic("nov")}],"pogovor":[],"navodila":null,"ostane":false}""" })
+        assertTrue(telesa[0].contains("\"epoha\":\"aaaaaaaaaaaaaaaa\""))
+        assertEquals("3:bbbbbbbbbbbbbbbb", rev.preberi())
+        assertEquals(1, d.seznam().size)
+    }
+
+    @Test
+    fun `zahteva ima meje bajtov, preostanek gre v naslednjem krogu`() {
+        val d = DnevnikKlicev(PomnilniskaShramba())
+        repeat(100) { d.dodaj(klic("klic-$it").copy(sporociloDobesedno = "č".repeat(5000))) }
+        val telesa = mutableListOf<String>()
+        val ok = SinhronLine.izmenjaj(d, PomnilniskaShramba(), poslji = { telesa.add(it); odgovor(1) })
+        assertTrue(ok)
+        assertTrue(telesa.size > 1)
+        assertTrue(telesa.all { it.toByteArray(Charsets.UTF_8).size < 600_000 })
+        assertTrue(d.cakajociZaSinhronizacijo().isEmpty())
+    }
+
+    @Test
+    fun `predolgo polje in osamljen nadomestni znak ne zatakneta sinhronizacije`() {
+        val z = klic("klic-x").copy(klicatelj = "A".repeat(400) + "\uD800", sporociloDobesedno = "x".repeat(9000)).zaSinhronizacijo()
+        assertEquals(240, z.klicatelj.length)
+        assertEquals(6000, z.sporociloDobesedno.length)
+        assertEquals("abc", skrajsajZaSinhronizacijo("a\uD800bc", 10))
     }
 }

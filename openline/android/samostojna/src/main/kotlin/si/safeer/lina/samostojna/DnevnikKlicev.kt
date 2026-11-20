@@ -116,17 +116,35 @@ data class ZapisKlica(
     fun zaSinhronizacijo(): ZapisKlicaSinhronizacija = ZapisKlicaSinhronizacija(
         id = id,
         casZacetka = casZacetka,
-        stevilka = stevilka,
+        stevilka = skrajsajZaSinhronizacijo(stevilka, 60),
         trajanjeS = trajanjeS,
         nujno = nujno,
-        povzetek = povzetek,
+        povzetek = skrajsajZaSinhronizacijo(povzetek, 2000),
         nacin = nacin,
-        klicatelj = klicatelj,
-        podjetje = podjetje,
-        sporocilo = sporocilo,
-        sporociloDobesedno = sporociloDobesedno,
-        brezSporocilaRazlog = brezSporocilaRazlog
+        klicatelj = skrajsajZaSinhronizacijo(klicatelj, 240),
+        podjetje = skrajsajZaSinhronizacijo(podjetje, 240),
+        sporocilo = skrajsajZaSinhronizacijo(sporocilo, 2000),
+        sporociloDobesedno = skrajsajZaSinhronizacijo(sporociloDobesedno, 6000),
+        brezSporocilaRazlog = skrajsajZaSinhronizacijo(brezSporocilaRazlog, 2000)
     )
+}
+
+/** Besedilo v mejah, ki jih racunalnik sprejme (dolzina, brez osamljenih nadomestnih znakov): en zapis ne sme zatakniti sinhronizacije. */
+fun skrajsajZaSinhronizacijo(s: String, meja: Int): String {
+    var r = if (s.length > meja) s.substring(0, meja) else s
+    val b = StringBuilder(r.length)
+    var i = 0
+    while (i < r.length) {
+        val c = r[i]
+        if (Character.isHighSurrogate(c)) {
+            if (i + 1 < r.length && Character.isLowSurrogate(r[i + 1])) { b.append(c).append(r[i + 1]); i += 2; continue }
+            i++; continue
+        }
+        if (!Character.isLowSurrogate(c)) b.append(c)
+        i++
+    }
+    r = b.toString()
+    return r
 }
 
 // Zapis klica za sinhronizacijo z racunalnikom: brez polja prepis, a s sporocilom klicatelja in razlogom, ce ga ni.

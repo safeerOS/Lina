@@ -6,6 +6,7 @@ import org.json.JSONObject
 import si.safeer.lina.podpis.NalogaLine
 import si.safeer.lina.podpis.NapravaKljuc
 import si.safeer.lina.podpis.OdgovorLine
+import si.safeer.lina.samostojna.PogovorShramba
 import si.safeer.lina.samostojna.Shramba
 import si.safeer.lina.samostojna.SinhronLine
 import si.safeer.lina.samostojna.smemSinhroniziratiDnevnik
@@ -47,10 +48,13 @@ object SinhronizacijaZLino {
         if (!smemSinhroniziratiDnevnik(medKlicem = medKlicem(context))) return false
         val id = runCatching { NapravaKljuc.id() }.getOrNull() ?: return false
         val pov = HttpPovezavaZLino(naslov)
+        val pogovor = PogovorSkupni.dobi(context)
         try {
             return SinhronLine.izmenjaj(
                 dnevnik = DnevnikKlicevSkupni.dobi(context),
                 reviziji = PrefsShramba(context),
+                pogovor = pogovor.vsa(),
+                prejetPogovor = { pogovor.zlij(it) },
                 poslji = { vsebina ->
                     val cas = System.currentTimeMillis()
                     val enkratni = NalogaLine.nakljucno(32)

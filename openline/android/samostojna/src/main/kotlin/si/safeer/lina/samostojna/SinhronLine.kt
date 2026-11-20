@@ -20,10 +20,12 @@ data class ZahtevaSinhron(
     val klici: List<ZapisKlicaSinhronizacija>,
     val pogovor: List<PogovorSinhron> = emptyList(),
     val navodila: NavodilaSinhron? = null,
+    val epoha: String? = null,
 )
 
 @Serializable
 data class OdgovorSinhron(
+    val epoha: String = "",
     val rev: Long = 0,
     val klici: List<ZapisKlicaSinhronizacija> = emptyList(),
     val pogovor: List<PogovorSinhron> = emptyList(),
@@ -33,10 +35,24 @@ data class OdgovorSinhron(
 
 object SinhronLine {
     const val NAJVEC_VNOSOV = 300
+    /** Najvec bajtov klicev v eni zahtevi (racunalnik sprejme 1 MiB; ostane rezerva za pogovor). */
+    const val NAJVEC_BAJTOV_KLICEV = 400_000
     private const val NAJVEC_KROGOV = 20
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     fun zahteva(z: ZahtevaSinhron): String = json.encodeToString(z)
+
+    /** Zapisi v mejah bajtov ene zahteve; vsaj en zapis gre vedno (ostali v naslednjem krogu). */
+    internal fun omejiPoBajtih(zapisi: List<ZapisKlicaSinhronizacija>): List<ZapisKlicaSinhronizacija> {
+        val izhod = ArrayList<ZapisKlicaSinhronizacija>()
+        var bajti = 0
+        for (z in zapisi) {
+            val velikost = json.encodeToString(z).toByteArray(Charsets.UTF_8).size + 1
+            if (izhod.isNotEmpty() && bajti + velikost > NAJVEC_BAJTOV_KLICEV) break
+            izhod.add(z); bajti += velikost
+        }
+        return izhod
+    }
 
     /** null = odgovor ni veljaven (neznana oblika ali negativna revizija): telefon ne spremeni nicesar. */
     fun odgovor(telo: String): OdgovorSinhron? = try {
@@ -58,23 +74,29 @@ object SinhronLine {
         prejetoNavodilo: (NavodilaSinhron) -> Unit = {},
         prejetPogovor: (List<PogovorSinhron>) -> Unit = {},
     ): Boolean {
-        var rev = try { reviziji.preberi()?.trim()?.toLongOrNull() ?: 0L } catch (_: Exception) { return false }
+        // Shramba hrani »revizija:epoha«; ce se stanje na racunalniku ponastavi, se epoha spremeni in telefon zacne znova pri 0.
+        val shranjeno = try { reviziji.preberi()?.trim().orEmpty() } catch (_: Exception) { return false }
+        var rev = shranjeno.substringBefore(':').toLongOrNull()?.takeIf { it >= 0 } ?: 0L
+        var epoha = shranjeno.substringAfter(':', "")
         var prvi = true
         repeat(NAJVEC_KROGOV) {
-            val cakajoci = dnevnik.cakajociZaSinhronizacijo().take(NAJVEC_VNOSOV)
-            val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null))
+            val cakajoci = omejiPoBajtih(dnevnik.cakajociZaSinhronizacijo().take(NAJVEC_VNOSOV))
+            val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null, epoha.ifEmpty { null }))
             val odg = odgovor(poslji(telo) ?: return false) ?: return false
             dnevnik.potrdiPoslane(cakajoci)
             dnevnik.sprejmiIzRacunalnika(odg.klici)
             if (odg.pogovor.isNotEmpty()) prejetPogovor(odg.pogovor)
             odg.navodila?.let(prejetoNavodilo)
-            // Revizija se nikoli ne vrne nazaj (pokvarjen ali star odgovor ne sme ponovno vleci vsega).
-            if (odg.rev > rev) {
+            // Revizija se nikoli ne vrne nazaj, razen ob NOVI epohi (stanje na racunalniku ponastavljeno: odgovor vsebuje vse).
+            val novaEpoha = odg.epoha.isNotEmpty() && odg.epoha != epoha
+            if (novaEpoha || odg.rev > rev) {
                 rev = odg.rev
-                try { reviziji.shrani(rev.toString()) } catch (_: Exception) { return false }
+                if (novaEpoha) epoha = odg.epoha
+                try { reviziji.shrani("$rev:$epoha") } catch (_: Exception) { return false }
             }
             prvi = false
-            if (!odg.ostane) return true
+            // Konec, ko racunalnik nima vec vnosov in je vrsta telefona prazna (vrsta je lahko presegla mejo ene zahteve).
+            if (!odg.ostane && dnevnik.cakajociZaSinhronizacijo().isEmpty()) return true
         }
         return true
     }
