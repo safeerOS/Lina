@@ -209,6 +209,7 @@ class DialerActivity : Activity() {
         super.onResume()
         wifiPromptShown = false
         if (zavihekZdaj == Zavihek.KLICI) linaKlici.osvezi()
+        si.safeer.lina.asistent.SinhronizacijaZLino.zazeni(this)
         notifyMissedWithoutPermission()
         renderSteps()
         renderLines()

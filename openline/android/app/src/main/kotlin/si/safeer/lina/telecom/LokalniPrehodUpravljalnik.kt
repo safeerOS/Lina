@@ -3,7 +3,6 @@ package si.safeer.lina.telecom
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -15,8 +14,6 @@ import si.safeer.lina.OkHttpWsFabrika
 import si.safeer.lina.asistent.AndroidPrenos
 import si.safeer.lina.asistent.GoogleShramba
 import si.safeer.lina.asistent.SkupniKljuci
-import si.safeer.lina.samostojna.DnevnikKlicev
-import si.safeer.lina.samostojna.DatotecnaShramba
 import si.safeer.lina.samostojna.GoogleZetonOsvezevalnik
 import si.safeer.lina.samostojna.Ponudnik
 import si.safeer.lina.samostojna.live.GeminiLiveOdjemalec
@@ -66,7 +63,7 @@ object LokalniPrehodUpravljalnik {
         val googleZeton = GoogleZetonOsvezevalnik(SkupniKljuci.shrambaZaPonudnika(context, Ponudnik.VERTEX), AndroidPrenos())
         val shramba = GoogleShramba(context)
         val projekt = { shramba.projekt() }
-        val dnevnik = DnevnikKlicev(DatotecnaShramba(File(context.filesDir, "dnevnik_klicev.json")))
+        val dnevnik = si.safeer.lina.asistent.DnevnikKlicevSkupni.dobi(context)
 
         val zvocniMost = GeminiLiveOdjemalec(
             apiKljuc = apiKljuc,
@@ -95,7 +92,10 @@ object LokalniPrehodUpravljalnik {
         gemini = zvocniMost
         // Zapis klica: ob koncu klica gre v datoteko v mapi uporabnika (z ozadne niti; neuspeh zapisa ne izgubi zapisa v dnevniku).
         zvocniMost.naKlicZakljucen = { zapis ->
-            Thread({ runCatching { si.safeer.lina.asistent.KlicIzvoz(context).zapisi(zapis) } }, "klic-izvoz").start()
+            Thread({
+                runCatching { si.safeer.lina.asistent.KlicIzvoz(context).zapisi(zapis) }
+                si.safeer.lina.asistent.SinhronizacijaZLino.zazeni(context, takoj = true)
+            }, "klic-izvoz").start()
         }
 
         val novPrehod = LokalniPrehod(sslContext, zeton, zvocniMost)

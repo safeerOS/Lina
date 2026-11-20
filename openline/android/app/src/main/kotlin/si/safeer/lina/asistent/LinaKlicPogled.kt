@@ -6,12 +6,9 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import si.safeer.lina.R
-import si.safeer.lina.samostojna.DatotecnaShramba
-import si.safeer.lina.samostojna.DnevnikKlicev
 import si.safeer.lina.samostojna.ZapisKlica
 import si.safeer.lina.samostojna.besediloDatotekeKlica
 import si.safeer.lina.samostojna.povzetekDomov
-import java.io.File
 
 /**
  * Klici, ki jih je sprejela Lina (lastnik 20. 11. 2026): kartica »Lina je odgovorila na N klicev« in seznam z imenom, stevilko,
@@ -25,7 +22,7 @@ class LinaKlicPogled(private val a: Context) {
 
     /** Klicati z glavne niti ob prikazu zavihka. */
     fun osvezi() {
-        val zapisi = runCatching { DnevnikKlicev(DatotecnaShramba(File(a.filesDir, "dnevnik_klicev.json"))).seznamPoDatumu(nujniNaVrhu = false) }
+        val zapisi = runCatching { DnevnikKlicevSkupni.dobi(a).seznamPoDatumu(nujniNaVrhu = false) }
             .getOrDefault(emptyList()).filter(::jeKlic)
         pogled.removeAllViews()
         if (zapisi.isEmpty()) { pogled.visibility = View.GONE; return }
