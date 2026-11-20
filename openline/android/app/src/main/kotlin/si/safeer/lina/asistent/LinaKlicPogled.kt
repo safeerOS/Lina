@@ -31,7 +31,7 @@ class LinaKlicPogled(private val a: Context) {
         val naslov = povzetekDomov(zapisi, teden).naslov.ifEmpty { a.getString(R.string.lina_calls_title) }
         pogled.addView(TextView(a).apply {
             setTextAppearance(R.style.Gw_Body); text = naslov; typeface = android.graphics.Typeface.DEFAULT_BOLD
-            accessibilityHeading = true
+            isAccessibilityHeading = true
         })
         val izvoz = KlicIzvoz(a)
         pogled.addView(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); text = a.getString(R.string.lina_calls_folder_fmt, izvoz.opis()) })
