@@ -31,7 +31,7 @@ object ShellStarter {
 
     /**
      * Ukaz za adb shell. Skripta je v base64, da vecvrsticnost ne poreze ukaza.
-     * Standardni vhod ostane za 6 vrstic konfiguracije, ne za skripto.
+     * Standardni vhod ostane za 9 vrstic konfiguracije (zadnje tri so lokalna pot; skripta jih mora vse prebrati in posredovati, sicer streznik izstopi z »manjka konfiguracija na vhodu«), ne za skripto.
      */
     fun adbShellCommand(script: String, processName: String): String {
         val b64 = Base64.getEncoder().encodeToString(script.toByteArray(Charsets.UTF_8))
@@ -61,6 +61,9 @@ object ShellStarter {
             IFS= read -r OL_D || exit 1
             IFS= read -r OL_E || exit 1
             IFS= read -r OL_F || exit 1
+            IFS= read -r OL_G || exit 1
+            IFS= read -r OL_H || exit 1
+            IFS= read -r OL_I || exit 1
             $body
         """.trimIndent() + "\n"
     }
@@ -73,6 +76,9 @@ object ShellStarter {
           print -r -- "${'$'}OL_D"
           print -r -- "${'$'}OL_E"
           print -r -- "${'$'}OL_F"
+          print -r -- "${'$'}OL_G"
+          print -r -- "${'$'}OL_H"
+          print -r -- "${'$'}OL_I"
         } | $redirect app_process /system/bin --nice-name=$nameQ $mainQ $version
     """.trimIndent()
 

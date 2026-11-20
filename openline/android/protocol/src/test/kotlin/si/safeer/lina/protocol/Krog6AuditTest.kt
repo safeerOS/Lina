@@ -493,7 +493,8 @@ class Krog6AuditTest {
             .redirectErrorStream(true)
             .apply { environment()["PATH"] = bin.toString() + ":" + (System.getenv("PATH") ?: "") }
             .start()
-        val stdin = listOf(token, "10123", config.mediaUrl, config.certSha256, config.deviceId, config.deviceToken)
+        // Devet vrstic kot ShellAuth.stdinText (zadnje tri: lokalna pot); skripta jih mora vse prebrati in posredovati.
+        val stdin = listOf(token, "10123", config.mediaUrl, config.certSha256, config.deviceId, config.deviceToken, "43111", "lokalni-odtis", "lokalni-zeton")
             .joinToString("\n", postfix = "\n")
         running.outputStream.write(stdin.toByteArray())
         running.outputStream.close()
@@ -503,6 +504,7 @@ class Krog6AuditTest {
         val argv = dir.resolve("argv").toFile().readText()
         val body = dir.resolve("stdin").toFile().readText()
         assertTrue(body.contains(token), body)
+        assertEquals(9, body.trim().lines().size, body)
         assertFalse(argv.contains(token), argv)
         assertFalse(argv.contains(config.deviceToken), argv)
     }

@@ -171,7 +171,7 @@ class ShellTcpTest {
             7,
             "httpgateway_shell",
         )
-        assertEquals(6, Regex("""IFS= read -r OL_""").findAll(script).count())
+        assertEquals(9, Regex("""IFS= read -r OL_""").findAll(script).count())
         assertFalse(script.contains("cgroup"))
         assertFalse(script.contains("stty"))
         assertFalse(script.contains("printf"))
