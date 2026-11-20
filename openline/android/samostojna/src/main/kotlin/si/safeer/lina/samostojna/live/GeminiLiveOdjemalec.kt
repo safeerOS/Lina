@@ -304,7 +304,10 @@ class GeminiLiveOdjemalec(
         val s = seja ?: return
         seja = null
         val zapis = s.zakljuci(System.currentTimeMillis())
-        if (!dnevnik.dodaj(zapis)) {
+        // Zapis ne sme izginiti zaradi enkratne napake shrambe: do trikrat poskusimo z istim zapisom.
+        var shranjen = false
+        for (poskus in 0 until 3) { if (dnevnik.dodaj(zapis)) { shranjen = true; break } }
+        if (!shranjen) {
             naNapako?.invoke("Zapisa klica ni bilo mogoče shraniti")
             return
         }

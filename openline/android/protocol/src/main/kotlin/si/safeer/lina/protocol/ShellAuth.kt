@@ -104,7 +104,7 @@ object ShellAuth {
             .any { it.isNotEmpty() && joined.contains(it) }
     }
 
-    /** Sest vrstic na standardni vhod. Zeton je prva, ne argument. */
+    /** Devet vrstic na standardni vhod. Zeton je prva, ne argument. */
     fun stdinText(config: LaunchConfig): String = listOf(
         config.token,
         config.appUid.toString(),

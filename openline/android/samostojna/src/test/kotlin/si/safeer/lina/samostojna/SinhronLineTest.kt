@@ -128,4 +128,15 @@ class SinhronLineTest {
         assertEquals(6000, z.sporociloDobesedno.length)
         assertEquals("abc", skrajsajZaSinhronizacijo("a\uD800bc", 10))
     }
+
+    @Test
+    fun `odgovor brez polja rev ne potrdi vrste`() {
+        val d = DnevnikKlicev(PomnilniskaShramba())
+        assertTrue(d.dodaj(klic("klic-1")))
+        assertNull(SinhronLine.odgovor("""{"klici":[],"ostane":false}"""))
+        val ok = SinhronLine.izmenjaj(d, PomnilniskaShramba(), poslji = { """{"klici":[]}""" })
+        assertFalse(ok)
+        assertEquals(1, d.cakajociZaSinhronizacijo().size)
+        assertEquals(0L, SinhronLine.odgovor(odgovor(0))?.rev)
+    }
 }

@@ -3,6 +3,7 @@ package si.safeer.lina.samostojna
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Sinhronizacija telefona z racunalnikom (lastnik 20. 11. 2026): zapisi klicev, pogovor in navodila lastnika. Racunalnik steje
@@ -56,7 +57,9 @@ object SinhronLine {
 
     /** null = odgovor ni veljaven (neznana oblika ali negativna revizija): telefon ne spremeni nicesar. */
     fun odgovor(telo: String): OdgovorSinhron? = try {
-        json.decodeFromString<OdgovorSinhron>(telo).takeIf { it.rev >= 0 }
+        // Polje rev mora biti izrecno prisotno: privzeta vrednost 0 ne sme potrditi vrste ob okvarjenem odgovoru.
+        if (json.parseToJsonElement(telo).jsonObject["rev"] == null) null
+        else json.decodeFromString<OdgovorSinhron>(telo).takeIf { it.rev >= 0 }
     } catch (_: Exception) {
         null
     }
@@ -84,7 +87,8 @@ object SinhronLine {
             val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null, epoha.ifEmpty { null }))
             val odg = odgovor(poslji(telo) ?: return false) ?: return false
             dnevnik.potrdiPoslane(cakajoci)
-            dnevnik.sprejmiIzRacunalnika(odg.klici)
+            // Ce zapis prejetih klicev ne uspe, revizija ostane (racunalnik jih ob naslednjem krogu poslje znova).
+            try { dnevnik.sprejmiIzRacunalnika(odg.klici) } catch (_: Exception) { return false }
             if (odg.pogovor.isNotEmpty()) prejetPogovor(odg.pogovor)
             odg.navodila?.let(prejetoNavodilo)
             // Revizija se nikoli ne vrne nazaj, razen ob NOVI epohi (stanje na racunalniku ponastavljeno: odgovor vsebuje vse).

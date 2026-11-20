@@ -79,4 +79,20 @@ class SejaKlicaTest {
         val z = zapisKlicaIzJson("""{"id":"a","casZacetka":1,"stevilka":"041","trajanjeS":2,"povzetek":"x"}""")
         assertTrue(z != null && z.klicatelj.isEmpty() && z.sporocilo.isEmpty())
     }
+
+    @Test
+    fun `dolgo ime ne odreze stevilke v imenu datoteke`() {
+        val z = ZapisKlica(id = "x", casZacetka = 1000L, stevilka = "+38640123456", trajanjeS = 1, povzetek = "p", klicatelj = "A".repeat(400))
+        val ime = imeDatotekeKlica(z, java.time.ZoneId.of("UTC"))
+        assertTrue(ime.length <= 154)
+        assertTrue(ime.endsWith("+38640123456.txt"))
+    }
+
+    @Test
+    fun `zapis samo s povzetkom izvozi povzetek`() {
+        val z = ZapisKlica(id = "y", casZacetka = 1000L, stevilka = "041123456", trajanjeS = 5, povzetek = "Poklical bo jutri.")
+        val b = besediloDatotekeKlica(z, java.time.ZoneId.of("UTC"))
+        assertTrue(b.contains("Poklical bo jutri."))
+        assertFalse(b.contains("Sporočila ni bilo."))
+    }
 }

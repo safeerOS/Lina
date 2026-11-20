@@ -87,9 +87,12 @@ private fun cistoIme(besedilo: String): String =
 /** Ime datoteke klica: cas, ime in priimek (ali Neznan) in stevilka vedno poleg imena. Primer: 2026-11-20 14-35 Miha Horvat 041123456.txt */
 fun imeDatotekeKlica(zapis: ZapisKlica, zona: ZoneId = ZoneId.systemDefault()): String {
     val cas = DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm").format(Instant.ofEpochMilli(zapis.casZacetka).atZone(zona))
-    val ime = cistoIme(zapis.klicatelj).ifEmpty { "Neznan" }
+    var ime = cistoIme(zapis.klicatelj).ifEmpty { "Neznan" }
     val stevilka = cistoIme(zapis.stevilka).ifEmpty { "skrita številka" }
-    return "$cas $ime $stevilka".take(150).trim() + ".txt"
+    // Skrajsamo samo ime: cas in celotna stevilka ostaneta v imenu (meja 150 znakov).
+    val prostor = 150 - cas.length - stevilka.length - 2
+    if (ime.length > prostor) ime = ime.take(prostor.coerceAtLeast(1)).trim().ifEmpty { "Neznan" }
+    return "$cas $ime $stevilka".trim() + ".txt"
 }
 
 /** Besedilo datoteke klica (UTF-8). */
@@ -110,8 +113,14 @@ fun besediloDatotekeKlica(zapis: ZapisKlica, zona: ZoneId = ZoneId.systemDefault
             appendLine("Sporočilo (povzetek):")
             appendLine(zapis.sporocilo)
         } else {
-            appendLine("Sporočila ni bilo.")
-            if (zapis.brezSporocilaRazlog.isNotBlank()) appendLine("Razlog: ${zapis.brezSporocilaRazlog}")
+            if (zapis.brezSporocilaRazlog.isBlank() && zapis.povzetek.isNotBlank()) {
+                // Zapis, prejet z racunalnika, lahko nosi samo povzetek.
+                appendLine("Sporočilo (povzetek):")
+                appendLine(zapis.povzetek)
+            } else {
+                appendLine("Sporočila ni bilo.")
+                if (zapis.brezSporocilaRazlog.isNotBlank()) appendLine("Razlog: ${zapis.brezSporocilaRazlog}")
+            }
         }
         if (zapis.sporociloDobesedno.isNotBlank()) {
             appendLine()
