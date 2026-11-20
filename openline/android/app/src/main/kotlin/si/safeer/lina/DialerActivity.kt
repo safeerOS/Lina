@@ -298,7 +298,7 @@ class DialerActivity : Activity() {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                 }.onFailure { toast(getString(R.string.line_permission_settings)) }
             } else {
-                requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_PHONE_STATE)
+                requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS), REQUEST_PHONE_STATE)
             }
         }
         fillAdvancedFields()
