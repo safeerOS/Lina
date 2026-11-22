@@ -72,6 +72,48 @@ class GeminiLiveOdjemalec(
 
     @Volatile private var nepopolnOkvir = ByteArray(0)
 
+    // Hiter in neprekinjen pozdrav (lastnik 22. 11. 2026 po klicu ob 10.39: »ko se telefon oglasi, se mora Lina takoj oglasiti«,
+    // »na zacetku se je dvakrat oglasila«):
+    //  - predpriprava: seja z modelom se odpre ze ob dvigu klica (pripraviKlic), ne sele ob prvem zvocnem okvirju;
+    //  - uvod (»Lina se predstavi.«) gre modelu sele, ko je zvocna pot nared (nastaviIzhod), in samo enkrat na klic;
+    //  - med pozdravom zvok klicatelja ne gre modelu (sum, »halo« ali odmev bi pozdrav prekinil in model bi zacel znova).
+    @Volatile private var predpripravaOd = 0L
+    @Volatile private var uvodPoslan = false
+    @Volatile private var uvodDo = 0L
+    private val NAJDLJE_POZDRAV_MS = 15_000L
+    private val PREDPRIPRAVA_VELJA_MS = 30_000L
+
+    /** Ob dvigu klica: odpre sejo z modelom vnaprej, da je ob zacetku zvoka ze pripravljena. Napaka ni usodna (nastaviIzhod zacne znova). */
+    fun pripraviKlic() {
+        synchronized(vhodniMutex) {
+            ws?.zapri(1000, "Nov klic")
+            ws = null
+            stanje = StanjePovezave.POVEZUJE
+            vhodnaVrsta.clear()
+            startTimeMs = 0L
+            nepopolnOkvir = ByteArray(0)
+            isClosed.set(false)
+            izhodniCallback = null
+            uvodPoslan = false
+            uvodDo = 0L
+            predpripravaOd = System.currentTimeMillis()
+        }
+        Thread({ runCatching { poskusiPovezavo() } }, "lina-live-priprava").start()
+    }
+
+    private fun posljiUvodCeNared() {
+        val poslji = synchronized(vhodniMutex) {
+            if (uvodPoslan || izhodniCallback == null || stanje != StanjePovezave.PRIPRAVLJEN || isClosed.get()) false
+            else {
+                uvodPoslan = true
+                uvodDo = System.currentTimeMillis() + NAJDLJE_POZDRAV_MS
+                true
+            }
+        }
+        // gemini-3.8-live: besedilo gre prek realtimeInput.text (ai.google.dev, get-started-websocket)
+        if (poslji) ws?.posiljiBesedilo("""{"realtimeInput":{"text":"Lina se predstavi."}}""")
+    }
+
     private fun maskirajSkrivnosti(besedilo: String): String {
         return besedilo.replace(Regex("key=[^&\\s]+"), "key=SKRITO").replace(Regex("Bearer\\s+[^&\\s]+"), "Bearer SKRITO")
     }
@@ -332,14 +374,9 @@ class GeminiLiveOdjemalec(
                 }
             }
             if (doSend) {
-                // "Ob dvigu klica poslji modelu uvodni stavek (Lina se predstavi)"
-                // gemini-3.8-live: besedilo gre prek realtimeInput.text (ai.google.dev, get-started-websocket)
-                val uvod = """{"realtimeInput":{"text":"Lina se predstavi."}}"""
-                ws?.posiljiBesedilo(uvod)
-                
-                for (okvir in zaPosiljanje) {
-                    posljiOkvirModelu(okvir)
-                }
+                // Uvod samo enkrat in sele z zvocno potjo. Okvirji, zbrani pred pripravljeno sejo (sum pred pozdravom), se zavrzejo:
+                // model bi jih vzel kot govor klicatelja in pozdrav prekinil (klic 22. 11. 2026 ob 10.39: dva pozdrava).
+                posljiUvodCeNared()
             }
         }
         if (msg.contains("\"interrupted\"")) {
@@ -360,6 +397,8 @@ class GeminiLiveOdjemalec(
         // Ob koncu govora ostanek dopolnimo s tisino do polnega okvirja (20 ms = 640 B).
         if (msg.contains("\"turnComplete\"")) {
             izprazniOstanek()
+            // Pozdrav je izrecen: od zdaj model poslusa klicatelja.
+            uvodDo = 0L
         }
     }
 
@@ -411,7 +450,8 @@ class GeminiLiveOdjemalec(
             poskusiPovezavo()
         }
         
-        if (isReady) {
+        // Med pozdravom (do prvega turnComplete, najvec 15 s) zvok klicatelja ne gre modelu.
+        if (isReady && !(uvodDo > 0L && System.currentTimeMillis() < uvodDo)) {
             posljiOkvirModelu(okvir)
         }
         
@@ -452,19 +492,29 @@ class GeminiLiveOdjemalec(
     override fun nastaviIzhod(posljiOkvir: (ByteArray) -> Unit) {
         // Prehod to pokliče ob vsaki novi medijski povezavi = začetek novega klica:
         // odjemalec se zato vrne v izhodiščno stanje in ga je mogoče uporabiti znova.
-        synchronized(vhodniMutex) {
-            ws?.zapri(1000, "Nov klic")
-            ws = null
-            stanje = StanjePovezave.ZAPRT
-            vhodnaVrsta.clear()
-            startTimeMs = 0L
-            nepopolnOkvir = ByteArray(0)
-            isClosed.set(false)
+        // Sveza predpripravljena seja (pripraviKlic ob dvigu) se ohrani; sicer izhodiscno stanje kot prej.
+        val ohrani = synchronized(vhodniMutex) {
+            val sveza = predpripravaOd > 0L && System.currentTimeMillis() - predpripravaOd < PREDPRIPRAVA_VELJA_MS &&
+                stanje != StanjePovezave.ZAPRT && !isClosed.get()
+            predpripravaOd = 0L
+            if (!sveza) {
+                ws?.zapri(1000, "Nov klic")
+                ws = null
+                stanje = StanjePovezave.ZAPRT
+                vhodnaVrsta.clear()
+                startTimeMs = 0L
+                nepopolnOkvir = ByteArray(0)
+                isClosed.set(false)
+                uvodPoslan = false
+                uvodDo = 0L
+            }
+            sveza
         }
         // Klic, ki je ostal odprt (brez konecKlica), se zapise, preden se zacne nov.
         zakljuciKlic()
         seja = SejaKlica(System.currentTimeMillis(), stevilkaNaslednjegaKlica)
         izhodniCallback = posljiOkvir
+        if (ohrani) posljiUvodCeNared()
     }
 
     override fun pocisti() {

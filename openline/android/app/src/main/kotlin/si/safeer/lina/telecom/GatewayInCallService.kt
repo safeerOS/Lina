@@ -398,9 +398,16 @@ class GatewayInCallService : InCallService() {
                     Log.i(TAG, "zvok $callId: zahtevana obdelava v ozadju")
                     // Ce Telecom klica ne prestavi v AUDIO_PROCESSING (izmerjeno na Samsungu 22. 11. 2026: ANSWERED -> ACTIVE, nic vec),
                     // Lina sicer nikoli ne spregovori: po 1,5 s zacne zvok tudi v ACTIVE.
-                    handler.postDelayed({
+                    // Telefon, ki AUDIO_PROCESSING enkrat ni dal, ga ne da nikoli: od drugega klica naprej zvok zacne TAKOJ v ACTIVE
+                    // (klic 22. 11. 2026 ob 10.39: 1,5 s tisine pred pozdravom samo zaradi tega cakanja).
+                    val zvokPrefs = getSharedPreferences("lina_zvok", MODE_PRIVATE)
+                    if (zvokPrefs.getBoolean("brez_audio_processing", false)) {
+                        Log.i(TAG, "zvok $callId: telefon ne da AUDIO_PROCESSING, zvok se zacne takoj v ACTIVE")
+                        CallAudioBridge.onCallActive(callId)
+                    } else handler.postDelayed({
                         if (LinaCallGate.isOwned(callId) && CallRegistry.androidState(call) == Call.STATE_ACTIVE) {
                             Log.w(TAG, "zvok $callId: AUDIO_PROCESSING ni prisel v 1500 ms, zvok se zacne v ACTIVE")
+                            zvokPrefs.edit().putBoolean("brez_audio_processing", true).apply()
                             CallAudioBridge.onCallActive(callId)
                         }
                     }, 1500)

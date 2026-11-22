@@ -23,6 +23,8 @@ class LokalniKrmilnik(private val context: Context) : CallEventSink {
         controller.handle(answerCmd) { result ->
             if (result.ok) {
                 Log.i("LokalniKrmilnik", "Call $callId answered locally")
+                // Seja z modelom se odpre ze zdaj (ob dvigu), da Lina spregovori takoj, ko zvok klica stece (lastnik 22. 11. 2026).
+                runCatching { LokalniPrehodUpravljalnik.gemini?.pripraviKlic() }
             } else {
                 Log.w("LokalniKrmilnik", "Failed to answer locally: ${result.error}")
             }

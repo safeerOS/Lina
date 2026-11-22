@@ -173,7 +173,17 @@ class GeminiLiveOdjemalecTest {
         strezhnik.poslji("""{"setupComplete":{}}""")
         Thread.sleep(200)
 
-        // setup + audio chunk = 2 messages
+        // Lastnik 22. 11. 2026 (klic ob 10.39, dva pozdrava): po setupComplete gre modelu SAMO uvod; zvok klicatelja sele po pozdravu.
+        val uvod = strezhnik.zadnjeSporocilo!!
+        assertTrue(uvod.contains("realtimeInput"))
+        assertTrue(uvod.contains("Lina se predstavi."))
+        odjemalec.vKlic(ByteArray(640))
+        Thread.sleep(100)
+        assertTrue(strezhnik.zadnjeSporocilo!!.contains("Lina se predstavi."), "med pozdravom zvok klicatelja ne gre modelu")
+        strezhnik.poslji("""{"serverContent":{"turnComplete":true}}""")
+        Thread.sleep(200)
+        odjemalec.vKlic(ByteArray(640))
+        Thread.sleep(200)
         val zadnje = strezhnik.zadnjeSporocilo!!
         assertTrue(zadnje.contains("realtimeInput"))
         assertTrue(zadnje.contains("audio/pcm"))
@@ -361,6 +371,77 @@ class GeminiLiveOdjemalecTest {
         assertEquals(640, rezultati[0].size)
     }
 
+    /** Lazna povezava: belezi poslano, test sam sprozi sporocila streznika. */
+    private class LaznaFabrika : WsFabrika {
+        val poslano = java.util.concurrent.CopyOnWriteArrayList<String>()
+        @Volatile var poslusalec: WsPoslusalec? = null
+        var odprtij = 0
+        override fun odpri(url: String, glave: Map<String, String>, poslusalec: WsPoslusalec): WsPovezava {
+            odprtij++
+            val pov = object : WsPovezava {
+                override fun posiljiBesedilo(besedilo: String) { poslano.add(besedilo) }
+                override fun zapri(koda: Int, razlog: String) {}
+            }
+            this.poslusalec = poslusalec
+            poslusalec.onOpen(pov)
+            return pov
+        }
+    }
+
+    private fun odjemalecZ(fabrika: WsFabrika) = GeminiLiveOdjemalec(
+        apiKljuc = object : ShranjevalnikKljuca {
+            override fun shrani(k: KljucGemini) {}
+            override fun preberi() = KljucGemini("k")
+            override fun izbrisi() {}
+        },
+        googleZeton = GoogleZeton { "z" },
+        projekt = { "p" },
+        dnevnik = dnevnik,
+        izbiraPoti = IzbiraPotiLive(naVoljo = { it == PotLive.VERTEX }),
+        wsFabrika = fabrika
+    )
+
+    // Lastnik 22. 11. 2026: »ko se telefon oglasi, se mora Lina takoj oglasiti«.
+    @Test
+    fun `predpriprava ob dvigu - seja nared pred zvokom, uvod sele z zvocno potjo in samo enkrat`() {
+        val f = LaznaFabrika()
+        val odj = odjemalecZ(f)
+        odj.pripraviKlic()
+        Thread.sleep(300)
+        assertEquals(1, f.odprtij)
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        assertTrue(f.poslano.none { it.contains("Lina se predstavi.") }, "uvod ne sme iti, dokler zvocna pot ni nared")
+        odj.nastaviIzhod { }
+        assertEquals(1, f.odprtij, "nastaviIzhod ohrani predpripravljeno sejo")
+        assertEquals(1, f.poslano.count { it.contains("Lina se predstavi.") })
+        // Med pozdravom zvok klicatelja ne gre modelu; po turnComplete gre.
+        repeat(5) { odj.vKlic(ByteArray(640)) }
+        assertEquals(0, f.poslano.count { it.contains("audio/pcm") })
+        f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
+        odj.vKlic(ByteArray(640))
+        assertEquals(1, f.poslano.count { it.contains("audio/pcm") })
+        // Ponovni setupComplete ali nov okvir ne sprozi drugega pozdrava.
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        assertEquals(1, f.poslano.count { it.contains("Lina se predstavi.") })
+        odj.konecKlica()
+    }
+
+    @Test
+    fun `brez predpriprave - nastaviIzhod zacne znova in uvod pride ob setupComplete`() {
+        val f = LaznaFabrika()
+        val odj = odjemalecZ(f)
+        odj.nastaviIzhod { }
+        odj.vKlic(ByteArray(640))
+        assertEquals(1, f.odprtij)
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        assertEquals(1, f.poslano.count { it.contains("Lina se predstavi.") })
+        // Nov klic brez predpriprave: stara seja se ne uporabi.
+        odj.nastaviIzhod { }
+        odj.vKlic(ByteArray(640))
+        assertEquals(2, f.odprtij)
+        odj.konecKlica()
+    }
+
     @Test
     fun `vrsta okvirjev pred setupComplete in max velikost`() {
         val ujetaSporocila = mutableListOf<String>()
@@ -403,9 +484,9 @@ class GeminiLiveOdjemalecTest {
         
         Thread.sleep(1000) // cakamo da nit klice setupComplete
         
-        // Po setupComplete je bilo poslanih najvec 100 okvirjev (omejitev vrste)
+        // Lastnik 22. 11. 2026: okvirji, zbrani pred pripravljeno sejo (sum pred pozdravom), se zavrzejo (prej: poslanih do 100).
         val poslanihAudio = ujetaSporocila.count { it.contains("audio/pcm") }
-        assertEquals(100, poslanihAudio)
+        assertEquals(0, poslanihAudio)
         
         // prav tako ne sme biti clientContent
         assertTrue(ujetaSporocila.none { it.contains("clientContent") })

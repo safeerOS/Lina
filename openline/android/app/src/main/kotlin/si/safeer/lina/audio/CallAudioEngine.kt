@@ -240,13 +240,21 @@ class CallAudioEngine(private val context: Context?) {
             }
         }
 
+        private val tisina = ByteArray(MediaStream.FRAME_BYTES)
+
         private fun playbackLoop() {
             while (running) {
                 val chunk = try {
-                    playbackQueue.poll(100, TimeUnit.MILLISECONDS)
+                    playbackQueue.poll(20, TimeUnit.MILLISECONDS)
                 } catch (_: InterruptedException) {
                     return
-                } ?: continue
+                }
+                // Brez zvoka Line gre v klic tisina: izhod ostane odprt. Klic 22. 11. 2026 ob 10.39: po vsakem premoru je sistem zavrgel
+                // AudioTrack (»dead IAudioTrack«, 9-krat v 50 s) in zacetek naslednjega stavka je bil popacen.
+                if (chunk == null) {
+                    track.write(tisina, 0, tisina.size)
+                    continue
+                }
                 track.write(chunk, 0, chunk.size)
             }
         }
