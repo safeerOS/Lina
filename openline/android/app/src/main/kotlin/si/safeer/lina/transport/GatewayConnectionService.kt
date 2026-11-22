@@ -61,8 +61,12 @@ class GatewayConnectionService : Service() {
             Intent(this, DialerActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        val text = when (ConnectionNotice.resourceName(connected)) {
-            "connection_connected" -> getString(R.string.connection_connected)
+        // Lastnik 22. 11. 2026: »zakaj pise ni povezave« - Lina je klice sprejemala sama v telefonu, obvestilo pa je javljalo samo
+        // povezavo z racunalnikom. Brez racunalnika in s pripravljeno samostojno potjo obvestilo pove, da Lina odgovarja v telefonu.
+        val lokalno = !connected && runCatching { si.safeer.lina.telecom.SamostojnaPripravljenost.jePripravljena(this) }.getOrDefault(false)
+        val text = when {
+            lokalno -> getString(R.string.lina_answers_local)
+            ConnectionNotice.resourceName(connected) == "connection_connected" -> getString(R.string.connection_connected)
             else -> getString(R.string.connection_offline)
         }
         return Notification.Builder(this, CHANNEL_ID)

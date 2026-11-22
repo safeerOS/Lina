@@ -272,13 +272,13 @@
     <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Recherche web et connexions</string>
     <string name="assistant_setup_title">Assistante : fournisseur et clés</string>
-    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur et saisissez sa clé dans les Réglages.</string>
+    <string name="assistant_setup_hint_missing">Pour discuter, choisissez un fournisseur et saisissez sa clé. Ouvrir les réglages ›</string>
     <string name="assistant_setup_hint_active_fmt">Fournisseur : %1$s. Le fournisseur et les clés se changent dans les Réglages.</string>
     <string name="settings_title">Réglages</string>
     <string name="lina_chat_title">Conversation avec Lina</string>
-    <string name="assistant_providers_note">Choisissez quel fournisseur répond pour Lina. La clé du fournisseur choisi se saisit dans les Réglages.</string>
+    <string name="assistant_providers_note">Choisissez quel fournisseur répond pour Lina. La clé du fournisseur choisi se saisit ci-dessous.</string>
     <string name="assistant_provider_ready_fmt">Le fournisseur %1$s est prêt.</string>
-    <string name="assistant_provider_missing_fmt">Le fournisseur %1$s n\'est pas encore prêt. Saisissez sa clé ou connectez-vous dans les Réglages.</string>
+    <string name="assistant_provider_missing_fmt">Le fournisseur %1$s n\'est pas encore prêt. Saisissez sa clé ou connectez-vous ci-dessous.</string>
     <string name="assistant_key_provider_fmt">Clé du fournisseur : %1$s. Le fournisseur se choisit ci-dessus.</string>
     <string name="notes_storage_title">Notes et appels : où ils sont enregistrés</string>
     <string name="notes_storage_info_fmt">Une copie des notes est écrite au fil de l\'eau dans ce fichier : %1$s. Modifier le fichier ne change pas les notes de l\'application. Chaque appel pris par Lina est enregistré dans son propre fichier dans le même dossier (par défaut dans le sous-dossier Klici).</string>

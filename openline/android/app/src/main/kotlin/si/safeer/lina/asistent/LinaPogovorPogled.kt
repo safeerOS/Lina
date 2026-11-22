@@ -38,6 +38,8 @@ import java.util.concurrent.Executors
 class LinaPogovorPogled(
     private val a: Activity,
     private val nazaj: () -> Unit = {},
+    /** Odpre podmeni Mozgani v Nastavitvah (namig v praznem pogovoru brez kljuca). */
+    private val odpriNastavitve: () -> Unit = {},
 ) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
@@ -53,7 +55,11 @@ class LinaPogovorPogled(
     private var nalozeno = false
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
-    private val namig: TextView = a.findViewById(R.id.assistantSetupHint)
+    private val namig: TextView = a.findViewById<TextView>(R.id.assistantSetupHint).apply {
+        // Uporabnik brez kljuca ne isce nastavitev sam: namig je gumb, ki odpre pravi podmeni (22. 11. 2026).
+        setOnClickListener { odpriNastavitve() }
+        isClickable = true
+    }
     private val klepetBlok: View = a.findViewById(R.id.assistantChatBlock)
     private val klepetDnevnik: LinearLayout = a.findViewById(R.id.assistantChatLog)
     private val klepetPrazno: View = a.findViewById(R.id.chatEmpty)

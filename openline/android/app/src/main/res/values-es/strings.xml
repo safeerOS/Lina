@@ -272,13 +272,13 @@
     <!-- Spletna orodja in Twilio v Nastavitvah -->
     <string name="tool_title">Búsqueda web y conexiones</string>
     <string name="assistant_setup_title">Asistente: proveedor y claves</string>
-    <string name="assistant_setup_hint_missing">Para chatear, elija un proveedor e introduzca su clave en Ajustes.</string>
+    <string name="assistant_setup_hint_missing">Para chatear, elija un proveedor e introduzca su clave. Abrir ajustes ›</string>
     <string name="assistant_setup_hint_active_fmt">Proveedor: %1$s. El proveedor y las claves se cambian en Ajustes.</string>
     <string name="settings_title">Ajustes</string>
     <string name="lina_chat_title">Conversación con Lina</string>
-    <string name="assistant_providers_note">Elija qué proveedor responde por Lina. La clave del proveedor elegido se introduce en Ajustes.</string>
+    <string name="assistant_providers_note">Elija qué proveedor responde por Lina. La clave del proveedor elegido se introduce abajo.</string>
     <string name="assistant_provider_ready_fmt">El proveedor %1$s está listo.</string>
-    <string name="assistant_provider_missing_fmt">El proveedor %1$s aún no está listo. Introduzca su clave o inicie sesión en Ajustes.</string>
+    <string name="assistant_provider_missing_fmt">El proveedor %1$s aún no está listo. Introduzca su clave o inicie sesión abajo.</string>
     <string name="assistant_key_provider_fmt">Clave del proveedor: %1$s. El proveedor se elige arriba.</string>
     <string name="notes_storage_title">Notas y llamadas: dónde se guardan</string>
     <string name="notes_storage_info_fmt">Una copia de las notas se escribe en este archivo sobre la marcha: %1$s. Editar el archivo no cambia las notas de la aplicación. Cada llamada que atiende Lina se guarda en su propio archivo en la misma carpeta (por defecto en la subcarpeta Klici).</string>

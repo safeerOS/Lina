@@ -58,4 +58,12 @@ class PostavitevTelefonTest {
             assertEquals("1", g.getAttributeNS(ns, "layout_weight"))
         }
     }
+
+    /** Sesutje na Samsungu 22. 11. 2026: polje v fokusu zunaj drsnega obmocja (IllegalArgumentException). */
+    @Test fun `pomik nad tipkovnico preveri, da je pogled v drsnem obmocju`() {
+        val f = listOf("../app/src/main/kotlin/si/safeer/lina/DialerActivity.kt", "app/src/main/kotlin/si/safeer/lina/DialerActivity.kt").map(::File).first { it.isFile }
+        val koda = f.readText()
+        val telo = koda.substringAfter("private fun pokaziVDrsnemObmocju").substringBefore("val r = android.graphics.Rect()")
+        assertTrue("if (!jePotomec(drsno, pogled)) return" in telo)
+    }
 }

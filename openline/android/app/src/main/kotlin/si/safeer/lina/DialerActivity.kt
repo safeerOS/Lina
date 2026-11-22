@@ -242,11 +242,23 @@ class DialerActivity : Activity() {
 
     /** Pomakne polje v fokusu v vidni del drsnega obmocja (nad tipkovnico). */
     private fun pokaziVDrsnemObmocju(drsno: android.widget.ScrollView, pogled: View) {
+        // Fokus je lahko zunaj drsnega obmocja (zgornja vrstica, vrstica za vnos, Pogovor): offsetDescendantRectToMyCoords
+        // bi vrgel IllegalArgumentException (sesutje na Samsungu 22. 11. 2026), zato najprej preveri, da je pogled potomec.
+        if (!jePotomec(drsno, pogled)) return
         val r = android.graphics.Rect()
         pogled.getDrawingRect(r)
         drsno.offsetDescendantRectToMyCoords(pogled, r)
         r.inset(0, -(16 * resources.displayMetrics.density).toInt())
         drsno.requestChildRectangleOnScreen(drsno.getChildAt(0), r, false)
+    }
+
+    private fun jePotomec(prednik: View, pogled: View): Boolean {
+        var p: android.view.ViewParent? = pogled.parent
+        while (p != null) {
+            if (p === prednik) return true
+            p = p.parent
+        }
+        return false
     }
 
     private fun bindViews() {
@@ -425,7 +437,7 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, nazaj = { showTab(zavihekPred) })
+        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, nazaj = { showTab(zavihekPred) }, odpriNastavitve = { odpriNastavitveKljucev() })
         // Podmeniji nastavitev (lastnik 22. 11. 2026); po LinaPogovorPogled, ker ta v nastavitve vstavi razdelka Ime in Spomin.
         nastavitveMeni = si.safeer.lina.asistent.NastavitveMeni(this, { showTab(Zavihek.TELEFON) }, { showTab(Zavihek.RACUNALNIK) })
         assistantApproval = findViewById(R.id.assistantApproval)
