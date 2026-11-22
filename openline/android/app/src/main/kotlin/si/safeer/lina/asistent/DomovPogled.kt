@@ -32,8 +32,11 @@ class DomovPogled(
     private val seznam: LinearLayout = a.findViewById(R.id.homeNoticesList)
     private val stevec: TextView = a.findViewById(R.id.homeTodayCount)
 
-    /** Hitri gumbi na Domovu (en skupni gradnik); Racunalnik in Priprava nista glavna gumba. */
-    private val hitri = listOf(PloscaDomov.POGOVOR, PloscaDomov.KLICI, PloscaDomov.ZAPISKI)
+    /**
+     * Hitri gumbi na Domovu (en skupni gradnik); Racunalnik in Priprava nista glavna gumba. Brez »Pogovor«: Domov ima ze velik gumb
+     * »Pogovor z Lino« (lastnik 22. 11. 2026: »zakaj je na domacem zaslonu 2 krat gumb pogovor«).
+     */
+    private val hitri = listOf(PloscaDomov.KLICI, PloscaDomov.ZAPISKI)
 
     init {
         a.findViewById<Button>(R.id.homeChat).setOnClickListener { vprasaj() }

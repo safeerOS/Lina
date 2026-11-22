@@ -300,6 +300,12 @@ class DialerActivity : Activity() {
         return false
     }
 
+    /** Pomik drsnega obmocja na dno BREZ premika fokusa (fullScroll bi fokus vzel polju za vnos). */
+    private fun naDnoBrezFokusa(drsno: android.widget.ScrollView) {
+        val vsebina = drsno.getChildAt(0) ?: return
+        drsno.scrollTo(0, maxOf(0, vsebina.height - drsno.height + drsno.paddingBottom))
+    }
+
     private fun bindViews() {
         // Zgoraj in ob straneh odmik dobi vsebina, spodnji odmik (navigacijska vrstica sistema) spodnja navigacija.
         findViewById<View>(R.id.okno).setOnApplyWindowInsetsListener { okno, insets ->
@@ -319,7 +325,9 @@ class DialerActivity : Activity() {
             if (tipkovnica > 0) view.post {
                 currentFocus?.let { f ->
                     // Polje pogovora je v vrstici nad tipkovnico (zunaj drsnega obmocja); zadnji odgovor ostane viden na dnu.
-                    if (f.id == R.id.assistantChatInput) findViewById<android.widget.ScrollView>(R.id.chatScroll).fullScroll(View.FOCUS_DOWN)
+                    // Lastnik 22. 11. 2026: po dotiku polja je moral klikniti se enkrat. ScrollView.fullScroll s FOCUS_DOWN PRESTAVI FOKUS
+                    // na zadnji pogled v drsnem obmocju in polju vzame fokus; zato samo pomik (scrollTo), fokus ostane v polju.
+                    if (f.id == R.id.assistantChatInput) naDnoBrezFokusa(findViewById(R.id.chatScroll))
                     else pokaziVDrsnemObmocju(view as android.widget.ScrollView, f)
                 }
             }

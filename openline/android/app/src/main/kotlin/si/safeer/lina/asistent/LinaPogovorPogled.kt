@@ -229,7 +229,11 @@ class LinaPogovorPogled(
                 klepetDnevnik.addView(vrstica)
             }
         }
-        if (doDna) klepetDrsno.post { klepetDrsno.fullScroll(View.FOCUS_DOWN) }
+        // Brez fullScroll: ta prestavi fokus na zadnji gumb (»Kopiraj«) in polju za vnos vzame tipkovnico (lastnik 22. 11. 2026).
+        if (doDna) klepetDrsno.post {
+            val vsebina = klepetDrsno.getChildAt(0)
+            if (vsebina != null) klepetDrsno.scrollTo(0, maxOf(0, vsebina.height - klepetDrsno.height + klepetDrsno.paddingBottom))
+        }
     }
 
     /** Pogovor je na voljo (ponudnik ima kljuc ali prijavo): takrat je vrstica za vnos vidna v zavihku Lina. */

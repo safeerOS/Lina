@@ -69,6 +69,24 @@ class PostavitevTelefonTest {
         }
     }
 
+    /** Lastnik 22. 11. 2026: na Domovu samo en gumb za pogovor (velik »Pogovor z Lino«), ne se ploscica Pogovor. */
+    @Test fun `Domov nima podvojenega gumba Pogovor`() {
+        val f = listOf("../app/src/main/kotlin/si/safeer/lina/asistent/DomovPogled.kt", "app/src/main/kotlin/si/safeer/lina/asistent/DomovPogled.kt").map(::File).first { it.isFile }
+        val hitri = f.readText().substringAfter("private val hitri = listOf(").substringBefore(")")
+        assertTrue("POGOVOR" !in hitri, hitri)
+        assertTrue(poId("homeChat").tagName.isNotEmpty())
+    }
+
+    /** Lastnik 22. 11. 2026: tipkanje takoj po prvem dotiku polja; fullScroll bi polju vzel fokus. */
+    @Test fun `ob tipkovnici pomik pogovora ne vzame fokusa polju`() {
+        val f = listOf("../app/src/main/kotlin/si/safeer/lina/DialerActivity.kt", "app/src/main/kotlin/si/safeer/lina/DialerActivity.kt").map(::File).first { it.isFile }
+        val koda = f.readText()
+        assertTrue("fullScroll(" !in koda.substringAfter("setOnApplyWindowInsetsListener").substringBefore("connectionDot ="), "fullScroll premakne fokus")
+        assertTrue("naDnoBrezFokusa(findViewById(R.id.chatScroll))" in koda)
+        val pogled = listOf("../app/src/main/kotlin/si/safeer/lina/asistent/LinaPogovorPogled.kt", "app/src/main/kotlin/si/safeer/lina/asistent/LinaPogovorPogled.kt").map(::File).first { it.isFile }
+        assertTrue("fullScroll(" !in pogled.readText(), "odgovor Line ne sme vzeti fokusa polju")
+    }
+
     /** Sesutje na Samsungu 22. 11. 2026: polje v fokusu zunaj drsnega obmocja (IllegalArgumentException). */
     @Test fun `pomik nad tipkovnico preveri, da je pogled v drsnem obmocju`() {
         val f = listOf("../app/src/main/kotlin/si/safeer/lina/DialerActivity.kt", "app/src/main/kotlin/si/safeer/lina/DialerActivity.kt").map(::File).first { it.isFile }
