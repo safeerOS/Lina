@@ -251,6 +251,8 @@
     <string name="local_you">You</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Note saved: %1$s</string>
+    <string name="local_task_sent">Task sent to your computer: %1$s\nProgress and approvals are in the Computer tab.</string>
+    <string name="local_task_busy">A task is already running on your computer. Wait for it to finish.</string>
     <string name="local_notes_title">Notes</string>
     <string name="local_note_delete">Delete</string>
     <string name="local_err_offline">No connection to Google.</string>

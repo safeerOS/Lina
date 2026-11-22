@@ -135,4 +135,27 @@ class AsistentTest {
         assertTrue(odgovor is Odgovor.Napaka)
         assertEquals("Zavrnjeno: SAFETY", (odgovor as Odgovor.Napaka).sporocilo)
     }
+
+    @Test
+    fun `povezan racunalnik - vrstica racunalnik postane naloga, navodilo to pove modelu`() {
+        val prenos = LazenPrenos()
+        prenos.naslednjiTeloOdgovora = formatirajOdgovor("Predam.\\n[[racunalnik: Izboljsaj zvok klica]]")
+        val asistent = Asistent(ustvariOdjemalca(prenos), "", racunalnikPovezan = { true })
+        val odgovor = asistent.povej("Predaj nalogo racunalniku")
+        assertTrue(odgovor is Odgovor.NalogaRacunalniku)
+        assertEquals("Izboljsaj zvok klica", (odgovor as Odgovor.NalogaRacunalniku).besedilo)
+        assertTrue(prenos.zadnjiPostTelo.contains("[[racunalnik:"), "navodilo mora modelu povedati, kako preda nalogo")
+        assertTrue(prenos.zadnjiPostTelo.contains("Nikoli ne trdi, da nimas dostopa"))
+    }
+
+    @Test
+    fun `racunalnik ni povezan - vrstica ni naloga, navodilo pove resnico`() {
+        val prenos = LazenPrenos()
+        prenos.naslednjiTeloOdgovora = formatirajOdgovor("Ne morem.\\n[[racunalnik: nekaj]]")
+        val asistent = Asistent(ustvariOdjemalca(prenos), "")
+        val odgovor = asistent.povej("Predaj nalogo racunalniku")
+        assertTrue(odgovor is Odgovor.Besedilo)
+        assertTrue(!(odgovor as Odgovor.Besedilo).besedilo.contains("[["), "vrstice orodja uporabnik ne vidi")
+        assertTrue(prenos.zadnjiPostTelo.contains("Racunalnik ni povezan"))
+    }
 }

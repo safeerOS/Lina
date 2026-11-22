@@ -46,6 +46,9 @@ class LinaPogovorPogled(
     private val nazaj: () -> Unit = {},
     /** Odpre podmeni Mozgani v Nastavitvah (namig v praznem pogovoru brez kljuca). */
     private val odpriNastavitve: () -> Unit = {},
+    /** Povezava z Lino na racunalniku (nalogo podpise telefon, prevzame jo Claude Code). */
+    private val racunalnikPovezan: () -> Boolean = { false },
+    private val posljiRacunalniku: (String) -> Boolean = { false },
 ) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
@@ -324,7 +327,7 @@ class LinaPogovorPogled(
         val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
         val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo)
-        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a)).also { asistent = it; asistentDan = danes }
+        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan).also { asistent = it; asistentDan = danes }
     }
 
     /** Ali ima Lina mozgane (kljuc ali prijava Google s projektom); uporablja povzetek klicatelja v zavihku Klici. */
@@ -475,6 +478,9 @@ class LinaPogovorPogled(
                         shraniZapiske(dodajZapisek(zapiski.beri(), tekst, System.currentTimeMillis(), UUID.randomUUID().toString()))
                         a.getString(R.string.local_note_saved, tekst)
                     }
+                    is Odgovor.NalogaRacunalniku ->
+                        if (posljiRacunalniku(odgovor.besedilo)) a.getString(R.string.local_task_sent, odgovor.besedilo)
+                        else a.getString(R.string.local_task_busy)
                     is Odgovor.Napaka -> when (odgovor.sporocilo) {
                         "Brez povezave" -> a.getString(R.string.local_err_offline)
                         "Prijava poteka" -> { google.odjava(); a.getString(R.string.local_google_relogin) }

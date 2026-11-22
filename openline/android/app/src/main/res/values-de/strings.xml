@@ -251,6 +251,8 @@
     <string name="local_you">Sie</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Notiz gespeichert: %1$s</string>
+    <string name="local_task_sent">Aufgabe an den Computer gesendet: %1$s\nVerlauf und Freigaben im Tab Computer.</string>
+    <string name="local_task_busy">Auf dem Computer läuft bereits eine Aufgabe. Warte, bis sie fertig ist.</string>
     <string name="local_notes_title">Notizen</string>
     <string name="local_note_delete">Löschen</string>
     <string name="local_err_offline">Keine Verbindung zu Google.</string>

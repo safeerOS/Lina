@@ -251,6 +251,8 @@
     <string name="local_you">Tu</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Nota salvata: %1$s</string>
+    <string name="local_task_sent">Attività inviata al computer: %1$s\nAvanzamento e approvazioni nella scheda Computer.</string>
+    <string name="local_task_busy">Sul computer è già in corso un\'attività. Attendi che finisca.</string>
     <string name="local_notes_title">Note</string>
     <string name="local_note_delete">Elimina</string>
     <string name="local_err_offline">Nessuna connessione a Google.</string>

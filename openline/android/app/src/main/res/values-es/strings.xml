@@ -251,6 +251,8 @@
     <string name="local_you">Usted</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Nota guardada: %1$s</string>
+    <string name="local_task_sent">Tarea enviada al ordenador: %1$s\nEl progreso y las aprobaciones están en la pestaña Ordenador.</string>
+    <string name="local_task_busy">Ya hay una tarea en curso en el ordenador. Espera a que termine.</string>
     <string name="local_notes_title">Notas</string>
     <string name="local_note_delete">Eliminar</string>
     <string name="local_err_offline">Sin conexión con Google.</string>

@@ -8,6 +8,8 @@ sealed class Odgovor {
     class Zapisek(val besedilo: String) : Odgovor()
     class Opomnik(val besedilo: String, val cas: String) : Odgovor()
     class Napaka(val sporocilo: String) : Odgovor()
+    /** Naloga za racunalnik (Claude Code prek podpisanega kanala); izvede jo aplikacija, ne model. */
+    class NalogaRacunalniku(val besedilo: String) : Odgovor()
 }
 
 class Asistent(
@@ -18,6 +20,8 @@ class Asistent(
     private val orodja: SpletnaOrodja? = null,
     // Spomin pogovorov na telefonu (lastnik 22. 11. 2026: privzeto vklopljen, brez potrjevanja, dela brez racunalnika).
     private val spomin: SpominPogovorov? = null,
+    // Ali je telefon povezan z Lino na racunalniku (ob vsakem vprasanju znova: povezava se spreminja).
+    private val racunalnikPovezan: () -> Boolean = { false },
 ) {
     private val zgodovina = mutableListOf<Sporocilo>()
 
@@ -39,7 +43,7 @@ class Asistent(
 
     private fun jeVrsticaOrodja(vrstica: String): Boolean {
         val v = vrstica.trim()
-        return v.startsWith("[[") && v.endsWith("]]") && (v.startsWith("[[iskanje:") || v.startsWith("[[beri:"))
+        return v.startsWith("[[") && v.endsWith("]]") && (v.startsWith("[[iskanje:") || v.startsWith("[[beri:") || v.startsWith("[[racunalnik:"))
     }
 
     /**
@@ -63,7 +67,8 @@ class Asistent(
     private fun povejNotranje(vnos: String, priponke: List<Priponka>): Odgovor {
         // Priklic starejsih sorodnih obratov (ne tistih, ki so ze v zgodovini seje); podatek, ne navodilo. Napaka spomina ne podre pogovora.
         val priklic = runCatching { spomin?.prikliči(vnos, zgodovina.map { it.besedilo }) ?: "" }.getOrDefault("")
-        val navodilo = sistemskoNavodilo + navodiloSpomina(priklic) + (if (priponke.isNotEmpty() || vnos.contains("--- Začetek datoteke")) NAVODILO_PRIPONK else "")
+        val povezan = runCatching { racunalnikPovezan() }.getOrDefault(false)
+        val navodilo = sistemskoNavodilo + SistemskoNavodilo.racunalnik(povezan) + navodiloSpomina(priklic) + (if (priponke.isNotEmpty() || vnos.contains("--- Začetek datoteke")) NAVODILO_PRIPONK else "")
 
         zgodovina.add(Sporocilo("user", vnos, priponke))
         var dodano = 1
@@ -94,6 +99,17 @@ class Asistent(
         when (rezultat) {
             is Rezultat.Besedilo -> {
                 // Vrstic orodja uporabniku ne pokazemo (tudi, ce jih model po omejitvi krogov ponovi).
+                // Naloga za racunalnik: vrstica je ukaz aplikaciji, uporabnik je ne vidi (zato se razcleni iz izvirnega besedila).
+                if (povezan) {
+                    val nal = rezultat.besedilo.lines().map { it.trim() }
+                        .firstOrNull { it.startsWith("[[racunalnik:") && it.endsWith("]]") }
+                        ?.let { it.substring(13, it.length - 2).trim() }
+                    if (!nal.isNullOrEmpty()) {
+                        zgodovina.add(Sporocilo("model", rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim()))
+                        obrezi()
+                        return Odgovor.NalogaRacunalniku(nal)
+                    }
+                }
                 val besedilo = rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim()
                 zgodovina.add(Sporocilo("model", besedilo))
                 obrezi()

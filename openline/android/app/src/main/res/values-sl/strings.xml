@@ -251,6 +251,8 @@
     <string name="local_you">Vi</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Zapisano: %1$s</string>
+    <string name="local_task_sent">Naloga poslana računalniku: %1$s\nPotek in odobritve so v zavihku Računalnik.</string>
+    <string name="local_task_busy">Na računalniku že teče naloga. Počakaj, da se konča.</string>
     <string name="local_notes_title">Zapiski</string>
     <string name="local_note_delete">Izbriši</string>
     <string name="local_err_offline">Ni povezave z Googlom.</string>

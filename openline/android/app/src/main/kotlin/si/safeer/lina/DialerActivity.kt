@@ -484,7 +484,9 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, nazaj = { showTab(zavihekPred) }, odpriNastavitve = { odpriNastavitveKljucev() })
+        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, nazaj = { showTab(zavihekPred) }, odpriNastavitve = { odpriNastavitveKljucev() },
+            racunalnikPovezan = { AsistentShramba.beri(this) != null },
+            posljiRacunalniku = { ::asistent.isInitialized && asistent.poslji(it) })
         // Podmeniji nastavitev (lastnik 22. 11. 2026); po LinaPogovorPogled, ker ta v nastavitve vstavi razdelka Ime in Spomin.
         nastavitveMeni = si.safeer.lina.asistent.NastavitveMeni(this, { showTab(Zavihek.TELEFON) }, { showTab(Zavihek.RACUNALNIK) })
         assistantApproval = findViewById(R.id.assistantApproval)
