@@ -31,29 +31,25 @@ object LokalniPrehodUpravljalnik {
     fun start(context: Context) {
         if (prehod != null) return
 
-        val alias = "LokalniPrehodCert"
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        // Klic na Samsungu 22. 11. 2026 brez zvoka: kljuc, ustvarjen v starejsi razlicici Line BREZ DIGEST_NONE, je ostal v shrambi
-        // (containsAlias), TLS streznik (Conscrypt) pa podpisuje surov povzetek (NONEwithECDSA) -> »Incompatible digest«, rokovanje z
-        // zvocno lupino propade pri vsakem poskusu in klicatelj ne slisi nic. Kljuc brez DIGEST_NONE zato zamenjamo z novim.
-        if (ks.containsAlias(alias) && !kljucPodpiraSurovPodpis(ks, alias)) {
-            runCatching { ks.deleteEntry(alias) }
-        }
-        if (!ks.containsAlias(alias)) {
-            val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
-            kpg.initialize(
-                KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
-                    .setCertificateSubject(javax.security.auth.x500.X500Principal("CN=LokalniPrehod"))
-                    .setKeySize(256)
-                    .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA384, KeyProperties.DIGEST_SHA512)
-                    .build()
-            )
-            kpg.generateKeyPair()
+        // TLS kljuc lokalnega prehoda je PROGRAMSKI (lastnik 22. 11. 2026, klica brez zvoka na Samsungu ob 9.51 in 10.09): Conscrypt
+        // podpisuje surov povzetek (NONEwithECDSA), KeyMint na Samsungu pa ga za kljuc v AndroidKeyStore zavrne (»Incompatible digest«),
+        // tudi pri kljucu z DIGEST_NONE. Zasebni kljuc je na disku samo ovit z AES-GCM kljucem iz AndroidKeyStore (isti vzorec kot ADB).
+        val material = kljucPrehoda(context)
+        odtis = material.odtis
+        val geslo = CharArray(0)
+        val ks = KeyStore.getInstance("PKCS12").apply {
+            load(null, null)
+            setKeyEntry("prehod", material.zasebni, geslo, arrayOf(material.cert))
         }
         val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-        kmf.init(ks, null)
+        kmf.init(ks, geslo)
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(kmf.keyManagers, null, SecureRandom())
+        // Star kljuc v AndroidKeyStore ni vec v rabi.
+        runCatching {
+            val star = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (star.containsAlias("LokalniPrehodCert")) star.deleteEntry("LokalniPrehodCert")
+        }
 
         val prefs = context.getSharedPreferences("lokalni_prehod", Context.MODE_PRIVATE)
         var zeton = prefs.getString("zeton", null)
@@ -117,19 +113,62 @@ object LokalniPrehodUpravljalnik {
         prehod = null
     }
 
-    /** Ali kljuc dovoli DIGEST_NONE (TLS strezniski podpis); napaka branja = ne (kljuc se ustvari znova). */
-    private fun kljucPodpiraSurovPodpis(ks: KeyStore, alias: String): Boolean = runCatching {
-        val kljuc = ks.getKey(alias, null) as? java.security.PrivateKey ?: return false
-        val tovarna = java.security.KeyFactory.getInstance(kljuc.algorithm, "AndroidKeyStore")
-        val info = tovarna.getKeySpec(kljuc, android.security.keystore.KeyInfo::class.java)
-        info.digests.contains(KeyProperties.DIGEST_NONE)
-    }.getOrDefault(false)
+    @Volatile private var odtis: String = ""
 
-    fun getCertFingerprint(): String {
+    /** SHA-256 odtis certifikata lokalnega prehoda (lupina ga pripne); prazno, dokler prehod ni zagnan. */
+    fun getCertFingerprint(): String = odtis
+
+    private class MaterialPrehoda(val zasebni: java.security.PrivateKey, val cert: X509Certificate, val odtis: String)
+
+    private const val OVOJ_ALIAS = "LokalniPrehodOvoj"
+
+    /** Kljuc in certifikat prehoda: prebere ovitega z diska ali ustvari novega (EC P-256, samopodpisan, 30 let). */
+    private fun kljucPrehoda(context: Context): MaterialPrehoda {
+        val mapa = java.io.File(context.noBackupFilesDir, "prehod").apply { mkdirs() }
+        val kljucDat = java.io.File(mapa, "kljuc.enc")
+        val certDat = java.io.File(mapa, "cert.der")
+        val ovoj = ovojniKljuc()
+        if (kljucDat.isFile && certDat.isFile) {
+            runCatching {
+                val pkcs8 = si.safeer.lina.protocol.AdbKeyBlob.open(ovoj, kljucDat.readBytes())
+                val zasebni = java.security.KeyFactory.getInstance("EC").generatePrivate(java.security.spec.PKCS8EncodedKeySpec(pkcs8))
+                pkcs8.fill(0)
+                val cert = java.security.cert.CertificateFactory.getInstance("X.509")
+                    .generateCertificate(certDat.inputStream().use { it.readBytes() }.inputStream()) as X509Certificate
+                return MaterialPrehoda(zasebni, cert, odtisCert(cert))
+            }
+        }
+        val par = KeyPairGenerator.getInstance("EC").apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }.generateKeyPair()
+        val ime = org.bouncycastle.asn1.x500.X500Name("CN=LokalniPrehod")
+        val zdaj = System.currentTimeMillis()
+        val holder = org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder(
+            ime,
+            java.math.BigInteger.valueOf(zdaj),
+            java.util.Date(zdaj - 86_400_000L),
+            java.util.Date(zdaj + 86_400_000L * 365L * 30L),
+            ime,
+            par.public,
+        ).build(org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SHA256withECDSA").build(par.private))
+        val cert = org.bouncycastle.cert.jcajce.JcaX509CertificateConverter().getCertificate(holder)
+        kljucDat.writeBytes(si.safeer.lina.protocol.AdbKeyBlob.seal(ovoj, par.private.encoded))
+        certDat.writeBytes(cert.encoded)
+        return MaterialPrehoda(par.private, cert, odtisCert(cert))
+    }
+
+    private fun odtisCert(cert: X509Certificate): String =
+        MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02x".format(it) }
+
+    private fun ovojniKljuc(): javax.crypto.SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        val cert = ks.getCertificate("LokalniPrehodCert") as? X509Certificate ?: return ""
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(cert.encoded)
-        return digest.joinToString("") { "%02x".format(it) }
+        (ks.getKey(OVOJ_ALIAS, null) as? javax.crypto.SecretKey)?.let { return it }
+        val gen = javax.crypto.KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        gen.init(
+            KeyGenParameterSpec.Builder(OVOJ_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build(),
+        )
+        return gen.generateKey()
     }
 }
