@@ -260,6 +260,7 @@ class InCallActivity : Activity(), CallRegistry.Listener {
     private fun takeBack() {
         val entry = displayed() ?: return
         LinaCallGate.markManual(entry.callId)
+        si.safeer.lina.telecom.UtisanMikrofon.odutisaj()
         CallAudioBridge.onCallEnded(entry.callId)
         GatewayRuntime.notifyCallEnded(entry.callId)
         val returned = CallBackgroundAudio.exit(entry.call)

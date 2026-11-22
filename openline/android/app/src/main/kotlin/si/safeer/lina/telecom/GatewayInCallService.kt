@@ -139,7 +139,13 @@ class GatewayInCallService : InCallService() {
         CallAudioBridge.setLineRecheck(lineRecheck)
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        UtisanMikrofon.sluzba = this
+    }
+
     override fun onDestroy() {
+        UtisanMikrofon.sluzba = null
         CallAudioBridge.clearLineRecheck(lineRecheck)
         LinaCallGate.setOwnedListener(null)
         super.onDestroy()
@@ -186,6 +192,7 @@ class GatewayInCallService : InCallService() {
             if (CallLifecycle.emitRemoval(linaOwned, linaAnnounced)) {
                 GatewayRuntime.emitCallRemoved(callId, call)
             }
+            if (linaOwned) UtisanMikrofon.odutisaj()
             LinaCallGate.clear(callId)
         }
         CallRegistry.remove(call)
@@ -316,6 +323,11 @@ class GatewayInCallService : InCallService() {
                     LinaCallGate.announce(callId)
                     
                     if (pot == si.safeer.lina.protocol.PotPrevzema.SAMOSTOJNO) {
+                        // Lastnik 22. 11. 2026: mikrofon telefona je pri Lininem klicu izklopljen (klicatelj ne sliši okolice, Lino ne moti šum);
+                        // vklopljen je le, ko uporabnik klic dvigne sam. Izklop: lina_zvok/utisaj_mikrofon = false.
+                        if (getSharedPreferences("lina_zvok", MODE_PRIVATE).getBoolean("utisaj_mikrofon", true)) {
+                            runCatching { setMuted(true); UtisanMikrofon.utisano = true; Log.i(TAG, "mikrofon telefona utisan za Linin klic $callId") }
+                        }
                         LokalniKrmilnik(this).emitCallAdded(callId, still)
                     } else {
                         GatewayRuntime.emitCallAdded(callId, still)
@@ -474,5 +486,19 @@ class GatewayInCallService : InCallService() {
         if (number.isBlank()) return false
         val telephony = getSystemService(TelephonyManager::class.java) ?: return false
         return runCatching { telephony.isEmergencyNumber(number) }.getOrDefault(false)
+    }
+}
+
+/**
+ * Mikrofon telefona je pri Lininem klicu utisan (lastnik 22. 11. 2026). Vklop nazaj: ob koncu Linine klica in ko uporabnik klic vzame nazaj.
+ */
+object UtisanMikrofon {
+    @Volatile var sluzba: InCallService? = null
+    @Volatile var utisano = false
+
+    fun odutisaj() {
+        if (!utisano) return
+        utisano = false
+        runCatching { sluzba?.setMuted(false) }
     }
 }
