@@ -355,4 +355,9 @@
     <string name="home_today_fmt">%1$d today</string>
     <string name="local_google_billing_on">billing enabled</string>
     <string name="local_google_billing_off">no billing</string>
+    <string name="lina_call_notice_channel">Calls Lina answered</string>
+    <string name="lina_call_notice_channel_urgent">Urgent calls Lina answered</string>
+    <string name="lina_call_notice_title">Lina answered a call: %1$s</string>
+    <string name="lina_call_notice_title_urgent">Urgent – Lina answered a call: %1$s</string>
+    <string name="lina_call_notice_public">Lina answered a call</string>
 </resources>

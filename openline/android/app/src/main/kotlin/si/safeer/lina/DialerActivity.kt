@@ -1364,6 +1364,7 @@ class DialerActivity : Activity() {
     }
 
     private fun applyDialIntent(intent: Intent) {
+        if (intent.action == si.safeer.lina.telecom.ObvestiloKlicaLine.ODPRI_KLICE) showTab(Zavihek.KLICI)
         if (intent.action == Intent.ACTION_DIAL) {
             showTab(Zavihek.KLICI)
             intent.data?.schemeSpecificPart?.let { numberInput.setText(it) }

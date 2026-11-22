@@ -355,4 +355,9 @@
     <string name="home_today_fmt">%1$d heute</string>
     <string name="local_google_billing_on">Abrechnung aktiv</string>
     <string name="local_google_billing_off">keine Abrechnung</string>
+    <string name="lina_call_notice_channel">Von Lina angenommene Anrufe</string>
+    <string name="lina_call_notice_channel_urgent">Dringende von Lina angenommene Anrufe</string>
+    <string name="lina_call_notice_title">Lina hat einen Anruf angenommen: %1$s</string>
+    <string name="lina_call_notice_title_urgent">Dringend – Lina hat einen Anruf angenommen: %1$s</string>
+    <string name="lina_call_notice_public">Lina hat einen Anruf angenommen</string>
 </resources>

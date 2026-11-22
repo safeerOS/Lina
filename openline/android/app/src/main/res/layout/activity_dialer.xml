@@ -80,11 +80,9 @@
                 <ImageView
                     android:id="@+id/homeCharacter"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top"
-                    android:adjustViewBounds="true"
+                    android:layout_height="match_parent"
                     android:importantForAccessibility="no"
-                    android:scaleType="fitStart"
+                    android:scaleType="matrix"
                     android:src="@drawable/lina_scena" />
 
                 <TextView

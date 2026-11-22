@@ -31,6 +31,19 @@ class DomovPogled(private val a: Activity, private val odpri: (PloscaDomov) -> U
     private val gumbi = mutableMapOf<PloscaDomov, View>()
 
     init {
+        // Slika po sirini, poravnana zgoraj; visina scene sledi sirini, da je mehurcek vedno pod obrazom (izmerjeno 22. 11. 2026 na
+        // OnePlus 9: obraz sega do ~67 % sirine od vrha, mehurcek je visok ~110 dp).
+        val scena = a.findViewById<FrameLayout>(R.id.homeHero)
+        val lik = a.findViewById<ImageView>(R.id.homeCharacter)
+        scena.addOnLayoutChangeListener { v, l, _, r, _, ol, _, or_, _ ->
+            val w = r - l
+            if (w <= 0 || w == or_ - ol) return@addOnLayoutChangeListener
+            val zelena = (w * 0.97f).toInt()
+            if (v.layoutParams.height != zelena) v.post { v.layoutParams = v.layoutParams.apply { height = zelena } }
+            val d = lik.drawable ?: return@addOnLayoutChangeListener
+            val s = w.toFloat() / d.intrinsicWidth.coerceAtLeast(1)
+            lik.imageMatrix = android.graphics.Matrix().apply { setScale(s, s) }
+        }
         a.findViewById<Button>(R.id.homeNoticesAll).setOnClickListener { odpri(PloscaDomov.KLICI) }
         a.findViewById<Button>(R.id.homeAsk).setOnClickListener { vprasaj() }
         zgradiPloscice()

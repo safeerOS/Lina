@@ -355,4 +355,9 @@
     <string name="home_today_fmt">%1$d oggi</string>
     <string name="local_google_billing_on">fatturazione attiva</string>
     <string name="local_google_billing_off">senza fatturazione</string>
+    <string name="lina_call_notice_channel">Chiamate risposte da Lina</string>
+    <string name="lina_call_notice_channel_urgent">Chiamate urgenti risposte da Lina</string>
+    <string name="lina_call_notice_title">Lina ha risposto a una chiamata: %1$s</string>
+    <string name="lina_call_notice_title_urgent">Urgente – Lina ha risposto a una chiamata: %1$s</string>
+    <string name="lina_call_notice_public">Lina ha risposto a una chiamata</string>
 </resources>

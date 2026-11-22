@@ -94,6 +94,7 @@ object LokalniPrehodUpravljalnik {
         // Zapis klica: ob koncu klica gre v datoteko v mapi uporabnika (z ozadne niti; neuspeh zapisa ne izgubi zapisa v dnevniku).
         zvocniMost.naKlicZakljucen = { zapis ->
             Thread({
+                runCatching { ObvestiloKlicaLine.pokazi(context, zapis) }
                 runCatching { si.safeer.lina.asistent.KlicIzvoz(context).zapisi(zapis) }
                 si.safeer.lina.asistent.SinhronizacijaZLino.zazeni(context, takoj = true)
             }, "klic-izvoz").start()
