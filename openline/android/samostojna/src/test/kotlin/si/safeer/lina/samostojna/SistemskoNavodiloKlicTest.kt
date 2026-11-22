@@ -34,4 +34,12 @@ class SistemskoNavodiloKlicTest {
         // pozdrav je v navodilu natanko enkrat (ne se enkrat kot »vedno zacni«)
         assertTrue(Regex("Tukaj Lina, pomočnica z umetno inteligenco").findAll(n).count() == 1)
     }
+
+    @Test
+    fun `ime, ki ga klicatelj pove o sebi, je ime klicatelja in ne Linino`() {
+        val n = SistemskoNavodilo.zgradiZaKlic(java.time.ZonedDateTime.parse("2026-11-22T13:00:00+01:00[Europe/Ljubljana]"), "Ana", "Ano")
+        assertTrue(n.contains("je ime KLICATELJA, ne tvoje"), n)
+        assertTrue(n.contains("ti si vedno Lina"), n)
+        assertTrue(n.contains("ne vprasaj znova po imenu"), n)
+    }
 }
