@@ -14,6 +14,8 @@
         <package android:name="si.safeer.phone" />
         <package android:name="si.safeer.os" />
         <package android:name="si.safeer.tablet" />
+        <!-- Samsungove Moje datoteke: gumb »Odpri mapo« (Android 11+ skrije pakete brez te vrstice). -->
+        <package android:name="com.sec.android.app.myfiles" />
     </queries>
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <!-- Lastnik 18. 11. 2026: klicalnik Line mora iskati po imeniku (dovoljenje potrdi uporabnik sam). -->

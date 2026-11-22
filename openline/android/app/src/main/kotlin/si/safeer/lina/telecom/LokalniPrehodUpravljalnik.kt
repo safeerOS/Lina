@@ -73,7 +73,8 @@ object LokalniPrehodUpravljalnik {
             projekt = projekt,
             dnevnik = dnevnik,
             wsFabrika = OkHttpWsFabrika(),
-            imeUporabnika = { si.safeer.lina.asistent.ImeUporabnika.preberi(context) }
+            imeUporabnika = { si.safeer.lina.asistent.ImeUporabnika.preberi(context) },
+            casovniZapis = { android.util.Log.i("LinaPozdrav", "${System.currentTimeMillis() % 100000} ms: $it") }
         ).apply {
             naNapako = { razlog ->
                 val manager = context.getSystemService(android.app.NotificationManager::class.java)

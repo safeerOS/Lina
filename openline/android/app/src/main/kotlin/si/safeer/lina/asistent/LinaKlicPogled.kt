@@ -130,10 +130,35 @@ class LinaKlicPogled(
         try {
             a.startActivity(namen)
         } catch (e: ActivityNotFoundException) {
+            odpriVSamsungovihDatotekah(izbrana)
+        } catch (e: SecurityException) {
+            odpriVSamsungovihDatotekah(izbrana)
+        }
+    }
+
+    /**
+     * Lastnik 22. 11. 2026: na njegovem Samsungu »Odpri mapo« ni odprl nicesar (Moje datoteke ne obravnavajo ACTION_VIEW z vrsto mape).
+     * Samsungov namen LAUNCH_MY_FILES z zacetno potjo je preverjen na tem telefonu (odpre Moje datoteke v mapi Documents/Lina).
+     */
+    private fun odpriVSamsungovihDatotekah(izbrana: Uri?) {
+        val relativna = izbrana?.let { poti(it) } ?: KlicIzvoz.PRIVZETA_MAPA.trimEnd('/')
+        val namen = Intent("samsung.myfiles.intent.action.LAUNCH_MY_FILES")
+            .setPackage("com.sec.android.app.myfiles")
+            .putExtra("samsung.myfiles.intent.extra.START_PATH", "/storage/emulated/0/$relativna")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            a.startActivity(namen)
+        } catch (e: ActivityNotFoundException) {
             neOdpre()
         } catch (e: SecurityException) {
             neOdpre()
         }
+    }
+
+    /** Pot izbrane mape SAF glede na notranji pomnilnik (»primary:Dokumenti/X« -> »Dokumenti/X«); drugace privzeta mapa. */
+    private fun poti(drevo: Uri): String {
+        val id = runCatching { DocumentsContract.getTreeDocumentId(drevo) }.getOrNull().orEmpty()
+        return if (id.startsWith("primary:") && id.length > 8) id.removePrefix("primary:") else KlicIzvoz.PRIVZETA_MAPA.trimEnd('/')
     }
 
     private fun neOdpre() {

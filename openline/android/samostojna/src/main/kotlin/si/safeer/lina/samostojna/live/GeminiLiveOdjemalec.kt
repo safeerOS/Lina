@@ -36,7 +36,9 @@ class GeminiLiveOdjemalec(
     private val model: String = "gemini-3.8-live",
     private val wsFabrika: WsFabrika,
     /** Ime uporabnika in rocni tozilnik za pozdrav osebne tajnice (lastnik 21. 11. 2026); prazno = »Dosegli ste glasovno tajnico.«. */
-    private val imeUporabnika: () -> Pair<String, String> = { "" to "" }
+    private val imeUporabnika: () -> Pair<String, String> = { "" to "" },
+    /** Casovni zapis poteka pozdrava (brez vsebine klica): »dvig«, »seja nared«, »uvod poslan«, »prvi zvok Line«, »konec obrata«. */
+    private val casovniZapis: (String) -> Unit = {}
 ) : ZvocniMost {
 
     companion object {
@@ -79,6 +81,7 @@ class GeminiLiveOdjemalec(
     //  - med pozdravom zvok klicatelja ne gre modelu (sum, »halo« ali odmev bi pozdrav prekinil in model bi zacel znova).
     @Volatile private var predpripravaOd = 0L
     @Volatile private var uvodPoslan = false
+    @Volatile private var prviZvokLine = false
     @Volatile private var uvodDo = 0L
     private val NAJDLJE_POZDRAV_MS = 15_000L
     private val PREDPRIPRAVA_VELJA_MS = 30_000L
@@ -95,9 +98,11 @@ class GeminiLiveOdjemalec(
             isClosed.set(false)
             izhodniCallback = null
             uvodPoslan = false
+            prviZvokLine = false
             uvodDo = 0L
             predpripravaOd = System.currentTimeMillis()
         }
+        casovniZapis("dvig klica, priprava seje")
         Thread({ runCatching { poskusiPovezavo() } }, "lina-live-priprava").start()
     }
 
@@ -111,7 +116,10 @@ class GeminiLiveOdjemalec(
             }
         }
         // gemini-3.8-live: besedilo gre prek realtimeInput.text (ai.google.dev, get-started-websocket)
-        if (poslji) ws?.posiljiBesedilo("""{"realtimeInput":{"text":"Lina se predstavi."}}""")
+        if (poslji) {
+            casovniZapis("uvod poslan modelu")
+            ws?.posiljiBesedilo("""{"realtimeInput":{"text":"Lina se predstavi."}}""")
+        }
     }
 
     private fun maskirajSkrivnosti(besedilo: String): String {
@@ -389,6 +397,7 @@ class GeminiLiveOdjemalec(
             val skupaj = nepopolnOkvir + resample24to16(decoded)
             var offset = 0
             while (skupaj.size - offset >= 640) {
+                if (!prviZvokLine) { prviZvokLine = true; casovniZapis("prvi zvok Line klicatelju") }
                 izhodniCallback?.invoke(skupaj.copyOfRange(offset, offset + 640))
                 offset += 640
             }
@@ -399,6 +408,7 @@ class GeminiLiveOdjemalec(
             izprazniOstanek()
             // Pozdrav je izrecen: od zdaj model poslusa klicatelja.
             uvodDo = 0L
+            casovniZapis("konec obrata Line")
         }
     }
 
@@ -506,6 +516,7 @@ class GeminiLiveOdjemalec(
                 nepopolnOkvir = ByteArray(0)
                 isClosed.set(false)
                 uvodPoslan = false
+            prviZvokLine = false
                 uvodDo = 0L
             }
             sveza

@@ -372,6 +372,7 @@ class GeminiLiveOdjemalecTest {
     }
 
     /** Lazna povezava: belezi poslano, test sam sprozi sporocila streznika. */
+    // Besedilo »Lina se predstavi.« je tudi v sistemskem navodilu (setup), zato stejemo samo sporocilo realtimeInput.
     private class LaznaFabrika : WsFabrika {
         val poslano = java.util.concurrent.CopyOnWriteArrayList<String>()
         @Volatile var poslusalec: WsPoslusalec? = null
@@ -410,10 +411,10 @@ class GeminiLiveOdjemalecTest {
         Thread.sleep(300)
         assertEquals(1, f.odprtij)
         f.poslusalec!!.onText("""{"setupComplete":{}}""")
-        assertTrue(f.poslano.none { it.contains("Lina se predstavi.") }, "uvod ne sme iti, dokler zvocna pot ni nared")
+        assertTrue(f.poslano.none { it.contains("\"text\":\"Lina se predstavi.\"") }, "uvod ne sme iti, dokler zvocna pot ni nared")
         odj.nastaviIzhod { }
         assertEquals(1, f.odprtij, "nastaviIzhod ohrani predpripravljeno sejo")
-        assertEquals(1, f.poslano.count { it.contains("Lina se predstavi.") })
+        assertEquals(1, f.poslano.count { it.contains("\"text\":\"Lina se predstavi.\"") })
         // Med pozdravom zvok klicatelja ne gre modelu; po turnComplete gre.
         repeat(5) { odj.vKlic(ByteArray(640)) }
         assertEquals(0, f.poslano.count { it.contains("audio/pcm") })
@@ -422,7 +423,7 @@ class GeminiLiveOdjemalecTest {
         assertEquals(1, f.poslano.count { it.contains("audio/pcm") })
         // Ponovni setupComplete ali nov okvir ne sprozi drugega pozdrava.
         f.poslusalec!!.onText("""{"setupComplete":{}}""")
-        assertEquals(1, f.poslano.count { it.contains("Lina se predstavi.") })
+        assertEquals(1, f.poslano.count { it.contains("\"text\":\"Lina se predstavi.\"") })
         odj.konecKlica()
     }
 
@@ -434,7 +435,7 @@ class GeminiLiveOdjemalecTest {
         odj.vKlic(ByteArray(640))
         assertEquals(1, f.odprtij)
         f.poslusalec!!.onText("""{"setupComplete":{}}""")
-        assertEquals(1, f.poslano.count { it.contains("Lina se predstavi.") })
+        assertEquals(1, f.poslano.count { it.contains("\"text\":\"Lina se predstavi.\"") })
         // Nov klic brez predpriprave: stara seja se ne uporabi.
         odj.nastaviIzhod { }
         odj.vKlic(ByteArray(640))

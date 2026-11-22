@@ -23,4 +23,15 @@ class SistemskoNavodiloKlicTest {
         kotlin.test.assertTrue("(112)" in n)
         kotlin.test.assertTrue("placilne kartice" in n && "gesla" in n)
     }
+
+    /** Lastnik 22. 11. 2026 (klic 10:53): pozdrav se je ponavljal, naglas je bil hrvaski, »umetnikova inteligenca«. */
+    @Test fun `navodilo klica zahteva slovenski naglas, pravilno izgovorjavo in en sam pozdrav`() {
+        val n = SistemskoNavodilo.zgradiZaKlic(ZonedDateTime.parse("2026-11-22T10:00:00+01:00[Europe/Ljubljana]"), "Ana")
+        assertTrue("nikoli hrvascina" in n)
+        assertTrue("um-ET-na in-te-li-GEN-ca" in n)
+        assertTrue("Lina se predstavi." in n && "tocno enkrat" in n)
+        assertTrue("Pozdrava ne ponavljaj" in n)
+        // pozdrav je v navodilu natanko enkrat (ne se enkrat kot »vedno zacni«)
+        assertTrue(Regex("Tukaj Lina, pomočnica z umetno inteligenco").findAll(n).count() == 1)
+    }
 }
