@@ -402,4 +402,9 @@
     <string name="chat_attach_too_big">Le fichier %1$s dépasse 15 Mo.</string>
     <string name="chat_attach_read_fail">Impossible de lire le fichier %1$s.</string>
     <string name="chat_attach_remove">Retirer la pièce jointe %1$s</string>
+    <!-- Dejanja pod odgovorom (22. 11. 2026) -->
+    <string name="chat_copy">Copier</string>
+    <string name="chat_copied">Copié</string>
+    <string name="chat_retry">Réessayer</string>
+    <string name="tab_calls_new_fmt">%1$s, nouveaux appels : %2$d</string>
 </resources>

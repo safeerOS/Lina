@@ -402,4 +402,9 @@
     <string name="chat_attach_too_big">Datoteka %1$s je večja od 15 MB.</string>
     <string name="chat_attach_read_fail">Datoteke %1$s ni bilo mogoče prebrati.</string>
     <string name="chat_attach_remove">Odstrani priponko %1$s</string>
+    <!-- Dejanja pod odgovorom (22. 11. 2026) -->
+    <string name="chat_copy">Kopiraj</string>
+    <string name="chat_copied">Kopirano</string>
+    <string name="chat_retry">Poskusi znova</string>
+    <string name="tab_calls_new_fmt">%1$s, novi klici: %2$d</string>
 </resources>

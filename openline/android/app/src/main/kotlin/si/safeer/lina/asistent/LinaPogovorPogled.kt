@@ -161,9 +161,52 @@ class LinaPogovorPogled(
         }
     }
 
+    /**
+     * Znanje 22. 11. 2026 (skil safeer-lina-tajnica-asistent-ui-znanje): pod odgovorom Line »Kopiraj«, pod napako »Poskusi znova«
+     * (besedilo uporabnika ostane), samodejni pomik na dno samo, ce je uporabnik ze na dnu ali je pravkar poslal sporocilo.
+     */
+    private var napakaZaPonovitev: Triple<String, String, List<si.safeer.lina.samostojna.Priponka>>? = null
+    private var prisilnoNaDno = true
+
+    private fun jeNaDnu(): Boolean {
+        val vsebina = klepetDrsno.getChildAt(0) ?: return true
+        return klepetDrsno.scrollY + klepetDrsno.height >= vsebina.bottom - dp(96)
+    }
+
+    private fun kopiraj(besedilo: String) {
+        val odlozisce = a.getSystemService(android.content.ClipboardManager::class.java) ?: return
+        odlozisce.setPrimaryClip(android.content.ClipData.newPlainText("Lina", besedilo))
+        // Android 13+ sam pokaze potrditev kopiranja; prej kratko obvestilo.
+        if (android.os.Build.VERSION.SDK_INT < 33) opozori(a.getString(R.string.chat_copied))
+    }
+
+    private fun dejanje(besedilo: String, klik: () -> Unit) = TextView(a).apply {
+        setTextAppearance(R.style.Gw_Muted)
+        text = besedilo
+        minHeight = dp(40)
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        setPadding(dp(14), 0, dp(14), 0)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { klik() }
+    }
+
+    private fun ponovi() {
+        val (prikaz, vnos, binarne) = napakaZaPonovitev ?: return
+        if (caka) return
+        napakaZaPonovitev = null
+        // Odstrani neuspelo prosnjo in napako; poslje se znova enako (tudi priponke).
+        repeat(2) { odstraniZadnjo() }
+        posljiBesedilo(prikaz, vnos, binarne)
+    }
+
     private fun narisiSporocila() {
+        val doDna = prisilnoNaDno || jeNaDnu()
+        prisilnoNaDno = false
         klepetDnevnik.removeAllViews()
-        for ((jeLina, besedilo) in sporocila) {
+        val razmislja = a.getString(R.string.local_thinking)
+        for ((i, par) in sporocila.withIndex()) {
+            val (jeLina, besedilo) = par
             klepetDnevnik.addView(TextView(a, null, 0, R.style.Gw_Body).apply {
                 text = besedilo
                 setTextIsSelectable(true)
@@ -177,8 +220,16 @@ class LinaPogovorPogled(
                     gravity = if (jeLina) android.view.Gravity.START else android.view.Gravity.END
                 }
             })
+            if (jeLina && besedilo != razmislja) {
+                val vrstica = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                vrstica.addView(dejanje(a.getString(R.string.chat_copy)) { kopiraj(besedilo) })
+                if (i == sporocila.lastIndex && napakaZaPonovitev != null) {
+                    vrstica.addView(dejanje(a.getString(R.string.chat_retry)) { ponovi() })
+                }
+                klepetDnevnik.addView(vrstica)
+            }
         }
-        klepetDrsno.post { klepetDrsno.fullScroll(View.FOCUS_DOWN) }
+        if (doDna) klepetDrsno.post { klepetDrsno.fullScroll(View.FOCUS_DOWN) }
     }
 
     /** Pogovor je na voljo (ponudnik ima kljuc ali prijavo): takrat je vrstica za vnos vidna v zavihku Lina. */
@@ -396,6 +447,8 @@ class LinaPogovorPogled(
 
     private fun posljiBesedilo(prikaz: String, vnos: String, binarne: List<si.safeer.lina.samostojna.Priponka> = emptyList()) {
         caka = true
+        napakaZaPonovitev = null
+        prisilnoNaDno = true
         sporocila += false to prikaz
         sporocila += true to a.getString(R.string.local_thinking)
         osvezi()
@@ -425,6 +478,7 @@ class LinaPogovorPogled(
                     }
                 }
                 sporocila += true to besedilo
+                if (odgovor is Odgovor.Napaka) napakaZaPonovitev = Triple(prikaz, vnos, binarne)
                 if (odgovor !is Odgovor.Napaka) runCatching {
                     val trajen = PogovorSkupni.dobi(a)
                     trajen.dodaj("lastnik", prikaz)

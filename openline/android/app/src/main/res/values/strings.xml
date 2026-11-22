@@ -403,4 +403,9 @@
     <string name="chat_attach_too_big">The file %1$s is larger than 15 MB.</string>
     <string name="chat_attach_read_fail">The file %1$s could not be read.</string>
     <string name="chat_attach_remove">Remove attachment %1$s</string>
+    <!-- Dejanja pod odgovorom (22. 11. 2026) -->
+    <string name="chat_copy">Copy</string>
+    <string name="chat_copied">Copied</string>
+    <string name="chat_retry">Try again</string>
+    <string name="tab_calls_new_fmt">%1$s, new calls: %2$d</string>
 </resources>

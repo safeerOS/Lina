@@ -186,9 +186,39 @@ class DialerActivity : Activity() {
         }
     }
 
+    /**
+     * Znacka novih klicev na zavihku Klici (znanje 22. 11. 2026, Material 3: znacka z dinamicnim stevilom). Novi = klici po zadnjem
+     * ogledu zavihka Klici; ogled zavihka znacko pobrise. Napis ostane berljiv tudi za bralnik zaslona.
+     */
+    private var znackaCas = 0L
+    private var znackaZavihek: Zavihek? = null
+
+    private fun osveziZnackoKlicev() {
+        val gumb = findViewById<Button>(R.id.navCalls) ?: return
+        // Dnevnik klicev ne beremo ob vsakem tiku (1,5 s): najvec na 10 s, takoj ob menjavi zavihka.
+        val zdaj = System.currentTimeMillis()
+        if (zavihekZdaj == znackaZavihek && zdaj - znackaCas < 10_000) return
+        znackaCas = zdaj
+        znackaZavihek = zavihekZdaj
+        val prefs = getSharedPreferences("lina_ui", MODE_PRIVATE)
+        if (zavihekZdaj == Zavihek.KLICI) prefs.edit().putLong("klici_videno", System.currentTimeMillis()).apply()
+        // Prvi zagon: dosedanji klici niso »novi« (cas ogleda se zapise samo, ce ga se ni).
+        if (!prefs.contains("klici_videno")) prefs.edit().putLong("klici_videno", zdaj).apply()
+        val videno = prefs.getLong("klici_videno", zdaj)
+        val novi = runCatching {
+            si.safeer.lina.asistent.DnevnikKlicevSkupni.dobi(this).seznamPoDatumu(nujniNaVrhu = false)
+                .count { !it.id.startsWith("sys-") && it.stevilka != "Sistem" && it.casZacetka > videno }
+        }.getOrDefault(0)
+        val osnova = getString(R.string.tab_calls)
+        val napis = if (novi > 0) "$osnova ${if (novi > 9) "9+" else novi}" else osnova
+        if (gumb.text.toString() != napis) gumb.text = napis
+        gumb.contentDescription = if (novi > 0) getString(R.string.tab_calls_new_fmt, osnova, novi) else osnova
+    }
+
     private val ticker = object : Runnable {
         override fun run() {
             renderConnection()
+            osveziZnackoKlicev()
             handler.postDelayed(this, 1_500)
         }
     }

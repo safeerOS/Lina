@@ -402,4 +402,9 @@
     <string name="chat_attach_too_big">Die Datei %1$s ist größer als 15 MB.</string>
     <string name="chat_attach_read_fail">Die Datei %1$s konnte nicht gelesen werden.</string>
     <string name="chat_attach_remove">Anhang %1$s entfernen</string>
+    <!-- Dejanja pod odgovorom (22. 11. 2026) -->
+    <string name="chat_copy">Kopieren</string>
+    <string name="chat_copied">Kopiert</string>
+    <string name="chat_retry">Erneut versuchen</string>
+    <string name="tab_calls_new_fmt">%1$s, neue Anrufe: %2$d</string>
 </resources>
