@@ -107,7 +107,7 @@ class NastavitveMeni(private val a: Activity, private val odpriPripravo: () -> U
     }
 
     private fun zgradiMeni() {
-        meni.addView(TextView(a, null, 0, R.style.Gw_Title).apply { setText(R.string.settings_title); accessibilityHeading = true })
+        meni.addView(TextView(a, null, 0, R.style.Gw_Title).apply { setText(R.string.settings_title); isAccessibilityHeading = true })
         for (p in Podmeni.entries) {
             val (n, o) = naslovInOpis(p)
             meni.addView(vrstica(n, o) { odpri(p) })
