@@ -57,8 +57,12 @@ class NastavitveKljuciPogled(
     private val osveziVse = mutableListOf<() -> Unit>()
 
     init {
-        ImeUporabnikaPogled(a, vsebnik)
-        SpominPogovorovPogled(a, vsebnik)
+        // Ime in spomin sta svoja razdelka pred naslovom spletnih orodij (zaslon 22. 11. 2026: bila sta pod »Spletno iskanje in povezave«).
+        val naslovOrodij: View = a.findViewById(R.id.assistantToolsTitle)
+        val starsi = naslovOrodij.parent as LinearLayout
+        val mesto = starsi.indexOfChild(naslovOrodij)
+        val ime = ImeUporabnikaPogled(a, starsi, mesto)
+        SpominPogovorovPogled(a, starsi, mesto + ime.dodanih)
         kljucShrani.setOnClickListener { shraniKljuc() }
         googleGumb.setOnClickListener { zacniPrijavoGoogle() }
         kljucPozabi.setOnClickListener {

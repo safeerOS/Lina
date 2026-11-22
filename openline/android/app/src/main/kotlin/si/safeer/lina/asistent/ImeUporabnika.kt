@@ -35,30 +35,39 @@ object ImeUporabnika {
     }
 }
 
-/** Razdelek »Kako vam je ime?« na vrhu nastavitev asistentke: ime, predlog tozilnika (popravljiv) in predogled pozdrava. */
-class ImeUporabnikaPogled(private val a: Activity, private val vsebnik: LinearLayout) {
+/**
+ * Razdelek »Kako vam je ime?« v nastavitvah asistentke (pred spletnimi orodji): ime, predlog tozilnika (popravljiv) in predogled pozdrava.
+ * Vstavi se v [vsebnik] od mesta [zacetek]; [dodanih] pove, koliko pogledov je dodal.
+ */
+class ImeUporabnikaPogled(private val a: Activity, private val vsebnik: LinearLayout, zacetek: Int) {
+    var dodanih = 0
+        private set
     private fun dp(v: Int) = (v * a.resources.displayMetrics.density).toInt()
 
     init {
-        var mesto = 0
+        var mesto = zacetek
         fun vrstica(v: View, zgoraj: Int) = vsebnik.addView(
-            v, mesto++,
+            v, mesto++.also { dodanih++ },
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(zgoraj) },
         )
         val (ime0, toz0) = ImeUporabnika.preberi(a)
-        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Body); setText(R.string.name_title); typeface = android.graphics.Typeface.DEFAULT_BOLD }, 8)
+        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Heading); setText(R.string.name_title) }, 16)
         vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.name_note) }, 4)
         fun polje(hint: Int, vrednost: String) = EditText(a, null, 0, R.style.Gw_Field).apply {
             setHint(hint)
             setText(vrednost)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PERSON_NAME or InputType.TYPE_TEXT_FLAG_CAP_WORDS
             filters = arrayOf(android.text.InputFilter.LengthFilter(60))
+            // Slog polja jih sicer pusti nefokusirana (zaslon 22. 11. 2026: vnos ni bil mogoc); enako kot polja kljucev.
+            isFocusable = true
+            isFocusableInTouchMode = true
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         }
         val imePolje = polje(R.string.name_hint, ime0).also { vrstica(it, 8) }
         val tozPolje = polje(R.string.name_acc_hint, toz0).also { vrstica(it, 8) }
         val predogled = TextView(a).apply { setTextAppearance(R.style.Gw_Muted); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         vrstica(predogled, 6)
-        val shrani = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.tool_save) }
+        val shrani = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.name_save) }
         vrstica(shrani, 8)
 
         fun osvezi() {

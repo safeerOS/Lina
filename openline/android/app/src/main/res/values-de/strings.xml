@@ -328,4 +328,6 @@
     <string name="memory_delete">Alle gemerkten Gespräche löschen</string>
     <string name="memory_delete_confirm">Wirklich alle gemerkten Gespräche löschen?</string>
     <string name="memory_deleted">Gesprächsspeicher gelöscht.</string>
+    <string name="name_save">Speichern</string>
+    <string name="memory_heading">Gedächtnis</string>
 </resources>

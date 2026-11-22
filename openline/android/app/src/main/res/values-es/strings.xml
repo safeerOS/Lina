@@ -328,4 +328,6 @@
     <string name="memory_delete">Borrar todas las conversaciones recordadas</string>
     <string name="memory_delete_confirm">¿Borrar de verdad todas las conversaciones recordadas?</string>
     <string name="memory_deleted">Memoria de conversaciones borrada.</string>
+    <string name="name_save">Guardar</string>
+    <string name="memory_heading">Memoria</string>
 </resources>

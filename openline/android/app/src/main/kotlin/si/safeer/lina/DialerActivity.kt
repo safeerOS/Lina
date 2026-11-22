@@ -1040,19 +1040,9 @@ class DialerActivity : Activity() {
         val ink = getColor(R.color.ink)
         val muted = getColor(R.color.muted)
         for (tipka in si.safeer.lina.protocol.DialKeys.ALL) {
-            // Stevilka velika, crke pod njo majhne (kot v aplikaciji Telefon).
-            val besedilo = android.text.SpannableStringBuilder(tipka.digit).apply {
-                setSpan(android.text.style.AbsoluteSizeSpan(28, true), 0, length, 0)
-                setSpan(android.text.style.ForegroundColorSpan(ink), 0, length, 0)
-                if (tipka.letters.isNotEmpty()) {
-                    val od = length
-                    append("\n").append(tipka.letters)
-                    setSpan(android.text.style.AbsoluteSizeSpan(10, true), od, length, 0)
-                    setSpan(android.text.style.ForegroundColorSpan(muted), od, length, 0)
-                }
-            }
             val gumb = Button(this, null, 0, R.style.Gw_Button).apply {
-                text = besedilo
+                text = besediloTipke(tipka, ink, muted, 1f)
+                tag = tipka
                 background = getDrawable(R.drawable.key_round)
                 setPadding(0, 0, 0, 0)
                 minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
@@ -1070,9 +1060,52 @@ class DialerActivity : Activity() {
                 setMargins(0, dp(2), 0, dp(2))
             })
         }
+        // Tipkovnica se prilagodi visini zaslona (lastnik 22. 11. 2026, Samsung z vecjo pisavo: gumb za klic je bil odrezan pod
+        // spodnjo navigacijo): ce vsebina zavihka Klici ne gre na zaslon, se tipke zmanjsajo (najmanj 46 dp), sicer ostanejo 62 dp.
+        val drsno = findViewById<android.widget.ScrollView>(R.id.root)
+        drsno.viewTreeObserver.addOnGlobalLayoutListener { prilagodiTipkovnico(pad, drsno, ink, muted) }
         val brisi = findViewById<View>(R.id.backspaceButton)
         brisi.setOnClickListener { izbrisiZnak() }
         brisi.setOnLongClickListener { numberInput.setText(""); true }
+    }
+
+    /** Stevilka velika, crke pod njo majhne (kot v aplikaciji Telefon); [faktor] pomanjsa pisavo skupaj s tipko. */
+    private fun besediloTipke(tipka: si.safeer.lina.protocol.DialKey, ink: Int, muted: Int, faktor: Float): CharSequence =
+        android.text.SpannableStringBuilder(tipka.digit).apply {
+            setSpan(android.text.style.AbsoluteSizeSpan(Math.round(28 * faktor), true), 0, length, 0)
+            setSpan(android.text.style.ForegroundColorSpan(ink), 0, length, 0)
+            if (tipka.letters.isNotEmpty()) {
+                val od = length
+                append("\n").append(tipka.letters)
+                setSpan(android.text.style.AbsoluteSizeSpan(Math.max(8, Math.round(10 * faktor)), true), od, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(muted), od, length, 0)
+            }
+        }
+
+    private var zadnjaVisinaDrsnega = -1
+
+    /**
+     * Velikost tipk iz razpolozljive visine: presezek vsebine nad visino drsnega obmocja (pri trenutni velikosti) se razdeli na
+     * stiri vrstice tipk. Izracun je vedno od polne velikosti 62 dp, zato se ne ziba; ponovi se samo ob spremembi visine zaslona.
+     */
+    private fun prilagodiTipkovnico(pad: android.widget.GridLayout, drsno: android.widget.ScrollView, ink: Int, muted: Int) {
+        if (findViewById<View>(R.id.tabCalls).visibility != View.VISIBLE || pad.childCount == 0) return
+        val vsebina = drsno.getChildAt(0) ?: return
+        val visina = drsno.height - drsno.paddingTop - drsno.paddingBottom
+        if (visina <= 0 || (visina == zadnjaVisinaDrsnega && vsebina.height <= visina)) return
+        zadnjaVisinaDrsnega = visina
+        val zdaj = (pad.getChildAt(0).layoutParams as android.widget.GridLayout.LayoutParams).height
+        val polna = dp(62)
+        val presezekPriPolni = vsebina.height - visina + 4 * (polna - zdaj)
+        val cilj = (polna - Math.max(0, (presezekPriPolni + 3) / 4)).coerceIn(dp(46), polna)
+        if (cilj == zdaj) return
+        val faktor = cilj.toFloat() / polna
+        for (i in 0 until pad.childCount) {
+            val gumb = pad.getChildAt(i) as Button
+            (gumb.layoutParams as android.widget.GridLayout.LayoutParams).apply { width = cilj; height = cilj }
+            (gumb.tag as? si.safeer.lina.protocol.DialKey)?.let { gumb.text = besediloTipke(it, ink, muted, faktor) }
+        }
+        pad.requestLayout()
     }
 
     private fun vstaviZnak(znak: String) {

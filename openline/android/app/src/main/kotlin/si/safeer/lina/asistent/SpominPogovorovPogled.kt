@@ -16,7 +16,7 @@ import java.io.File
  * Razdelek »Lina si zapomni pogovore« v nastavitvah asistentke (lastnik 22. 11. 2026: privzeto vklopljeno, brez potrjevanja,
  * dela brez racunalnika). Stikalo za izklop in »Izbriši vse« s potrditvijo. Spomin je v zasebni mapi aplikacije.
  */
-class SpominPogovorovPogled(private val a: Activity, private val vsebnik: LinearLayout) {
+class SpominPogovorovPogled(private val a: Activity, private val vsebnik: LinearLayout, zacetek: Int) {
     companion object {
         @Volatile private var edini: SpominPogovorov? = null
         fun spomin(c: Context): SpominPogovorov =
@@ -27,11 +27,14 @@ class SpominPogovorovPogled(private val a: Activity, private val vsebnik: Linear
 
     init {
         val s = spomin(a)
+        var mesto = zacetek
         fun vrstica(v: View, zgoraj: Int) = vsebnik.addView(
-            v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(zgoraj) },
+            v, mesto++, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(zgoraj) },
         )
-        val stikalo = CheckBox(a).apply { setText(R.string.memory_title); isChecked = s.vklopljen() }
-        vrstica(stikalo, 16)
+        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Heading); setText(R.string.memory_heading) }, 16)
+        // Besedilo stikala v slogu aplikacije (zaslon 22. 11. 2026: privzeta barva je bila temna na temnem).
+        val stikalo = CheckBox(a).apply { setTextAppearance(R.style.Gw_Body); setText(R.string.memory_title); isChecked = s.vklopljen() }
+        vrstica(stikalo, 8)
         vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.memory_note) }, 4)
         val stanje = TextView(a).apply { setTextAppearance(R.style.Gw_Muted); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         val brisi = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.memory_delete) }

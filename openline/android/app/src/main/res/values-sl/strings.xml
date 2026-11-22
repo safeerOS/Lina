@@ -328,4 +328,6 @@
     <string name="memory_delete">Izbriši vse zapomnjene pogovore</string>
     <string name="memory_delete_confirm">Res izbrišem vse zapomnjene pogovore?</string>
     <string name="memory_deleted">Spomin pogovorov je izbrisan.</string>
+    <string name="name_save">Shrani</string>
+    <string name="memory_heading">Spomin</string>
 </resources>

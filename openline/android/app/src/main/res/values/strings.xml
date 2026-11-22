@@ -328,4 +328,6 @@
     <string name="memory_delete">Delete all remembered conversations</string>
     <string name="memory_delete_confirm">Really delete all remembered conversations?</string>
     <string name="memory_deleted">Conversation memory deleted.</string>
+    <string name="name_save">Save</string>
+    <string name="memory_heading">Memory</string>
 </resources>
