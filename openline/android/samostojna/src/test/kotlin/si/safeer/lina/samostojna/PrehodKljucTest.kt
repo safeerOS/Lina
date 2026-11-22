@@ -17,4 +17,20 @@ class PrehodKljucTest {
         assertTrue("AdbKeyBlob.seal(ovoj, par.private.encoded)" in vir, "zasebni kljuc na disku samo ovit")
         assertTrue("noBackupFilesDir" in vir, "brez varnostne kopije")
     }
+
+    // Klic 22. 11. 2026 ob 10.30: Vertex Live odgovarja v binarnih okvirjih; OkHttp odjemalec jih mora brati.
+    @Test
+    fun `odjemalec Live bere tudi binarne okvirje`() {
+        val f = File("../app/src/main/kotlin/si/safeer/lina/OkHttpWsFabrika.kt").readText()
+        assertTrue("override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString)" in f)
+        assertTrue("poslusalec.onText(bytes.utf8())" in f)
+    }
+
+    // Posnetek lastnika 22. 11. 2026: okno klicatelja s svetlim besedilom na belem ozadju.
+    @Test
+    fun `vsako pogovorno okno ima paleto aplikacije`() {
+        val t = File("../app/src/main/res/values/themes.xml").readText()
+        assertTrue("<item name=\"android:alertDialogTheme\">@style/Gw.Dialog</item>" in t)
+        assertTrue("<item name=\"android:colorBackgroundFloating\">@color/surface</item>" in t)
+    }
 }

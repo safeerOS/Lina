@@ -13,12 +13,15 @@
         <item name="android:textColorPrimary">@color/ink</item>
         <item name="android:textColorSecondary">@color/muted</item>
         <item name="android:textColorHint">@color/muted</item>
+        <!-- Lastnik 22. 11. 2026 (posnetek: svetlo besedilo na belem oknu): VSAKO pogovorno okno dobi paleto aplikacije, tudi brez izrecne teme. -->
+        <item name="android:alertDialogTheme">@style/Gw.Dialog</item>
     </style>
 
     <!-- Dialogs follow the app palette (values-night swaps it), so text stays readable in dark mode. -->
     <style name="Gw.Dialog" parent="android:style/Theme.Material.Light.Dialog.Alert">
         <item name="android:fontFamily">@font/public_sans</item>
         <item name="android:colorBackground">@color/surface</item>
+        <item name="android:colorBackgroundFloating">@color/surface</item>
         <item name="android:textColorPrimary">@color/ink</item>
         <item name="android:textColorSecondary">@color/muted</item>
         <item name="android:textColorAlertDialogListItem">@color/ink</item>

@@ -41,6 +41,12 @@ class OkHttpWsFabrika : WsFabrika {
                 poslusalec.onText(text)
             }
 
+            // Vertex Live poslje JSON v BINARNIH okvirjih (racunalniska pot jih bere kot ArrayBuffer). Klic na Samsungu 22. 11. 2026 ob 10.30:
+            // brez te metode »setupComplete« ni nikoli prisel in klic se je po 5 s koncal z »Model se ni odzval«.
+            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                poslusalec.onText(bytes.utf8())
+            }
+
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 poslusalec.onError(t)
             }

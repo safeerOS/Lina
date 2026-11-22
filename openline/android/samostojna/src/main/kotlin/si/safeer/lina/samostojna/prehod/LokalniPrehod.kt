@@ -424,21 +424,24 @@ class LokalniPrehod(
     }
 
     private fun sendFrame(output: OutputStream, opcode: Int, payload: ByteArray) {
-        synchronized(output) {
-            output.write(0x80 or opcode)
-            if (payload.size < 126) {
-                output.write(payload.size)
-            } else if (payload.size <= 65535) {
-                output.write(126)
-                output.write((payload.size ushr 8) and 0xFF)
-                output.write(payload.size and 0xFF)
-            } else {
-                output.write(127)
-                for (i in 7 downTo 0) {
-                    output.write((payload.size ushr (i * 8)) and 0xFF)
-                }
+        // Cel okvir v ENEM zapisu: posamezni write(bajt) na TLS vticnici bi bil vsak svoj zapis TLS (50 zvocnih okvirjev na sekundo).
+        val okvir = java.io.ByteArrayOutputStream(payload.size + 10)
+        okvir.write(0x80 or opcode)
+        if (payload.size < 126) {
+            okvir.write(payload.size)
+        } else if (payload.size <= 65535) {
+            okvir.write(126)
+            okvir.write((payload.size ushr 8) and 0xFF)
+            okvir.write(payload.size and 0xFF)
+        } else {
+            okvir.write(127)
+            for (i in 7 downTo 0) {
+                okvir.write((payload.size.toLong() ushr (i * 8)).toInt() and 0xFF)
             }
-            output.write(payload)
+        }
+        okvir.write(payload)
+        synchronized(output) {
+            output.write(okvir.toByteArray())
             output.flush()
         }
     }
