@@ -33,6 +33,12 @@ object LokalniPrehodUpravljalnik {
 
         val alias = "LokalniPrehodCert"
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        // Klic na Samsungu 22. 11. 2026 brez zvoka: kljuc, ustvarjen v starejsi razlicici Line BREZ DIGEST_NONE, je ostal v shrambi
+        // (containsAlias), TLS streznik (Conscrypt) pa podpisuje surov povzetek (NONEwithECDSA) -> »Incompatible digest«, rokovanje z
+        // zvocno lupino propade pri vsakem poskusu in klicatelj ne slisi nic. Kljuc brez DIGEST_NONE zato zamenjamo z novim.
+        if (ks.containsAlias(alias) && !kljucPodpiraSurovPodpis(ks, alias)) {
+            runCatching { ks.deleteEntry(alias) }
+        }
         if (!ks.containsAlias(alias)) {
             val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
             kpg.initialize(
@@ -110,6 +116,14 @@ object LokalniPrehodUpravljalnik {
         prehod?.stop()
         prehod = null
     }
+
+    /** Ali kljuc dovoli DIGEST_NONE (TLS strezniski podpis); napaka branja = ne (kljuc se ustvari znova). */
+    private fun kljucPodpiraSurovPodpis(ks: KeyStore, alias: String): Boolean = runCatching {
+        val kljuc = ks.getKey(alias, null) as? java.security.PrivateKey ?: return false
+        val tovarna = java.security.KeyFactory.getInstance(kljuc.algorithm, "AndroidKeyStore")
+        val info = tovarna.getKeySpec(kljuc, android.security.keystore.KeyInfo::class.java)
+        info.digests.contains(KeyProperties.DIGEST_NONE)
+    }.getOrDefault(false)
 
     fun getCertFingerprint(): String {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

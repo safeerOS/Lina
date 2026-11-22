@@ -69,10 +69,15 @@ object ImeTozilnik {
         return (listOf(prvo) + priimki).joinToString(" ")
     }
 
-    /** Pozdrav osebne tajnice (lastnik 21. 11. 2026); brez imena »Dosegli ste glasovno tajnico.«. */
-    fun pozdrav(ime: String, uporabnikovZapis: String = ""): String {
+    /**
+     * Pozdrav osebne tajnice (lastnik 21. 11. 2026); brez imena »Dosegli ste glasovno tajnico.«.
+     * Lastnik 22. 11. 2026: »Pogovor se zapisuje more povedati, ker je takšen zakon«; ko je vklopljeno snemanje zvoka,
+     * »Pogovor se snema in zapisuje.«.
+     */
+    fun pozdrav(ime: String, uporabnikovZapis: String = "", snemanje: Boolean = false): String {
         val toz = imeVTozilniku(ime, uporabnikovZapis)
         val poklicali = if (toz.isNotEmpty()) "Poklicali ste $toz." else "Dosegli ste glasovno tajnico."
-        return "Tukaj Lina, pomočnica z umetno inteligenco. $poklicali Kaj naj sporočim?"
+        val zapis = if (snemanje) "Pogovor se snema in zapisuje." else "Pogovor se zapisuje."
+        return "Tukaj Lina, pomočnica z umetno inteligenco. $zapis $poklicali Kaj naj sporočim?"
     }
 }
