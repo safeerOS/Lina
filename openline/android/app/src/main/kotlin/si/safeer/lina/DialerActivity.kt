@@ -487,7 +487,7 @@ class DialerActivity : Activity() {
         val polje = findViewById<EditText>(R.id.assistantChatInput)
         polje.post {
             if (polje.isShown && polje.requestFocus()) {
-                getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.showSoftInput(polje, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.showSoftInput(polje, 0)
             }
         }
     }
