@@ -65,8 +65,8 @@ class GeminiLiveOdjemalec(
     var naKonecPogovora: (() -> Unit)? = null
 
     /**
-     * Varovalo (lastnik 22. 11. 2026: »Lino ne sme utisat«): mikrofon telefona je pri Lininem klicu utisan; ce klicatelj pove, da Line ne slisi,
-     * model poklice orodje klicatelj_ne_slisi in aplikacija mikrofon takoj vklopi nazaj (in utisanje izklopi za naslednje klice).
+     * Klicatelj pove, da Line ne slisi (22. 11. 2026): model poklice orodje klicatelj_ne_slisi, aplikacija tezavo zapise v dnevnik.
+     * Mikrofona telefona se zaradi tega NE vklaplja (ukaz lastnika); Lina ponovi zadnji stavek.
      */
     var naTezavoSlisnosti: (() -> Unit)? = null
     private val koncajCaka = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -396,7 +396,7 @@ class GeminiLiveOdjemalec(
                     sprozikKonec(KONEC_VARNOSTNI_ROK_MS)
                 }
                 if (ime == ORODJE_SLISNOST) {
-                    casovniZapis("klicatelj ne slisi Line: mikrofon telefona se vklopi nazaj")
+                    casovniZapis("klicatelj javlja, da Line ne slisi (mikrofon ostane utisan)")
                     runCatching { naTezavoSlisnosti?.invoke() }
                 }
                 if (ime == ORODJE_SPOROCILO) {

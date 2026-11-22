@@ -20,11 +20,10 @@ class LokalniKrmilnik(private val context: Context) : CallEventSink {
                 Log.i("LokalniKrmilnik", "Call $callId ended by Lina: ok=${r.ok}")
             }
         }
-        // Varovalo: klicatelj pove, da Line ne slisi -> mikrofon nazaj, utisanje za naslednje klice izklopljeno (Lina ne sme biti utisana).
+        // Lastnik 22. 11. 2026: mikrofon telefona se zaradi tezave s slisnostjo NE vklopi nazaj (Lina je program in ne potrebuje mikrofona telefona).
+        // Orodje klicatelj_ne_slisi samo zapise tezavo v dnevnik; Lina ponovi zadnji stavek. Vzrok (utisanje) se odpravi v kodi, ne z vklopom mikrofona.
         LokalniPrehodUpravljalnik.gemini?.naTezavoSlisnosti = {
-            UtisanMikrofon.odutisaj()
-            context.getSharedPreferences("lina_zvok", Context.MODE_PRIVATE).edit().putBoolean("utisaj_mikrofon", false).apply()
-            Log.w("LokalniKrmilnik", "klicatelj ne slisi Line: mikrofon vklopljen, utisaj_mikrofon=false")
+            Log.w("LokalniKrmilnik", "klicatelj javlja, da Line ne slisi (mikrofon ostane utisan)")
         }
         val answerCmd = GatewayCommand(
             commandId = "loc_ans_$callId",

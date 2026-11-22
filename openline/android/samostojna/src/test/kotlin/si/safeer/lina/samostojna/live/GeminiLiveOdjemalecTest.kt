@@ -480,7 +480,7 @@ class GeminiLiveOdjemalecTest {
     }
 
     @Test
-    fun `varovalo - orodje klicatelj_ne_slisi vklopi mikrofon nazaj, odgovor orodja je poslan`() {
+    fun `orodje klicatelj_ne_slisi sprozi zapis tezave (mikrofon se ne vklaplja), odgovor orodja je poslan`() {
         val f = LaznaFabrika()
         val odj = odjemalecZ(f)
         val klicano = java.util.concurrent.atomic.AtomicInteger(0)
