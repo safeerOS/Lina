@@ -70,6 +70,8 @@ class GeminiLiveOdjemalec(
      */
     var naTezavoSlisnosti: (() -> Unit)? = null
     private val koncajCaka = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** Model je poklical koncaj_klic: po tem Lina ne govori vec (zvok se zavrze), klic se prekine po predvajanju slovesa. */
+    @Volatile private var slovoKonec = false
 
     private fun sprozikKonec(cakaj: Long) {
         Thread({
@@ -391,9 +393,12 @@ class GeminiLiveOdjemalec(
                 val f = k.jsonObject
                 val ime = f["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                 val id = f["id"]?.jsonPrimitive?.contentOrNull
-                if (ime == ORODJE_KONEC && koncajCaka.compareAndSet(false, true)) {
-                    // Slovo se izgovori do konca: klic se prekine po naslednjem koncu obrata, najpozneje po varnostnem roku.
-                    sprozikKonec(KONEC_VARNOSTNI_ROK_MS)
+                if (ime == ORODJE_KONEC) {
+                    // Lastnik 22. 11. 2026: po slovesu Lina ne reče nič več, klic se prekine. Modelu NE odgovorimo (sicer bi govoril naprej),
+                    // zvok, ki bi prišel po slovesu, se zavrže, klic pa se prekine, ko je slovo predvajano.
+                    slovoKonec = true
+                    if (koncajCaka.compareAndSet(false, true)) sprozikKonec(KONEC_VARNOSTNI_ROK_MS)
+                    return@mapNotNull null
                 }
                 if (ime == ORODJE_SLISNOST) {
                     casovniZapis("klicatelj javlja, da Line ne slisi (mikrofon ostane utisan)")
@@ -459,7 +464,7 @@ class GeminiLiveOdjemalec(
             nepopolnOkvir = ByteArray(0)
             naPrekinitev?.invoke()
         }
-        val dataStrs = izlusciBase64Audio(msg)
+        val dataStrs = if (slovoKonec) emptyList() else izlusciBase64Audio(msg)
         for (dataStr in dataStrs) {
             val decoded = Base64.getDecoder().decode(dataStr)
             val skupaj = nepopolnOkvir + prevzorcevalnik.obdelaj(decoded).let { if (obdelavaZvoka) IzhodniLimiter.obdelaj(it) else it }
@@ -594,6 +599,8 @@ class GeminiLiveOdjemalec(
         }
         // Klic, ki je ostal odprt (brez konecKlica), se zapise, preden se zacne nov.
         zakljuciKlic()
+        slovoKonec = false
+        koncajCaka.set(false)
         seja = SejaKlica(System.currentTimeMillis(), stevilkaNaslednjegaKlica)
         filterKlicatelja = FiltrKlicatelja()
         synchronized(izhodMutex) {

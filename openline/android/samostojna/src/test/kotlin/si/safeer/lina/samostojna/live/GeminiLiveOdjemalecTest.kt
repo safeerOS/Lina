@@ -434,17 +434,22 @@ class GeminiLiveOdjemalecTest {
         val odj = odjemalecZ(f)
         val konci = java.util.concurrent.atomic.AtomicInteger(0)
         odj.naKonecPogovora = { konci.incrementAndGet() }
+        val prejetoPoSlovesu = java.util.Collections.synchronizedList(mutableListOf<ByteArray>())
         odj.pripraviKlic()
         Thread.sleep(300)
         f.poslusalec!!.onText("""{"setupComplete":{}}""")
-        odj.nastaviIzhod { }
+        odj.nastaviIzhod { prejetoPoSlovesu.add(it) }
         // Brez orodja turnComplete klica ne prekine.
         f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
         Thread.sleep(2000)
         assertEquals(0, konci.get())
-        // Orodje + konec obrata: klic se prekine enkrat, odgovor orodja je poslan modelu.
+        // Orodje + konec obrata: klic se prekine enkrat. Modelu se NE odgovori (sicer bi po slovesu govoril naprej, lastnik 22. 11. 2026),
+        // zvok, ki pride po slovesu, se zavrze.
         f.poslusalec!!.onText("""{"toolCall":{"functionCalls":[{"id":"k1","name":"koncaj_klic","args":{}}]}}""")
-        assertTrue(f.poslano.any { it.contains("toolResponse") && it.contains("koncaj_klic") })
+        assertTrue(f.poslano.none { it.contains("toolResponse") && it.contains("koncaj_klic") })
+        val b64s = java.util.Base64.getEncoder().encodeToString(ByteArray(1920))
+        f.poslusalec!!.onText("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64s"}}]}}}""")
+        assertEquals(0, prejetoPoSlovesu.size, "po koncaj_klic Lina ne govori vec")
         f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
         Thread.sleep(2500)
         assertEquals(1, konci.get())
