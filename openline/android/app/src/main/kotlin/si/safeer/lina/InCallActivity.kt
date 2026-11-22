@@ -259,10 +259,7 @@ class InCallActivity : Activity(), CallRegistry.Listener {
     /** Uporabnik vzame Linin klic nazaj: oznaka, ustavitev zajema, izhod iz ozadja. */
     private fun takeBack() {
         val entry = displayed() ?: return
-        LinaCallGate.markManual(entry.callId)
-        si.safeer.lina.telecom.UtisanMikrofon.odutisaj()
-        CallAudioBridge.onCallEnded(entry.callId)
-        GatewayRuntime.notifyCallEnded(entry.callId)
+        si.safeer.lina.telecom.PrevzemKlica.ustavi(entry.callId)
         val returned = CallBackgroundAudio.exit(entry.call)
         // API 29 izhoda nima: klic je ACTIVE in slisen, opozorilo »tih« bi bilo napacno (N11-5).
         val audible = CallRegistry.androidState(entry.call) == Call.STATE_ACTIVE

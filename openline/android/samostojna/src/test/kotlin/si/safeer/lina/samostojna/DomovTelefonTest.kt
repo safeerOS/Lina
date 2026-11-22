@@ -37,4 +37,15 @@ class DomovTelefonTest {
         assertEquals(DelDneva.VECER, delDneva(4)); assertEquals(DelDneva.JUTRO, delDneva(5)); assertEquals(DelDneva.JUTRO, delDneva(9))
         assertEquals(DelDneva.DAN, delDneva(10)); assertEquals(DelDneva.DAN, delDneva(17)); assertEquals(DelDneva.VECER, delDneva(18))
     }
+
+    @Test
+    fun `sistemski zapisi niso klici in se ne stejejo ne kazejo`() {
+        val z = listOf(
+            klic("a", cas(22, 8, 5)),
+            klic("sys-1", cas(22, 9, 0)).copy(stevilka = "Sistem"),
+            klic("sys-2", cas(22, 9, 5)),
+        )
+        assertEquals(1, steviloDanes(z, cas(22, 12, 0), cona))
+        assertEquals(listOf("a"), obvestilaDanes(z, cas(22, 12, 0), cona).map { it.id })
+    }
 }

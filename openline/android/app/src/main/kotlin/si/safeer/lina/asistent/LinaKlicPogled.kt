@@ -63,7 +63,8 @@ class LinaKlicPogled(
         for (s in skupine.take(30)) {
             val zadnji = s.klici.first()
             val ime = s.ime.ifBlank { a.getString(R.string.lina_calls_unknown) }
-            val sporocilo = zadnji.sporocilo.ifBlank { zadnji.brezSporocilaRazlog }
+            // Brez sporocila: razlog + klicateljeve besede dobesedno (22. 11. 2026: razlog je obljubljal »spodaj je dobesedno«, pod njim pa ni bilo nic).
+            val sporocilo = zadnji.sporocilo.ifBlank { dobesednoZRazlogom(zadnji) }
             val stevec = if (s.klici.size > 1) a.getString(R.string.lina_calls_count_fmt, s.klici.size) + " · " else ""
             pogled.addView(TextView(a).apply {
                 setTextAppearance(R.style.Gw_Body)
@@ -82,6 +83,12 @@ class LinaKlicPogled(
         }
     }
 
+    private fun dobesednoZRazlogom(z: si.safeer.lina.samostojna.ZapisKlica): String {
+        val dobesedno = z.sporociloDobesedno.replace(Regex("\\s+"), " ").trim()
+        return if (z.brezSporocilaRazlog.isBlank() || dobesedno.isBlank()) z.brezSporocilaRazlog
+        else z.brezSporocilaRazlog + "\n»" + dobesedno + "«"
+    }
+
     /** Odpre skupino klicatelja (iz obvestila po klicu). */
     fun odpriKlicatelja(idKlica: String) {
         if (skupine.isEmpty()) osvezi()
@@ -93,7 +100,7 @@ class LinaKlicPogled(
         val besedilo = if (s.klici.size == 1) besediloDatotekeKlica(s.klici.first()) else buildString {
             for (z in s.klici.take(20)) {
                 appendLine(oblika.oblikaCasa(z.casZacetka) + (if (z.nujno) " · " + a.getString(R.string.lina_calls_urgent) else ""))
-                appendLine(z.sporocilo.ifBlank { z.povzetek }.ifBlank { z.brezSporocilaRazlog }.trim())
+                appendLine(z.sporocilo.ifBlank { z.povzetek }.ifBlank { dobesednoZRazlogom(z) }.trim())
                 appendLine()
             }
         }.trim()
@@ -120,7 +127,7 @@ class LinaKlicPogled(
      * Mapa klicev v aplikaciji Datoteke: izbrana mapa (drevo SAF) ali privzeta Dokumenti/Lina/Klici. ACTION_VIEW z vrsto mape
      * odpre sistemsko aplikacijo Datoteke (preverjeno na WP28 S 22. 11. 2026); ce je ni, pove pot.
      */
-    private fun odpriMapo() {
+    fun odpriMapo() {
         val izbrana = ZapiskiIzvoz(a).mapa()
         val uri: Uri = izbrana?.let { DocumentsContract.buildDocumentUriUsingTree(it, DocumentsContract.getTreeDocumentId(it)) }
             ?: DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + KlicIzvoz.PRIVZETA_MAPA.trimEnd('/'))

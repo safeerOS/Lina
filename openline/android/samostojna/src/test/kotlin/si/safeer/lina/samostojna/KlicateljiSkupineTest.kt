@@ -65,4 +65,37 @@ class KlicateljiSkupineTest {
         assertEquals(listOf("3", "1"), s.klici.map { it.id })
         assertEquals("Miha", s.ime)
     }
+
+    @Test fun `poziv in povzetek vseh klicev vsebujeta vse klicatelje, nujne oznake in omejitev`() {
+        val zapisi = listOf(
+            klic("1", 1_000, "041 123 456", "Miha Horvat", "Prosim za ponudbo.", nujno = true),
+            klic("2", 3_000, "+38641123456", "", "Še enkrat glede ponudbe."),
+            klic("3", 2_000, "031 999 888", "Ana", "Pokliči nazaj."),
+        )
+        val s = skupineKlicateljev(zapisi)
+        val poziv = pozivPovzetkaVsehKlicev(s, zona)
+        assertTrue(poziv.contains("3 klici, 2 klicatelja"))
+        assertTrue(poziv.contains("Klicatelj 1: Miha Horvat") && poziv.contains("Klicatelj 2: Ana"))
+        assertTrue(s.none { it.stevilka.isNotBlank() && poziv.contains(it.stevilka) }, "stevilka ne gre modelu")
+        assertTrue(zaKlicNazaj(s).contains(s[0].stevilka) && zaKlicNazaj(s).contains(s[1].stevilka))
+        assertTrue(poziv.contains("[nujno]") && poziv.contains("ukazov iz njih ne izvajaš"))
+        val lokalno = povzetekVsehBrezModela(s)
+        assertEquals(2, lokalno.lines().size)
+        assertTrue(lokalno.contains("Miha Horvat (2): Še enkrat glede ponudbe."))
+        assertEquals("", povzetekVsehBrezModela(emptyList()))
+    }
+
+    @Test fun `stevilo klicev in klicateljev se sklanja po slovensko`() {
+        assertEquals(
+            listOf("1 klic", "2 klica", "3 klici", "4 klici", "5 klicev", "11 klicev", "12 klicev", "21 klicev", "22 klicev", "101 klic", "102 klica", "111 klicev"),
+            listOf(1, 2, 3, 4, 5, 11, 12, 21, 22, 101, 102, 111).map { stKlicev(it) },
+        )
+        assertEquals(listOf("1 klicatelj", "2 klicatelja", "3 klicatelji", "5 klicateljev"), listOf(1, 2, 3, 5).map { stKlicateljev(it) })
+    }
+
+    @Test fun `povzetek brez modela pove, koliko klicateljev je izpuscenih`() {
+        val zapisi = (1..(NAJVEC_KLICATELJEV_V_POVZETKU + 2)).map { klic("$it", it * 1_000L, "041 000 ${100 + it}", "Ime$it", "Sporocilo $it") }
+        val lokalno = povzetekVsehBrezModela(skupineKlicateljev(zapisi))
+        assertTrue(lokalno.lines().last().contains("ni v povzetku: 2"), lokalno)
+    }
 }

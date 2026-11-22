@@ -251,7 +251,7 @@
     <string name="local_you">You</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Note saved: %1$s</string>
-    <string name="local_task_sent">Task sent to your computer: %1$s\nProgress and approvals are in the Computer tab.</string>
+    <string name="local_task_sent">Sending the task to your computer: %1$s\nIt is only delivered once the computer accepts it; the result or an error is in the Computer tab.</string>
     <string name="local_task_busy">A task is already running on your computer. Wait for it to finish.</string>
     <string name="local_notes_title">Notes</string>
     <string name="local_note_delete">Delete</string>
@@ -371,6 +371,14 @@
     <string name="chat_chip_calls">Summarise recent calls</string>
     <string name="chat_chip_remind">Remind me …</string>
     <string name="home_calls_none">No calls yet today.</string>
+    <string name="home_tile_summary">Answered</string>
+    <string name="summary_title">Answered calls</string>
+    <string name="summary_all">Summarise all with Lina</string>
+    <string name="summary_all_prompt">Summarise all calls</string>
+    <string name="summary_empty">No answered calls yet.</string>
+    <string name="summary_delete_q">Delete the record of this call?</string>
+    <string name="summary_read_error">Could not read the call log.</string>
+    <string name="summary_delete_failed">Could not delete the record.</string>
     <string name="home_status_setup">Open Setup</string>
     <string name="app_name_short" translatable="false">Lina</string>
     <string name="set_menu_name">Name and greeting</string>
@@ -390,7 +398,7 @@
     <string name="set_menu_computer">Computer</string>
     <string name="set_menu_computer_desc">Connection to Lina on your computer</string>
     <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
-    <string name="lina_calls_open_folder">Open folder</string>
+    <string name="lina_calls_open_folder">Folder of answered calls</string>
     <string name="lina_calls_count_fmt">Calls: %1$d</string>
     <string name="lina_calls_urgent">urgent</string>
     <string name="lina_calls_summary">Summary of all messages</string>
@@ -415,4 +423,6 @@
     <string name="local_reminder_set">Reminder set: %1$s, %2$s</string>
     <string name="local_reminder_bad">Reminder not set (time is missing, invalid or already past): %1$s</string>
     <string name="local_reminder_approx">Allow exact alarms for Lina in the phone settings so reminders fire on the minute.</string>
+    <string name="headset_key_label">Headset button takeover</string>
+    <string name="headset_key_desc">Lets the headset button take over a call that Lina is answering: Lina stops and your phone microphone turns on. Only headset buttons are read; no screen content is accessed.</string>
 </resources>

@@ -158,4 +158,28 @@ class AsistentTest {
         assertTrue(!(odgovor as Odgovor.Besedilo).besedilo.contains("[["), "vrstice orodja uporabnik ne vidi")
         assertTrue(prenos.zadnjiPostTelo.contains("Racunalnik ni povezan"))
     }
+
+    @Test
+    fun `povej - model zahteva koledar, izvede se KoledarIzvajalec in rezultat gre modelu kot podatek`() {
+        val zona = java.time.ZoneId.of("Europe/Ljubljana")
+        val vir = object : KoledarOrodje {
+            override fun dogodki(odMs: Long, doMs: Long) = listOf(
+                DogodekKoledarja("Zobozdravnik", java.time.ZonedDateTime.of(2026, 12, 1, 9, 0, 0, 0, zona).toInstant().toEpochMilli(),
+                    java.time.ZonedDateTime.of(2026, 12, 1, 10, 0, 0, 0, zona).toInstant().toEpochMilli(), false),
+            )
+        }
+        val videnaSporocila = mutableListOf<List<Sporocilo>>()
+        var krog = 0
+        val model = object : PonudnikOdjemalec {
+            override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
+                videnaSporocila += zgodovina.toList()
+                return if (krog++ == 0) Rezultat.Besedilo("[[koledar: 2026-12-01]]") else Rezultat.Besedilo("Ob 9.00 imate zobozdravnika.")
+            }
+        }
+        val a = Asistent(model, "S", koledar = KoledarIzvajalec(vir) { java.time.ZonedDateTime.of(2026, 11, 22, 12, 0, 0, 0, zona) })
+        val odgovor = a.povej("Kaj imam 1. decembra?")
+        assertEquals("Ob 9.00 imate zobozdravnika.", (odgovor as Odgovor.Besedilo).besedilo)
+        val povratno = videnaSporocila.last().last().besedilo
+        assertTrue(povratno.contains("Zobozdravnik") && povratno.contains("<<<") && povratno.contains("koledarja"), povratno)
+    }
 }

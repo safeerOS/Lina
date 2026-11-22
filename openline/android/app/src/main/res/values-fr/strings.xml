@@ -251,7 +251,7 @@
     <string name="local_you">Vous</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Note enregistrée : %1$s</string>
-    <string name="local_task_sent">Tâche envoyée à l\'ordinateur : %1$s\nSuivi et validations dans l\'onglet Ordinateur.</string>
+    <string name="local_task_sent">Envoi de la tâche à l\'ordinateur : %1$s\nElle n\'est livrée que lorsque l\'ordinateur l\'accepte ; résultat ou erreur dans l\'onglet Ordinateur.</string>
     <string name="local_task_busy">Une tâche est déjà en cours sur l\'ordinateur. Attendez qu\'elle se termine.</string>
     <string name="local_notes_title">Notes</string>
     <string name="local_note_delete">Supprimer</string>
@@ -371,6 +371,14 @@
     <string name="chat_chip_calls">Résume les derniers appels</string>
     <string name="chat_chip_remind">Rappelle-moi …</string>
     <string name="home_calls_none">Aucun appel aujourd\'hui.</string>
+    <string name="home_tile_summary">Reçus</string>
+    <string name="summary_title">Appels reçus</string>
+    <string name="summary_all">Tout résumer avec Lina</string>
+    <string name="summary_all_prompt">Résume tous les appels</string>
+    <string name="summary_empty">Aucun appel reçu pour le moment.</string>
+    <string name="summary_delete_q">Supprimer l\'enregistrement de cet appel ?</string>
+    <string name="summary_read_error">Impossible de lire le journal des appels.</string>
+    <string name="summary_delete_failed">Impossible de supprimer l\'enregistrement.</string>
     <string name="home_status_setup">Ouvrir la configuration</string>
     <string name="set_menu_name">Nom et salutation</string>
     <string name="set_menu_name_desc">Comment Lina vous nomme et vous présente</string>
@@ -389,7 +397,7 @@
     <string name="set_menu_computer">Ordinateur</string>
     <string name="set_menu_computer_desc">Connexion à Lina sur l\'ordinateur</string>
     <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
-    <string name="lina_calls_open_folder">Ouvrir le dossier</string>
+    <string name="lina_calls_open_folder">Dossier des appels pris</string>
     <string name="lina_calls_count_fmt">Appels : %1$d</string>
     <string name="lina_calls_urgent">urgent</string>
     <string name="lina_calls_summary">Résumé de tous les messages</string>
@@ -414,4 +422,6 @@
     <string name="local_reminder_set">Rappel défini : %1$s, %2$s</string>
     <string name="local_reminder_bad">Rappel non défini (heure manquante, invalide ou déjà passée) : %1$s</string>
     <string name="local_reminder_approx">Autorisez les alarmes exactes pour Lina dans les réglages du téléphone pour que les rappels sonnent à la minute.</string>
+    <string name="headset_key_label">Reprise d\'appel par le bouton du casque</string>
+    <string name="headset_key_desc">Le bouton du casque reprend un appel que Lina est en train de prendre : Lina se tait et le micro du téléphone s\'active. Seuls les boutons du casque sont lus, jamais le contenu de l\'écran.</string>
 </resources>

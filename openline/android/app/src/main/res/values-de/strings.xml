@@ -251,7 +251,7 @@
     <string name="local_you">Sie</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Notiz gespeichert: %1$s</string>
-    <string name="local_task_sent">Aufgabe an den Computer gesendet: %1$s\nVerlauf und Freigaben im Tab Computer.</string>
+    <string name="local_task_sent">Aufgabe wird an den Computer gesendet: %1$s\nSie gilt erst als zugestellt, wenn der Computer sie annimmt; Ergebnis oder Fehler im Tab Computer.</string>
     <string name="local_task_busy">Auf dem Computer läuft bereits eine Aufgabe. Warte, bis sie fertig ist.</string>
     <string name="local_notes_title">Notizen</string>
     <string name="local_note_delete">Löschen</string>
@@ -371,6 +371,14 @@
     <string name="chat_chip_calls">Letzte Anrufe zusammenfassen</string>
     <string name="chat_chip_remind">Erinnere mich …</string>
     <string name="home_calls_none">Heute noch keine Anrufe.</string>
+    <string name="home_tile_summary">Angenommen</string>
+    <string name="summary_title">Angenommene Anrufe</string>
+    <string name="summary_all">Alle mit Lina zusammenfassen</string>
+    <string name="summary_all_prompt">Fasse alle Anrufe zusammen</string>
+    <string name="summary_empty">Noch keine angenommenen Anrufe.</string>
+    <string name="summary_delete_q">Aufzeichnung dieses Anrufs löschen?</string>
+    <string name="summary_read_error">Anrufprotokoll konnte nicht gelesen werden.</string>
+    <string name="summary_delete_failed">Aufzeichnung konnte nicht gelöscht werden.</string>
     <string name="home_status_setup">Einrichtung öffnen</string>
     <string name="set_menu_name">Name und Begrüßung</string>
     <string name="set_menu_name_desc">Wie Lina Sie anspricht und vorstellt</string>
@@ -389,7 +397,7 @@
     <string name="set_menu_computer">Computer</string>
     <string name="set_menu_computer_desc">Verbindung zu Lina auf dem Computer</string>
     <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
-    <string name="lina_calls_open_folder">Ordner öffnen</string>
+    <string name="lina_calls_open_folder">Ordner angenommener Anrufe</string>
     <string name="lina_calls_count_fmt">Anrufe: %1$d</string>
     <string name="lina_calls_urgent">dringend</string>
     <string name="lina_calls_summary">Zusammenfassung aller Nachrichten</string>
@@ -414,4 +422,6 @@
     <string name="local_reminder_set">Erinnerung gesetzt: %1$s, %2$s</string>
     <string name="local_reminder_bad">Erinnerung nicht gesetzt (Zeit fehlt, ist ungültig oder liegt in der Vergangenheit): %1$s</string>
     <string name="local_reminder_approx">Erlaube Lina in den Telefoneinstellungen genaue Alarme, damit Erinnerungen minutengenau auslösen.</string>
+    <string name="headset_key_label">Übernahme per Headset-Taste</string>
+    <string name="headset_key_desc">Mit der Headset-Taste übernimmst du einen Anruf, den Lina annimmt: Lina verstummt, das Mikrofon des Telefons wird aktiviert. Es werden nur Headset-Tasten gelesen, kein Bildschirminhalt.</string>
 </resources>

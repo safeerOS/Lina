@@ -251,7 +251,7 @@
     <string name="local_you">Vi</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Zapisano: %1$s</string>
-    <string name="local_task_sent">Naloga poslana računalniku: %1$s\nPotek in odobritve so v zavihku Računalnik.</string>
+    <string name="local_task_sent">Pošiljam nalogo računalniku: %1$s\nDostavljena je šele, ko jo računalnik sprejme; izid ali napaka je v zavihku Računalnik.</string>
     <string name="local_task_busy">Na računalniku že teče naloga. Počakaj, da se konča.</string>
     <string name="local_notes_title">Zapiski</string>
     <string name="local_note_delete">Izbriši</string>
@@ -371,6 +371,14 @@
     <string name="chat_chip_calls">Povzemi zadnje klice</string>
     <string name="chat_chip_remind">Opomni me …</string>
     <string name="home_calls_none">Danes še ni klicev.</string>
+    <string name="home_tile_summary">Sprejeti</string>
+    <string name="summary_title">Sprejeti klici</string>
+    <string name="summary_all">Povzemi vse z Lino</string>
+    <string name="summary_all_prompt">Povzemi vse klice</string>
+    <string name="summary_empty">Še ni sprejetih klicev.</string>
+    <string name="summary_delete_q">Izbrišem zapis tega klica?</string>
+    <string name="summary_read_error">Dnevnika klicev ni bilo mogoče prebrati.</string>
+    <string name="summary_delete_failed">Zapisa ni bilo mogoče izbrisati.</string>
     <string name="home_status_setup">Odprite Pripravo</string>
     <string name="set_menu_name">Ime in pozdrav</string>
     <string name="set_menu_name_desc">Kako vas Lina pokliče in predstavi</string>
@@ -389,7 +397,7 @@
     <string name="set_menu_computer">Računalnik</string>
     <string name="set_menu_computer_desc">Povezava z Lino na računalniku</string>
     <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
-    <string name="lina_calls_open_folder">Odpri mapo</string>
+    <string name="lina_calls_open_folder">Mapa s prevzetimi klici</string>
     <string name="lina_calls_count_fmt">Klicev: %1$d</string>
     <string name="lina_calls_urgent">nujno</string>
     <string name="lina_calls_summary">Povzetek vseh sporočil</string>
@@ -414,4 +422,6 @@
     <string name="local_reminder_set">Opomnik nastavljen: %1$s, %2$s</string>
     <string name="local_reminder_bad">Opomnik ni nastavljen (čas manjka, je neveljaven ali že mimo): %1$s</string>
     <string name="local_reminder_approx">Za opomnike na minuto dovolite Lini natančne alarme v nastavitvah telefona.</string>
+    <string name="headset_key_label">Prevzem klica s tipko slušalk</string>
+    <string name="headset_key_desc">Tipka na slušalkah prevzame klic, ki ga sprejema Lina: Lina utihne, mikrofon telefona se vklopi. Bere se samo tipka slušalk, vsebina zaslona ni dostopna.</string>
 </resources>

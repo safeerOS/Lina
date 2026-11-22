@@ -76,7 +76,9 @@ data class ZapisKlica(
     val sporocilo: String = "",
     val sporociloDobesedno: String = "",
     /** Zakaj sporocila ni (klicatelj je prekinil, zvok ni deloval ...); prazno, kadar sporocilo obstaja. */
-    val brezSporocilaRazlog: String = ""
+    val brezSporocilaRazlog: String = "",
+    /** Dobesedno, kar je rekla Lina (prepis njenega govora; glasu klicatelja se ne snema). Zadnje polje (pozicijski klici); ZapisKlicaSinhronizacija ga ne nosi, torej ne gre na racunalnik. */
+    val linaDobesedno: String = ""
 ) {
     constructor(
         id: String,

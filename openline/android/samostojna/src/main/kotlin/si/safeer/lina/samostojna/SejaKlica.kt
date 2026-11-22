@@ -32,6 +32,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
     /** Konec obrata (model je koncal): naslednji govor klicatelja gre v nov odstavek. */
     @Synchronized fun konecObrata() {
         if (vhod.isNotEmpty() && vhod.last() != '\n') vhod.append('\n')
+        if (izhod.isNotEmpty() && izhod.last() != '\n') izhod.append('\n')
     }
 
     /** Orodje shrani_sporocilo; poznejsi klic dopolni prejsnjega (prazno polje ne izbrise ze zapisanega). */
@@ -48,6 +49,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
     fun zakljuci(konec: Long): ZapisKlica {
         val klicatelj = listOf(ime, priimek).filter { it.isNotEmpty() }.joinToString(" ")
         val dobesedno = vhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MEJA_DOBESEDNO)
+        val linaDobesedno = izhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MEJA_DOBESEDNO)
         val razlog = when {
             sporocilo.isNotEmpty() -> ""
             !zvokSlisan -> "Zvoka klicatelja ni bilo mogoče zapisati (prepis je prazen): klicatelj ni nič povedal ali zvok klica ni deloval."
@@ -67,6 +69,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
             podjetje = podjetje,
             sporocilo = sporocilo,
             sporociloDobesedno = dobesedno,
+            linaDobesedno = linaDobesedno,
             brezSporocilaRazlog = razlog,
         )
     }
@@ -126,6 +129,15 @@ fun besediloDatotekeKlica(zapis: ZapisKlica, zona: ZoneId = ZoneId.systemDefault
             appendLine()
             appendLine("Dobesedno, kar je povedal klicatelj:")
             appendLine(zapis.sporociloDobesedno)
+        }
+        if (zapis.linaDobesedno.isNotBlank()) {
+            appendLine()
+            appendLine("Dobesedno, kar je rekla Lina:")
+            appendLine(zapis.linaDobesedno)
+            val moske = moskeOblikeLine(zapis.linaDobesedno)
+            if (moske.isNotEmpty()) appendLine("Opozorilo: Lina je o sebi uporabila moško obliko (${moske.joinToString(", ")}).")
+            val ponovitve = stevilePonovitev(zapis.linaDobesedno)
+            if (ponovitve > 0) appendLine("Opozorilo: Lina je ponovila skoraj enak stavek ($ponovitve-krat).")
         }
     }
 }

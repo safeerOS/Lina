@@ -15,6 +15,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import si.safeer.lina.samostojna.Asistent
+import si.safeer.lina.samostojna.KoledarIzvajalec
 import si.safeer.lina.samostojna.GoogleZetonOsvezevalnik
 import si.safeer.lina.samostojna.PrijavaGoogle
 import si.safeer.lina.samostojna.ProjektGoogle
@@ -169,6 +170,8 @@ class LinaPogovorPogled(
      * (besedilo uporabnika ostane), samodejni pomik na dno samo, ce je uporabnik ze na dnu ali je pravkar poslal sporocilo.
      */
     private var napakaZaPonovitev: Triple<String, String, List<si.safeer.lina.samostojna.Priponka>>? = null
+    /** Dodatek (npr. blok »Za klic nazaj«) neuspele prosnje: ob ponovitvi se pripne enako kot prvic. */
+    private var dodatekZaPonovitev: String = ""
     private var prisilnoNaDno = true
 
     private fun jeNaDnu(): Boolean {
@@ -200,7 +203,7 @@ class LinaPogovorPogled(
         napakaZaPonovitev = null
         // Odstrani neuspelo prosnjo in napako; poslje se znova enako (tudi priponke).
         repeat(2) { odstraniZadnjo() }
-        posljiBesedilo(prikaz, vnos, binarne)
+        posljiBesedilo(prikaz, vnos, binarne, dodatek = dodatekZaPonovitev)
     }
 
     private fun narisiSporocila() {
@@ -326,8 +329,18 @@ class LinaPogovorPogled(
         if (obstojeci != null && asistentDan == danes) return obstojeci
         val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
         val orodja = nastavitveKljuci.orodja()
-        val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo)
-        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan).also { asistent = it; asistentDan = danes }
+        val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo, koledar = true)
+        vprasajZaKoledar()
+        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan, koledar = KoledarIzvajalec(KoledarAndroid(a))).also { asistent = it; asistentDan = danes }
+    }
+
+    /** Enkrat (ob prvem pogovoru) vpraša za dovoljenje branja koledarja; zavrnitev se ne ponavlja (orodje takrat pove, da dovoljenja ni). */
+    private fun vprasajZaKoledar() {
+        val prefs = a.getSharedPreferences("lina_koledar", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("vprasano", false)) return
+        if (a.checkSelfPermission(android.Manifest.permission.READ_CALENDAR) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        prefs.edit().putBoolean("vprasano", true).apply()
+        a.requestPermissions(arrayOf(android.Manifest.permission.READ_CALENDAR), 1010)
     }
 
     /** Ali ima Lina mozgane (kljuc ali prijava Google s projektom); uporablja povzetek klicatelja v zavihku Klici. */
@@ -337,9 +350,9 @@ class LinaPogovorPogled(
      * Povzetek klicatelja iz zavihka Klici (22. 11. 2026): v klepetu se pokaze kratka prosnja, model dobi celoten poziv s
      * sporocili. Vrne false, ce Lina se caka na prejsnji odgovor.
      */
-    fun posljiPoziv(prikaz: String, poziv: String): Boolean {
+    fun posljiPoziv(prikaz: String, poziv: String, dodatek: String = ""): Boolean {
         if (caka) return false
-        posljiBesedilo(prikaz, poziv)
+        posljiBesedilo(prikaz, poziv, dodatek = dodatek)
         return true
     }
 
@@ -452,7 +465,7 @@ class LinaPogovorPogled(
         android.widget.Toast.makeText(a, besedilo, android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private fun posljiBesedilo(prikaz: String, vnos: String, binarne: List<si.safeer.lina.samostojna.Priponka> = emptyList()) {
+    private fun posljiBesedilo(prikaz: String, vnos: String, binarne: List<si.safeer.lina.samostojna.Priponka> = emptyList(), dodatek: String = "") {
         caka = true
         napakaZaPonovitev = null
         prisilnoNaDno = true
@@ -468,7 +481,7 @@ class LinaPogovorPogled(
                 if (mojRod != rod) { odstraniZadnjo(); caka = false; osvezi(); return@post }
                 odstraniZadnjo()
                 val besedilo = when (odgovor) {
-                    is Odgovor.Besedilo -> odgovor.besedilo
+                    is Odgovor.Besedilo -> if (dodatek.isBlank()) odgovor.besedilo else odgovor.besedilo.trimEnd() + "\n\n" + dodatek
                     is Odgovor.Zapisek -> {
                         shraniZapiske(dodajZapisek(zapiski.beri(), odgovor.besedilo, System.currentTimeMillis(), UUID.randomUUID().toString()))
                         a.getString(R.string.local_note_saved, odgovor.besedilo)
@@ -495,7 +508,7 @@ class LinaPogovorPogled(
                     }
                 }
                 sporocila += true to besedilo
-                if (odgovor is Odgovor.Napaka) napakaZaPonovitev = Triple(prikaz, vnos, binarne)
+                if (odgovor is Odgovor.Napaka) { napakaZaPonovitev = Triple(prikaz, vnos, binarne); dodatekZaPonovitev = dodatek }
                 if (odgovor !is Odgovor.Napaka) runCatching {
                     val trajen = PogovorSkupni.dobi(a)
                     trajen.dodaj("lastnik", prikaz)

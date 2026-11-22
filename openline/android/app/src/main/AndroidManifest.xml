@@ -20,6 +20,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <!-- Lastnik 18. 11. 2026: klicalnik Line mora iskati po imeniku (dovoljenje potrdi uporabnik sam). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -102,6 +103,19 @@
                 android:name="android.telecom.IN_CALL_SERVICE_UI"
                 android:value="true" />
         </service>
+        <service
+            android:name=".telecom.TipkaSlusalkStoritev"
+            android:exported="true"
+            android:label="@string/headset_key_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/tipka_slusalk_storitev" />
+        </service>
+
         <service
             android:name=".shell.PairingService"
             android:exported="false"

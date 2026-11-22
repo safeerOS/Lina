@@ -46,6 +46,8 @@ class GatewayInCallService : InCallService() {
     }
 
     private val callbacks = mutableMapOf<Call, Call.Callback>()
+    private var zadnjaPot = -1
+    @Volatile private var linaPrevzelaOb = 0L
     private val ringStartedAt = mutableMapOf<String, Long>()
     private val handler = Handler(Looper.getMainLooper())
     private val timers = mutableMapOf<String, Runnable>()
@@ -131,6 +133,7 @@ class GatewayInCallService : InCallService() {
         // Po uspesnem answer je klic ze lahko ACTIVE. Zvok se sprozi sele, ko je owned.
         LinaCallGate.setOwnedListener { callId ->
             // Glavna nit: najprej zavrni klice, ki ze zvonijo (N13-2), sele nato oceni linijo.
+            linaPrevzelaOb = SystemClock.elapsedRealtime()
             handler.post {
                 rejectRingingOthers(callId)
                 CallRegistry.get(callId)?.let { syncCallAudio(callId, it) }
@@ -399,7 +402,8 @@ class GatewayInCallService : InCallService() {
     }
 
     private fun startOwnedAudio(callId: String, call: Call) {
-        if (!LinaCallGate.isOwned(callId)) return
+        // Po prevzemu (gumb, slusalke) Lina ne sme znova zagnati zvoka: ne takoj ne v zakasnjenem klicu spodaj (CodeRabbit 22. 11. 2026).
+        if (!LinaCallGate.isOwned(callId) || LinaCallGate.isManual(callId)) return
         when (CallRegistry.androidState(call)) {
             Call.STATE_ACTIVE -> {
                 val routed = runCatching { enterBackgroundAudioProcessing(call) }
@@ -417,7 +421,7 @@ class GatewayInCallService : InCallService() {
                         Log.i(TAG, "zvok $callId: telefon ne da AUDIO_PROCESSING, zvok se zacne takoj v ACTIVE")
                         CallAudioBridge.onCallActive(callId)
                     } else handler.postDelayed({
-                        if (LinaCallGate.isOwned(callId) && CallRegistry.androidState(call) == Call.STATE_ACTIVE) {
+                        if (LinaCallGate.isOwned(callId) && !LinaCallGate.isManual(callId) && CallRegistry.androidState(call) == Call.STATE_ACTIVE) {
                             Log.w(TAG, "zvok $callId: AUDIO_PROCESSING ni prisel v 1500 ms, zvok se zacne v ACTIVE")
                             zvokPrefs.edit().putBoolean("brez_audio_processing", true).apply()
                             CallAudioBridge.onCallActive(callId)
@@ -465,6 +469,24 @@ class GatewayInCallService : InCallService() {
         val wiredOrBt = (mask and (CallAudioState.ROUTE_BLUETOOTH or CallAudioState.ROUTE_WIRED_HEADSET)) != 0
         val car = (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_CAR
         RouteGuard.externalPickup = wiredOrBt || car
+        // Lastnik 22. 11. 2026: prevzem prek slušalk. Če uporabnik med Linino tajnico preklopi zvok na slušalke ali Bluetooth,
+        // je to prevzem klica (Lina utihne, mikrofon se vklopi). Prvi dogodek in dogodki prvih 3 s po prevzemu klica Line se ne štejejo.
+        val pot = audioState.route
+        val prejsnja = zadnjaPot
+        zadnjaPot = pot
+        val naSlusalke = pot == CallAudioState.ROUTE_BLUETOOTH || pot == CallAudioState.ROUTE_WIRED_HEADSET
+        if (prejsnja != -1 && pot != prejsnja && naSlusalke) {
+            val vsi = CallRegistry.snapshot()
+            // Zvok ima klic v stanju ACTIVE: prevzem je samo, ce je ta klic Linin. Zadrzan Linin klic ob aktivnem uporabnikovem klicu ni prevzem
+            // (CodeRabbit 22. 11. 2026); en sam aktiven Linin klic ostane prevzem.
+            val linin = vsi.firstOrNull { LinaCallGate.isOwned(it.callId) && !LinaCallGate.isManual(it.callId) && CallRegistry.androidState(it.call) == Call.STATE_ACTIVE }
+            val tujAktiven = vsi.any { !LinaCallGate.isOwned(it.callId) && CallRegistry.androidState(it.call) == Call.STATE_ACTIVE }
+            if (linin != null && !tujAktiven && SystemClock.elapsedRealtime() - linaPrevzelaOb > 3_000L) {
+                Log.i(TAG, "prevzem klica ${linin.callId}: zvok preklopljen na slusalke")
+                PrevzemKlica.ustavi(linin.callId)
+                runCatching { CallBackgroundAudio.exit(linin.call) }
+            }
+        }
     }
 
     private fun numberOf(call: Call): String = call.details.handle?.schemeSpecificPart.orEmpty()
@@ -496,8 +518,9 @@ object UtisanMikrofon {
     @Volatile var sluzba: InCallService? = null
     @Volatile var utisano = false
 
-    fun odutisaj() {
-        if (!utisano) return
+    /** [sila]: ob prevzemu klica se mikrofon vklopi vedno, tudi ce zastavica ni bila nastavljena (uporabnik mora biti slišen). */
+    fun odutisaj(sila: Boolean = false) {
+        if (!utisano && !sila) return
         utisano = false
         runCatching { sluzba?.setMuted(false) }
     }

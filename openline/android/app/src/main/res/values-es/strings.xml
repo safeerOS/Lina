@@ -251,7 +251,7 @@
     <string name="local_you">Usted</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Nota guardada: %1$s</string>
-    <string name="local_task_sent">Tarea enviada al ordenador: %1$s\nEl progreso y las aprobaciones están en la pestaña Ordenador.</string>
+    <string name="local_task_sent">Enviando la tarea al ordenador: %1$s\nSe entrega solo cuando el ordenador la acepta; el resultado o un error está en la pestaña Ordenador.</string>
     <string name="local_task_busy">Ya hay una tarea en curso en el ordenador. Espera a que termine.</string>
     <string name="local_notes_title">Notas</string>
     <string name="local_note_delete">Eliminar</string>
@@ -371,6 +371,14 @@
     <string name="chat_chip_calls">Resume las últimas llamadas</string>
     <string name="chat_chip_remind">Recuérdame …</string>
     <string name="home_calls_none">Todavía no hay llamadas hoy.</string>
+    <string name="home_tile_summary">Atendidas</string>
+    <string name="summary_title">Llamadas atendidas</string>
+    <string name="summary_all">Resumir todo con Lina</string>
+    <string name="summary_all_prompt">Resume todas las llamadas</string>
+    <string name="summary_empty">Aún no hay llamadas atendidas.</string>
+    <string name="summary_delete_q">¿Eliminar el registro de esta llamada?</string>
+    <string name="summary_read_error">No se pudo leer el registro de llamadas.</string>
+    <string name="summary_delete_failed">No se pudo eliminar el registro.</string>
     <string name="home_status_setup">Abrir configuración</string>
     <string name="set_menu_name">Nombre y saludo</string>
     <string name="set_menu_name_desc">Cómo Lina le llama y le presenta</string>
@@ -389,7 +397,7 @@
     <string name="set_menu_computer">Ordenador</string>
     <string name="set_menu_computer_desc">Conexión con Lina en el ordenador</string>
     <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
-    <string name="lina_calls_open_folder">Abrir carpeta</string>
+    <string name="lina_calls_open_folder">Carpeta de llamadas atendidas</string>
     <string name="lina_calls_count_fmt">Llamadas: %1$d</string>
     <string name="lina_calls_urgent">urgente</string>
     <string name="lina_calls_summary">Resumen de todos los mensajes</string>
@@ -414,4 +422,6 @@
     <string name="local_reminder_set">Recordatorio creado: %1$s, %2$s</string>
     <string name="local_reminder_bad">Recordatorio no creado (falta la hora, no es válida o ya pasó): %1$s</string>
     <string name="local_reminder_approx">Permite a Lina alarmas exactas en los ajustes del teléfono para que los recordatorios suenen al minuto.</string>
+    <string name="headset_key_label">Tomar la llamada con el botón del auricular</string>
+    <string name="headset_key_desc">El botón del auricular toma una llamada que Lina está atendiendo: Lina se calla y se activa el micrófono del teléfono. Solo se leen los botones del auricular, no el contenido de la pantalla.</string>
 </resources>

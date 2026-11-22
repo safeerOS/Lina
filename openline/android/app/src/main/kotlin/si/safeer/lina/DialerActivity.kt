@@ -112,6 +112,7 @@ class DialerActivity : Activity() {
     private lateinit var tabCalls: View
     private lateinit var tabHome: View
     private lateinit var tabNotes: View
+    private lateinit var tabSummary: View
     private lateinit var nastavitveMeni: si.safeer.lina.asistent.NastavitveMeni
     private lateinit var domov: si.safeer.lina.asistent.DomovPogled
     private val linaKlici by lazy {
@@ -124,6 +125,17 @@ class DialerActivity : Activity() {
             }
         }
     }
+    private val povzetekKlicev by lazy {
+        si.safeer.lina.asistent.PovzetekKlicevPogled(this) { prikaz, poziv, dodatek ->
+            // Povzetek vseh klicev pripravi Lina v Pogovoru; brez mozganov PovzetekKlicevPogled pokaze lokalni povzetek.
+            if (!::samostojniPogled.isInitialized || !samostojniPogled.imaMozgane()) false
+            else {
+                val poslano = samostojniPogled.posljiPoziv(prikaz, poziv, dodatek)
+                if (poslano) showTab(Zavihek.LINA)
+                poslano
+            }
+        }
+    }
     private lateinit var tabPhone: View
     private lateinit var tabLina: View
     private lateinit var tabSettings: View
@@ -131,7 +143,7 @@ class DialerActivity : Activity() {
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
-    private enum class Zavihek { DOMOV, KLICI, TELEFON, LINA, ZAPISKI, RACUNALNIK, NASTAVITVE }
+    private enum class Zavihek { DOMOV, KLICI, TELEFON, LINA, ZAPISKI, POVZETEK, RACUNALNIK, NASTAVITVE }
 
     /** Zavihek pred odprtimi Nastavitvami: gumb Nazaj ga obnovi. */
     private var zavihekPred = Zavihek.DOMOV
@@ -251,7 +263,6 @@ class DialerActivity : Activity() {
     override fun onResume() {
         super.onResume()
         wifiPromptShown = false
-        if (zavihekZdaj == Zavihek.KLICI) linaKlici.osvezi()
         si.safeer.lina.asistent.SinhronizacijaZLino.zazeni(this)
         notifyMissedWithoutPermission()
         renderSteps()
@@ -450,15 +461,16 @@ class DialerActivity : Activity() {
      */
     private fun bindTabs() {
         tabCalls = findViewById(R.id.tabCalls)
-        // Klici, ki jih je sprejela Lina: na vrhu zavihka Klici (lastnik 20. 11. 2026).
-        (tabCalls as android.view.ViewGroup).addView(linaKlici.pogled, 0)
+        // Lastnik 22. 11. 2026: kartice »Lina je odgovorila na N klicev« na zavihku Klici ne zelimo (preveč; klici so v Domov > Sprejeti).
+        // linaKlici ostane samo za odpiranje klicatelja iz obvestila po klicu (pogled ni v zavihku).
         tabPhone = findViewById(R.id.tabPhone)
         tabLina = findViewById(R.id.tabLina)
         tabSettings = findViewById(R.id.tabSettings)
         tabComputer = findViewById(R.id.tabComputer)
         tabHome = findViewById(R.id.tabHome)
         tabNotes = findViewById(R.id.tabNotes)
-        domov = si.safeer.lina.asistent.DomovPogled(this, { odpriIzDomova(it) }, { vprasajLino() }, { showTab(Zavihek.TELEFON) })
+        tabSummary = findViewById(R.id.tabSummary)
+        domov = si.safeer.lina.asistent.DomovPogled(this, { odpriIzDomova(it) }, { vprasajLino() }, { showTab(Zavihek.TELEFON) }, { linaKlici.odpriMapo() })
         findViewById<View>(R.id.topSettings).setOnClickListener { showTab(Zavihek.NASTAVITVE); nastavitveMeni.pokaziMeni() }
         findViewById<View>(R.id.topComputer).setOnClickListener { showTab(Zavihek.RACUNALNIK) }
         navButtons = mapOf(
@@ -551,6 +563,7 @@ class DialerActivity : Activity() {
             si.safeer.lina.samostojna.PloscaDomov.RACUNALNIK -> showTab(Zavihek.RACUNALNIK)
             si.safeer.lina.samostojna.PloscaDomov.NASTAVITVE -> showTab(Zavihek.NASTAVITVE)
             si.safeer.lina.samostojna.PloscaDomov.ZAPISKI -> showTab(Zavihek.ZAPISKI)
+            si.safeer.lina.samostojna.PloscaDomov.POVZETEK -> showTab(Zavihek.POVZETEK)
         }
     }
 
@@ -578,6 +591,7 @@ class DialerActivity : Activity() {
         zavihekZdaj = z
         tabHome.visibility = if (z == Zavihek.DOMOV) View.VISIBLE else View.GONE
         tabNotes.visibility = if (z == Zavihek.ZAPISKI) View.VISIBLE else View.GONE
+        tabSummary.visibility = if (z == Zavihek.POVZETEK) View.VISIBLE else View.GONE
         // Domov in Pogovor imata svoj prostor brez skupnega drsenja; ostali zavihki so v drsnem obmocju.
         findViewById<View>(R.id.root).visibility = if (z == Zavihek.DOMOV || z == Zavihek.LINA) View.GONE else View.VISIBLE
         tabCalls.visibility = if (z == Zavihek.KLICI) View.VISIBLE else View.GONE
@@ -587,8 +601,8 @@ class DialerActivity : Activity() {
         tabComputer.visibility = if (z == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
         for ((t, b) in navButtons) { b.isSelected = t == z; b.contentDescription = b.text }
         findViewById<View>(R.id.root).scrollTo(0, 0)
-        if (z == Zavihek.KLICI) linaKlici.osvezi()
         if (z == Zavihek.DOMOV) domov.osvezi()
+        if (z == Zavihek.POVZETEK) povzetekKlicev.osvezi()
         osveziSestavljalnik()
         if (z != Zavihek.KLICI && z != Zavihek.TELEFON && z != Zavihek.DOMOV) renderAssistant()
         // Domov kaze stanje povezave (vrstica stanja je zdaj na Domovu).

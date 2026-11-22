@@ -26,6 +26,8 @@ class DomovPogled(
     private val odpri: (PloscaDomov) -> Unit,
     private val vprasaj: () -> Unit,
     private val odpriPripravo: () -> Unit,
+    /** Odpre mapo z datotekami klicev (lastnik 22. 11. 2026: gumb »Odpri mapo« mora biti na domaci strani). */
+    private val odpriMapoKlicev: () -> Unit = {},
 ) {
     private val pozdrav: TextView = a.findViewById(R.id.homeGreeting)
     private val gumbi: LinearLayout = a.findViewById(R.id.homeTiles)
@@ -36,12 +38,13 @@ class DomovPogled(
      * Hitri gumbi na Domovu (en skupni gradnik); Racunalnik in Priprava nista glavna gumba. Brez »Pogovor«: Domov ima ze velik gumb
      * »Pogovor z Lino« (lastnik 22. 11. 2026: »zakaj je na domacem zaslonu 2 krat gumb pogovor«).
      */
-    private val hitri = listOf(PloscaDomov.KLICI, PloscaDomov.ZAPISKI)
+    private val hitri = listOf(PloscaDomov.KLICI, PloscaDomov.POVZETEK, PloscaDomov.ZAPISKI)
 
     init {
         a.findViewById<Button>(R.id.homeChat).setOnClickListener { vprasaj() }
         a.findViewById<View>(R.id.homeToday).setOnClickListener { odpri(PloscaDomov.KLICI) }
         a.findViewById<View>(R.id.connectionRow).setOnClickListener { odpriPripravo() }
+        a.findViewById<Button>(R.id.homeOpenFolder).setOnClickListener { odpriMapoKlicev() }
         zgradiGumbe()
     }
 
@@ -50,6 +53,7 @@ class DomovPogled(
     private fun opis(p: PloscaDomov): Pair<Int, Int> = when (p) {
         PloscaDomov.POGOVOR -> R.drawable.ic_nav_lina to R.string.tab_chat
         PloscaDomov.KLICI -> R.drawable.ic_nav_calls to R.string.home_tile_calls
+        PloscaDomov.POVZETEK -> R.drawable.ic_nav_lina to R.string.home_tile_summary
         PloscaDomov.ZAPISKI -> R.drawable.ic_notes to R.string.home_tile_notes
         PloscaDomov.PRIPRAVA -> R.drawable.ic_nav_phone to R.string.home_tile_setup
         PloscaDomov.RACUNALNIK -> R.drawable.ic_nav_computer to R.string.home_tile_computer

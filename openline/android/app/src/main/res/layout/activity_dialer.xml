@@ -170,6 +170,14 @@
         android:layout_marginTop="16dp"
         android:orientation="horizontal" />
 
+    <Button
+        android:id="@+id/homeOpenFolder"
+        style="@style/Gw.Button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/lina_calls_open_folder" />
+
     <View
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -914,6 +922,46 @@
 
             <LinearLayout
                 android:id="@+id/assistantNotesList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+
+        <!-- Povzetek klicev (22. 11. 2026): svoj zaslon, podoben Zapiskom; odpre se s ploscice na Domovu. -->
+        <LinearLayout
+            android:id="@+id/tabSummary"
+            style="@style/Gw.Panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/summaryTitle"
+                style="@style/Gw.Heading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:accessibilityHeading="true"
+                android:text="@string/summary_title" />
+
+            <Button
+                android:id="@+id/summaryAll"
+                style="@style/Gw.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/summary_all" />
+
+            <TextView
+                android:id="@+id/summaryEmpty"
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/summary_empty" />
+
+            <LinearLayout
+                android:id="@+id/summaryList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />

@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter
  * Zaslon Domov na telefonu po skici Lina 2.0 (lastnik 22. 11. 2026). Samo ploscice za funkcije, ki na telefonu
  * res delujejo (pravilo »samo delujoce funkcije«); besedila so v virih aplikacije v sestih jezikih.
  */
-enum class PloscaDomov { POGOVOR, KLICI, ZAPISKI, PRIPRAVA, RACUNALNIK, NASTAVITVE }
+enum class PloscaDomov { POGOVOR, KLICI, POVZETEK, ZAPISKI, PRIPRAVA, RACUNALNIK, NASTAVITVE }
 
 /** Del dneva za pozdrav: jutro 5–9, dan 10–17, vecer sicer. */
 enum class DelDneva { JUTRO, DAN, VECER }
@@ -18,6 +18,9 @@ fun delDneva(ura: Int): DelDneva = when (ura) {
     in 10..17 -> DelDneva.DAN
     else -> DelDneva.VECER
 }
+
+/** Sistemski zapisi (napake, »Sistem«) niso klici: 22. 11. 2026 je Domov stel 21 »danes«, od tega 8 sistemskih zapisov. */
+fun jeKlicZapis(z: ZapisKlica) = !z.id.startsWith("sys-") && z.stevilka != "Sistem"
 
 /** Ena vrstica kartice »Danasnja obvestila«: ura klica, kdo in kratko sporocilo. */
 data class VrsticaObvestila(val id: String, val ura: String, val kdo: String, val sporocilo: String, val nujno: Boolean)
@@ -30,7 +33,7 @@ fun obvestilaDanes(
 ): List<VrsticaObvestila> {
     val danes = Instant.ofEpochMilli(zdaj).atZone(cona).toLocalDate()
     return zapisi
-        .filter { Instant.ofEpochMilli(it.casZacetka).atZone(cona).toLocalDate() == danes }
+        .filter { jeKlicZapis(it) && Instant.ofEpochMilli(it.casZacetka).atZone(cona).toLocalDate() == danes }
         .sortedWith(compareByDescending<ZapisKlica> { it.nujno }.thenByDescending { it.casZacetka })
         .take(najvec)
         .map { z ->
@@ -48,5 +51,5 @@ fun obvestilaDanes(
 /** Stevilo danasnjih klicev (znacka na ploscici Klici); 0 = brez znacke. */
 fun steviloDanes(zapisi: List<ZapisKlica>, zdaj: Long, cona: ZoneId): Int {
     val danes = Instant.ofEpochMilli(zdaj).atZone(cona).toLocalDate()
-    return zapisi.count { Instant.ofEpochMilli(it.casZacetka).atZone(cona).toLocalDate() == danes }
+    return zapisi.count { jeKlicZapis(it) && Instant.ofEpochMilli(it.casZacetka).atZone(cona).toLocalDate() == danes }
 }

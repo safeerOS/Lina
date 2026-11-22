@@ -251,7 +251,7 @@
     <string name="local_you">Tu</string>
     <string name="local_lina">Lina</string>
     <string name="local_note_saved">Nota salvata: %1$s</string>
-    <string name="local_task_sent">Attività inviata al computer: %1$s\nAvanzamento e approvazioni nella scheda Computer.</string>
+    <string name="local_task_sent">Invio dell\'attività al computer: %1$s\nÈ consegnata solo quando il computer la accetta; esito o errore nella scheda Computer.</string>
     <string name="local_task_busy">Sul computer è già in corso un\'attività. Attendi che finisca.</string>
     <string name="local_notes_title">Note</string>
     <string name="local_note_delete">Elimina</string>
@@ -371,6 +371,14 @@
     <string name="chat_chip_calls">Riassumi le ultime chiamate</string>
     <string name="chat_chip_remind">Ricordami …</string>
     <string name="home_calls_none">Ancora nessuna chiamata oggi.</string>
+    <string name="home_tile_summary">Ricevute</string>
+    <string name="summary_title">Chiamate ricevute</string>
+    <string name="summary_all">Riassumi tutto con Lina</string>
+    <string name="summary_all_prompt">Riassumi tutte le chiamate</string>
+    <string name="summary_empty">Ancora nessuna chiamata ricevuta.</string>
+    <string name="summary_delete_q">Eliminare la registrazione di questa chiamata?</string>
+    <string name="summary_read_error">Impossibile leggere il registro delle chiamate.</string>
+    <string name="summary_delete_failed">Impossibile eliminare la registrazione.</string>
     <string name="home_status_setup">Apri configurazione</string>
     <string name="set_menu_name">Nome e saluto</string>
     <string name="set_menu_name_desc">Come Lina la chiama e la presenta</string>
@@ -389,7 +397,7 @@
     <string name="set_menu_computer">Computer</string>
     <string name="set_menu_computer_desc">Connessione a Lina sul computer</string>
     <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
-    <string name="lina_calls_open_folder">Apri cartella</string>
+    <string name="lina_calls_open_folder">Cartella delle chiamate</string>
     <string name="lina_calls_count_fmt">Chiamate: %1$d</string>
     <string name="lina_calls_urgent">urgente</string>
     <string name="lina_calls_summary">Riepilogo di tutti i messaggi</string>
@@ -414,4 +422,6 @@
     <string name="local_reminder_set">Promemoria impostato: %1$s, %2$s</string>
     <string name="local_reminder_bad">Promemoria non impostato (ora mancante, non valida o già passata): %1$s</string>
     <string name="local_reminder_approx">Consenti a Lina le sveglie esatte nelle impostazioni del telefono perché i promemoria suonino al minuto.</string>
+    <string name="headset_key_label">Subentro con il pulsante delle cuffie</string>
+    <string name="headset_key_desc">Il pulsante delle cuffie subentra in una chiamata che Lina sta gestendo: Lina smette di parlare e si attiva il microfono del telefono. Vengono letti solo i pulsanti delle cuffie, mai il contenuto dello schermo.</string>
 </resources>

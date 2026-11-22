@@ -95,4 +95,21 @@ class SejaKlicaTest {
         assertTrue(b.contains("Poklical bo jutri."))
         assertFalse(b.contains("Sporočila ni bilo."))
     }
+
+    @Test
+    fun `Linine vrstice so v zapisu in v datoteki klica, vsak obrat v svoji vrstici`() {
+        val s = SejaKlica(t0, "+38641123456")
+        s.dodajIzhod("Dober dan, tukaj Lina. ")
+        s.dodajIzhod("Kako vam lahko pomagam?")
+        s.konecObrata()
+        s.dodajVhod("Prosim za povratni klic.")
+        s.konecObrata()
+        s.dodajIzhod("Sem zapisala.")
+        s.konecObrata()
+        val z = s.zakljuci(t0 + 30_000)
+        assertEquals("Dober dan, tukaj Lina. Kako vam lahko pomagam?\nSem zapisala.", z.linaDobesedno)
+        val datoteka = besediloDatotekeKlica(z, zona)
+        assertTrue(datoteka.contains("Dobesedno, kar je rekla Lina:\nDober dan, tukaj Lina. Kako vam lahko pomagam?\nSem zapisala."))
+        assertTrue(datoteka.contains("Dobesedno, kar je povedal klicatelj:\nProsim za povratni klic."))
+    }
 }
