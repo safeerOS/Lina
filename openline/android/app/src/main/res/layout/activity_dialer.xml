@@ -71,47 +71,33 @@
             <FrameLayout
                 android:id="@+id/homeHero"
                 android:layout_width="match_parent"
-                android:layout_height="260dp"
+                android:layout_height="300dp"
                 android:background="@drawable/bg_home_hero"
                 android:clipToOutline="true">
 
+                <!-- Isti lik in prizor kot Lina 2.0 na racunalniku (public/lina/lina-scena.webp); zgornji del slike, obraz ostane prost:
+                     mehurcek je spodaj levo (lastnik 22. 11. 2026: nic ne sme prekriti obraza). -->
                 <ImageView
                     android:id="@+id/homeCharacter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="end|bottom"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
                     android:adjustViewBounds="true"
                     android:importantForAccessibility="no"
-                    android:scaleType="fitEnd"
-                    android:src="@drawable/lina_domov" />
+                    android:scaleType="fitStart"
+                    android:src="@drawable/lina_scena" />
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/homeGreeting"
+                    style="@style/Gw.Heading"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="start|top"
-                    android:layout_margin="14dp"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:maxWidth="170dp"
-                        android:text="@string/home_subtitle"
-                        android:textColor="#FFFFFF"
-                        android:textSize="14sp"
-                        android:textStyle="italic" />
-
-                    <TextView
-                        android:id="@+id/homeGreeting"
-                        style="@style/Gw.Heading"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:accessibilityLiveRegion="polite"
-                        android:background="@drawable/bg_bubble"
-                        android:maxWidth="180dp"
-                        android:padding="14dp" />
-                </LinearLayout>
+                    android:layout_gravity="start|bottom"
+                    android:layout_margin="12dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:background="@drawable/bg_bubble"
+                    android:maxWidth="190dp"
+                    android:padding="12dp" />
             </FrameLayout>
 
             <LinearLayout

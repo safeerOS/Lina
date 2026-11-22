@@ -256,7 +256,8 @@ class DialerActivity : Activity() {
             val tipkovnica = SistemskeVrstice.visinaTipkovnice(insets)
             val nav = findViewById<View>(R.id.navBar)
             nav.visibility = if (tipkovnica > 0) View.GONE else View.VISIBLE
-            (view as android.view.ViewGroup).clipToPadding = false
+            // Vsebina se ne sme drsati pod vrstico stanja (lastnik 22. 11. 2026: prekrivanje); odmik je izven obmocja risanja.
+            (view as android.view.ViewGroup).clipToPadding = true
             view.setPadding(b[0], b[1], b[2], tipkovnica)
             nav.setPadding(b[0], 0, b[2], b[3])
             if (tipkovnica > 0) view.post {

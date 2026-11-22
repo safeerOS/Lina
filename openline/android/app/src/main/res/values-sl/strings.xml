@@ -332,7 +332,6 @@
 
     <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->
     <string name="tab_home">Domov</string>
-    <string name="home_subtitle">Vaša osebna asistentka in tajnica</string>
     <string name="home_greet_morning">Dobro jutro</string>
     <string name="home_greet_day">Dober dan</string>
     <string name="home_greet_evening">Dober večer</string>

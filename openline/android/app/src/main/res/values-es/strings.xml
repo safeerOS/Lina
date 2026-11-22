@@ -332,7 +332,6 @@
 
     <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->
     <string name="tab_home">Inicio</string>
-    <string name="home_subtitle">Su asistente personal y secretaria</string>
     <string name="home_greet_morning">Buenos días</string>
     <string name="home_greet_day">Buenas tardes</string>
     <string name="home_greet_evening">Buenas noches</string>
