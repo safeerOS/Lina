@@ -46,7 +46,14 @@ class PostavitevTelefonTest {
         assertTrue(!prednikiImajo(poId("assistantChatSend"), "ScrollView"))
         assertTrue(!prednikiImajo(poId("assistantChatMic"), "ScrollView"))
         // Priponke (22. 11. 2026): sponka v vrstici za vnos, seznam priponk nad njo, oba zunaj drsnih obmocij.
-        assertEquals("assistantComposer", (poId("assistantChatAttach").parentNode as Element).getAttributeNS(ns, "id").removePrefix("@+id/"))
+        // Sestavljalnik kot v Claude (lastnik 22. 11. 2026): sponka, mikrofon in Poslji v spodnji vrstici kartice assistantComposer.
+        for (id in listOf("assistantChatAttach", "assistantChatMic", "assistantChatSend")) {
+            assertEquals("assistantComposerVrstica", (poId(id).parentNode as Element).getAttributeNS(ns, "id").removePrefix("@+id/"), id)
+        }
+        assertEquals("assistantComposer", (poId("assistantComposerVrstica").parentNode as Element).getAttributeNS(ns, "id").removePrefix("@+id/"))
+        assertEquals("vertical", poId("assistantComposer").getAttributeNS(ns, "orientation"), "polje nad vrstico gumbov")
+        assertEquals("match_parent", polje.getAttributeNS(ns, "layout_width"), "polje cez celo sirino")
+        assertEquals("2", polje.getAttributeNS(ns, "minLines"), "vecje polje")
         assertTrue(!prednikiImajo(poId("assistantComposerAttachments"), "ScrollView"))
         assertEquals("52dp", poId("assistantChatSend").getAttributeNS(ns, "layout_width"), "cilj dotika vsaj 48 dp")
     }
