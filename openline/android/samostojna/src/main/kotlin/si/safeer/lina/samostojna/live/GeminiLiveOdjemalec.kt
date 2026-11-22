@@ -40,7 +40,9 @@ class GeminiLiveOdjemalec(
     /** Casovni zapis poteka pozdrava (brez vsebine klica): »dvig«, »seja nared«, »uvod poslan«, »prvi zvok Line«, »konec obrata«. */
     private val casovniZapis: (String) -> Unit = {},
     // Diagnosticni zajem tistega, kar klicatelj sliši (glas Line, 16 kHz s16le mono). Samo izhod Line, nikoli glas klicatelja.
-    private val zajemIzhoda: ((ByteArray) -> Unit)? = null
+    private val zajemIzhoda: ((ByteArray) -> Unit)? = null,
+    // Obdelava zvoka (lastnik 22. 11. 2026: privzeto vklopljena, z izklopom): filter suma klicatelja, omejevalnik Linine ravni, nizka obcutljivost zacetka govora.
+    private val obdelavaZvoka: Boolean = true
 ) : ZvocniMost {
 
     companion object {
@@ -92,6 +94,8 @@ class GeminiLiveOdjemalec(
     @Volatile private var nepopolnOkvir = ByteArray(0)
     // Prevzorcenje glasu Line 24->16 kHz s stanjem med kosi (brez klikanja na mejah kosov).
     private val prevzorcevalnik = Prevzorcevalnik24v16()
+    // Cistilnik zvoka klicatelja (visokopasovni 100 Hz + mehek ekspander); nov na vsak klic.
+    @Volatile private var filterKlicatelja = FiltrKlicatelja()
 
     // Hiter in neprekinjen pozdrav (lastnik 22. 11. 2026 po klicu ob 10.39: »ko se telefon oglasi, se mora Lina takoj oglasiti«,
     // »na zacetku se je dvakrat oglasila«):
@@ -230,6 +234,10 @@ class GeminiLiveOdjemalec(
                             }
                         }
                         // Prepis govora klicatelja in Line: podlaga za dobesedni zapis klica.
+                        // Nizja obcutljivost zacetka govora: sum v ozadju ne sproziva govora in prekinitev (privzeto je visoka). Vir: Live API, RealtimeInputConfig.
+                        if (obdelavaZvoka) putJsonObject("realtimeInputConfig") {
+                            putJsonObject("automaticActivityDetection") { put("startOfSpeechSensitivity", "START_SENSITIVITY_LOW") }
+                        }
                         putJsonObject("inputAudioTranscription") {}
                         putJsonObject("outputAudioTranscription") {}
                         putJsonArray("tools") {
@@ -424,7 +432,7 @@ class GeminiLiveOdjemalec(
         val dataStrs = izlusciBase64Audio(msg)
         for (dataStr in dataStrs) {
             val decoded = Base64.getDecoder().decode(dataStr)
-            val skupaj = nepopolnOkvir + prevzorcevalnik.obdelaj(decoded)
+            val skupaj = nepopolnOkvir + prevzorcevalnik.obdelaj(decoded).let { if (obdelavaZvoka) IzhodniLimiter.obdelaj(it) else it }
             var offset = 0
             while (skupaj.size - offset >= 640) {
                 if (!prviZvokLine) { prviZvokLine = true; casovniZapis("prvi zvok Line klicatelju") }
@@ -473,6 +481,7 @@ class GeminiLiveOdjemalec(
 
     override fun vKlic(okvir: ByteArray) {
         if (isClosed.get()) return
+        val okvirCist = if (obdelavaZvoka) filterKlicatelja.obdelaj(okvir) else okvir
         var needsConnect = false
         var isReady = false
         synchronized(vhodniMutex) {
@@ -486,7 +495,7 @@ class GeminiLiveOdjemalec(
                 if (vhodnaVrsta.size >= MAKS_OKVIRJEV_V_VRSTI) {
                     vhodnaVrsta.removeFirst()
                 }
-                vhodnaVrsta.addLast(okvir)
+                vhodnaVrsta.addLast(okvirCist)
             }
         }
         
@@ -496,7 +505,7 @@ class GeminiLiveOdjemalec(
         
         // Med pozdravom (do prvega turnComplete, najvec 15 s) zvok klicatelja ne gre modelu.
         if (isReady && !(uvodDo > 0L && System.currentTimeMillis() < uvodDo)) {
-            posljiOkvirModelu(okvir)
+            posljiOkvirModelu(okvirCist)
         }
         
         if (stanje != StanjePovezave.PRIPRAVLJEN && startTimeMs > 0 && System.currentTimeMillis() - startTimeMs > 5000) {
@@ -558,6 +567,7 @@ class GeminiLiveOdjemalec(
         // Klic, ki je ostal odprt (brez konecKlica), se zapise, preden se zacne nov.
         zakljuciKlic()
         seja = SejaKlica(System.currentTimeMillis(), stevilkaNaslednjegaKlica)
+        filterKlicatelja = FiltrKlicatelja()
         izhodniCallback = posljiOkvir
         if (ohrani) posljiUvodCeNared()
     }

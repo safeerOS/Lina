@@ -10,23 +10,23 @@ import kotlin.math.sin
  *
  * Prejsnja izvedba je vsak kos (nekaj 10 ms) obdelala posebej: filter je na robu kosa videl tisino, faza
  * interpolacije se je za vsak kos zacela znova in filter je imel 15 utezi z slabim zadrzanjem -> klikanje na mejah
- * kosov in zrcalenje (aliasing). Tu je okno-sinc filter (48 utezi, Blackman), zgodovina in faza se prenasata.
+ * kosov in zrcalenje (aliasing). Tu je okno-sinc filter (66 utezi, Blackman, meja 7,2 kHz), zgodovina in faza se prenasata.
  * Rezultat je enak, ne glede na to, kako je tok razrezan (preizkus PrevzorcevalnikTest).
  */
 internal class Prevzorcevalnik24v16 {
-    private val pol = 24
+    private val pol = 33 // veckratnik 3: zakasnitev je celo stevilo izhodnih vzorcev (22)
     private val tapsCel = naredi(0.0)
     private val tapsPol = naredi(0.5)
 
     // Se neporabljeni vzorci (od abs. indeksa `baza`) in stevilka naslednjega izhodnega vzorca.
     private var zgodovina = FloatArray(0)
     private var baza = 0L
-    // Zacne pri -16: filter gleda 24 vzorcev naprej, zato izhod zacne 1 ms tisine prej; stevilo izhodnih vzorcev je tako
+    // Zacne pri -22: filter gleda 33 vzorcev naprej, zato izhod zacne 1,4 ms tisine prej; stevilo izhodnih vzorcev je tako
     // ob vsakem trenutku enako vhodnemu * 2/3 (kot pri prejsnji izvedbi), zakasnitev je stalna.
-    private var k = -16L
+    private var k = -(pol * 2L / 3)
 
     private fun naredi(f: Double): FloatArray {
-        val fc = 6800.0 / 24000.0
+        val fc = 7200.0 / 24000.0 // sicniki (s, š, č) ostanejo; prej 6800 Hz
         val t = DoubleArray(2 * pol)
         var vsota = 0.0
         for (m in 0 until 2 * pol) {

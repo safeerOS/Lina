@@ -75,7 +75,8 @@ object LokalniPrehodUpravljalnik {
             wsFabrika = OkHttpWsFabrika(),
             imeUporabnika = { si.safeer.lina.asistent.ImeUporabnika.preberi(context) },
             casovniZapis = { android.util.Log.i("LinaPozdrav", "${System.currentTimeMillis() % 100000} ms: $it") },
-            zajemIzhoda = ZajemIzhodaLine(context.filesDir)::zapisi
+            zajemIzhoda = ZajemIzhodaLine(context.filesDir)::zapisi,
+            obdelavaZvoka = context.getSharedPreferences("lina_zvok", Context.MODE_PRIVATE).getBoolean("obdelava_zvoka", true)
         ).apply {
             naNapako = { razlog ->
                 val manager = context.getSystemService(android.app.NotificationManager::class.java)
