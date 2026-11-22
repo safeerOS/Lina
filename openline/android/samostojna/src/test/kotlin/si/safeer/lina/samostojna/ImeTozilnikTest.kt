@@ -27,8 +27,8 @@ class ImeTozilnikTest {
 
     @Test
     fun `pozdrav - z imenom tozilnik, brez imena glasovna tajnica, nikoli splosne besede`() {
-        assertEquals("Dober dan. Tukaj Lina, pomočnica z umetno inteligenco. Pogovor se zapisuje. Poklicali ste Tomaža. Kaj naj sporočim?", ImeTozilnik.pozdrav("Tomaž"))
-        assertEquals("Dober dan. Tukaj Lina, pomočnica z umetno inteligenco. Pogovor se zapisuje. Dosegli ste glasovno tajnico. Kaj naj sporočim?", ImeTozilnik.pozdrav(""))
+        assertEquals("Dober dan. Tukaj Lina, umetna inteligenca. Pogovor se zapisuje. Poklicali ste Tomaža. Kaj naj sporočim?", ImeTozilnik.pozdrav("Tomaž"))
+        assertEquals("Dober dan. Tukaj Lina, umetna inteligenca. Pogovor se zapisuje. Dosegli ste glasovno tajnico. Kaj naj sporočim?", ImeTozilnik.pozdrav(""))
         assertFalse(ImeTozilnik.PREPOVEDANO_ZA_POKLICALI.containsMatchIn(ImeTozilnik.pozdrav("Tomaž")))
         assertTrue(ImeTozilnik.PREPOVEDANO_ZA_POKLICALI.containsMatchIn("Poklicali ste podjetje Forma."))
     }
@@ -37,7 +37,7 @@ class ImeTozilnikTest {
     fun `navodilo za klic - pozdrav z imenom v tozilniku in brez prepovedanih besed`() {
         val zdaj = ZonedDateTime.parse("2026-11-22T10:00:00+01:00[Europe/Ljubljana]")
         val z = SistemskoNavodilo.zgradiZaKlic(zdaj, "Ana", "")
-        assertTrue(z.contains("»Dober dan. Tukaj Lina, pomočnica z umetno inteligenco. Pogovor se zapisuje. Poklicali ste Ano. Kaj naj sporočim?«"), z)
+        assertTrue(z.contains("»Dober dan. Tukaj Lina, umetna inteligenca. Pogovor se zapisuje. Poklicali ste Ano. Kaj naj sporočim?«"), z)
         assertFalse(ImeTozilnik.PREPOVEDANO_ZA_POKLICALI.containsMatchIn(z))
         assertFalse(z.contains("vprasaj, kako lahko pomagas"))
         val brez = SistemskoNavodilo.zgradiZaKlic(zdaj)
@@ -48,7 +48,7 @@ class ImeTozilnikTest {
 
     /** Lastnik 22. 11. 2026: zakon zahteva obvestilo o zapisovanju; s snemanjem »Pogovor se snema in zapisuje.«. */
     @Test fun `pozdrav pove zapisovanje in snemanje`() {
-        assertEquals("Dober dan. Tukaj Lina, pomočnica z umetno inteligenco. Pogovor se snema in zapisuje. Poklicali ste Ano. Kaj naj sporočim?", ImeTozilnik.pozdrav("Ana", snemanje = true))
+        assertEquals("Dober dan. Tukaj Lina, umetna inteligenca. Pogovor se snema in zapisuje. Poklicali ste Ano. Kaj naj sporočim?", ImeTozilnik.pozdrav("Ana", snemanje = true))
         assertTrue("Pogovor se zapisuje." in ImeTozilnik.pozdrav(""))
     }
 

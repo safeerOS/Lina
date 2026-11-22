@@ -89,6 +89,6 @@ object ImeTozilnik {
         val toz = imeVTozilniku(ime, uporabnikovZapis)
         val poklicali = if (toz.isNotEmpty()) "Poklicali ste $toz." else "Dosegli ste glasovno tajnico."
         val zapis = if (snemanje) "Pogovor se snema in zapisuje." else "Pogovor se zapisuje."
-        return "${dobrDan(zdaj)}. Tukaj Lina, pomočnica z umetno inteligenco. $zapis $poklicali Kaj naj sporočim?"
+        return "${dobrDan(zdaj)}. Tukaj Lina, umetna inteligenca. $zapis $poklicali Kaj naj sporočim?"
     }
 }

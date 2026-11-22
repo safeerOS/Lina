@@ -32,7 +32,7 @@ class SistemskoNavodiloKlicTest {
         assertTrue("Lina se predstavi." in n && "tocno enkrat" in n)
         assertTrue("Pozdrava ne ponavljaj" in n)
         // pozdrav je v navodilu natanko enkrat (ne se enkrat kot »vedno zacni«)
-        assertTrue(Regex("Tukaj Lina, pomočnica z umetno inteligenco").findAll(n).count() == 1)
+        assertTrue(Regex("Tukaj Lina, umetna inteligenca").findAll(n).count() == 1)
     }
 
     @Test
