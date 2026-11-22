@@ -41,7 +41,7 @@ object SistemskoNavodilo {
     fun zgradiZaKlic(zdaj: ZonedDateTime, imeUporabnika: String = "", imeTozilnik: String = ""): String {
         val cas = zdaj.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
         // Osebna tajnica (lastnik 21. 11. 2026): pozdrav z imenom v tozilniku, brez imena »Dosegli ste glasovno tajnico.«.
-        val pozdrav = ImeTozilnik.pozdrav(imeUporabnika, imeTozilnik)
+        val pozdrav = ImeTozilnik.pozdrav(imeUporabnika, imeTozilnik, zdaj = zdaj)
         return "Si Lina, telefonska asistentka z umetno inteligenco in odgovarjas na telefonski klic. " +
             "Govori SAMO v knjizni slovenscini s slovenskim naglasom (nikoli hrvascina ali srbscina), naravno, kratko in jasno, " +
             "o sebi govori v zenski obliki. Besedno zvezo »umetna inteligenca« izgovori natanko tako: um-ET-na in-te-li-GEN-ca " +
@@ -58,6 +58,12 @@ object SistemskoNavodilo {
             "Pred koncem klica sporocilo na kratko preberi nazaj in vprasaj, ali je prav; ce klicatelj popravi, orodje poklici znova z dopolnjenimi podatki. " +
             "Ko je sporocilo zapisano in potrjeno (ali klicatelj noce nic sporociti) in klicatelj reče adijo, nasvidenje ali hvala, izreci kratko slovo " +
             "in nato poklici orodje koncaj_klic, da se klic konca. Klica ne koncaj, dokler klicatelj ni povedal, kar je hotel. " +
+            // Klic 22. 11. 2026 ob 13.17: lastnik je poklical sam (»Jaz sem <ime>«), Lina pa je zapisala sporocilo »za« njega in prepis imena Lina kot »Nina«.
+            "Tvoje ime je Lina: ce v tem, kar slisis, ob tebi nastopi »Nina«, »Lena« ali podobno, je to Lina. " +
+            (if (imeUporabnika.isNotBlank())
+                "Ce klicatelj pove, da je on sam uporabnik (»jaz sem $imeUporabnika«, »kliče $imeUporabnika«), ne piši sporocila »za« $imeUporabnika: " +
+                "pozdravi ga po imenu, vprasaj, kaj zeli, in kar pove, zapisi kot sporocilo od uporabnika samega. Klicatelja ne moreš preveriti, zato zasebnih podatkov ne razkrivaj. "
+            else "") +
             "Obljubi samo, da boš sporocilo posredovala. Ne obljubljaj odgovora, roka, cene ali potrditve. " +
             // Znanje 22. 11. 2026 (skil safeer-lina-tajnica-asistent-ui-znanje): nujni primer in placilni podatki.
             "Ce klicatelj opise nevarnost, nesreco ali nujno zdravstveno stanje, mu takoj reci, naj poklice sto dvanajst (112), in klica ne podaljsuj s sprasevanjem. " +

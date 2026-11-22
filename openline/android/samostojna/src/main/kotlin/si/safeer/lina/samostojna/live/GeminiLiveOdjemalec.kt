@@ -266,7 +266,7 @@ class GeminiLiveOdjemalec(
             }
 
             override fun onError(napaka: Throwable) {
-                izbiraPoti.neuspeh(pot)
+                if (!isClosed.get()) izbiraPoti.neuspeh(pot)
                 val msg = napaka.message ?: napaka.javaClass.simpleName
                 val varnoSporocilo = maskirajSkrivnosti(msg)
                 dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
@@ -285,7 +285,9 @@ class GeminiLiveOdjemalec(
             override fun onClose(koda: Int, razlog: String) {
                 val maskiran = maskirajSkrivnosti(razlog)
                 val textRazlog = if (maskiran.isBlank()) "brez razloga" else maskiran
-                dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
+                // Zaprtje, ki ga je sprozil klic sam (konec klica, Lina prekine klic), ni napaka: prej je nastal prazen zapis
+                // »Zaprto (koda 1000)« poleg pravega zapisa klica (22. 11. 2026 ob 12.49 in 13.19).
+                if (!isClosed.get()) dnevnik.dodaj(si.safeer.lina.samostojna.ZapisKlica(
                     id = sistemskiId(),
                     casZacetka = System.currentTimeMillis(),
                     stevilka = "Sistem",
@@ -293,7 +295,7 @@ class GeminiLiveOdjemalec(
                     povzetek = "Zaprto (koda $koda): $textRazlog",
                     prepis = ""
                 ))
-                izbiraPoti.neuspeh(pot)
+                if (!isClosed.get()) izbiraPoti.neuspeh(pot)
                 synchronized(vhodniMutex) {
                     stanje = StanjePovezave.ZAPRT
                 }

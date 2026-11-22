@@ -74,10 +74,21 @@ object ImeTozilnik {
      * Lastnik 22. 11. 2026: »Pogovor se zapisuje more povedati, ker je takšen zakon«; ko je vklopljeno snemanje zvoka,
      * »Pogovor se snema in zapisuje.«.
      */
-    fun pozdrav(ime: String, uporabnikovZapis: String = "", snemanje: Boolean = false): String {
+    /**
+     * Pozdrav glede na uro (lastnik 22. 11. 2026: Lina ni rekla »dober dan«, ampak takoj »Tukaj Lina«): do 10. ure »Dobro jutro«,
+     * do 18. ure »Dober dan«, nato »Dober vecer«. Brez ure (predogled v nastavitvah) »Dober dan«.
+     */
+    fun dobrDan(zdaj: java.time.ZonedDateTime?): String = when (zdaj?.hour) {
+        null -> "Dober dan"
+        in 0..9 -> "Dobro jutro"
+        in 10..17 -> "Dober dan"
+        else -> "Dober večer"
+    }
+
+    fun pozdrav(ime: String, uporabnikovZapis: String = "", snemanje: Boolean = false, zdaj: java.time.ZonedDateTime? = null): String {
         val toz = imeVTozilniku(ime, uporabnikovZapis)
         val poklicali = if (toz.isNotEmpty()) "Poklicali ste $toz." else "Dosegli ste glasovno tajnico."
         val zapis = if (snemanje) "Pogovor se snema in zapisuje." else "Pogovor se zapisuje."
-        return "Tukaj Lina, pomočnica z umetno inteligenco. $zapis $poklicali Kaj naj sporočim?"
+        return "${dobrDan(zdaj)}. Tukaj Lina, pomočnica z umetno inteligenco. $zapis $poklicali Kaj naj sporočim?"
     }
 }
