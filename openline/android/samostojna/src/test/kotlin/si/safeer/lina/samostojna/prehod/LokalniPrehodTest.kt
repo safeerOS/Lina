@@ -154,6 +154,25 @@ class LokalniPrehodTest {
         socket2.close()
     }
 
+    // Klic na Samsungu 22. 11. 2026: lupina poslje X-Device-Token (CallAudioEngine.connect); prehod ga mora sprejeti.
+    @Test
+    fun `zeton v glavi X-Device-Token kot ga poslje zvocna lupina`() {
+        val socket = connect("/v1/device-media?callId=lupina1", "zeton123", "X-Device-Token:")
+        assertTrue(readResponseLine(socket).contains("101"))
+        socket.close()
+        val slab = connect("/v1/device-media?callId=lupina2", "napacen", "X-Device-Token:")
+        assertTrue(readResponseLine(slab).contains("401"))
+        slab.close()
+    }
+
+    @Test
+    fun `glava lupine in glava prehoda se ujemata v izvorni kodi`() {
+        val motor = java.io.File("../app/src/main/kotlin/si/safeer/lina/audio/CallAudioEngine.kt").readText()
+        val glava = Regex("""\.header\("([A-Za-z-]+)", target\.deviceToken\)""").find(motor)!!.groupValues[1]
+        val prehodVir = java.io.File("src/main/kotlin/si/safeer/lina/samostojna/prehod/LokalniPrehod.kt").readText()
+        assertTrue(prehodVir.contains("line.startsWith(\"$glava: \""), "prehod ne bere glave $glava")
+    }
+
     @Test
     fun `napacen zeton zavrnjen s 401`() {
         val socket = connect("/v1/device-media?callId=test1", "napacen")

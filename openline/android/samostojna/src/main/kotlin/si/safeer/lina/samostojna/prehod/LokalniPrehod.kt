@@ -174,6 +174,10 @@ class LokalniPrehod(
                 val line = lines[i]
                 if (line.startsWith("Authorization: Bearer ", ignoreCase = true)) {
                     authHeader = line.substring("Authorization: Bearer ".length).trim()
+                } else if (line.startsWith("X-Device-Token: ", ignoreCase = true)) {
+                    // Zvocna lupina (CallAudioEngine) poslje zeton v glavi X-Device-Token, kot strezniku na racunalniku. Klic na Samsungu
+                    // 22. 11. 2026 ob 10.18: prehod je poznal samo Authorization in je lupino zavrnil s 401 (klic brez zvoka).
+                    authHeader = line.substring("X-Device-Token: ".length).trim()
                 } else if (line.startsWith("Sec-WebSocket-Key: ", ignoreCase = true)) {
                     wsKey = line.substring("Sec-WebSocket-Key: ".length).trim()
                 }
