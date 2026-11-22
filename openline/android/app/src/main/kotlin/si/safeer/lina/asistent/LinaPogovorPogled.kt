@@ -474,9 +474,16 @@ class LinaPogovorPogled(
                         a.getString(R.string.local_note_saved, odgovor.besedilo)
                     }
                     is Odgovor.Opomnik -> {
-                        val tekst = "${odgovor.besedilo} (${odgovor.cas})"
-                        shraniZapiske(dodajZapisek(zapiski.beri(), tekst, System.currentTimeMillis(), UUID.randomUUID().toString()))
-                        a.getString(R.string.local_note_saved, tekst)
+                        // 2j: pravi alarm ob casu; neveljaven ali pretekel cas se ne nastavi tiho, ampak se uporabniku pove.
+                        val casMs = si.safeer.lina.samostojna.OpomnikCas.izracunaj(odgovor.cas, System.currentTimeMillis())
+                        if (casMs == null) a.getString(R.string.local_reminder_bad, odgovor.besedilo)
+                        else {
+                            val natancno = si.safeer.lina.asistent.OpomnikAlarm.nastavi(
+                                a, si.safeer.lina.samostojna.CakajociOpomnik(UUID.randomUUID().toString(), casMs, odgovor.besedilo),
+                            )
+                            val kdaj = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(casMs))
+                            a.getString(R.string.local_reminder_set, odgovor.besedilo, kdaj) + if (natancno) "" else " " + a.getString(R.string.local_reminder_approx)
+                        }
                     }
                     is Odgovor.NalogaRacunalniku ->
                         if (posljiRacunalniku(odgovor.besedilo)) a.getString(R.string.local_task_sent, odgovor.besedilo)

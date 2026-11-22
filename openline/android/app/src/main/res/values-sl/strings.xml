@@ -4,7 +4,7 @@
     <string name="app_title">Lina – AI tajnica</string>
     <string name="setup_title">Nastavitev telefona</string>
     <string name="step_role_title">Privzeta aplikacija za telefon</string>
-    <string name="step_server_title">Povezava s prehodom</string>
+    <string name="step_server_title">Povezava s strežnikom (neobvezno)</string>
     <string name="step_audio_title">Zvok klica</string>
     <string name="step_battery_title">Ostani povezan v ozadju</string>
     <string name="language">Jezik</string>
@@ -48,7 +48,7 @@
     <string name="battery_needed">Brez tega telefon po nekaj minutah pade s prehoda.</string>
     <string name="allow">Dovoli</string>
     <string name="battery_manual">Odpri Nastavitve, Aplikacije, Lina, Baterija</string>
-    <string name="server_scan">Skeniraj kodo QR iz skrbniške konzole.</string>
+    <string name="server_scan">Ni potrebno: Lina odgovarja sama v telefonu. Kodo QR skeniraj samo za parjenje s strežnikom OpenLine.</string>
     <string name="server_offline">%1$s trenutno ni dosegljiv.</string>
     <string name="scan_again">Skeniraj znova</string>
     <string name="scan_qr">Skeniraj QR</string>
@@ -409,4 +409,9 @@
     <string name="chat_copied">Kopirano</string>
     <string name="chat_retry">Poskusi znova</string>
     <string name="tab_calls_new_fmt">%1$s, novi klici: %2$d</string>
+    <string name="reminder_channel">Opomniki</string>
+    <string name="reminder_title">Opomnik</string>
+    <string name="local_reminder_set">Opomnik nastavljen: %1$s, %2$s</string>
+    <string name="local_reminder_bad">Opomnik ni nastavljen (čas manjka, je neveljaven ali že mimo): %1$s</string>
+    <string name="local_reminder_approx">Za opomnike na minuto dovolite Lini natančne alarme v nastavitvah telefona.</string>
 </resources>

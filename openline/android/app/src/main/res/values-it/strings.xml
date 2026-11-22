@@ -4,7 +4,7 @@
     <string name="app_title">Lina – segretaria IA</string>
     <string name="setup_title">Configura questo telefono</string>
     <string name="step_role_title">App Telefono predefinita</string>
-    <string name="step_server_title">Connettiti al gateway</string>
+    <string name="step_server_title">Connessione al server (facoltativa)</string>
     <string name="step_audio_title">Audio delle chiamate</string>
     <string name="step_battery_title">Resta online in background</string>
     <string name="language">Lingua</string>
@@ -48,7 +48,7 @@
     <string name="battery_needed">Senza questa impostazione il telefono si disconnette dal gateway dopo pochi minuti.</string>
     <string name="allow">Consenti</string>
     <string name="battery_manual">Apri Impostazioni, poi App, Lina, Batteria</string>
-    <string name="server_scan">Scansiona il codice QR mostrato nella console di amministrazione.</string>
+    <string name="server_scan">Non necessario: Lina risponde da sola nel telefono. Scansiona il codice QR solo per associare un server OpenLine.</string>
     <string name="server_offline">%1$s non è raggiungibile al momento.</string>
     <string name="scan_again">Scansiona di nuovo</string>
     <string name="scan_qr">Scansiona QR</string>
@@ -409,4 +409,9 @@
     <string name="chat_copied">Copiato</string>
     <string name="chat_retry">Riprova</string>
     <string name="tab_calls_new_fmt">%1$s, nuove chiamate: %2$d</string>
+    <string name="reminder_channel">Promemoria</string>
+    <string name="reminder_title">Promemoria</string>
+    <string name="local_reminder_set">Promemoria impostato: %1$s, %2$s</string>
+    <string name="local_reminder_bad">Promemoria non impostato (ora mancante, non valida o già passata): %1$s</string>
+    <string name="local_reminder_approx">Consenti a Lina le sveglie esatte nelle impostazioni del telefono perché i promemoria suonino al minuto.</string>
 </resources>

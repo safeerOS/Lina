@@ -4,7 +4,7 @@
     <string name="app_title">Lina – AI receptionist</string>
     <string name="setup_title">Set up this phone</string>
     <string name="step_role_title">Default phone app</string>
-    <string name="step_server_title">Connect to your gateway</string>
+    <string name="step_server_title">Server connection (optional)</string>
     <string name="step_audio_title">Call audio</string>
     <string name="step_battery_title">Stay online in the background</string>
     <string name="language">Language</string>
@@ -48,7 +48,7 @@
     <string name="battery_needed">Without this the phone drops off the gateway after a few minutes.</string>
     <string name="allow">Allow</string>
     <string name="battery_manual">Open Settings, then Apps, then Lina, then Battery</string>
-    <string name="server_scan">Scan the QR code shown in the admin console.</string>
+    <string name="server_scan">Not needed: Lina answers on her own in the phone. Scan the QR code only to pair with an OpenLine server.</string>
     <string name="server_offline">%1$s, not reachable right now.</string>
     <string name="scan_again">Scan again</string>
     <string name="scan_qr">Scan QR</string>
@@ -410,4 +410,9 @@
     <string name="chat_copied">Copied</string>
     <string name="chat_retry">Try again</string>
     <string name="tab_calls_new_fmt">%1$s, new calls: %2$d</string>
+    <string name="reminder_channel">Reminders</string>
+    <string name="reminder_title">Reminder</string>
+    <string name="local_reminder_set">Reminder set: %1$s, %2$s</string>
+    <string name="local_reminder_bad">Reminder not set (time is missing, invalid or already past): %1$s</string>
+    <string name="local_reminder_approx">Allow exact alarms for Lina in the phone settings so reminders fire on the minute.</string>
 </resources>

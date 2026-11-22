@@ -4,7 +4,7 @@
     <string name="app_title">Lina – KI-Sekretärin</string>
     <string name="setup_title">Dieses Telefon einrichten</string>
     <string name="step_role_title">Standard-Telefon-App</string>
-    <string name="step_server_title">Mit dem Gateway verbinden</string>
+    <string name="step_server_title">Serververbindung (optional)</string>
     <string name="step_audio_title">Anruf-Audio</string>
     <string name="step_battery_title">Im Hintergrund online bleiben</string>
     <string name="language">Sprache</string>
@@ -48,7 +48,7 @@
     <string name="battery_needed">Ohne dies verliert das Telefon nach wenigen Minuten die Verbindung zum Gateway.</string>
     <string name="allow">Zulassen</string>
     <string name="battery_manual">Einstellungen öffnen, dann Apps, Lina, Akku</string>
-    <string name="server_scan">Scannen Sie den QR-Code aus der Admin-Konsole.</string>
+    <string name="server_scan">Nicht nötig: Lina antwortet selbstständig im Telefon. QR-Code nur scannen, um mit einem OpenLine-Server zu koppeln.</string>
     <string name="server_offline">%1$s ist derzeit nicht erreichbar.</string>
     <string name="scan_again">Erneut scannen</string>
     <string name="scan_qr">QR scannen</string>
@@ -409,4 +409,9 @@
     <string name="chat_copied">Kopiert</string>
     <string name="chat_retry">Erneut versuchen</string>
     <string name="tab_calls_new_fmt">%1$s, neue Anrufe: %2$d</string>
+    <string name="reminder_channel">Erinnerungen</string>
+    <string name="reminder_title">Erinnerung</string>
+    <string name="local_reminder_set">Erinnerung gesetzt: %1$s, %2$s</string>
+    <string name="local_reminder_bad">Erinnerung nicht gesetzt (Zeit fehlt, ist ungültig oder liegt in der Vergangenheit): %1$s</string>
+    <string name="local_reminder_approx">Erlaube Lina in den Telefoneinstellungen genaue Alarme, damit Erinnerungen minutengenau auslösen.</string>
 </resources>

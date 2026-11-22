@@ -4,7 +4,7 @@
     <string name="app_title">Lina – réceptionniste IA</string>
     <string name="setup_title">Configurer ce téléphone</string>
     <string name="step_role_title">Application Téléphone par défaut</string>
-    <string name="step_server_title">Se connecter à la passerelle</string>
+    <string name="step_server_title">Connexion au serveur (facultatif)</string>
     <string name="step_audio_title">Audio des appels</string>
     <string name="step_battery_title">Rester en ligne en arrière-plan</string>
     <string name="language">Langue</string>
@@ -48,7 +48,7 @@
     <string name="battery_needed">Sans cela, le téléphone se déconnecte de la passerelle au bout de quelques minutes.</string>
     <string name="allow">Autoriser</string>
     <string name="battery_manual">Ouvrez Paramètres, puis Applications, Lina, Batterie</string>
-    <string name="server_scan">Scannez le code QR affiché dans la console d’administration.</string>
+    <string name="server_scan">Inutile : Lina répond seule dans le téléphone. Scannez le code QR seulement pour associer un serveur OpenLine.</string>
     <string name="server_offline">%1$s n’est pas joignable pour le moment.</string>
     <string name="scan_again">Scanner à nouveau</string>
     <string name="scan_qr">Scanner le QR</string>
@@ -409,4 +409,9 @@
     <string name="chat_copied">Copié</string>
     <string name="chat_retry">Réessayer</string>
     <string name="tab_calls_new_fmt">%1$s, nouveaux appels : %2$d</string>
+    <string name="reminder_channel">Rappels</string>
+    <string name="reminder_title">Rappel</string>
+    <string name="local_reminder_set">Rappel défini : %1$s, %2$s</string>
+    <string name="local_reminder_bad">Rappel non défini (heure manquante, invalide ou déjà passée) : %1$s</string>
+    <string name="local_reminder_approx">Autorisez les alarmes exactes pour Lina dans les réglages du téléphone pour que les rappels sonnent à la minute.</string>
 </resources>

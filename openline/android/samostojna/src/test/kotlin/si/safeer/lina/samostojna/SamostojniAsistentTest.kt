@@ -10,12 +10,12 @@ import kotlin.test.assertTrue
 
 class SamostojniAsistentTest {
     @Test
-    fun navodiloVsebujeCasInFormatZapiskaInNeObljubljaOpomnikov() {
+    fun navodiloVsebujeCasInFormatZapiskaInOpomnika() {
         val n = SistemskoNavodilo.zgradi(ZonedDateTime.parse("2026-11-18T19:30:00+01:00"))
         assertTrue(n.contains("2026-11-18T19:30:00+01:00"))
         assertTrue(n.contains("[[zapisek:"))
-        // Model ne sme dobiti oblike opomnika: aplikacija ga se ne sprozi, zato bi bil opomnik laz.
-        assertFalse(n.contains("[[opomnik:"))
+        // Od 22. 11. 2026 (2j) telefon opomnik sprozi z alarmom (OpomnikAlarm), zato ga navodilo opisuje.
+        assertTrue(n.contains("[[opomnik:"))
     }
 
     @Test

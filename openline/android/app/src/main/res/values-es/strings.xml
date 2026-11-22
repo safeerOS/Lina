@@ -4,7 +4,7 @@
     <string name="app_title">Lina – recepcionista con IA</string>
     <string name="setup_title">Configurar este teléfono</string>
     <string name="step_role_title">Aplicación de teléfono predeterminada</string>
-    <string name="step_server_title">Conectar con la pasarela</string>
+    <string name="step_server_title">Conexión con el servidor (opcional)</string>
     <string name="step_audio_title">Audio de las llamadas</string>
     <string name="step_battery_title">Seguir en línea en segundo plano</string>
     <string name="language">Idioma</string>
@@ -48,7 +48,7 @@
     <string name="battery_needed">Sin esto, el teléfono se desconecta de la pasarela tras unos minutos.</string>
     <string name="allow">Permitir</string>
     <string name="battery_manual">Abra Ajustes, luego Aplicaciones, Lina, Batería</string>
-    <string name="server_scan">Escanee el código QR que se muestra en la consola de administración.</string>
+    <string name="server_scan">No es necesario: Lina responde por sí sola en el teléfono. Escanea el código QR solo para vincular un servidor OpenLine.</string>
     <string name="server_offline">%1$s no está accesible en este momento.</string>
     <string name="scan_again">Escanear de nuevo</string>
     <string name="scan_qr">Escanear QR</string>
@@ -409,4 +409,9 @@
     <string name="chat_copied">Copiado</string>
     <string name="chat_retry">Reintentar</string>
     <string name="tab_calls_new_fmt">%1$s, llamadas nuevas: %2$d</string>
+    <string name="reminder_channel">Recordatorios</string>
+    <string name="reminder_title">Recordatorio</string>
+    <string name="local_reminder_set">Recordatorio creado: %1$s, %2$s</string>
+    <string name="local_reminder_bad">Recordatorio no creado (falta la hora, no es válida o ya pasó): %1$s</string>
+    <string name="local_reminder_approx">Permite a Lina alarmas exactas en los ajustes del teléfono para que los recordatorios suenen al minuto.</string>
 </resources>

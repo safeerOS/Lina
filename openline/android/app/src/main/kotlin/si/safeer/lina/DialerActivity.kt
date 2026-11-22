@@ -998,7 +998,9 @@ class DialerActivity : Activity() {
     private fun renderServerStep(config: GatewayConfig, host: String) {
         val paired = config.deviceToken.isNotBlank()
         stepServer.render(
-            done = paired && GatewayRuntime.isConnected(),
+            // 22. 11. 2026 (lastnik: »Čeprav sem povezan z računalnikom«): brez parjenja s strežnikom OpenLine Lina odgovarja sama v telefonu,
+            // zato korak ni zahtevan; povezava z računalnikom (ikona prenosnika) je loceno in se tu ne preverja.
+            done = !paired || GatewayRuntime.isConnected(),
             statusText = when {
                 !paired -> getString(R.string.server_scan)
                 GatewayRuntime.isConnected() -> host
