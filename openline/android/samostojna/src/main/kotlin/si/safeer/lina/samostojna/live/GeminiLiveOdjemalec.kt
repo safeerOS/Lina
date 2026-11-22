@@ -38,7 +38,9 @@ class GeminiLiveOdjemalec(
     /** Ime uporabnika in rocni tozilnik za pozdrav osebne tajnice (lastnik 21. 11. 2026); prazno = »Dosegli ste glasovno tajnico.«. */
     private val imeUporabnika: () -> Pair<String, String> = { "" to "" },
     /** Casovni zapis poteka pozdrava (brez vsebine klica): »dvig«, »seja nared«, »uvod poslan«, »prvi zvok Line«, »konec obrata«. */
-    private val casovniZapis: (String) -> Unit = {}
+    private val casovniZapis: (String) -> Unit = {},
+    // Diagnosticni zajem tistega, kar klicatelj sliši (glas Line, 16 kHz s16le mono). Samo izhod Line, nikoli glas klicatelja.
+    private val zajemIzhoda: ((ByteArray) -> Unit)? = null
 ) : ZvocniMost {
 
     companion object {
@@ -88,6 +90,8 @@ class GeminiLiveOdjemalec(
     private val MAKS_OKVIRJEV_V_VRSTI = 100 // max ~2 s pri 20ms
 
     @Volatile private var nepopolnOkvir = ByteArray(0)
+    // Prevzorcenje glasu Line 24->16 kHz s stanjem med kosi (brez klikanja na mejah kosov).
+    private val prevzorcevalnik = Prevzorcevalnik24v16()
 
     // Hiter in neprekinjen pozdrav (lastnik 22. 11. 2026 po klicu ob 10.39: »ko se telefon oglasi, se mora Lina takoj oglasiti«,
     // »na zacetku se je dvakrat oglasila«):
@@ -418,11 +422,13 @@ class GeminiLiveOdjemalec(
         val dataStrs = izlusciBase64Audio(msg)
         for (dataStr in dataStrs) {
             val decoded = Base64.getDecoder().decode(dataStr)
-            val skupaj = nepopolnOkvir + resample24to16(decoded)
+            val skupaj = nepopolnOkvir + prevzorcevalnik.obdelaj(decoded)
             var offset = 0
             while (skupaj.size - offset >= 640) {
                 if (!prviZvokLine) { prviZvokLine = true; casovniZapis("prvi zvok Line klicatelju") }
-                izhodniCallback?.invoke(skupaj.copyOfRange(offset, offset + 640))
+                val okvir = skupaj.copyOfRange(offset, offset + 640)
+                zajemIzhoda?.invoke(okvir)
+                izhodniCallback?.invoke(okvir)
                 offset += 640
             }
             nepopolnOkvir = skupaj.copyOfRange(offset, skupaj.size)
@@ -442,6 +448,7 @@ class GeminiLiveOdjemalec(
             val padded = ByteArray(640)
             System.arraycopy(nepopolnOkvir, 0, padded, 0, minOf(640, nepopolnOkvir.size))
             nepopolnOkvir = ByteArray(0)
+            zajemIzhoda?.invoke(padded)
             izhodniCallback?.invoke(padded)
         }
     }
@@ -567,53 +574,5 @@ class GeminiLiveOdjemalec(
             }
             zakljuciKlic()
         }
-    }
-
-    private fun resample24to16(input: ByteArray): ByteArray {
-        val numInputSamples = input.size / 2
-        
-        val inShorts = ShortArray(numInputSamples)
-        for (i in 0 until numInputSamples) {
-            val low = input[i * 2].toInt() and 0xFF
-            val high = input[i * 2 + 1].toInt() shl 8
-            inShorts[i] = (low or high).toShort()
-        }
-        
-        // 15-tap FIR lowpass filter, fc = 5500 Hz at fs = 24000 Hz
-        val firTaps = floatArrayOf(
-            -0.0022f, 0.0047f, 0.0128f, -0.0174f, -0.0631f, 0.0341f, 0.3016f, 0.4589f,
-            0.3016f, 0.0341f, -0.0631f, -0.0174f, 0.0128f, 0.0047f, -0.0022f
-        )
-        val filtered = FloatArray(numInputSamples)
-        for (i in 0 until numInputSamples) {
-            var sum = 0f
-            for (j in 0 until 15) {
-                val idx = i - j + 7 // center tap is at 7
-                if (idx in 0 until numInputSamples) {
-                    sum += inShorts[idx] * firTaps[j]
-                }
-            }
-            filtered[i] = sum
-        }
-        
-        val numOutputSamples = numInputSamples * 2 / 3
-        val output = ByteArray(numOutputSamples * 2)
-        
-        for (i in 0 until numOutputSamples) {
-            val inIdx = i * 1.5f
-            val idx1 = inIdx.toInt()
-            val idx2 = (idx1 + 1).coerceAtMost(numInputSamples - 1)
-            val frac = inIdx - idx1
-            
-            val s1 = filtered[idx1]
-            val s2 = filtered[idx2]
-            val outS = (s1 * (1.0f - frac) + s2 * frac).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-            
-            val s = outS.toInt()
-            output[i * 2] = (s and 0xFF).toByte()
-            output[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
-        }
-        
-        return output
     }
 }
