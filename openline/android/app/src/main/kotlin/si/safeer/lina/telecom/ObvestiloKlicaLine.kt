@@ -23,6 +23,8 @@ import java.time.ZonedDateTime
  */
 object ObvestiloKlicaLine {
     const val ODPRI_KLICE = "si.safeer.lina.ODPRI_KLICE"
+    const val ID_KLICA = "si.safeer.lina.ID_KLICA"
+    const val PONOVNI = "si.safeer.lina.PONOVNI"
     private const val KANAL = "lina_klici"
     private const val KANAL_NUJNO = "lina_klici_nujno"
 
@@ -48,10 +50,18 @@ object ObvestiloKlicaLine {
             si.safeer.lina.ContactSearch(context).nameOf(zapis.stevilka) ?: zapis.stevilka.ifBlank { context.getString(R.string.unknown_number) }
         }
         val besedilo = zapis.sporocilo.ifBlank { zapis.povzetek }.trim()
-        val naslov = context.getString(if (zapis.nujno) R.string.lina_call_notice_title_urgent else R.string.lina_call_notice_title, kdo)
+        val osnova = context.getString(if (zapis.nujno) R.string.lina_call_notice_title_urgent else R.string.lina_call_notice_title, kdo)
+        // Isti klicatelj je ze klical (22. 11. 2026): naslov pove, koliko krat; obvestilo odpre vsa njegova sporocila s povzetkom.
+        val steviloKlicev = runCatching {
+            si.safeer.lina.samostojna.skupinaZaKlic(si.safeer.lina.asistent.DnevnikKlicevSkupni.dobi(context).seznamPoDatumu(nujniNaVrhu = false), zapis)?.klici?.size
+        }.getOrNull() ?: 1
+        val naslov = if (steviloKlicev > 1) context.getString(R.string.lina_call_notice_repeat_fmt, osnova, steviloKlicev) else osnova
+        // Vsako obvestilo svojo zahtevo: s skupno kodo in FLAG_UPDATE_CURRENT bi starejse obvestilo odprlo zadnjega klicatelja.
         val odpri = PendingIntent.getActivity(
-            context, 7006,
-            Intent(context, DialerActivity::class.java).setAction(ODPRI_KLICE).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            context, zapis.id.hashCode(),
+            Intent(context, DialerActivity::class.java).setAction(ODPRI_KLICE)
+                .putExtra(ID_KLICA, zapis.id).putExtra(PONOVNI, steviloKlicev > 1)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val obvestilo = Notification.Builder(context, kanal)

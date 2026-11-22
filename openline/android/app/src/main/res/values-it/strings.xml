@@ -386,4 +386,20 @@
     <string name="set_menu_setup_desc">App predefinita, audio chiamate, batteria</string>
     <string name="set_menu_computer">Computer</string>
     <string name="set_menu_computer_desc">Connessione a Lina sul computer</string>
+    <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
+    <string name="lina_calls_open_folder">Apri cartella</string>
+    <string name="lina_calls_count_fmt">Chiamate: %1$d</string>
+    <string name="lina_calls_urgent">urgente</string>
+    <string name="lina_calls_summary">Riepilogo di tutti i messaggi</string>
+    <string name="lina_calls_summary_prompt_fmt">Riassumi tutti i messaggi del chiamante: %1$s</string>
+    <string name="lina_calls_open_fail_fmt">Impossibile aprire la cartella. Apri l\'app File e vai in %1$s</string>
+    <string name="lina_call_notice_repeat_fmt">%1$s (%2$d° chiamata)</string>
+    <string name="local_google_help">Prima di accedere prepara un progetto Google Cloud con la fatturazione attivata; senza fatturazione Google non risponde. I nuovi clienti ricevono 300 $ di credito per 90 giorni.\n\nCome attivare la fatturazione del progetto: su console.cloud.google.com apri il menu ☰ → «Billing» → «Manage billing accounts» → scheda «My projects». Nella riga del progetto con «Billing is disabled» apri «⋮» (Actions) → «Change billing», scegli un account di fatturazione e premi «Set account». Se non hai ancora un account di fatturazione, Google propone di crearne uno.</string>
+    <!-- Priponke v pogovoru (22. 11. 2026) -->
+    <string name="chat_attach">Allega file</string>
+    <string name="chat_attach_no_picker">Nessuna app per scegliere i file.</string>
+    <string name="chat_attach_too_many">Puoi allegare al massimo %1$d file alla volta.</string>
+    <string name="chat_attach_too_big">Il file %1$s supera 15 MB.</string>
+    <string name="chat_attach_read_fail">Impossibile leggere il file %1$s.</string>
+    <string name="chat_attach_remove">Rimuovi allegato %1$s</string>
 </resources>

@@ -30,6 +30,12 @@ import si.safeer.lina.samostojna.dodajZapisek
 import si.safeer.lina.samostojna.izbrisiZapisek
 import si.safeer.lina.samostojna.vidniZapiski
 import si.safeer.lina.samostojna.Zapisek
+import si.safeer.lina.samostojna.NAJVEC_BAJTOV_PRIPONK
+import si.safeer.lina.samostojna.NAJVEC_PRIPONK
+import si.safeer.lina.samostojna.PRIVZETA_ZAHTEVA_PRIPONKE
+import si.safeer.lina.samostojna.PripravljenaPriponka
+import si.safeer.lina.samostojna.besediloZPriponkami
+import si.safeer.lina.samostojna.pripraviPriponko
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
@@ -53,6 +59,9 @@ class LinaPogovorPogled(
     /** Sporocila na zaslonu (true = Lina). Ob zagonu se nalozi zadnjih [NAJVEC_PRIKAZANIH] iz trajnega pogovora. */
     private val sporocila = mutableListOf<Pair<Boolean, String>>()
     private var nalozeno = false
+    /** Priponke za naslednje sporocilo (22. 11. 2026); prebrane in preverjene ob izbiri. */
+    private val priponke = mutableListOf<PripravljenaPriponka>()
+    private val vrsticaPriponk: LinearLayout by lazy { a.findViewById(R.id.assistantComposerAttachments) }
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
     private val namig: TextView = a.findViewById<TextView>(R.id.assistantSetupHint).apply {
@@ -88,6 +97,7 @@ class LinaPogovorPogled(
         a.findViewById<Button>(R.id.assistantBackToAssistant).setOnClickListener { nazaj() }
         klepetPosli.setOnClickListener { poslji() }
         a.findViewById<View>(R.id.assistantChatMic).setOnClickListener { govori() }
+        a.findViewById<View>(R.id.assistantChatAttach).setOnClickListener { izberiPriponke() }
         for (predlog in listOf(R.string.chat_chip_today, R.string.chat_chip_calls, R.string.chat_chip_remind)) {
             klepetPredlogi.addView(Button(a, null, 0, R.style.Gw_Button).apply {
                 setText(predlog)
@@ -123,6 +133,7 @@ class LinaPogovorPogled(
 
     companion object {
         const val ZAHTEVA_GOVOR = 7311
+        const val ZAHTEVA_PRIPONKA = 7312
         private const val NAJVEC_PRIKAZANIH = 40
     }
 
@@ -261,19 +272,137 @@ class LinaPogovorPogled(
         return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a)).also { asistent = it; asistentDan = danes }
     }
 
+    /** Ali ima Lina mozgane (kljuc ali prijava Google s projektom); uporablja povzetek klicatelja v zavihku Klici. */
+    fun imaMozgane(): Boolean = imaDostop()
+
+    /**
+     * Povzetek klicatelja iz zavihka Klici (22. 11. 2026): v klepetu se pokaze kratka prosnja, model dobi celoten poziv s
+     * sporocili. Vrne false, ce Lina se caka na prejsnji odgovor.
+     */
+    fun posljiPoziv(prikaz: String, poziv: String): Boolean {
+        if (caka) return false
+        posljiBesedilo(prikaz, poziv)
+        return true
+    }
+
     private fun poslji() {
         val vnos = klepetVnos.text.toString().trim()
-        if (vnos.isEmpty() || caka) return
-        caka = true
+        if ((vnos.isEmpty() && priponke.isEmpty()) || caka) return
         klepetVnos.setText("")
         (a.getSystemService(Activity.INPUT_METHOD_SERVICE) as? InputMethodManager)?.hideSoftInputFromWindow(klepetVnos.windowToken, 0)
-        sporocila += false to vnos
+        if (priponke.isEmpty()) { posljiBesedilo(vnos, vnos); return }
+        val izbrane = priponke.toList()
+        priponke.clear()
+        narisiPriponke()
+        val imena = izbrane.joinToString(", ") { ime(it) }
+        val prikaz = listOf(vnos, "📎 $imena").filter { it.isNotEmpty() }.joinToString("\n")
+        val binarne = izbrane.filterIsInstance<PripravljenaPriponka.Binarna>().map { it.priponka }
+        posljiBesedilo(prikaz, besediloZPriponkami(vnos.ifEmpty { PRIVZETA_ZAHTEVA_PRIPONKE }, izbrane), binarne)
+    }
+
+    private fun ime(p: PripravljenaPriponka) = when (p) {
+        is PripravljenaPriponka.Binarna -> p.priponka.ime
+        is PripravljenaPriponka.Besedilna -> p.ime
+        is PripravljenaPriponka.Napaka -> ""
+    }
+
+    /** Sistemski izbirnik datotek (brez dovoljenja za pomnilnik): slike, PDF, video, zvok, besedilo; vec naenkrat. */
+    private fun izberiPriponke() {
+        val namen = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "application/pdf", "video/*", "audio/*", "text/*", "application/json"))
+            .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        try { a.startActivityForResult(namen, ZAHTEVA_PRIPONKA) }
+        catch (e: ActivityNotFoundException) { opozori(a.getString(R.string.chat_attach_no_picker)) }
+    }
+
+    /** Rezultat izbirnika (DialerActivity.onActivityResult). Branje in preverjanje na ozadni niti, meja 15 MB na datoteko. */
+    fun dodajPriponke(data: Intent?) {
+        val uriji = buildList {
+            data?.clipData?.let { c -> for (i in 0 until c.itemCount) add(c.getItemAt(i).uri) }
+            if (isEmpty()) data?.data?.let { add(it) }
+        }
+        if (uriji.isEmpty()) return
+        val ponudnik = SkupniKljuci.aktivniPonudnik(a)
+        nit.execute {
+            val izidi = uriji.map { uri -> preberiPriponko(uri, ponudnik) }
+            glavna.post {
+                if (a.isFinishing) return@post
+                for (izid in izidi) {
+                    when {
+                        izid is PripravljenaPriponka.Napaka -> opozori(izid.sporocilo)
+                        priponke.size >= NAJVEC_PRIPONK -> opozori(a.getString(R.string.chat_attach_too_many, NAJVEC_PRIPONK))
+                        else -> priponke += izid
+                    }
+                }
+                narisiPriponke()
+            }
+        }
+    }
+
+    private fun preberiPriponko(uri: Uri, ponudnik: Ponudnik): PripravljenaPriponka {
+        val r = a.contentResolver
+        var ime: String? = null
+        var velikost = -1L
+        runCatching {
+            r.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME, android.provider.OpenableColumns.SIZE), null, null, null)?.use {
+                if (it.moveToFirst()) {
+                    ime = it.getString(0)
+                    if (!it.isNull(1)) velikost = it.getLong(1)
+                }
+            }
+        }
+        if (velikost > NAJVEC_BAJTOV_PRIPONK) return PripravljenaPriponka.Napaka(a.getString(R.string.chat_attach_too_big, ime ?: ""))
+        val bajti = try {
+            r.openInputStream(uri)?.use { vhod ->
+                // Branje z mejo: ponudnik velikosti lahko ne pove, zato preberemo najvec meja + 1 bajt.
+                val izhod = java.io.ByteArrayOutputStream()
+                val med = ByteArray(64 * 1024)
+                var skupaj = 0
+                while (true) {
+                    val n = vhod.read(med)
+                    if (n < 0) break
+                    skupaj += n
+                    if (skupaj > NAJVEC_BAJTOV_PRIPONK) return PripravljenaPriponka.Napaka(a.getString(R.string.chat_attach_too_big, ime ?: ""))
+                    izhod.write(med, 0, n)
+                }
+                izhod.toByteArray()
+            }
+        } catch (e: Exception) { null } ?: return PripravljenaPriponka.Napaka(a.getString(R.string.chat_attach_read_fail, ime ?: ""))
+        return pripraviPriponko(ime, bajti, ponudnik)
+    }
+
+    private fun narisiPriponke() {
+        vrsticaPriponk.removeAllViews()
+        for (p in priponke.toList()) {
+            vrsticaPriponk.addView(TextView(a).apply {
+                setTextAppearance(R.style.Gw_Muted)
+                text = "📎 ${ime(p)}   ✕"
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+                minHeight = dp(40)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                contentDescription = a.getString(R.string.chat_attach_remove, ime(p))
+                setOnClickListener { priponke.remove(p); narisiPriponke() }
+            })
+        }
+        vrsticaPriponk.visibility = if (priponke.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private fun opozori(besedilo: String) {
+        android.widget.Toast.makeText(a, besedilo, android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    private fun posljiBesedilo(prikaz: String, vnos: String, binarne: List<si.safeer.lina.samostojna.Priponka> = emptyList()) {
+        caka = true
+        sporocila += false to prikaz
         sporocila += true to a.getString(R.string.local_thinking)
         osvezi()
         val asist = trenutniAsistent()
         val mojRod = rod
         nit.execute {
-            val odgovor = try { asist.povej(vnos) } catch (e: Exception) { Odgovor.Napaka(e.javaClass.simpleName) }
+            val odgovor = try { asist.povej(vnos, binarne) } catch (e: Exception) { Odgovor.Napaka(e.javaClass.simpleName) }
             glavna.post {
                 if (a.isFinishing) return@post
                 if (mojRod != rod) { odstraniZadnjo(); caka = false; osvezi(); return@post }
@@ -298,7 +427,7 @@ class LinaPogovorPogled(
                 sporocila += true to besedilo
                 if (odgovor !is Odgovor.Napaka) runCatching {
                     val trajen = PogovorSkupni.dobi(a)
-                    trajen.dodaj("lastnik", vnos)
+                    trajen.dodaj("lastnik", prikaz)
                     trajen.dodaj("lina", besedilo)
                     SinhronizacijaZLino.zazeni(a, takoj = true)
                 }

@@ -42,16 +42,30 @@ class Asistent(
         return v.startsWith("[[") && v.endsWith("]]") && (v.startsWith("[[iskanje:") || v.startsWith("[[beri:"))
     }
 
-    fun povej(vnos: String): Odgovor {
+    /**
+     * [priponke]: binarne priponke tega obrata (22. 11. 2026). Gredo k ponudniku samo v tem obratu (in v krogih orodij);
+     * po odgovoru ostane v zgodovini samo besedilo, da se velike datoteke ne posiljajo ob vsakem naslednjem vprasanju.
+     */
+    fun povej(vnos: String, priponke: List<Priponka> = emptyList()): Odgovor {
         if (vnos.isBlank()) {
             return Odgovor.Besedilo("")
         }
+        try {
+            return povejNotranje(vnos, priponke)
+        } finally {
+            if (priponke.isNotEmpty()) {
+                val i = zgodovina.indexOfFirst { it.priponke.isNotEmpty() }
+                if (i >= 0) zgodovina[i] = zgodovina[i].copy(priponke = emptyList())
+            }
+        }
+    }
 
+    private fun povejNotranje(vnos: String, priponke: List<Priponka>): Odgovor {
         // Priklic starejsih sorodnih obratov (ne tistih, ki so ze v zgodovini seje); podatek, ne navodilo. Napaka spomina ne podre pogovora.
         val priklic = runCatching { spomin?.prikliči(vnos, zgodovina.map { it.besedilo }) ?: "" }.getOrDefault("")
-        val navodilo = sistemskoNavodilo + navodiloSpomina(priklic)
+        val navodilo = sistemskoNavodilo + navodiloSpomina(priklic) + (if (priponke.isNotEmpty() || vnos.contains("--- Začetek datoteke")) NAVODILO_PRIPONK else "")
 
-        zgodovina.add(Sporocilo("user", vnos))
+        zgodovina.add(Sporocilo("user", vnos, priponke))
         var dodano = 1
         obrezi()
 

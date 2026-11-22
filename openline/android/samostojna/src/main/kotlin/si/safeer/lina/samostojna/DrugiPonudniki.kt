@@ -94,7 +94,21 @@ class OpenAiOdjemalec(
         put("messages", buildJsonArray {
             if (sistemsko.isNotEmpty()) add(buildJsonObject { put("role", "system"); put("content", sistemsko) })
             for (s in zgodovina) add(buildJsonObject {
-                put("role", if (s.vloga == "model") "assistant" else "user"); put("content", s.besedilo)
+                put("role", if (s.vloga == "model") "assistant" else "user")
+                if (s.priponke.isEmpty()) put("content", s.besedilo)
+                // Slike kot data URL, PDF kot »file« (OpenAI, OpenRouter); ostale vrste zavrne ze pripraviPriponko.
+                else put("content", buildJsonArray {
+                    add(buildJsonObject { put("type", "text"); put("text", s.besedilo) })
+                    for (p in s.priponke) add(
+                        if (p.vrsta == VrstaPriponke.PDF) buildJsonObject {
+                            put("type", "file")
+                            put("file", buildJsonObject { put("filename", p.ime); put("file_data", "data:${p.mime};base64,${p.base64}") })
+                        } else buildJsonObject {
+                            put("type", "image_url")
+                            put("image_url", buildJsonObject { put("url", "data:${p.mime};base64,${p.base64}") })
+                        },
+                    )
+                })
             })
         })
     }.toString()
@@ -133,7 +147,15 @@ class ClaudeOdjemalec(
         if (sistemsko.isNotEmpty()) put("system", sistemsko)
         put("messages", buildJsonArray {
             for (s in zgodovina) add(buildJsonObject {
-                put("role", if (s.vloga == "model") "assistant" else "user"); put("content", s.besedilo)
+                put("role", if (s.vloga == "model") "assistant" else "user")
+                if (s.priponke.isEmpty()) put("content", s.besedilo)
+                else put("content", buildJsonArray {
+                    for (p in s.priponke) add(buildJsonObject {
+                        put("type", if (p.vrsta == VrstaPriponke.PDF) "document" else "image")
+                        put("source", buildJsonObject { put("type", "base64"); put("media_type", p.mime); put("data", p.base64) })
+                    })
+                    add(buildJsonObject { put("type", "text"); put("text", s.besedilo) })
+                })
             })
         })
     }.toString()

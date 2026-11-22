@@ -45,6 +45,9 @@ class PostavitevTelefonTest {
         assertEquals("@+id/assistantComposer", vrstica.getAttributeNS(ns, "id"))
         assertTrue(!prednikiImajo(poId("assistantChatSend"), "ScrollView"))
         assertTrue(!prednikiImajo(poId("assistantChatMic"), "ScrollView"))
+        // Priponke (22. 11. 2026): sponka v vrstici za vnos, seznam priponk nad njo, oba zunaj drsnih obmocij.
+        assertEquals("assistantComposer", (poId("assistantChatAttach").parentNode as Element).getAttributeNS(ns, "id").removePrefix("@+id/"))
+        assertTrue(!prednikiImajo(poId("assistantComposerAttachments"), "ScrollView"))
         assertEquals("52dp", poId("assistantChatSend").getAttributeNS(ns, "layout_width"), "cilj dotika vsaj 48 dp")
     }
 

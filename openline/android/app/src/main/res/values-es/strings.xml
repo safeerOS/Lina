@@ -386,4 +386,20 @@
     <string name="set_menu_setup_desc">App predeterminada, audio de llamada, batería</string>
     <string name="set_menu_computer">Ordenador</string>
     <string name="set_menu_computer_desc">Conexión con Lina en el ordenador</string>
+    <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
+    <string name="lina_calls_open_folder">Abrir carpeta</string>
+    <string name="lina_calls_count_fmt">Llamadas: %1$d</string>
+    <string name="lina_calls_urgent">urgente</string>
+    <string name="lina_calls_summary">Resumen de todos los mensajes</string>
+    <string name="lina_calls_summary_prompt_fmt">Resume todos los mensajes de la persona que llamó: %1$s</string>
+    <string name="lina_calls_open_fail_fmt">No se pudo abrir la carpeta. Abra la app Archivos y vaya a %1$s</string>
+    <string name="lina_call_notice_repeat_fmt">%1$s (llamada n.º %2$d)</string>
+    <string name="local_google_help">Antes de iniciar sesión, prepare un proyecto de Google Cloud con la facturación activada; sin facturación Google no responde. Los clientes nuevos reciben 300 $ de crédito durante 90 días.\n\nCómo activar la facturación del proyecto: en console.cloud.google.com abra el menú ☰ → «Billing» → «Manage billing accounts» → pestaña «My projects». En la fila del proyecto que dice «Billing is disabled», abra «⋮» (Actions) → «Change billing», elija una cuenta de facturación y pulse «Set account». Si aún no tiene cuenta de facturación, Google le ofrece crearla.</string>
+    <!-- Priponke v pogovoru (22. 11. 2026) -->
+    <string name="chat_attach">Adjuntar archivo</string>
+    <string name="chat_attach_no_picker">No se encontró ninguna app para elegir archivos.</string>
+    <string name="chat_attach_too_many">Puede adjuntar como máximo %1$d archivos a la vez.</string>
+    <string name="chat_attach_too_big">El archivo %1$s supera los 15 MB.</string>
+    <string name="chat_attach_read_fail">No se pudo leer el archivo %1$s.</string>
+    <string name="chat_attach_remove">Quitar adjunto %1$s</string>
 </resources>

@@ -387,4 +387,20 @@
     <string name="set_menu_setup_desc">Default app, call audio, battery</string>
     <string name="set_menu_computer">Computer</string>
     <string name="set_menu_computer_desc">Connection to Lina on your computer</string>
+    <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
+    <string name="lina_calls_open_folder">Open folder</string>
+    <string name="lina_calls_count_fmt">Calls: %1$d</string>
+    <string name="lina_calls_urgent">urgent</string>
+    <string name="lina_calls_summary">Summary of all messages</string>
+    <string name="lina_calls_summary_prompt_fmt">Summarise all messages from caller: %1$s</string>
+    <string name="lina_calls_open_fail_fmt">The folder could not be opened. Open the Files app and go to %1$s</string>
+    <string name="lina_call_notice_repeat_fmt">%1$s (call no. %2$d)</string>
+    <string name="local_google_help">Before signing in, prepare a Google Cloud project with billing enabled; without billing Google does not answer. New customers get $300 credit for 90 days.\n\nHow to enable billing on the project: at console.cloud.google.com open the menu ☰ → \'Billing\' → \'Manage billing accounts\' → \'My projects\' tab. In the row of the project that says \'Billing is disabled\', open \'⋮\' (Actions) → \'Change billing\', choose a billing account and press \'Set account\'. If you do not have a billing account yet, Google offers to create one.</string>
+    <!-- Priponke v pogovoru (22. 11. 2026) -->
+    <string name="chat_attach">Attach file</string>
+    <string name="chat_attach_no_picker">No app for choosing files was found.</string>
+    <string name="chat_attach_too_many">You can attach at most %1$d files at once.</string>
+    <string name="chat_attach_too_big">The file %1$s is larger than 15 MB.</string>
+    <string name="chat_attach_read_fail">The file %1$s could not be read.</string>
+    <string name="chat_attach_remove">Remove attachment %1$s</string>
 </resources>

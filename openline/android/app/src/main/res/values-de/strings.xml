@@ -386,4 +386,20 @@
     <string name="set_menu_setup_desc">Standard-App, Anrufton, Akku</string>
     <string name="set_menu_computer">Computer</string>
     <string name="set_menu_computer_desc">Verbindung zu Lina auf dem Computer</string>
+    <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
+    <string name="lina_calls_open_folder">Ordner öffnen</string>
+    <string name="lina_calls_count_fmt">Anrufe: %1$d</string>
+    <string name="lina_calls_urgent">dringend</string>
+    <string name="lina_calls_summary">Zusammenfassung aller Nachrichten</string>
+    <string name="lina_calls_summary_prompt_fmt">Fasse alle Nachrichten des Anrufers zusammen: %1$s</string>
+    <string name="lina_calls_open_fail_fmt">Der Ordner konnte nicht geöffnet werden. Öffnen Sie die App Dateien und gehen Sie zu %1$s</string>
+    <string name="lina_call_notice_repeat_fmt">%1$s (%2$d. Anruf)</string>
+    <string name="local_google_help">Bereiten Sie vor der Anmeldung ein Google-Cloud-Projekt mit aktivierter Abrechnung vor; ohne Abrechnung antwortet Google nicht. Neukunden erhalten 300 $ Guthaben für 90 Tage.\n\nSo aktivieren Sie die Abrechnung im Projekt: Öffnen Sie auf console.cloud.google.com das Menü ☰ → „Billing“ → „Manage billing accounts“ → Tab „My projects“. Öffnen Sie in der Zeile des Projekts mit „Billing is disabled“ „⋮“ (Actions) → „Change billing“, wählen Sie ein Rechnungskonto und drücken Sie „Set account“. Ohne Rechnungskonto bietet Google an, eines zu erstellen.</string>
+    <!-- Priponke v pogovoru (22. 11. 2026) -->
+    <string name="chat_attach">Datei anhängen</string>
+    <string name="chat_attach_no_picker">Keine App zur Dateiauswahl gefunden.</string>
+    <string name="chat_attach_too_many">Sie können höchstens %1$d Dateien auf einmal anhängen.</string>
+    <string name="chat_attach_too_big">Die Datei %1$s ist größer als 15 MB.</string>
+    <string name="chat_attach_read_fail">Die Datei %1$s konnte nicht gelesen werden.</string>
+    <string name="chat_attach_remove">Anhang %1$s entfernen</string>
 </resources>

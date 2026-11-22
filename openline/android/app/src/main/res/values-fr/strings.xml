@@ -386,4 +386,20 @@
     <string name="set_menu_setup_desc">Application par défaut, son des appels, batterie</string>
     <string name="set_menu_computer">Ordinateur</string>
     <string name="set_menu_computer_desc">Connexion à Lina sur l\'ordinateur</string>
+    <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
+    <string name="lina_calls_open_folder">Ouvrir le dossier</string>
+    <string name="lina_calls_count_fmt">Appels : %1$d</string>
+    <string name="lina_calls_urgent">urgent</string>
+    <string name="lina_calls_summary">Résumé de tous les messages</string>
+    <string name="lina_calls_summary_prompt_fmt">Résume tous les messages de l\'appelant : %1$s</string>
+    <string name="lina_calls_open_fail_fmt">Impossible d\'ouvrir le dossier. Ouvrez l\'app Fichiers et allez dans %1$s</string>
+    <string name="lina_call_notice_repeat_fmt">%1$s (%2$de appel)</string>
+    <string name="local_google_help">Avant de vous connecter, préparez un projet Google Cloud avec la facturation activée ; sans facturation, Google ne répond pas. Les nouveaux clients reçoivent 300 $ de crédit pendant 90 jours.\n\nComment activer la facturation du projet : sur console.cloud.google.com, ouvrez le menu ☰ → « Billing » → « Manage billing accounts » → onglet « My projects ». Sur la ligne du projet indiquant « Billing is disabled », ouvrez « ⋮ » (Actions) → « Change billing », choisissez un compte de facturation et appuyez sur « Set account ». Si vous n\'avez pas encore de compte de facturation, Google propose d\'en créer un.</string>
+    <!-- Priponke v pogovoru (22. 11. 2026) -->
+    <string name="chat_attach">Joindre un fichier</string>
+    <string name="chat_attach_no_picker">Aucune app pour choisir des fichiers.</string>
+    <string name="chat_attach_too_many">Vous pouvez joindre au plus %1$d fichiers à la fois.</string>
+    <string name="chat_attach_too_big">Le fichier %1$s dépasse 15 Mo.</string>
+    <string name="chat_attach_read_fail">Impossible de lire le fichier %1$s.</string>
+    <string name="chat_attach_remove">Retirer la pièce jointe %1$s</string>
 </resources>

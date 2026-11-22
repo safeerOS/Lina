@@ -4,7 +4,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-data class Sporocilo(val vloga: String, val besedilo: String)
+/** [priponke]: slike, PDF, video, zvok samo v trenutnem obratu; po odgovoru Asistent v zgodovini pusti samo besedilo. */
+data class Sporocilo(val vloga: String, val besedilo: String, val priponke: List<Priponka> = emptyList())
 
 sealed class Rezultat {
     data class Besedilo(val besedilo: String) : Rezultat()
@@ -18,7 +19,11 @@ class KljucGemini(private val vrednost: String) {
 }
 
 @Serializable
-private data class Part(val text: String)
+private data class InlineData(val mimeType: String, val data: String)
+
+/** Prazna polja se ne zapisejo (privzete vrednosti brez encodeDefaults): del je besedilo ALI vgrajeni podatki. */
+@Serializable
+private data class Part(val text: String? = null, val inlineData: InlineData? = null)
 
 @Serializable
 private data class Content(val role: String? = null, val parts: List<Part>)
@@ -42,7 +47,7 @@ fun gradiTelo(zgodovina: List<Sporocilo>, sistemskoNavodilo: String): String {
     }
     
     val contents = zgodovina.map {
-        Content(role = it.vloga, parts = listOf(Part(it.besedilo)))
+        Content(role = it.vloga, parts = it.priponke.map { p -> Part(inlineData = InlineData(p.mime, p.base64)) } + Part(it.besedilo))
     }
     
     val request = GeminiRequest(systemInstruction = systemInstruction, contents = contents)
@@ -103,7 +108,7 @@ fun razberiOdgovor(json: String): Rezultat {
         return Rezultat.Napaka(null, "Manjka besedilo")
     }
     
-    val text = parts.joinToString("") { it.text }
+    val text = parts.joinToString("") { it.text.orEmpty() }
     if (text.isEmpty()) {
         return Rezultat.Napaka(null, "Manjka besedilo")
     }

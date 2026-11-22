@@ -114,7 +114,16 @@ class DialerActivity : Activity() {
     private lateinit var tabNotes: View
     private lateinit var nastavitveMeni: si.safeer.lina.asistent.NastavitveMeni
     private lateinit var domov: si.safeer.lina.asistent.DomovPogled
-    private val linaKlici by lazy { si.safeer.lina.asistent.LinaKlicPogled(this) }
+    private val linaKlici by lazy {
+        si.safeer.lina.asistent.LinaKlicPogled(this) { prikaz, poziv ->
+            // Povzetek vseh sporocil klicatelja pripravi Lina v Pogovoru; brez mozganov LinaKlicPogled pokaze lokalni povzetek.
+            if (!::samostojniPogled.isInitialized || !samostojniPogled.imaMozgane()) false
+            else {
+                showTab(Zavihek.LINA)
+                samostojniPogled.posljiPoziv(prikaz, poziv)
+            }
+        }
+    }
     private lateinit var tabPhone: View
     private lateinit var tabLina: View
     private lateinit var tabSettings: View
@@ -487,8 +496,11 @@ class DialerActivity : Activity() {
 
     /** Vrstica za vnos pogovora: samo v zavihku Lina in samo, ko je pogovor na voljo. */
     private fun osveziSestavljalnik() {
-        findViewById<View>(R.id.assistantComposer).visibility =
-            if (zavihekZdaj == Zavihek.LINA && samostojniPogled.imaKlepet()) View.VISIBLE else View.GONE
+        val viden = zavihekZdaj == Zavihek.LINA && samostojniPogled.imaKlepet()
+        findViewById<View>(R.id.assistantComposer).visibility = if (viden) View.VISIBLE else View.GONE
+        // Izbrane priponke ostanejo, vrstica pa je vidna samo skupaj z vrstico za vnos.
+        val vrstica = findViewById<android.view.ViewGroup>(R.id.assistantComposerAttachments)
+        vrstica.visibility = if (viden && vrstica.childCount > 0) View.VISIBLE else View.GONE
     }
 
     private fun odpriIzDomova(p: si.safeer.lina.samostojna.PloscaDomov) {
@@ -636,6 +648,11 @@ class DialerActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        // Priponke za pogovor z Lino (22. 11. 2026).
+        if (requestCode == si.safeer.lina.asistent.LinaPogovorPogled.ZAHTEVA_PRIPONKA) {
+            if (resultCode == RESULT_OK) samostojniPogled.dodajPriponke(data)
+            return
+        }
         if (requestCode == si.safeer.lina.asistent.LinaPogovorPogled.ZAHTEVA_GOVOR) {
             if (resultCode == RESULT_OK) data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { samostojniPogled.vstaviGovor(it) }
             return
@@ -1404,7 +1421,13 @@ class DialerActivity : Activity() {
     }
 
     private fun applyDialIntent(intent: Intent) {
-        if (intent.action == si.safeer.lina.telecom.ObvestiloKlicaLine.ODPRI_KLICE) showTab(Zavihek.KLICI)
+        if (intent.action == si.safeer.lina.telecom.ObvestiloKlicaLine.ODPRI_KLICE) {
+            showTab(Zavihek.KLICI)
+            // Obvestilo ponovnega klicatelja odpre vsa njegova sporocila (z gumbom za povzetek).
+            intent.getStringExtra(si.safeer.lina.telecom.ObvestiloKlicaLine.ID_KLICA)?.let { id ->
+                if (intent.getBooleanExtra(si.safeer.lina.telecom.ObvestiloKlicaLine.PONOVNI, false)) linaKlici.odpriKlicatelja(id)
+            }
+        }
         if (intent.action == Intent.ACTION_DIAL) {
             showTab(Zavihek.KLICI)
             intent.data?.schemeSpecificPart?.let { numberInput.setText(it) }

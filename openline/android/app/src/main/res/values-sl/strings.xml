@@ -386,4 +386,20 @@
     <string name="set_menu_setup_desc">Privzeta aplikacija, zvok klica, baterija</string>
     <string name="set_menu_computer">Računalnik</string>
     <string name="set_menu_computer_desc">Povezava z Lino na računalniku</string>
+    <!-- Klici po klicateljih in mapa klicev (22. 11. 2026) -->
+    <string name="lina_calls_open_folder">Odpri mapo</string>
+    <string name="lina_calls_count_fmt">Klicev: %1$d</string>
+    <string name="lina_calls_urgent">nujno</string>
+    <string name="lina_calls_summary">Povzetek vseh sporočil</string>
+    <string name="lina_calls_summary_prompt_fmt">Povzemi vsa sporočila klicatelja: %1$s</string>
+    <string name="lina_calls_open_fail_fmt">Mape ni bilo mogoče odpreti. Odprite aplikacijo Datoteke in pojdite v %1$s</string>
+    <string name="lina_call_notice_repeat_fmt">%1$s (%2$d. klic)</string>
+    <string name="local_google_help">Pred prijavo pripravite projekt v Google Cloud z vklopljenim obračunom; brez obračuna Google ne odgovori. Novi uporabniki dobijo 300 $ kredita za 90 dni.\n\nKako vklopite obračun v projektu: na console.cloud.google.com odprite meni ☰ → »Billing« → »Manage billing accounts« → zavihek »My projects«. V vrstici projekta, kjer piše »Billing is disabled«, odprite »⋮« (Actions) → »Change billing«, izberite obračunski račun in pritisnite »Set account«. Če obračunskega računa še nimate, vam ga Google ponudi ustvariti.</string>
+    <!-- Priponke v pogovoru (22. 11. 2026) -->
+    <string name="chat_attach">Priloži datoteko</string>
+    <string name="chat_attach_no_picker">Ni aplikacije za izbiro datotek.</string>
+    <string name="chat_attach_too_many">Priložite lahko največ %1$d datotek naenkrat.</string>
+    <string name="chat_attach_too_big">Datoteka %1$s je večja od 15 MB.</string>
+    <string name="chat_attach_read_fail">Datoteke %1$s ni bilo mogoče prebrati.</string>
+    <string name="chat_attach_remove">Odstrani priponko %1$s</string>
 </resources>

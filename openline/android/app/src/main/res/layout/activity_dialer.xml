@@ -834,6 +834,15 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/local_google_sign_in" />
+
+                <TextView
+                    android:id="@+id/assistantGoogleHelp"
+                    style="@style/Gw.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textIsSelectable="true"
+                    android:text="@string/local_google_help" />
             </LinearLayout>
 
             <TextView
@@ -1098,6 +1107,17 @@
 <!-- Vrstica za vnos pogovora (lastnik 22. 11. 2026: »bi moralo biti kot tu« - kot v aplikaciji Claude): pritrjena na dno,
      nad tipkovnico, gumb Poslji v vrstici. Vidna samo v zavihku Lina, ko je pogovor na voljo (DialerActivity.osveziSestavljalnik). -->
 <LinearLayout
+    android:id="@+id/assistantComposerAttachments"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/paper"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="6dp"
+    android:paddingEnd="16dp"
+    android:visibility="gone" />
+
+<LinearLayout
     android:id="@+id/assistantComposer"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -1118,6 +1138,16 @@
         android:background="?android:attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/chat_mic"
         android:src="@drawable/ic_mic"
+        android:tint="@color/muted" />
+
+    <ImageButton
+        android:id="@+id/assistantChatAttach"
+        android:layout_width="44dp"
+        android:layout_height="52dp"
+        android:layout_marginEnd="4dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/chat_attach"
+        android:src="@drawable/ic_attach"
         android:tint="@color/muted" />
 
     <EditText
