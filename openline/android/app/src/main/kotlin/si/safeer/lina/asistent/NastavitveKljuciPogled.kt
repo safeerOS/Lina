@@ -57,6 +57,8 @@ class NastavitveKljuciPogled(
     private val osveziVse = mutableListOf<() -> Unit>()
 
     init {
+        ImeUporabnikaPogled(a, vsebnik)
+        SpominPogovorovPogled(a, vsebnik)
         kljucShrani.setOnClickListener { shraniKljuc() }
         googleGumb.setOnClickListener { zacniPrijavoGoogle() }
         kljucPozabi.setOnClickListener {

@@ -70,7 +70,8 @@ object LokalniPrehodUpravljalnik {
             googleZeton = googleZeton,
             projekt = projekt,
             dnevnik = dnevnik,
-            wsFabrika = OkHttpWsFabrika()
+            wsFabrika = OkHttpWsFabrika(),
+            imeUporabnika = { si.safeer.lina.asistent.ImeUporabnika.preberi(context) }
         ).apply {
             naNapako = { razlog ->
                 val manager = context.getSystemService(android.app.NotificationManager::class.java)

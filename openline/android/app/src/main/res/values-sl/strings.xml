@@ -317,4 +317,15 @@
     <string name="lina_calls_title">Klici, ki jih je sprejela Lina</string>
     <string name="lina_calls_folder_fmt">Datoteke klicev: %1$s</string>
     <string name="lina_calls_unknown">Neznan klicatelj</string>
+    <string name="name_title">Kako vam je ime?</string>
+    <string name="name_note">Lina se bo klicateljem predstavila s tem imenom (osebna tajnica).</string>
+    <string name="name_hint">Vaše ime</string>
+    <string name="name_acc_hint">Ime v tožilniku (popravite, če je napačno)</string>
+    <string name="name_preview_fmt">Lina bo rekla: %1$s</string>
+    <string name="name_saved_fmt">Shranjeno. Lina bo rekla: %1$s</string>
+    <string name="memory_title">Lina si zapomni pogovore</string>
+    <string name="memory_note">Pogovori z Lino se shranijo samo v tem telefonu, da lahko Lina nadaljuje, kjer ste ostali, tudi brez računalnika. Gesla in ključi se nikoli ne shranijo.</string>
+    <string name="memory_delete">Izbriši vse zapomnjene pogovore</string>
+    <string name="memory_delete_confirm">Res izbrišem vse zapomnjene pogovore?</string>
+    <string name="memory_deleted">Spomin pogovorov je izbrisan.</string>
 </resources>

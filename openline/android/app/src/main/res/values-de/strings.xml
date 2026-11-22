@@ -317,4 +317,15 @@
     <string name="lina_calls_title">Von Lina angenommene Anrufe</string>
     <string name="lina_calls_folder_fmt">Anrufdateien: %1$s</string>
     <string name="lina_calls_unknown">Unbekannter Anrufer</string>
+    <string name="name_title">Wie heißen Sie?</string>
+    <string name="name_note">Lina stellt sich den Anrufern mit diesem Namen vor (persönliche Sekretärin).</string>
+    <string name="name_hint">Ihr Name</string>
+    <string name="name_acc_hint">Name im slowenischen Akkusativ (korrigieren, falls falsch)</string>
+    <string name="name_preview_fmt">Lina wird sagen: %1$s</string>
+    <string name="name_saved_fmt">Gespeichert. Lina wird sagen: %1$s</string>
+    <string name="memory_title">Lina merkt sich Gespräche</string>
+    <string name="memory_note">Gespräche mit Lina werden nur auf diesem Telefon gespeichert, damit Lina auch ohne Computer dort weitermacht, wo Sie aufgehört haben. Passwörter und Schlüssel werden nie gespeichert.</string>
+    <string name="memory_delete">Alle gemerkten Gespräche löschen</string>
+    <string name="memory_delete_confirm">Wirklich alle gemerkten Gespräche löschen?</string>
+    <string name="memory_deleted">Gesprächsspeicher gelöscht.</string>
 </resources>

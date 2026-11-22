@@ -34,7 +34,9 @@ class GeminiLiveOdjemalec(
     private val dnevnik: DnevnikKlicev,
     private val izbiraPoti: IzbiraPotiLive = IzbiraPotiLive(naVoljo = { true }),
     private val model: String = "gemini-3.8-live",
-    private val wsFabrika: WsFabrika
+    private val wsFabrika: WsFabrika,
+    /** Ime uporabnika in rocni tozilnik za pozdrav osebne tajnice (lastnik 21. 11. 2026); prazno = »Dosegli ste glasovno tajnico.«. */
+    private val imeUporabnika: () -> Pair<String, String> = { "" to "" }
 ) : ZvocniMost {
 
     companion object {
@@ -138,7 +140,8 @@ class GeminiLiveOdjemalec(
                 }
                 if (!sendSetup) return
                 izbiraPoti.uspeh(pot)
-                val sysNav = SistemskoNavodilo.zgradiZaKlic(ZonedDateTime.now())
+                val (ime, tozilnik) = runCatching(imeUporabnika).getOrDefault("" to "")
+                val sysNav = SistemskoNavodilo.zgradiZaKlic(ZonedDateTime.now(), ime, tozilnik)
                 
                 val keySetupStr = if (UPORABI_CONFIG_NAMESTO_SETUP && jeApiKljuc) "config" else "setup"
                 val setup = buildJsonObject {

@@ -317,4 +317,15 @@
     <string name="lina_calls_title">Chiamate gestite da Lina</string>
     <string name="lina_calls_folder_fmt">File delle chiamate: %1$s</string>
     <string name="lina_calls_unknown">Chiamante sconosciuto</string>
+    <string name="name_title">Come si chiama?</string>
+    <string name="name_note">Lina si presenterà a chi chiama con questo nome (segretaria personale).</string>
+    <string name="name_hint">Il suo nome</string>
+    <string name="name_acc_hint">Nome all\'accusativo sloveno (correggerlo se errato)</string>
+    <string name="name_preview_fmt">Lina dirà: %1$s</string>
+    <string name="name_saved_fmt">Salvato. Lina dirà: %1$s</string>
+    <string name="memory_title">Lina ricorda le conversazioni</string>
+    <string name="memory_note">Le conversazioni con Lina sono salvate solo su questo telefono, così Lina riprende da dove avete lasciato anche senza il computer. Password e chiavi non vengono mai salvate.</string>
+    <string name="memory_delete">Elimina tutte le conversazioni ricordate</string>
+    <string name="memory_delete_confirm">Eliminare davvero tutte le conversazioni ricordate?</string>
+    <string name="memory_deleted">Memoria delle conversazioni eliminata.</string>
 </resources>

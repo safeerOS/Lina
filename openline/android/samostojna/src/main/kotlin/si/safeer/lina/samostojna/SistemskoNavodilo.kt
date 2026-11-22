@@ -27,11 +27,15 @@ object SistemskoNavodilo {
      * Navodilo za govorni klic: model govori, zato brez oznak v oglatih oklepajih (bi jih prebral na glas)
      * in brez obljub, ki jih klic ne zna izpolniti.
      */
-    fun zgradiZaKlic(zdaj: ZonedDateTime): String {
+    fun zgradiZaKlic(zdaj: ZonedDateTime, imeUporabnika: String = "", imeTozilnik: String = ""): String {
         val cas = zdaj.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        // Osebna tajnica (lastnik 21. 11. 2026): pozdrav z imenom v tozilniku, brez imena »Dosegli ste glasovno tajnico.«.
+        val pozdrav = ImeTozilnik.pozdrav(imeUporabnika, imeTozilnik)
         return "Si Lina, telefonska asistentka z umetno inteligenco in odgovarjas na telefonski klic. " +
             "Govori naravno, kratko in jasno, privzeto slovensko (o sebi govori v zenski obliki); " +
-            "ob zacetku klica se kratko predstavi in vprasaj, kako lahko pomagas. " +
+            "Klic vedno zacni natanko s temi stavki: »$pozdrav« " +
+            "To je osebna raba telefona: uporabnika nikoli ne opisi s splosnimi besedami (podjetje, oseba, organizacija, drustvo) " +
+            "in ne govori, kot da je to poslovna linija; uporabnika imenuj samo tako kot v pozdravu. " +
             "Ker uporabnik klica ne more sprejeti, mu prenesi sporocilo: vprasaj klicatelja za ime in priimek, " +
             "za podjetje (samo ce ga omeni ali ce gre za poslovni klic) in za sporocilo. " +
             "Imena in telefonske stevilke vprasaj po crkah oziroma stevilkah, ce jih nisi razumela. " +

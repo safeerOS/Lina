@@ -16,6 +16,8 @@ class Asistent(
     private val najvecSporocil: Int = 40,
     // Spletna orodja (iskanje Brave, branje strani TinyFish); brez kljuca jih ni (lastnik 18. 11. 2026).
     private val orodja: SpletnaOrodja? = null,
+    // Spomin pogovorov na telefonu (lastnik 22. 11. 2026: privzeto vklopljen, brez potrjevanja, dela brez racunalnika).
+    private val spomin: SpominPogovorov? = null,
 ) {
     private val zgodovina = mutableListOf<Sporocilo>()
 
@@ -45,11 +47,15 @@ class Asistent(
             return Odgovor.Besedilo("")
         }
 
+        // Priklic starejsih sorodnih obratov (ne tistih, ki so ze v zgodovini seje); podatek, ne navodilo. Napaka spomina ne podre pogovora.
+        val priklic = runCatching { spomin?.prikliči(vnos, zgodovina.map { it.besedilo }) ?: "" }.getOrDefault("")
+        val navodilo = sistemskoNavodilo + navodiloSpomina(priklic)
+
         zgodovina.add(Sporocilo("user", vnos))
         var dodano = 1
         obrezi()
 
-        var rezultat = odjemalec.poslji(zgodovina, sistemskoNavodilo)
+        var rezultat = odjemalec.poslji(zgodovina, navodilo)
 
         // Orodja: najvec dva kroga na vprasanje. Rezultat s spleta je nezaupan podatek, ne navodilo.
         var krogi = 0
@@ -68,7 +74,7 @@ class Asistent(
             zgodovina.add(Sporocilo("user", povratno))
             dodano += 2
             obrezi()
-            rezultat = odjemalec.poslji(zgodovina, sistemskoNavodilo)
+            rezultat = odjemalec.poslji(zgodovina, navodilo)
         }
 
         when (rezultat) {
@@ -77,6 +83,7 @@ class Asistent(
                 val besedilo = rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim()
                 zgodovina.add(Sporocilo("model", besedilo))
                 obrezi()
+                runCatching { spomin?.zapisi(vnos, besedilo) }
 
                 val vrstice = besedilo.lines()
                 for (vrstica in vrstice) {

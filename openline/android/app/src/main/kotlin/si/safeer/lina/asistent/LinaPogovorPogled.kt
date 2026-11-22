@@ -174,7 +174,7 @@ class LinaPogovorPogled(
         val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
         val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo)
-        return Asistent(odjemalec, navodilo, orodja = orodja).also { asistent = it; asistentDan = danes }
+        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a)).also { asistent = it; asistentDan = danes }
     }
 
     private fun poslji() {
