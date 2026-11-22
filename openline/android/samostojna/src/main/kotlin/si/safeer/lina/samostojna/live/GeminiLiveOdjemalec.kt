@@ -48,6 +48,7 @@ class GeminiLiveOdjemalec(
     companion object {
         const val ORODJE_SPOROCILO = "shrani_sporocilo"
         const val ORODJE_KONEC = "koncaj_klic"
+        const val ORODJE_SLISNOST = "klicatelj_ne_slisi"
         /** Najdlje cakanje na konec Linega slovesa, preden se klic vseeno konca. */
         const val KONEC_VARNOSTNI_ROK_MS = 4000L
         /** Pocakamo, da se izgovor slovesa predvaja do konca (predvajalna vrsta), preden se klic prekine. */
@@ -62,6 +63,12 @@ class GeminiLiveOdjemalec(
     var naPrekinitev: (() -> Unit)? = null
     /** Lastnik 22. 11. 2026: ko se Lina poslovi, naj klic tudi prekine. Pokliče se po orodju koncaj_klic, ko je slovo izgovorjeno. */
     var naKonecPogovora: (() -> Unit)? = null
+
+    /**
+     * Varovalo (lastnik 22. 11. 2026: »Lino ne sme utisat«): mikrofon telefona je pri Lininem klicu utisan; ce klicatelj pove, da Line ne slisi,
+     * model poklice orodje klicatelj_ne_slisi in aplikacija mikrofon takoj vklopi nazaj (in utisanje izklopi za naslednje klice).
+     */
+    var naTezavoSlisnosti: (() -> Unit)? = null
     private val koncajCaka = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private fun sprozikKonec(cakaj: Long) {
@@ -257,6 +264,11 @@ class GeminiLiveOdjemalec(
                             add(buildJsonObject {
                                 putJsonArray("functionDeclarations") {
                                     add(buildJsonObject {
+                                        put("name", ORODJE_SLISNOST)
+                                        put("description", "Poklici ga takoj, ce klicatelj reče, da te ne slisi (»ne slisim«, »halo, je kdo tam«, »nic ne slisim«), ali ce vec kot enkrat zaporedoma samo reče »halo«. Nato ponovi zadnji stavek.")
+                                        putJsonObject("parameters") { put("type", "OBJECT"); putJsonObject("properties") {} }
+                                    })
+                                    add(buildJsonObject {
                                         put("name", ORODJE_KONEC)
                                         put("description", "Konca klic. Poklici ga SAMO potem, ko si izrekla slovo in je klicatelj sporocilo zapisal ali ne zeli nic sporociti.")
                                         putJsonObject("parameters") { put("type", "OBJECT"); putJsonObject("properties") {} }
@@ -383,6 +395,10 @@ class GeminiLiveOdjemalec(
                     // Slovo se izgovori do konca: klic se prekine po naslednjem koncu obrata, najpozneje po varnostnem roku.
                     sprozikKonec(KONEC_VARNOSTNI_ROK_MS)
                 }
+                if (ime == ORODJE_SLISNOST) {
+                    casovniZapis("klicatelj ne slisi Line: mikrofon telefona se vklopi nazaj")
+                    runCatching { naTezavoSlisnosti?.invoke() }
+                }
                 if (ime == ORODJE_SPOROCILO) {
                     val a = f["args"]?.jsonObject
                     fun polje(n: String) = a?.get(n)?.jsonPrimitive?.contentOrNull
@@ -391,7 +407,7 @@ class GeminiLiveOdjemalec(
                 buildJsonObject {
                     if (id != null) put("id", id)
                     put("name", ime)
-                    putJsonObject("response") { put("izid", when (ime) { ORODJE_SPOROCILO -> "zapisano"; ORODJE_KONEC -> "v redu"; else -> "neznano orodje" }) }
+                    putJsonObject("response") { put("izid", when (ime) { ORODJE_SPOROCILO -> "zapisano"; ORODJE_KONEC -> "v redu"; ORODJE_SLISNOST -> "v redu, ponovi zadnji stavek"; else -> "neznano orodje" }) }
                 }
             }
             if (odgovori.isNotEmpty()) {

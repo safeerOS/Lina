@@ -480,6 +480,23 @@ class GeminiLiveOdjemalecTest {
     }
 
     @Test
+    fun `varovalo - orodje klicatelj_ne_slisi vklopi mikrofon nazaj, odgovor orodja je poslan`() {
+        val f = LaznaFabrika()
+        val odj = odjemalecZ(f)
+        val klicano = java.util.concurrent.atomic.AtomicInteger(0)
+        odj.naTezavoSlisnosti = { klicano.incrementAndGet() }
+        odj.pripraviKlic()
+        Thread.sleep(300)
+        assertTrue(f.poslano.any { it.contains("\"klicatelj_ne_slisi\"") }, "orodje je v setup sporocilu")
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        odj.nastaviIzhod { }
+        f.poslusalec!!.onText("""{"toolCall":{"functionCalls":[{"id":"s1","name":"klicatelj_ne_slisi","args":{}}]}}""")
+        assertEquals(1, klicano.get())
+        assertTrue(f.poslano.any { it.contains("toolResponse") && it.contains("klicatelj_ne_slisi") })
+        odj.konecKlica()
+    }
+
+    @Test
     fun `brez predpriprave - nastaviIzhod zacne znova in uvod pride ob setupComplete`() {
         val f = LaznaFabrika()
         val odj = odjemalecZ(f)
