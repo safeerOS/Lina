@@ -43,6 +43,11 @@ class GeminiLiveOdjemalec(
 
     companion object {
         const val ORODJE_SPOROCILO = "shrani_sporocilo"
+        const val ORODJE_KONEC = "koncaj_klic"
+        /** Najdlje cakanje na konec Linega slovesa, preden se klic vseeno konca. */
+        const val KONEC_VARNOSTNI_ROK_MS = 4000L
+        /** Pocakamo, da se izgovor slovesa predvaja do konca (predvajalna vrsta), preden se klic prekine. */
+        const val KONEC_PO_OBRATU_MS = 1500L
         const val UPORABI_CONFIG_NAMESTO_SETUP = false // uradna dokumentacija (get-started-websocket, 19. 11. 2026): vsi primeri uporabljajo "setup"
     }
 
@@ -51,6 +56,16 @@ class GeminiLiveOdjemalec(
     }
 
     var naPrekinitev: (() -> Unit)? = null
+    /** Lastnik 22. 11. 2026: ko se Lina poslovi, naj klic tudi prekine. Pokliče se po orodju koncaj_klic, ko je slovo izgovorjeno. */
+    var naKonecPogovora: (() -> Unit)? = null
+    private val koncajCaka = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun sprozikKonec(cakaj: Long) {
+        Thread({
+            runCatching { Thread.sleep(cakaj) }
+            if (koncajCaka.compareAndSet(true, false)) { casovniZapis("konec pogovora (Lina je klic prekinila)"); runCatching { naKonecPogovora?.invoke() } }
+        }, "lina-konec-klica").start()
+    }
     var naNapako: ((String) -> Unit)? = null
     /** Ob koncu klica: zapis (ime, stevilka, podjetje, sporocilo). Aplikacija ga zapise tudi v datoteko v mapi uporabnika. */
     var naKlicZakljucen: ((ZapisKlica) -> Unit)? = null
@@ -217,6 +232,11 @@ class GeminiLiveOdjemalec(
                             add(buildJsonObject {
                                 putJsonArray("functionDeclarations") {
                                     add(buildJsonObject {
+                                        put("name", ORODJE_KONEC)
+                                        put("description", "Konca klic. Poklici ga SAMO potem, ko si izrekla slovo in je klicatelj sporocilo zapisal ali ne zeli nic sporociti.")
+                                        putJsonObject("parameters") { put("type", "OBJECT"); putJsonObject("properties") {} }
+                                    })
+                                    add(buildJsonObject {
                                         put("name", ORODJE_SPOROCILO)
                                         put("description", "Zapise sporocilo klicatelja. Poklici ga, ko klicatelj pove sporocilo, in ga pred koncem klica se enkrat dopolni z imenom, priimkom in podjetjem, ce so znani.")
                                         putJsonObject("parameters") {
@@ -332,6 +352,10 @@ class GeminiLiveOdjemalec(
                 val f = k.jsonObject
                 val ime = f["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                 val id = f["id"]?.jsonPrimitive?.contentOrNull
+                if (ime == ORODJE_KONEC && koncajCaka.compareAndSet(false, true)) {
+                    // Slovo se izgovori do konca: klic se prekine po naslednjem koncu obrata, najpozneje po varnostnem roku.
+                    sprozikKonec(KONEC_VARNOSTNI_ROK_MS)
+                }
                 if (ime == ORODJE_SPOROCILO) {
                     val a = f["args"]?.jsonObject
                     fun polje(n: String) = a?.get(n)?.jsonPrimitive?.contentOrNull
@@ -340,7 +364,7 @@ class GeminiLiveOdjemalec(
                 buildJsonObject {
                     if (id != null) put("id", id)
                     put("name", ime)
-                    putJsonObject("response") { put("izid", if (ime == ORODJE_SPOROCILO) "zapisano" else "neznano orodje") }
+                    putJsonObject("response") { put("izid", when (ime) { ORODJE_SPOROCILO -> "zapisano"; ORODJE_KONEC -> "v redu"; else -> "neznano orodje" }) }
                 }
             }
             if (odgovori.isNotEmpty()) {
@@ -409,6 +433,7 @@ class GeminiLiveOdjemalec(
             // Pozdrav je izrecen: od zdaj model poslusa klicatelja.
             uvodDo = 0L
             casovniZapis("konec obrata Line")
+            if (koncajCaka.get()) { sprozikKonec(KONEC_PO_OBRATU_MS) }
         }
     }
 

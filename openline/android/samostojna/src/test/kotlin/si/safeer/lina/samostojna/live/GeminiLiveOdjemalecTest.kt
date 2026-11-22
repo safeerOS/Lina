@@ -427,6 +427,40 @@ class GeminiLiveOdjemalecTest {
         odj.konecKlica()
     }
 
+    // Lastnik 22. 11. 2026: »ko se Lina poslovi, naj tudi prekine pogovor«.
+    @Test
+    fun `orodje koncaj_klic prekine klic po koncu obrata, brez orodja klica ne prekine`() {
+        val f = LaznaFabrika()
+        val odj = odjemalecZ(f)
+        val konci = java.util.concurrent.atomic.AtomicInteger(0)
+        odj.naKonecPogovora = { konci.incrementAndGet() }
+        odj.pripraviKlic()
+        Thread.sleep(300)
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        odj.nastaviIzhod { }
+        // Brez orodja turnComplete klica ne prekine.
+        f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
+        Thread.sleep(2000)
+        assertEquals(0, konci.get())
+        // Orodje + konec obrata: klic se prekine enkrat, odgovor orodja je poslan modelu.
+        f.poslusalec!!.onText("""{"toolCall":{"functionCalls":[{"id":"k1","name":"koncaj_klic","args":{}}]}}""")
+        assertTrue(f.poslano.any { it.contains("toolResponse") && it.contains("koncaj_klic") })
+        f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
+        Thread.sleep(2500)
+        assertEquals(1, konci.get())
+        // Varnostni rok: orodje brez poznejsega konca obrata klic vseeno prekine (najvec 4 s).
+        val f2 = LaznaFabrika(); val odj2 = odjemalecZ(f2)
+        val konci2 = java.util.concurrent.atomic.AtomicInteger(0)
+        odj2.naKonecPogovora = { konci2.incrementAndGet() }
+        odj2.pripraviKlic(); Thread.sleep(300)
+        f2.poslusalec!!.onText("""{"setupComplete":{}}""")
+        odj2.nastaviIzhod { }
+        f2.poslusalec!!.onText("""{"toolCall":{"functionCalls":[{"id":"k2","name":"koncaj_klic","args":{}}]}}""")
+        Thread.sleep(4600)
+        assertEquals(1, konci2.get())
+        odj.konecKlica(); odj2.konecKlica()
+    }
+
     @Test
     fun `brez predpriprave - nastaviIzhod zacne znova in uvod pride ob setupComplete`() {
         val f = LaznaFabrika()

@@ -14,6 +14,12 @@ class LokalniKrmilnik(private val context: Context) : CallEventSink {
         // Stevilka klicatelja za zapis klica (skrita stevilka = prazno).
         LokalniPrehodUpravljalnik.gemini?.stevilkaNaslednjegaKlica = call.details?.handle?.schemeSpecificPart.orEmpty()
         val controller = CallCommandController(context)
+        // Ko se Lina poslovi, klic tudi prekine (lastnik 22. 11. 2026): model pokliče koncaj_klic, odjemalec sprozi prekinitev.
+        LokalniPrehodUpravljalnik.gemini?.naKonecPogovora = {
+            controller.handle(GatewayCommand(commandId = "loc_end_$callId", callId = callId, action = CommandAction.HANGUP, digits = null)) { r ->
+                Log.i("LokalniKrmilnik", "Call $callId ended by Lina: ok=${r.ok}")
+            }
+        }
         val answerCmd = GatewayCommand(
             commandId = "loc_ans_$callId",
             callId = callId,
