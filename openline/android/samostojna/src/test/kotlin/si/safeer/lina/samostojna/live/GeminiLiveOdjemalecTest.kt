@@ -411,7 +411,7 @@ class GeminiLiveOdjemalecTest {
         Thread.sleep(300)
         assertEquals(1, f.odprtij)
         f.poslusalec!!.onText("""{"setupComplete":{}}""")
-        assertTrue(f.poslano.none { it.contains("\"text\":\"Lina se predstavi.\"") }, "uvod ne sme iti, dokler zvocna pot ni nared")
+        assertEquals(1, f.poslano.count { it.contains("\"text\":\"Lina se predstavi.\"") }, "uvod gre takoj ob setupComplete, ne caka zvocne poti")
         odj.nastaviIzhod { }
         assertEquals(1, f.odprtij, "nastaviIzhod ohrani predpripravljeno sejo")
         assertEquals(1, f.poslano.count { it.contains("\"text\":\"Lina se predstavi.\"") })
@@ -459,6 +459,24 @@ class GeminiLiveOdjemalecTest {
         Thread.sleep(4600)
         assertEquals(1, konci2.get())
         odj.konecKlica(); odj2.konecKlica()
+    }
+
+    @Test
+    fun `zgodnji pozdrav - zvok Line se do zvocne poti shrani in ob njej preda po vrsti`() {
+        val f = LaznaFabrika()
+        val odj = odjemalecZ(f)
+        odj.pripraviKlic()
+        Thread.sleep(300)
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        val b64 = java.util.Base64.getEncoder().encodeToString(ByteArray(1920)) // 1920 B @24k -> 1280 B @16k = 2 okvirja
+        f.poslusalec!!.onText("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}]}}}""")
+        val prejeti = java.util.Collections.synchronizedList(mutableListOf<ByteArray>())
+        odj.nastaviIzhod { prejeti.add(it) }
+        assertEquals(2, prejeti.size, "predpomnjeni okvirji gredo ob zvocni poti takoj")
+        assertEquals(1, f.poslano.count { it.contains("\"text\":\"Lina se predstavi.\"") })
+        f.poslusalec!!.onText("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}]}}}""")
+        assertEquals(4, prejeti.size, "po vzpostavitvi zvocne poti gre zvok neposredno")
+        odj.konecKlica()
     }
 
     @Test

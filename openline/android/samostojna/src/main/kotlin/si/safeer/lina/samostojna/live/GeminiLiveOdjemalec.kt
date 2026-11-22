@@ -106,6 +106,19 @@ class GeminiLiveOdjemalec(
     @Volatile private var uvodPoslan = false
     @Volatile private var prviZvokLine = false
     @Volatile private var uvodDo = 0L
+    // Zgodnji pozdrav (lastnik 22. 11. 2026: »takoj ko se javi, naj zacne govoriti«): od dviga do aktivnega klica mine ~2 s (Android/operater),
+    // model pa potrebuje ~1 s do prvega zvoka. Uvod gre modelu takoj, ko je seja pripravljena; zvok se do zvocne poti shrani in se ob njej takoj preda.
+    private val izhodMutex = Any()
+    private val predpomnjenIzhod = java.util.ArrayDeque<ByteArray>()
+    private val MAKS_PREDPOMNJENIH_OKVIRJEV = 750 // 15 s
+
+    private fun oddajIzhod(okvir: ByteArray) {
+        zajemIzhoda?.invoke(okvir)
+        synchronized(izhodMutex) {
+            val cb = izhodniCallback
+            if (cb != null) cb(okvir) else if (predpomnjenIzhod.size < MAKS_PREDPOMNJENIH_OKVIRJEV) predpomnjenIzhod.addLast(okvir)
+        }
+    }
     private val NAJDLJE_POZDRAV_MS = 15_000L
     private val PREDPRIPRAVA_VELJA_MS = 30_000L
 
@@ -119,7 +132,7 @@ class GeminiLiveOdjemalec(
             startTimeMs = 0L
             nepopolnOkvir = ByteArray(0)
             isClosed.set(false)
-            izhodniCallback = null
+            synchronized(izhodMutex) { izhodniCallback = null; predpomnjenIzhod.clear() }
             uvodPoslan = false
             prviZvokLine = false
             uvodDo = 0L
@@ -131,7 +144,7 @@ class GeminiLiveOdjemalec(
 
     private fun posljiUvodCeNared() {
         val poslji = synchronized(vhodniMutex) {
-            if (uvodPoslan || izhodniCallback == null || stanje != StanjePovezave.PRIPRAVLJEN || isClosed.get()) false
+            if (uvodPoslan || stanje != StanjePovezave.PRIPRAVLJEN || isClosed.get()) false
             else {
                 uvodPoslan = true
                 uvodDo = System.currentTimeMillis() + NAJDLJE_POZDRAV_MS
@@ -437,8 +450,7 @@ class GeminiLiveOdjemalec(
             while (skupaj.size - offset >= 640) {
                 if (!prviZvokLine) { prviZvokLine = true; casovniZapis("prvi zvok Line klicatelju") }
                 val okvir = skupaj.copyOfRange(offset, offset + 640)
-                zajemIzhoda?.invoke(okvir)
-                izhodniCallback?.invoke(okvir)
+                oddajIzhod(okvir)
                 offset += 640
             }
             nepopolnOkvir = skupaj.copyOfRange(offset, skupaj.size)
@@ -458,8 +470,7 @@ class GeminiLiveOdjemalec(
             val padded = ByteArray(640)
             System.arraycopy(nepopolnOkvir, 0, padded, 0, minOf(640, nepopolnOkvir.size))
             nepopolnOkvir = ByteArray(0)
-            zajemIzhoda?.invoke(padded)
-            izhodniCallback?.invoke(padded)
+            oddajIzhod(padded)
         }
     }
 
@@ -568,7 +579,12 @@ class GeminiLiveOdjemalec(
         zakljuciKlic()
         seja = SejaKlica(System.currentTimeMillis(), stevilkaNaslednjegaKlica)
         filterKlicatelja = FiltrKlicatelja()
-        izhodniCallback = posljiOkvir
+        synchronized(izhodMutex) {
+            if (!ohrani) predpomnjenIzhod.clear()
+            izhodniCallback = posljiOkvir
+            if (predpomnjenIzhod.isNotEmpty()) casovniZapis("zvok Line predan zvocni poti (predpomnjenih okvirjev: ${predpomnjenIzhod.size})")
+            while (predpomnjenIzhod.isNotEmpty()) posljiOkvir(predpomnjenIzhod.removeFirst())
+        }
         if (ohrani) posljiUvodCeNared()
     }
 
