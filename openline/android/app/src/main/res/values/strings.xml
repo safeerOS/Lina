@@ -274,7 +274,6 @@
     <string name="assistant_setup_title">Assistant: provider and keys</string>
     <string name="assistant_setup_hint_missing">To chat, choose a provider and enter its key in Settings.</string>
     <string name="assistant_setup_hint_active_fmt">Provider: %1$s. Change the provider and keys in Settings.</string>
-    <string name="assistant_open_settings">Key settings</string>
     <string name="settings_title">Settings</string>
     <string name="lina_chat_title">Chat with Lina</string>
     <string name="assistant_providers_note">Choose which provider answers for Lina. Enter the key for the chosen provider in Settings.</string>
@@ -330,4 +329,31 @@
     <string name="memory_deleted">Conversation memory deleted.</string>
     <string name="name_save">Save</string>
     <string name="memory_heading">Memory</string>
+
+    <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->
+    <string name="tab_home">Home</string>
+    <string name="home_subtitle">Your personal assistant and secretary</string>
+    <string name="home_greet_morning">Good morning</string>
+    <string name="home_greet_day">Good afternoon</string>
+    <string name="home_greet_evening">Good evening</string>
+    <string name="home_help">How can I help you today?</string>
+    <string name="home_tile_chat">Chat</string>
+    <string name="home_tile_chat_desc">Talk to Lina</string>
+    <string name="home_tile_calls">Calls</string>
+    <string name="home_tile_calls_desc">Caller messages</string>
+    <string name="home_tile_notes">Notes</string>
+    <string name="home_tile_notes_desc">What Lina noted</string>
+    <string name="home_tile_setup">Setup</string>
+    <string name="home_tile_setup_desc">Call forwarding</string>
+    <string name="home_tile_computer">Computer</string>
+    <string name="home_tile_computer_desc">Lina on your computer</string>
+    <string name="home_tile_settings_desc">Keys, name, memory</string>
+    <string name="home_notices_title">Today\'s notifications</string>
+    <string name="home_notices_all">All</string>
+    <string name="home_notices_empty">No calls yet today.</string>
+    <string name="home_urgent">urgent</string>
+    <string name="home_ask">Ask Lina …</string>
+    <string name="home_today_fmt">%1$d today</string>
+    <string name="local_google_billing_on">billing enabled</string>
+    <string name="local_google_billing_off">no billing</string>
 </resources>

@@ -58,6 +58,118 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
+        <!-- Domov po skici Lina 2.0 (lastnik 22. 11. 2026): lik, pozdrav, ploscice samo za delujoce funkcije,
+             danasnja obvestila iz dnevnika klicev in vrstica za vprasanje. Ploscice in vrstice gradi DomovPogled. -->
+        <LinearLayout
+            android:id="@+id/tabHome"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/homeHero"
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:background="@drawable/bg_home_hero"
+                android:clipToOutline="true">
+
+                <ImageView
+                    android:id="@+id/homeCharacter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="end|bottom"
+                    android:adjustViewBounds="true"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitEnd"
+                    android:src="@drawable/lina_domov" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="start|top"
+                    android:layout_margin="14dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxWidth="170dp"
+                        android:text="@string/home_subtitle"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="italic" />
+
+                    <TextView
+                        android:id="@+id/homeGreeting"
+                        style="@style/Gw.Heading"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:accessibilityLiveRegion="polite"
+                        android:background="@drawable/bg_bubble"
+                        android:maxWidth="180dp"
+                        android:padding="14dp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/homeTiles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                style="@style/Gw.Panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/Gw.Heading"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:accessibilityHeading="true"
+                        android:text="@string/home_notices_title" />
+
+                    <Button
+                        android:id="@+id/homeNoticesAll"
+                        style="@style/Gw.Button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/home_notices_all" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/homeNoticesList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/homeAsk"
+                style="@style/Gw.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:drawableEnd="@drawable/ic_nav_lina"
+                android:drawableTint="@color/accent"
+                android:gravity="start|center_vertical"
+                android:minHeight="52dp"
+                android:text="@string/home_ask" />
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/tabCalls"
             android:layout_width="match_parent"
@@ -681,13 +793,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp" />
 
-            <Button
-                android:id="@+id/assistantOpenSettings"
-                style="@style/Gw.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/assistant_open_settings" />
+            <!-- Gumb »Nastavitve ključev« odstranjen (lastnik 22. 11. 2026: ključi so že v Nastavitvah). -->
 
             <LinearLayout
                 android:id="@+id/assistantChatBlock"
@@ -937,6 +1043,14 @@
     android:layout_height="wrap_content"
     android:background="@color/surface"
     android:orientation="horizontal">
+        <Button
+            android:id="@+id/navHome"
+            android:drawableTop="@drawable/ic_nav_home"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_home" />
         <Button
             android:id="@+id/navCalls"
             android:drawableTop="@drawable/ic_nav_calls"

@@ -274,7 +274,6 @@
     <string name="assistant_setup_title">Asistentka: ponudnik in ključi</string>
     <string name="assistant_setup_hint_missing">Za pogovor v Nastavitvah izberite ponudnika in vnesite ključ.</string>
     <string name="assistant_setup_hint_active_fmt">Ponudnik: %1$s. Ponudnika in ključe spremenite v Nastavitvah.</string>
-    <string name="assistant_open_settings">Nastavitve ključev</string>
     <string name="settings_title">Nastavitve</string>
     <string name="lina_chat_title">Pogovor z Lino</string>
     <string name="assistant_providers_note">Izberite ponudnika, ki odgovarja namesto Line. Ključ izbranega ponudnika vnesete v Nastavitvah.</string>
@@ -330,4 +329,31 @@
     <string name="memory_deleted">Spomin pogovorov je izbrisan.</string>
     <string name="name_save">Shrani</string>
     <string name="memory_heading">Spomin</string>
+
+    <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->
+    <string name="tab_home">Domov</string>
+    <string name="home_subtitle">Vaša osebna asistentka in tajnica</string>
+    <string name="home_greet_morning">Dobro jutro</string>
+    <string name="home_greet_day">Dober dan</string>
+    <string name="home_greet_evening">Dober večer</string>
+    <string name="home_help">Kako vam lahko pomagam danes?</string>
+    <string name="home_tile_chat">Pogovor</string>
+    <string name="home_tile_chat_desc">Klepet z Lino</string>
+    <string name="home_tile_calls">Klici</string>
+    <string name="home_tile_calls_desc">Sporočila klicateljev</string>
+    <string name="home_tile_notes">Zapiski</string>
+    <string name="home_tile_notes_desc">Kar si je Lina zapisala</string>
+    <string name="home_tile_setup">Priprava</string>
+    <string name="home_tile_setup_desc">Preusmeritev klicev</string>
+    <string name="home_tile_computer">Računalnik</string>
+    <string name="home_tile_computer_desc">Lina na računalniku</string>
+    <string name="home_tile_settings_desc">Ključi, ime, spomin</string>
+    <string name="home_notices_title">Današnja obvestila</string>
+    <string name="home_notices_all">Vse</string>
+    <string name="home_notices_empty">Danes še ni klicev.</string>
+    <string name="home_urgent">nujno</string>
+    <string name="home_ask">Vprašajte Lino …</string>
+    <string name="home_today_fmt">%1$d danes</string>
+    <string name="local_google_billing_on">obračunavanje vklopljeno</string>
+    <string name="local_google_billing_off">brez obračunavanja</string>
 </resources>

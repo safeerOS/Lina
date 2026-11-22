@@ -170,7 +170,10 @@ class NastavitveKljuciPogled(
 
     private fun izberiProjekt(projekti: List<ProjektGoogle>, zeton: String) {
         AlertDialog.Builder(a).setTitle(R.string.local_google_pick)
-            .setItems(projekti.map { "${it.ime} (${it.id})" }.toTypedArray()) { _, i ->
+            .setItems(projekti.map {
+                val obracun = when (it.obracun) { true -> " – " + a.getString(R.string.local_google_billing_on); false -> " – " + a.getString(R.string.local_google_billing_off); null -> "" }
+                "${it.ime} (${it.id})$obracun"
+            }.toTypedArray()) { _, i ->
                 nit.execute {
                     val izid = vklopiVertex(zeton, prenos, projekti[i])
                     glavna.post { if (!a.isFinishing) obdelajIzid(izid, zeton) }

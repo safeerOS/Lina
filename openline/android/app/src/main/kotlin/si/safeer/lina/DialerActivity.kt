@@ -110,6 +110,8 @@ class DialerActivity : Activity() {
     private lateinit var linePermissionButton: Button
     private lateinit var lineSpinner: Spinner
     private lateinit var tabCalls: View
+    private lateinit var tabHome: View
+    private lateinit var domov: si.safeer.lina.asistent.DomovPogled
     private val linaKlici by lazy { si.safeer.lina.asistent.LinaKlicPogled(this) }
     private lateinit var tabPhone: View
     private lateinit var tabLina: View
@@ -118,11 +120,11 @@ class DialerActivity : Activity() {
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
-    private enum class Zavihek { KLICI, TELEFON, LINA, RACUNALNIK, NASTAVITVE }
+    private enum class Zavihek { DOMOV, KLICI, TELEFON, LINA, RACUNALNIK, NASTAVITVE }
 
     /** Zavihek pred odprtimi Nastavitvami: gumb Nazaj ga obnovi. */
-    private var zavihekPred = Zavihek.LINA
-    private var zavihekZdaj = Zavihek.LINA
+    private var zavihekPred = Zavihek.DOMOV
+    private var zavihekZdaj = Zavihek.DOMOV
     private lateinit var assistantStatus: TextView
     private lateinit var assistantDeviceId: TextView
     private lateinit var assistantTaskInput: EditText
@@ -257,7 +259,13 @@ class DialerActivity : Activity() {
             (view as android.view.ViewGroup).clipToPadding = false
             view.setPadding(b[0], b[1], b[2], tipkovnica)
             nav.setPadding(b[0], 0, b[2], b[3])
-            if (tipkovnica > 0) view.post { currentFocus?.let { pokaziVDrsnemObmocju(view as android.widget.ScrollView, it) } }
+            if (tipkovnica > 0) view.post {
+                currentFocus?.let { f ->
+                    // Polje pogovora: nad tipkovnico mora biti tudi gumb »Pošlji« (lastnik 22. 11. 2026: tipkovnica ga je prekrila).
+                    val cilj = if (f.id == R.id.assistantChatInput) findViewById<View>(R.id.assistantChatSend) ?: f else f
+                    pokaziVDrsnemObmocju(view as android.widget.ScrollView, cilj)
+                }
+            }
             insets
         }
         connectionDot = findViewById(R.id.connectionDot)
@@ -383,7 +391,10 @@ class DialerActivity : Activity() {
         tabLina = findViewById(R.id.tabLina)
         tabSettings = findViewById(R.id.tabSettings)
         tabComputer = findViewById(R.id.tabComputer)
+        tabHome = findViewById(R.id.tabHome)
+        domov = si.safeer.lina.asistent.DomovPogled(this, { odpriIzDomova(it) }, { vprasajLino() })
         navButtons = mapOf(
+            Zavihek.DOMOV to findViewById<Button>(R.id.navHome),
             Zavihek.KLICI to findViewById<Button>(R.id.navCalls),
             Zavihek.TELEFON to findViewById<Button>(R.id.navPhone),
             Zavihek.LINA to findViewById<Button>(R.id.navLina),
@@ -404,7 +415,7 @@ class DialerActivity : Activity() {
         assistantForgetButton = findViewById(R.id.assistantForgetButton)
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
-        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, { odpriNastavitveKljucev() }, { showTab(zavihekPred) })
+        samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, nazaj = { showTab(zavihekPred) })
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
@@ -417,7 +428,8 @@ class DialerActivity : Activity() {
         assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
         findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
         findViewById<Button>(R.id.assistantDenyButton).setOnClickListener { asistent.odgovori(dovoli = false) }
-        showTab(Zavihek.KLICI)
+        // Zacetni zaslon je Domov po skici Lina 2.0 (lastnik 22. 11. 2026); klicanje (ACTION_DIAL) odpre Klice.
+        showTab(Zavihek.DOMOV)
         // Proces je bil med prijavo v brskalniku ubit: vrnitev pride v onCreate namesto onNewIntent.
         if (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == si.safeer.lina.samostojna.GoogleOAuth.SHEMA) {
             odpriNastavitveKljucev()   // prijava Google je v Nastavitvah
@@ -443,11 +455,46 @@ class DialerActivity : Activity() {
     private fun osveziNavRacunalnik() {
         navButtons[Zavihek.RACUNALNIK]?.visibility =
             if (racunalnikPotreben() || zavihekZdaj == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
+        // Priprava je ploscica na Domovu; v spodnji vrstici je vidna samo, ko je odprta (lastnik 22. 11. 2026: skica).
+        navButtons[Zavihek.TELEFON]?.visibility = if (zavihekZdaj == Zavihek.TELEFON) View.VISIBLE else View.GONE
+    }
+
+    private fun odpriIzDomova(p: si.safeer.lina.samostojna.PloscaDomov) {
+        when (p) {
+            si.safeer.lina.samostojna.PloscaDomov.POGOVOR -> showTab(Zavihek.LINA)
+            si.safeer.lina.samostojna.PloscaDomov.KLICI -> showTab(Zavihek.KLICI)
+            si.safeer.lina.samostojna.PloscaDomov.PRIPRAVA -> showTab(Zavihek.TELEFON)
+            si.safeer.lina.samostojna.PloscaDomov.RACUNALNIK -> showTab(Zavihek.RACUNALNIK)
+            si.safeer.lina.samostojna.PloscaDomov.NASTAVITVE -> showTab(Zavihek.NASTAVITVE)
+            si.safeer.lina.samostojna.PloscaDomov.ZAPISKI -> {
+                showTab(Zavihek.LINA)
+                val drsno = findViewById<android.widget.ScrollView>(R.id.root)
+                val naslov = findViewById<View>(R.id.assistantNotesTitle)
+                drsno.post {
+                    // Odmik od vrha drsne vsebine prek vseh starsev (naslov je lahko gnezden v plosci).
+                    var y = 0; var v: View? = naslov
+                    while (v != null && v.parent !== drsno) { y += v.top; v = v.parent as? View }
+                    drsno.smoothScrollTo(0, y.coerceAtLeast(0))
+                }
+            }
+        }
+    }
+
+    /** Vrstica »Vprasajte Lino« na Domovu: pogovor s kurzorjem v polju in tipkovnico. */
+    private fun vprasajLino() {
+        showTab(Zavihek.LINA)
+        val polje = findViewById<EditText>(R.id.assistantChatInput)
+        polje.post {
+            if (polje.isShown && polje.requestFocus()) {
+                getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.showSoftInput(polje, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
     }
 
     private fun showTab(z: Zavihek) {
         if (z != Zavihek.NASTAVITVE) zavihekPred = z
         zavihekZdaj = z
+        tabHome.visibility = if (z == Zavihek.DOMOV) View.VISIBLE else View.GONE
         tabCalls.visibility = if (z == Zavihek.KLICI) View.VISIBLE else View.GONE
         tabPhone.visibility = if (z == Zavihek.TELEFON) View.VISIBLE else View.GONE
         tabLina.visibility = if (z == Zavihek.LINA) View.VISIBLE else View.GONE
@@ -456,7 +503,8 @@ class DialerActivity : Activity() {
         for ((t, b) in navButtons) { b.isSelected = t == z; b.contentDescription = b.text }
         findViewById<View>(R.id.root).scrollTo(0, 0)
         if (z == Zavihek.KLICI) linaKlici.osvezi()
-        if (z != Zavihek.KLICI && z != Zavihek.TELEFON) renderAssistant()
+        if (z == Zavihek.DOMOV) domov.osvezi()
+        if (z != Zavihek.KLICI && z != Zavihek.TELEFON && z != Zavihek.DOMOV) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
         osveziNavRacunalnik()
     }
@@ -1316,6 +1364,7 @@ class DialerActivity : Activity() {
 
     private fun applyDialIntent(intent: Intent) {
         if (intent.action == Intent.ACTION_DIAL) {
+            showTab(Zavihek.KLICI)
             intent.data?.schemeSpecificPart?.let { numberInput.setText(it) }
         }
     }

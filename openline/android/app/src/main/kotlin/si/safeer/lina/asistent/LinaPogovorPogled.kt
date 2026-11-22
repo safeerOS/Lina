@@ -37,7 +37,6 @@ import java.util.concurrent.Executors
 
 class LinaPogovorPogled(
     private val a: Activity,
-    private val odpriNastavitve: () -> Unit = {},
     private val nazaj: () -> Unit = {},
 ) {
     private val glavna = Handler(Looper.getMainLooper())
@@ -53,7 +52,6 @@ class LinaPogovorPogled(
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
     private val namig: TextView = a.findViewById(R.id.assistantSetupHint)
-    private val namigGumb: Button = a.findViewById(R.id.assistantOpenSettings)
     private val klepetBlok: View = a.findViewById(R.id.assistantChatBlock)
     private val klepetDnevnik: TextView = a.findViewById(R.id.assistantChatLog)
     private val klepetVnos: EditText = a.findViewById(R.id.assistantChatInput)
@@ -75,7 +73,6 @@ class LinaPogovorPogled(
     }
 
     init {
-        namigGumb.setOnClickListener { odpriNastavitve() }
         a.findViewById<Button>(R.id.assistantBackToAssistant).setOnClickListener { nazaj() }
         klepetPosli.setOnClickListener { poslji() }
         izvozIzberi.setOnClickListener {

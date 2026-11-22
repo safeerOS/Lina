@@ -37,16 +37,20 @@ class PogovorShramba(private val shramba: Shramba) {
 
     /** Sporocila z racunalnika: dodajo se manjkajoca, vrstni red po casu; vrne stevilo dodanih. */
     @Synchronized
-    fun zlij(prejeta: List<PogovorSinhron>): Int {
+    fun zlij(prejeta: List<PogovorSinhron>): Int = zlijInVrni(prejeta).size
+
+    /** Kot [zlij], vrne pa dodana sporocila (za spomin pogovorov: samo nova, brez podvajanja). */
+    @Synchronized
+    fun zlijInVrni(prejeta: List<PogovorSinhron>): List<PogovorSinhron> {
         val znana = sporocila.map { Triple(it.vloga, it.cas, it.besedilo) }.toHashSet()
-        var dodanih = 0
+        val dodana = mutableListOf<PogovorSinhron>()
         for (p in prejeta) {
             if (!veljavno(p) || !znana.add(Triple(p.vloga, p.cas, p.besedilo))) continue
-            sporocila.add(p); dodanih++
+            sporocila.add(p); dodana += p
         }
-        if (dodanih == 0) return 0
+        if (dodana.isEmpty()) return dodana
         sporocila = sporocila.sortedBy { java.time.Instant.parse(it.cas) }.takeLast(NAJVEC).toMutableList()
         try { shramba.shrani(json.encodeToString(sporocila)) } catch (_: Exception) { /* ostane v pomnilniku, naslednji zapis poskusi znova */ }
-        return dodanih
+        return dodana
     }
 }

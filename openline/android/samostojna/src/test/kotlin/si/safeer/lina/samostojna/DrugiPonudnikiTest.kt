@@ -36,6 +36,24 @@ class DrugiPonudnikiTest {
     }
 
     @Test
+    fun `OpenRouter gre na openrouter ai, prepove hrambo podatkov in ima model s predpono`() {
+        val p = Lazen(listOf(OdgovorHttp(200, """{"choices":[{"message":{"content":"ok"}}]}""")))
+        val r = ustvariOdjemalca(Ponudnik.OPENROUTER, shramba("sk-or-1"), p).poslji(listOf(Sporocilo("user", "a")), "")
+        assertEquals("ok", (r as Rezultat.Besedilo).besedilo)
+        assertEquals("https://openrouter.ai/api/v1/chat/completions", p.url)
+        assertEquals("Bearer sk-or-1", p.glave["Authorization"])
+        assertTrue(p.telo.contains("\"data_collection\":\"deny\"") && p.telo.contains("\"model\":\"openai/gpt-4o\""), p.telo)
+        assertEquals(Ponudnik.OPENROUTER, Ponudnik.izId("openrouter"))
+    }
+
+    @Test
+    fun `OpenAI nima polja OpenRouter`() {
+        val p = Lazen(listOf(OdgovorHttp(200, """{"choices":[{"message":{"content":"ok"}}]}""")))
+        ustvariOdjemalca(Ponudnik.OPENAI, shramba("sk-1"), p).poslji(emptyList(), "")
+        assertFalse(p.telo.contains("data_collection")); assertFalse(p.glave.containsKey("X-Title"))
+    }
+
+    @Test
     fun `Claude poslje x-api-key in verzijo, system loceno`() {
         val p = Lazen(listOf(OdgovorHttp(200, """{"content":[{"type":"text","text":"he"},{"type":"text","text":"j"}]}""")))
         val r = ustvariOdjemalca(Ponudnik.CLAUDE, shramba("sk-ant-1"), p).poslji(listOf(Sporocilo("user", "a")), "nav")

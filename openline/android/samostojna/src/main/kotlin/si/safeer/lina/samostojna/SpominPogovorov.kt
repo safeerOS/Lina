@@ -111,6 +111,25 @@ class SpominPogovorov(
         vrstice.size
     }
 
+    /**
+     * Obrati, prejeti s sinhronizacijo z racunalnika (22. 11. 2026: spomin telefon <-> racunalnik), z izvirnim casom.
+     * Ze zapisani (cas + vloga + besedilo) in skrivnosti se preskocijo; vloga je »uporabnik« ali »lina«.
+     */
+    fun zapisiUvozene(obrati: List<Obrat>): Int = synchronized(zaklep) {
+        if (!vklopljen() || obrati.isEmpty()) return 0
+        val znani = vsi().map { Triple(it.cas, it.vloga, it.besedilo) }.toHashSet()
+        val vrstice = obrati
+            .filter { it.vloga == "uporabnik" || it.vloga == "lina" }
+            .map { it.copy(besedilo = it.besedilo.trim().take(NAJVEC_ZNAKOV_BESEDILA)) }
+            .filter { it.besedilo.isNotEmpty() && !jeSkrivnost(it.besedilo) && znani.add(Triple(it.cas, it.vloga, it.besedilo)) }
+            .map { "${it.cas}\t${it.vloga}\t${ubezi(it.besedilo)}\n" }
+        if (vrstice.isEmpty()) return 0
+        mapa.mkdirs()
+        datoteka.appendText(vrstice.joinToString(""))
+        skrajsajCeTreba()
+        vrstice.size
+    }
+
     /** Vsi obrati (najstarejsi prvi); pokvarjene vrstice se preskocijo. */
     fun vsi(): List<Obrat> = synchronized(zaklep) {
         val f = datoteka

@@ -62,7 +62,8 @@ class GoogleCloudTest {
         val p = Lazen(listOf(OdgovorHttp(200, """{"candidates":[{"content":{"parts":[{"text":"zivjo"}]}}]}""")))
         val r = VertexOdjemalec({ "ya29.tajni" }, { "my-first-project-12345" }, prenos = p).poslji(listOf(Sporocilo("user", "a")), "nav")
         assertEquals("zivjo", (r as Rezultat.Besedilo).besedilo)
-        assertEquals("https://aiplatform.googleapis.com/v1/projects/my-first-project-12345/locations/global/publishers/google/models/gemini-2.5-flash:generateContent", p.naslovi[0])
+        // 22. 11. 2026: privzeti model kot na racunalniku (gemini-2.5-flash je na lastnikovem projektu vrnil 404).
+        assertEquals("https://aiplatform.googleapis.com/v1/projects/my-first-project-12345/locations/global/publishers/google/models/gemini-3-flash-preview:generateContent", p.naslovi[0])
         assertEquals("Bearer ya29.tajni", p.glave["Authorization"])
         assertFalse(p.telo.contains("ya29.tajni"))
     }

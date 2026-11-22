@@ -9,6 +9,7 @@ import si.safeer.lina.podpis.OdgovorLine
 import si.safeer.lina.samostojna.PogovorShramba
 import si.safeer.lina.samostojna.Shramba
 import si.safeer.lina.samostojna.SinhronLine
+import si.safeer.lina.samostojna.SpominPogovorov
 import si.safeer.lina.samostojna.smemSinhroniziratiDnevnik
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -54,7 +55,16 @@ object SinhronizacijaZLino {
                 dnevnik = DnevnikKlicevSkupni.dobi(context),
                 reviziji = PrefsShramba(context),
                 pogovor = pogovor.vsa(),
-                prejetPogovor = { pogovor.zlij(it) },
+                prejetPogovor = { prejeta ->
+                    // Nova sporocila z racunalnika gredo tudi v spomin telefona (brez podvajanja; lastna so ze zapisana).
+                    val nova = pogovor.zlijInVrni(prejeta)
+                    runCatching {
+                        SpominPogovorovPogled.spomin(context).zapisiUvozene(nova.mapNotNull { p ->
+                            val cas = runCatching { java.time.Instant.parse(p.cas).toEpochMilli() }.getOrNull() ?: return@mapNotNull null
+                            SpominPogovorov.Obrat(cas, if (p.vloga == "lina") "lina" else "uporabnik", p.besedilo)
+                        })
+                    }
+                },
                 poslji = { vsebina ->
                     val cas = System.currentTimeMillis()
                     val enkratni = NalogaLine.nakljucno(32)

@@ -23,8 +23,11 @@ enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
     OPENAI("openai", "OpenAI", "gpt-4.1-mini"),
     CLAUDE("claude", "Claude", "claude-sonnet-4-5"),
     GROK("grok", "Grok", "grok-4"),
+    /** Lastnik 22. 11. 2026: tudi kljuc OpenRouter (kot na racunalniku; ID modela s predpono ponudnika). */
+    OPENROUTER("openrouter", "OpenRouter", "openai/gpt-4o"),
     /** Prijava z Google racunom (Vertex AI); namesto kljuca zeton Google. */
-    VERTEX("vertex", "Google Cloud", "gemini-2.5-flash");
+    /** Isti model kot racunalniska Lina (types.ts DEFAULT_BRAIN_MODELS.vertex); 22. 11. 2026 gemini-2.5-flash na lastnikovem projektu vrne 404. */
+    VERTEX("vertex", "Google Cloud", "gemini-3-flash-preview");
 
     companion object {
         fun izId(id: String?): Ponudnik = entries.firstOrNull { it.id == id } ?: GEMINI
@@ -80,11 +83,14 @@ class OpenAiOdjemalec(
     private val osnovniNaslov: String = "https://api.openai.com",
     private val model: String = Ponudnik.OPENAI.model,
     private val prenos: Prenos = JavaHttpPrenos(),
+    /** OpenRouter: ponudnikom prepove hrambo podatkov (data_collection deny), kot racunalniska Lina. */
+    private val openRouter: Boolean = false,
 ) : PonudnikOdjemalec {
     var spanje: (Long) -> Unit = { Thread.sleep(it) }
 
     fun gradiTelo(zgodovina: List<Sporocilo>, sistemsko: String): String = buildJsonObject {
         put("model", model)
+        if (openRouter) put("provider", buildJsonObject { put("data_collection", "deny") })
         put("messages", buildJsonArray {
             if (sistemsko.isNotEmpty()) add(buildJsonObject { put("role", "system"); put("content", sistemsko) })
             for (s in zgodovina) add(buildJsonObject {
@@ -96,7 +102,11 @@ class OpenAiOdjemalec(
     override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
         val kljuc = shramba.preberi() ?: return Rezultat.Napaka(null, "Manjka kljuc")
         val url = "${osnovniNaslov.trimEnd('/')}/v1/chat/completions"
-        return posljiZPonovitvami(prenos, url, mapOf("Authorization" to "Bearer ${kljuc.izpostavi()}"), gradiTelo(zgodovina, sistemsko), spanje, ::razberi)
+        val glave = buildMap {
+            put("Authorization", "Bearer ${kljuc.izpostavi()}")
+            if (openRouter) put("X-Title", "Lina")
+        }
+        return posljiZPonovitvami(prenos, url, glave, gradiTelo(zgodovina, sistemsko), spanje, ::razberi)
     }
 
     fun razberi(telo: String): Rezultat {
@@ -150,6 +160,7 @@ fun ustvariOdjemalca(p: Ponudnik, shramba: ShranjevalnikKljuca, prenos: Prenos):
     Ponudnik.OPENAI -> OpenAiOdjemalec(shramba, "https://api.openai.com", Ponudnik.OPENAI.model, prenos)
     Ponudnik.CLAUDE -> ClaudeOdjemalec(shramba, prenos = prenos)
     Ponudnik.GROK -> OpenAiOdjemalec(shramba, "https://api.x.ai", Ponudnik.GROK.model, prenos)
+    Ponudnik.OPENROUTER -> OpenAiOdjemalec(shramba, "https://openrouter.ai/api", Ponudnik.OPENROUTER.model, prenos, openRouter = true)
     // Vertex ne uporablja kljuca: odjemalca gradi aplikacija z zetonom Google (glej VertexOdjemalec).
     Ponudnik.VERTEX -> throw IllegalArgumentException("Vertex: uporabi VertexOdjemalec")
 }

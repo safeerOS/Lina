@@ -274,7 +274,6 @@
     <string name="assistant_setup_title">Asistente: proveedor y claves</string>
     <string name="assistant_setup_hint_missing">Para chatear, elija un proveedor e introduzca su clave en Ajustes.</string>
     <string name="assistant_setup_hint_active_fmt">Proveedor: %1$s. El proveedor y las claves se cambian en Ajustes.</string>
-    <string name="assistant_open_settings">Ajustes de claves</string>
     <string name="settings_title">Ajustes</string>
     <string name="lina_chat_title">Conversación con Lina</string>
     <string name="assistant_providers_note">Elija qué proveedor responde por Lina. La clave del proveedor elegido se introduce en Ajustes.</string>
@@ -330,4 +329,31 @@
     <string name="memory_deleted">Memoria de conversaciones borrada.</string>
     <string name="name_save">Guardar</string>
     <string name="memory_heading">Memoria</string>
+
+    <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->
+    <string name="tab_home">Inicio</string>
+    <string name="home_subtitle">Su asistente personal y secretaria</string>
+    <string name="home_greet_morning">Buenos días</string>
+    <string name="home_greet_day">Buenas tardes</string>
+    <string name="home_greet_evening">Buenas noches</string>
+    <string name="home_help">¿En qué puedo ayudarle hoy?</string>
+    <string name="home_tile_chat">Conversación</string>
+    <string name="home_tile_chat_desc">Hablar con Lina</string>
+    <string name="home_tile_calls">Llamadas</string>
+    <string name="home_tile_calls_desc">Mensajes de llamantes</string>
+    <string name="home_tile_notes">Notas</string>
+    <string name="home_tile_notes_desc">Lo que Lina anotó</string>
+    <string name="home_tile_setup">Configuración</string>
+    <string name="home_tile_setup_desc">Desvío de llamadas</string>
+    <string name="home_tile_computer">Ordenador</string>
+    <string name="home_tile_computer_desc">Lina en el ordenador</string>
+    <string name="home_tile_settings_desc">Claves, nombre, memoria</string>
+    <string name="home_notices_title">Avisos de hoy</string>
+    <string name="home_notices_all">Todo</string>
+    <string name="home_notices_empty">Todavía no hay llamadas hoy.</string>
+    <string name="home_urgent">urgente</string>
+    <string name="home_ask">Pregunte a Lina …</string>
+    <string name="home_today_fmt">%1$d hoy</string>
+    <string name="local_google_billing_on">facturación activada</string>
+    <string name="local_google_billing_off">sin facturación</string>
 </resources>

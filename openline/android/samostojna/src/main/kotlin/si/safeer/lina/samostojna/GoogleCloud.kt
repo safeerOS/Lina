@@ -17,7 +17,8 @@ fun interface GoogleZeton {
     fun zeton(): String?
 }
 
-data class ProjektGoogle(val id: String, val ime: String)
+/** [obracun]: true/false iz Cloud Billing, null = ni znano (API ni dosegljiv ali ni preverjeno). */
+data class ProjektGoogle(val id: String, val ime: String, val obracun: Boolean? = null)
 
 private val jsonG = Json { ignoreUnknownKeys = true }
 
@@ -44,6 +45,28 @@ fun projektiIzOdgovora(telo: String): List<ProjektGoogle> {
     }.sortedBy { it.ime.lowercase() }
 }
 
+fun naslovObracuna(projekt: String): String {
+    require(ID_PROJEKTA.matches(projekt)) { "ID projekta Google Cloud ni veljaven." }
+    return "https://cloudbilling.googleapis.com/v1/projects/$projekt/billingInfo"
+}
+
+/**
+ * Ali ima projekt vklopljeno obracunavanje (lastnik 22. 11. 2026: telefon je izbral projekt AI Studio brez obracuna,
+ * Vertex je nato zavrnil vsak odgovor). Napaka ali neznan odgovor = null; nikoli ne ustavi prijave.
+ */
+fun obracunVklopljen(zeton: String, prenos: Prenos, projekt: String): Boolean? = try {
+    val odg = prenos.get(naslovObracuna(projekt), mapOf("Authorization" to "Bearer $zeton"), 15000L)
+    if (odg.koda != 200) null
+    else ((jsonG.parseToJsonElement(odg.telo) as? JsonObject)?.get("billingEnabled") as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
+} catch (e: Exception) { null }
+
+/** Projekti z znanim obracunom; prvi so tisti z obracunom, nato neznani, nazadnje brez obracuna (znotraj po imenu). */
+fun projektiZObracunom(zeton: String, prenos: Prenos, projekti: List<ProjektGoogle>, najvecPreverb: Int = 10): List<ProjektGoogle> {
+    if (projekti.size > najvecPreverb) return projekti
+    return projekti.map { it.copy(obracun = obracunVklopljen(zeton, prenos, it.id)) }
+        .sortedWith(compareBy<ProjektGoogle> { when (it.obracun) { true -> 0; null -> 1; false -> 2 } }.thenBy { it.ime.lowercase() })
+}
+
 /** Natanko en projekt: izbran sam; sicer uporabnik izbere (aplikacija ne ugiba, kam gre racun). */
 fun samodejniProjekt(projekti: List<ProjektGoogle>): ProjektGoogle? = projekti.singleOrNull()
 
@@ -61,8 +84,16 @@ fun poPrijaviGoogle(zeton: String, prenos: Prenos, izbran: String?): PrijavaGoog
     if (odg.koda != 200) return PrijavaGoogle.Napaka("Napaka ${odg.koda}")
     val projekti = projektiIzOdgovora(odg.telo)
     if (projekti.isEmpty()) return PrijavaGoogle.Napaka("Na tem Google racunu ni projekta Google Cloud")
-    val izbranProjekt = projekti.firstOrNull { it.id == izbran } ?: samodejniProjekt(projekti) ?: return PrijavaGoogle.Izbira(projekti)
-    return vklopiVertex(zeton, prenos, izbranProjekt)
+    projekti.firstOrNull { it.id == izbran }?.let { p ->
+        // Prej izbran projekt brez obracuna: znova ponudi izbiro (oznaceno), namesto da vsak odgovor pade.
+        if (projekti.size > 1 && obracunVklopljen(zeton, prenos, p.id) == false) return PrijavaGoogle.Izbira(projektiZObracunom(zeton, prenos, projekti))
+        return vklopiVertex(zeton, prenos, p)
+    }
+    samodejniProjekt(projekti)?.let { return vklopiVertex(zeton, prenos, it) }
+    val oznaceni = projektiZObracunom(zeton, prenos, projekti)
+    // Natanko en projekt z obracunom: uporabniku ni treba izbirati (racun gre tja, kjer je dobroimetje).
+    oznaceni.filter { it.obracun == true }.singleOrNull()?.let { return vklopiVertex(zeton, prenos, it) }
+    return PrijavaGoogle.Izbira(oznaceni)
 }
 
 fun vklopiVertex(zeton: String, prenos: Prenos, projekt: ProjektGoogle): PrijavaGoogle {
@@ -88,7 +119,24 @@ class VertexOdjemalec(
     override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
         val p = projekt()?.takeIf { ID_PROJEKTA.matches(it) } ?: return Rezultat.Napaka(null, "Manjka projekt")
         val t = try { zeton.zeton() } catch (e: IOException) { return Rezultat.Napaka(null, "Brez povezave") } ?: return Rezultat.Napaka(null, "Prijava poteka")
-        val url = "https://aiplatform.googleapis.com/v1/projects/$p/locations/global/publishers/google/models/$model:generateContent"
-        return posljiZPonovitvami(prenos, url, mapOf("Authorization" to "Bearer $t"), gradiTelo(zgodovina, sistemsko), spanje, ::razberiOdgovor)
+        var r: Rezultat = Rezultat.Napaka(null, "Ni modela")
+        // Model ni na voljo na tem projektu (404): poskusi rezervnega, namesto da Lina ne odgovori.
+        for (m in listOf(model) + REZERVNI_MODELI_VERTEX.filter { it != model }) {
+            val url = "https://aiplatform.googleapis.com/v1/projects/$p/locations/global/publishers/google/models/$m:generateContent"
+            r = posljiZPonovitvami(prenos, url, mapOf("Authorization" to "Bearer $t"), gradiTelo(zgodovina, sistemsko), spanje, ::razberiOdgovor)
+            if (!(r is Rezultat.Napaka && (r.koda == 404 || r.sporocilo.contains("was not found", ignoreCase = true)))) break
+        }
+        return if (r is Rezultat.Napaka && jeNapakaObracuna(r.sporocilo)) Rezultat.Napaka(r.koda, sporociloBrezObracuna(p)) else r
     }
 }
+
+/** Google vrne angleski opis z naslovom konzole; uporabnik dobi slovensko navodilo (brez dolgega naslova). */
+fun jeNapakaObracuna(sporocilo: String): Boolean =
+    sporocilo.contains("billing to be enabled", ignoreCase = true) || sporocilo.contains("BILLING_DISABLED")
+
+fun sporociloBrezObracuna(projekt: String): String =
+    "Projekt Google Cloud »$projekt« nima vklopljenega obračunavanja, zato Google ne odgovori. " +
+        "V Nastavitvah se odjavite iz Googla, se znova prijavite in izberite projekt z dobroimetjem."
+
+/** Rezervni modeli Vertex po vrsti, ce izbrani na projektu ni na voljo. */
+val REZERVNI_MODELI_VERTEX = listOf("gemini-3-flash-preview", "gemini-2.5-flash")
