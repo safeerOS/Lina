@@ -1,8 +1,264 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/okno"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/paper"
     android:orientation="vertical">
+
+<!-- Zgornja vrstica (prenova 22. 11. 2026): avatar Line, ime, racunalnik (samo ko je potreben) in Nastavitve. Ne drsi. -->
+<LinearLayout
+    android:id="@+id/topBar"
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="20dp"
+    android:paddingEnd="8dp">
+
+    <ImageView
+        android:id="@+id/topAvatar"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:background="@drawable/bg_avatar"
+        android:clipToOutline="true"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:src="@drawable/lina_avatar" />
+
+    <TextView
+        android:id="@+id/topTitle"
+        style="@style/Gw.Title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:accessibilityHeading="true"
+        android:maxLines="1"
+        android:text="@string/app_name_short" />
+
+    <ImageButton
+        android:id="@+id/topComputer"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/tab_computer"
+        android:src="@drawable/ic_nav_computer"
+        android:tint="@color/muted"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/topSettings"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/settings_title"
+        android:src="@drawable/ic_nav_settings"
+        android:tint="@color/muted" />
+</LinearLayout>
+
+<!-- Domov: en zaslon brez drsenja (prenova 22. 11. 2026, svet Duck.ai): pozdrav, stanje, velik gumb Pogovor z Lino,
+     kartica Danes in trije hitri gumbi. Vsebina, ki ne gre na zaslon, se skrajsa, ne drsi. Gradi DomovPogled. -->
+<LinearLayout
+    android:id="@+id/tabHome"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="16dp"
+    android:visibility="gone">
+
+    <TextView
+        android:id="@+id/homeGreeting"
+        style="@style/Gw.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:ellipsize="end"
+        android:maxLines="1" />
+
+    <LinearLayout
+        android:id="@+id/connectionRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:minHeight="32dp"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/connectionDot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/dot" />
+
+        <TextView
+            android:id="@+id/connectionText"
+            style="@style/Gw.Muted"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/homeChat"
+        style="@style/Gw.Button.Solid"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="16dp"
+        android:drawableStart="@drawable/ic_mic"
+        android:drawablePadding="10dp"
+        android:drawableTint="@color/on_accent"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:text="@string/home_chat_button"
+        android:textSize="17sp" />
+
+    <LinearLayout
+        android:id="@+id/homeToday"
+        style="@style/Gw.Panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_tile"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/Gw.Heading"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:accessibilityHeading="true"
+                android:text="@string/home_today_title" />
+
+            <TextView
+                android:id="@+id/homeTodayCount"
+                style="@style/Gw.Muted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/homeNoticesList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/homeTiles"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>
+
+<!-- Pogovor: pravi klepet (mehurcki, Lina levo, uporabnik desno), samodejni pomik na zadnje sporocilo; prazno stanje s predlogi
+     samo pred prvim sporocilom. Polje za pisanje je pripeto spodaj nad tipkovnico (assistantComposer). -->
+<LinearLayout
+    android:id="@+id/tabLina"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:visibility="gone">
+
+    <ScrollView
+        android:id="@+id/chatScroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp">
+
+            <LinearLayout
+                android:id="@+id/chatEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:background="@drawable/bg_avatar"
+                    android:clipToOutline="true"
+                    android:importantForAccessibility="no"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/lina_avatar" />
+
+                <TextView
+                    style="@style/Gw.Title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center"
+                    android:text="@string/home_help" />
+
+                <TextView
+                    android:id="@+id/assistantSetupHint"
+                    style="@style/Gw.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center" />
+
+                <LinearLayout
+                    android:id="@+id/chatChips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/assistantChatBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/assistantChatLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
 
 <ScrollView
     android:id="@+id/root"
@@ -16,143 +272,11 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="20dp"
-        android:paddingTop="20dp"
+        android:paddingTop="4dp"
         android:paddingEnd="20dp"
         android:paddingBottom="32dp">
 
-        <!-- Header: what this phone is and whether it is online -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
 
-            <TextView
-                style="@style/Gw.Title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/app_title" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <View
-                android:id="@+id/connectionDot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:background="@drawable/dot" />
-
-            <TextView
-                android:id="@+id/connectionText"
-                style="@style/Gw.Muted"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:textSize="14sp" />
-        </LinearLayout>
-
-        <!-- Domov po skici Lina 2.0 (lastnik 22. 11. 2026): lik, pozdrav, ploscice samo za delujoce funkcije,
-             danasnja obvestila iz dnevnika klicev in vrstica za vprasanje. Ploscice in vrstice gradi DomovPogled. -->
-        <LinearLayout
-            android:id="@+id/tabHome"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <FrameLayout
-                android:id="@+id/homeHero"
-                android:layout_width="match_parent"
-                android:layout_height="300dp"
-                android:background="@drawable/bg_home_hero"
-                android:clipToOutline="true">
-
-                <!-- Isti lik in prizor kot Lina 2.0 na racunalniku (public/lina/lina-scena.webp); zgornji del slike, obraz ostane prost:
-                     mehurcek je spodaj levo (lastnik 22. 11. 2026: nic ne sme prekriti obraza). -->
-                <ImageView
-                    android:id="@+id/homeCharacter"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:importantForAccessibility="no"
-                    android:scaleType="matrix"
-                    android:src="@drawable/lina_scena" />
-
-                <TextView
-                    android:id="@+id/homeGreeting"
-                    style="@style/Gw.Heading"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="start|bottom"
-                    android:layout_margin="12dp"
-                    android:accessibilityLiveRegion="polite"
-                    android:background="@drawable/bg_bubble"
-                    android:maxWidth="190dp"
-                    android:padding="12dp" />
-            </FrameLayout>
-
-            <LinearLayout
-                android:id="@+id/homeTiles"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="vertical" />
-
-            <LinearLayout
-                style="@style/Gw.Panel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        style="@style/Gw.Heading"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:accessibilityHeading="true"
-                        android:text="@string/home_notices_title" />
-
-                    <Button
-                        android:id="@+id/homeNoticesAll"
-                        style="@style/Gw.Button"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/home_notices_all" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/homeNoticesList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:orientation="vertical" />
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/homeAsk"
-                style="@style/Gw.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:drawableEnd="@drawable/ic_nav_lina"
-                android:drawableTint="@color/accent"
-                android:gravity="start|center_vertical"
-                android:minHeight="52dp"
-                android:text="@string/home_ask" />
-        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/tabCalls"
@@ -614,6 +738,13 @@
                 android:layout_marginTop="16dp">
 
                 <TextView
+                    android:id="@+id/assistantLocalInfo"
+                    style="@style/Gw.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
                     style="@style/Gw.Heading"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -747,92 +878,36 @@
 
         </LinearLayout>
 
+        <!-- Zapiski: svoj zavihek v spodnji vrstici (prenova 22. 11. 2026). -->
         <LinearLayout
-            android:id="@+id/tabLina"
+            android:id="@+id/tabNotes"
             style="@style/Gw.Panel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="8dp"
             android:visibility="gone">
-
-            <TextView
-                style="@style/Gw.Heading"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/lina_chat_title" />
-
-            <!-- Samostojna asistentka: deluje brez racunalnika (lastnik 18. 11. 2026). -->
-            <TextView
-                android:id="@+id/assistantLocalInfo"
-                style="@style/Gw.Muted"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
-
-            <!-- Ponudnik in kljuci so v Nastavitvah (zavihek Lina), ne tu (lastnik 18. 11. 2026). -->
-            <TextView
-                android:id="@+id/assistantSetupHint"
-                style="@style/Gw.Muted"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp" />
-
-            <!-- Gumb »Nastavitve ključev« odstranjen (lastnik 22. 11. 2026: ključi so že v Nastavitvah). -->
-
-            <LinearLayout
-                android:id="@+id/assistantChatBlock"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/assistantChatLog"
-                    style="@style/Gw.Body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textIsSelectable="true"
-                    android:visibility="gone" />
-
-                <EditText
-                    android:id="@+id/assistantChatInput"
-                    style="@style/Gw.Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:gravity="top"
-                    android:hint="@string/local_chat_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="textMultiLine"
-                    android:maxLength="4000"
-                    android:minLines="2" />
-
-                <Button
-                    android:id="@+id/assistantChatSend"
-                    style="@style/Gw.Button"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/local_send" />
-            </LinearLayout>
 
             <TextView
                 android:id="@+id/assistantNotesTitle"
                 style="@style/Gw.Heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/local_notes_title"
-                android:visibility="gone" />
+                android:accessibilityHeading="true"
+                android:text="@string/local_notes_title" />
+
+            <TextView
+                android:id="@+id/notesEmpty"
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/notes_empty" />
 
             <LinearLayout
                 android:id="@+id/assistantNotesList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />
-
-
         </LinearLayout>
 
         <LinearLayout
@@ -1020,6 +1095,61 @@
         </LinearLayout>
     </LinearLayout>
 </ScrollView>
+<!-- Vrstica za vnos pogovora (lastnik 22. 11. 2026: »bi moralo biti kot tu« - kot v aplikaciji Claude): pritrjena na dno,
+     nad tipkovnico, gumb Poslji v vrstici. Vidna samo v zavihku Lina, ko je pogovor na voljo (DialerActivity.osveziSestavljalnik). -->
+<LinearLayout
+    android:id="@+id/assistantComposer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/paper"
+    android:gravity="bottom"
+    android:orientation="horizontal"
+    android:paddingStart="12dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="8dp"
+    android:visibility="gone">
+
+    <ImageButton
+        android:id="@+id/assistantChatMic"
+        android:layout_width="48dp"
+        android:layout_height="52dp"
+        android:layout_marginEnd="4dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/chat_mic"
+        android:src="@drawable/ic_mic"
+        android:tint="@color/muted" />
+
+    <EditText
+        android:id="@+id/assistantChatInput"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="@drawable/bg_composer"
+        android:gravity="center_vertical|start"
+        android:hint="@string/local_chat_hint"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine|textCapSentences"
+        android:maxLength="4000"
+        android:maxLines="5"
+        android:minHeight="52dp"
+        android:paddingStart="18dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="12dp"
+        android:textColor="@color/ink"
+        android:textColorHint="@color/hint"
+        android:textSize="16sp" />
+
+    <ImageButton
+        android:id="@+id/assistantChatSend"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_send"
+        android:contentDescription="@string/local_send"
+        android:src="@drawable/ic_send" />
+</LinearLayout>
 <!-- Spodnja navigacija: pet podmenijev namesto enega dolgega zaslona (lastnik 18. 11. 2026). -->
 <LinearLayout
     android:id="@+id/navBar"
@@ -1045,6 +1175,7 @@
             android:text="@string/tab_calls" />
         <Button
             android:id="@+id/navPhone"
+            android:visibility="gone"
             android:drawableTop="@drawable/ic_nav_phone"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
@@ -1054,17 +1185,22 @@
         <Button
             android:id="@+id/navLina"
             android:drawableTop="@drawable/ic_nav_lina"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp"
-            style="@style/Gw.Nav.Lina"
+            style="@style/Gw.Nav"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/tab_lina" />
+            android:text="@string/tab_chat" />
+        <Button
+            android:id="@+id/navNotes"
+            android:drawableTop="@drawable/ic_notes"
+            style="@style/Gw.Nav"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/home_tile_notes" />
         <Button
             android:id="@+id/navSettings"
+            android:visibility="gone"
             android:drawableTop="@drawable/ic_nav_settings"
             style="@style/Gw.Nav"
             android:layout_width="0dp"
@@ -1073,6 +1209,7 @@
             android:text="@string/settings_title" />
         <Button
             android:id="@+id/navComputer"
+            android:visibility="gone"
             android:drawableTop="@drawable/ic_nav_computer"
             style="@style/Gw.Nav"
             android:layout_width="0dp"

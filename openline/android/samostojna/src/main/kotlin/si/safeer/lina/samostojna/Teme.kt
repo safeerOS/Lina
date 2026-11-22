@@ -4,7 +4,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 
-// Izbira barvne teme zaslona (privzeto temna Aura tema).
+// Izbira barvne teme zaslona (privzeto temna mornarsko modra; lastnik 22. 11. 2026: ne vijolicna).
 enum class Tema {
     TEMNA,
     SVETLA
@@ -26,13 +26,13 @@ data class Barve(
 }
 
 private val temnaBarvnaPaleta = Barve(
-    ozadje = "#0E0B24",
-    povrsina = "#171236",
-    povrsina2 = "#1F1948",
+    ozadje = "#0B1220",
+    povrsina = "#121B2E",
+    povrsina2 = "#1A2540",
     poudarekCian = "#5CE1E6",
     rozaSnemanje = "#FF4F9A",
-    besedilo = "#EEF0FF",
-    tiho = "#A7A9D6",
+    besedilo = "#EEF2FF",
+    tiho = "#A9B6D3",
     napaka = "#FF8087"
 )
 

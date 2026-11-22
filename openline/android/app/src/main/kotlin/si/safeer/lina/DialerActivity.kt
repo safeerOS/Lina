@@ -111,6 +111,8 @@ class DialerActivity : Activity() {
     private lateinit var lineSpinner: Spinner
     private lateinit var tabCalls: View
     private lateinit var tabHome: View
+    private lateinit var tabNotes: View
+    private lateinit var nastavitveMeni: si.safeer.lina.asistent.NastavitveMeni
     private lateinit var domov: si.safeer.lina.asistent.DomovPogled
     private val linaKlici by lazy { si.safeer.lina.asistent.LinaKlicPogled(this) }
     private lateinit var tabPhone: View
@@ -120,7 +122,7 @@ class DialerActivity : Activity() {
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
-    private enum class Zavihek { DOMOV, KLICI, TELEFON, LINA, RACUNALNIK, NASTAVITVE }
+    private enum class Zavihek { DOMOV, KLICI, TELEFON, LINA, ZAPISKI, RACUNALNIK, NASTAVITVE }
 
     /** Zavihek pred odprtimi Nastavitvami: gumb Nazaj ga obnovi. */
     private var zavihekPred = Zavihek.DOMOV
@@ -249,7 +251,8 @@ class DialerActivity : Activity() {
 
     private fun bindViews() {
         // Zgoraj in ob straneh odmik dobi vsebina, spodnji odmik (navigacijska vrstica sistema) spodnja navigacija.
-        findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { view, insets ->
+        findViewById<View>(R.id.okno).setOnApplyWindowInsetsListener { okno, insets ->
+            val view = findViewById<View>(R.id.root)
             val b = SistemskeVrstice.odmiki(insets)
             // Tipkovnica: ob robu do roba je zaslon ne zmanjsa sam, zato drsno obmocje dobi spodnji odmik v visini tipkovnice,
             // spodnja navigacija se skrije, polje v fokusu pa se pomakne nad tipkovnico (lastnik 18. 11. 2026: ni videl, kaj tipka).
@@ -258,13 +261,15 @@ class DialerActivity : Activity() {
             nav.visibility = if (tipkovnica > 0) View.GONE else View.VISIBLE
             // Vsebina se ne sme drsati pod vrstico stanja (lastnik 22. 11. 2026: prekrivanje); odmik je izven obmocja risanja.
             (view as android.view.ViewGroup).clipToPadding = true
-            view.setPadding(b[0], b[1], b[2], tipkovnica)
+            // Prenova 22. 11. 2026: odmik vrstice stanja in tipkovnice dobi celotno okno; zgornja vrstica in vrstica za vnos
+            // (zunaj drsnih obmocij) zato stojita pod vrstico stanja in tik nad tipkovnico.
+            okno.setPadding(b[0], b[1], b[2], tipkovnica)
             nav.setPadding(b[0], 0, b[2], b[3])
             if (tipkovnica > 0) view.post {
                 currentFocus?.let { f ->
-                    // Polje pogovora: nad tipkovnico mora biti tudi gumb »Pošlji« (lastnik 22. 11. 2026: tipkovnica ga je prekrila).
-                    val cilj = if (f.id == R.id.assistantChatInput) findViewById<View>(R.id.assistantChatSend) ?: f else f
-                    pokaziVDrsnemObmocju(view as android.widget.ScrollView, cilj)
+                    // Polje pogovora je v vrstici nad tipkovnico (zunaj drsnega obmocja); zadnji odgovor ostane viden na dnu.
+                    if (f.id == R.id.assistantChatInput) findViewById<android.widget.ScrollView>(R.id.chatScroll).fullScroll(View.FOCUS_DOWN)
+                    else pokaziVDrsnemObmocju(view as android.widget.ScrollView, f)
                 }
             }
             insets
@@ -393,12 +398,16 @@ class DialerActivity : Activity() {
         tabSettings = findViewById(R.id.tabSettings)
         tabComputer = findViewById(R.id.tabComputer)
         tabHome = findViewById(R.id.tabHome)
-        domov = si.safeer.lina.asistent.DomovPogled(this, { odpriIzDomova(it) }, { vprasajLino() })
+        tabNotes = findViewById(R.id.tabNotes)
+        domov = si.safeer.lina.asistent.DomovPogled(this, { odpriIzDomova(it) }, { vprasajLino() }, { showTab(Zavihek.TELEFON) })
+        findViewById<View>(R.id.topSettings).setOnClickListener { showTab(Zavihek.NASTAVITVE); nastavitveMeni.pokaziMeni() }
+        findViewById<View>(R.id.topComputer).setOnClickListener { showTab(Zavihek.RACUNALNIK) }
         navButtons = mapOf(
             Zavihek.DOMOV to findViewById<Button>(R.id.navHome),
             Zavihek.KLICI to findViewById<Button>(R.id.navCalls),
             Zavihek.TELEFON to findViewById<Button>(R.id.navPhone),
             Zavihek.LINA to findViewById<Button>(R.id.navLina),
+            Zavihek.ZAPISKI to findViewById<Button>(R.id.navNotes),
             Zavihek.RACUNALNIK to findViewById<Button>(R.id.navComputer),
             Zavihek.NASTAVITVE to findViewById<Button>(R.id.navSettings),
         )
@@ -417,6 +426,8 @@ class DialerActivity : Activity() {
         assistantStopButton = findViewById(R.id.assistantStopButton)
         assistantLog = findViewById(R.id.assistantLog)
         samostojniPogled = si.safeer.lina.asistent.LinaPogovorPogled(this, nazaj = { showTab(zavihekPred) })
+        // Podmeniji nastavitev (lastnik 22. 11. 2026); po LinaPogovorPogled, ker ta v nastavitve vstavi razdelka Ime in Spomin.
+        nastavitveMeni = si.safeer.lina.asistent.NastavitveMeni(this, { showTab(Zavihek.TELEFON) }, { showTab(Zavihek.RACUNALNIK) })
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
@@ -441,9 +452,7 @@ class DialerActivity : Activity() {
     /** Kljuci so v Nastavitvah (lastnik 19. 11. 2026: zavihek Lina je pogovor): odpri jih in drsi do ploscice kljucev. */
     private fun odpriNastavitveKljucev() {
         showTab(Zavihek.NASTAVITVE)
-        val drsno = findViewById<android.widget.ScrollView>(R.id.root)
-        val plosca = findViewById<View>(R.id.assistantSetupPanel)
-        drsno.post { drsno.smoothScrollTo(0, (tabSettings.top + plosca.top).coerceAtLeast(0)) }
+        nastavitveMeni.odpri(si.safeer.lina.asistent.NastavitveMeni.Podmeni.MOZGANI)
     }
 
     /** Racunalnik ima opravilo samo med seznanjanjem, po seznanitvi ali ko je izid seznanitve se za prebrati (lastnik 19. 11. 2026); seznanjanje je v Pripravi. */
@@ -456,8 +465,18 @@ class DialerActivity : Activity() {
     private fun osveziNavRacunalnik() {
         navButtons[Zavihek.RACUNALNIK]?.visibility =
             if (racunalnikPotreben() || zavihekZdaj == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
-        // Priprava je ploscica na Domovu; v spodnji vrstici je vidna samo, ko je odprta (lastnik 22. 11. 2026: skica).
-        navButtons[Zavihek.TELEFON]?.visibility = if (zavihekZdaj == Zavihek.TELEFON) View.VISIBLE else View.GONE
+        // Prenova 22. 11. 2026: spodaj 4 enakovredni zavihki; Racunalnik je ikona v zgornji vrstici (samo ko je potreben),
+        // Priprava se odpre iz vrstice stanja na Domovu, Nastavitve iz zgornje vrstice.
+        navButtons[Zavihek.RACUNALNIK]?.visibility = View.GONE
+        navButtons[Zavihek.TELEFON]?.visibility = View.GONE
+        navButtons[Zavihek.NASTAVITVE]?.visibility = View.GONE
+        findViewById<View>(R.id.topComputer).visibility = if (racunalnikPotreben() || zavihekZdaj == Zavihek.RACUNALNIK) View.VISIBLE else View.GONE
+    }
+
+    /** Vrstica za vnos pogovora: samo v zavihku Lina in samo, ko je pogovor na voljo. */
+    private fun osveziSestavljalnik() {
+        findViewById<View>(R.id.assistantComposer).visibility =
+            if (zavihekZdaj == Zavihek.LINA && samostojniPogled.imaKlepet()) View.VISIBLE else View.GONE
     }
 
     private fun odpriIzDomova(p: si.safeer.lina.samostojna.PloscaDomov) {
@@ -467,17 +486,7 @@ class DialerActivity : Activity() {
             si.safeer.lina.samostojna.PloscaDomov.PRIPRAVA -> showTab(Zavihek.TELEFON)
             si.safeer.lina.samostojna.PloscaDomov.RACUNALNIK -> showTab(Zavihek.RACUNALNIK)
             si.safeer.lina.samostojna.PloscaDomov.NASTAVITVE -> showTab(Zavihek.NASTAVITVE)
-            si.safeer.lina.samostojna.PloscaDomov.ZAPISKI -> {
-                showTab(Zavihek.LINA)
-                val drsno = findViewById<android.widget.ScrollView>(R.id.root)
-                val naslov = findViewById<View>(R.id.assistantNotesTitle)
-                drsno.post {
-                    // Odmik od vrha drsne vsebine prek vseh starsev (naslov je lahko gnezden v plosci).
-                    var y = 0; var v: View? = naslov
-                    while (v != null && v.parent !== drsno) { y += v.top; v = v.parent as? View }
-                    drsno.smoothScrollTo(0, y.coerceAtLeast(0))
-                }
-            }
+            si.safeer.lina.samostojna.PloscaDomov.ZAPISKI -> showTab(Zavihek.ZAPISKI)
         }
     }
 
@@ -492,10 +501,21 @@ class DialerActivity : Activity() {
         }
     }
 
+    /** Nazaj: podmeni nastavitev -> seznam podmenijev, drug zavihek -> Domov, Domov -> privzeto (zapre okno). */
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+    override fun onBackPressed() {
+        if (zavihekZdaj == Zavihek.NASTAVITVE && nastavitveMeni.nazaj()) return
+        if (zavihekZdaj != Zavihek.DOMOV) { showTab(Zavihek.DOMOV); return }
+        super.onBackPressed()
+    }
+
     private fun showTab(z: Zavihek) {
         if (z != Zavihek.NASTAVITVE) zavihekPred = z
         zavihekZdaj = z
         tabHome.visibility = if (z == Zavihek.DOMOV) View.VISIBLE else View.GONE
+        tabNotes.visibility = if (z == Zavihek.ZAPISKI) View.VISIBLE else View.GONE
+        // Domov in Pogovor imata svoj prostor brez skupnega drsenja; ostali zavihki so v drsnem obmocju.
+        findViewById<View>(R.id.root).visibility = if (z == Zavihek.DOMOV || z == Zavihek.LINA) View.GONE else View.VISIBLE
         tabCalls.visibility = if (z == Zavihek.KLICI) View.VISIBLE else View.GONE
         tabPhone.visibility = if (z == Zavihek.TELEFON) View.VISIBLE else View.GONE
         tabLina.visibility = if (z == Zavihek.LINA) View.VISIBLE else View.GONE
@@ -505,13 +525,17 @@ class DialerActivity : Activity() {
         findViewById<View>(R.id.root).scrollTo(0, 0)
         if (z == Zavihek.KLICI) linaKlici.osvezi()
         if (z == Zavihek.DOMOV) domov.osvezi()
+        osveziSestavljalnik()
         if (z != Zavihek.KLICI && z != Zavihek.TELEFON && z != Zavihek.DOMOV) renderAssistant()
+        // Domov kaze stanje povezave (vrstica stanja je zdaj na Domovu).
+        if (z == Zavihek.DOMOV) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
         osveziNavRacunalnik()
     }
 
     private fun renderAssistant() {
         samostojniPogled.osvezi()
+        osveziSestavljalnik()
         val stanje = asistent.stanje()
         val p = AsistentPrikaz.izracunaj(stanje)
         val naslov = AsistentShramba.beri(this)
@@ -600,6 +624,10 @@ class DialerActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == si.safeer.lina.asistent.LinaPogovorPogled.ZAHTEVA_GOVOR) {
+            if (resultCode == RESULT_OK) data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { samostojniPogled.vstaviGovor(it) }
+            return
+        }
         if (requestCode == si.safeer.lina.asistent.ZapiskiIzvoz.ZAHTEVA_MAPA) {
             if (resultCode == RESULT_OK) data?.data?.let { samostojniPogled.obdelajMapo(it) }
             return

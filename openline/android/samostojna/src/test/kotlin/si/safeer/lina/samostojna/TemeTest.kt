@@ -14,13 +14,13 @@ class TemeTest {
         val temna = barve(Tema.TEMNA)
 
         assertEquals(temna, privzeta)
-        assertEquals("#0E0B24", temna.ozadje)
-        assertEquals("#171236", temna.povrsina)
-        assertEquals("#1F1948", temna.povrsina2)
+        assertEquals("#0B1220", temna.ozadje)
+        assertEquals("#121B2E", temna.povrsina)
+        assertEquals("#1A2540", temna.povrsina2)
         assertEquals("#5CE1E6", temna.poudarekCian)
         assertEquals("#FF4F9A", temna.rozaSnemanje)
-        assertEquals("#EEF0FF", temna.besedilo)
-        assertEquals("#A7A9D6", temna.tiho)
+        assertEquals("#EEF2FF", temna.besedilo)
+        assertEquals("#A9B6D3", temna.tiho)
         assertEquals("#FF8087", temna.napaka)
     }
 
@@ -50,7 +50,7 @@ class TemeTest {
     fun `kontrast - pravilno izracuna razmerje za crno belo in enaki barvi`() {
         val crnoBelo = kontrast("#000000", "#FFFFFF")
         val beloCrno = kontrast("#FFFFFF", "#000000")
-        val enaki = kontrast("#171236", "#171236")
+        val enaki = kontrast("#121B2E", "#121B2E")
 
         assertEquals(21.0, crnoBelo, 0.05)
         assertEquals(crnoBelo, beloCrno, 0.0001)

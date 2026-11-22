@@ -372,7 +372,10 @@ class GatewayInCallService : InCallService() {
      */
     private fun syncCallAudio(callId: String, call: Call) {
         val otherLive = CallLine.blocksCapture(callId)
-        when (CallAudioPolicy.action(LinaCallGate.isOwned(callId), CallLine.audioState(call), otherLive)) {
+        val akcija = CallAudioPolicy.action(LinaCallGate.isOwned(callId), CallLine.audioState(call), otherLive)
+        // Diagnostika (22. 11. 2026: na Samsungu klic sprejet, zvoka Line ni bilo, brez zapisa v dnevniku): brez stevilke in vsebine.
+        Log.i(TAG, "zvok $callId: lina=${LinaCallGate.isOwned(callId)} stanje=${CallRegistry.androidState(call)} drug=$otherLive -> $akcija")
+        when (akcija) {
             CallAudioAction.START -> startOwnedAudio(callId, call)
             CallAudioAction.STOP -> {
                 // Linin klic ostane Linin (cakanje, uporabnikov klic): zajem se zadrzi, ne konca.
@@ -391,6 +394,17 @@ class GatewayInCallService : InCallService() {
                     .onFailure { Log.w(TAG, "background audio processing refused for $callId", it) }
                     .isSuccess
                 if (!routed) CallAudioBridge.onCallActive(callId)
+                else {
+                    Log.i(TAG, "zvok $callId: zahtevana obdelava v ozadju")
+                    // Ce Telecom klica ne prestavi v AUDIO_PROCESSING (izmerjeno na Samsungu 22. 11. 2026: ANSWERED -> ACTIVE, nic vec),
+                    // Lina sicer nikoli ne spregovori: po 1,5 s zacne zvok tudi v ACTIVE.
+                    handler.postDelayed({
+                        if (LinaCallGate.isOwned(callId) && CallRegistry.androidState(call) == Call.STATE_ACTIVE) {
+                            Log.w(TAG, "zvok $callId: AUDIO_PROCESSING ni prisel v 1500 ms, zvok se zacne v ACTIVE")
+                            CallAudioBridge.onCallActive(callId)
+                        }
+                    }, 1500)
+                }
             }
             Call.STATE_AUDIO_PROCESSING -> CallAudioBridge.onCallActive(callId)
         }

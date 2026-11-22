@@ -360,4 +360,31 @@
     <string name="lina_call_notice_title">Lina answered a call: %1$s</string>
     <string name="lina_call_notice_title_urgent">Urgent – Lina answered a call: %1$s</string>
     <string name="lina_call_notice_public">Lina answered a call</string>
+    <string name="home_chat_button">Talk to Lina</string>
+    <string name="home_today_title">Today</string>
+    <string name="tab_chat">Chat</string>
+    <string name="chat_mic">Speak</string>
+    <string name="notes_empty">No notes yet. Lina writes them when you ask her or when she answers a call.</string>
+    <string name="chat_chip_today">What do I have today?</string>
+    <string name="chat_chip_calls">Summarise recent calls</string>
+    <string name="chat_chip_remind">Remind me …</string>
+    <string name="home_calls_none">No calls yet today.</string>
+    <string name="home_status_setup">Open Setup</string>
+    <string name="app_name_short" translatable="false">Lina</string>
+    <string name="set_menu_name">Name and greeting</string>
+    <string name="set_menu_name_desc">How Lina addresses and introduces you</string>
+    <string name="set_menu_brain">Brain and keys</string>
+    <string name="set_menu_brain_desc">Provider, key or Google sign-in</string>
+    <string name="set_menu_memory">Memory</string>
+    <string name="set_menu_memory_desc">What Lina remembers from chats</string>
+    <string name="set_menu_tools">Web tools</string>
+    <string name="set_menu_tools_desc">Search, reading pages, messages</string>
+    <string name="set_menu_calls">Calls and language</string>
+    <string name="set_menu_calls_desc">Language, ringing, allowed numbers, line</string>
+    <string name="set_menu_notes">Notes</string>
+    <string name="set_menu_notes_desc">Where notes and calls are saved</string>
+    <string name="set_menu_setup">Phone setup</string>
+    <string name="set_menu_setup_desc">Default app, call audio, battery</string>
+    <string name="set_menu_computer">Computer</string>
+    <string name="set_menu_computer_desc">Connection to Lina on your computer</string>
 </resources>

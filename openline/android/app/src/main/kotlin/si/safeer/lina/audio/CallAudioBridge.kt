@@ -128,6 +128,18 @@ object CallAudioBridge {
     private object Ports : CapturePorts {
         override fun prepare(callId: String): Boolean {
             val context = appContext ?: return false
+            // Samostojna pot (brez racunalnika): zvok gre v lokalni prehod na telefonu, nastavitev prehoda racunalnika ni potrebna
+            // (22. 11. 2026: telefon brez racunalnika je klic sprejel, Lina pa ni spregovorila). Lupina mora teci v obeh poteh.
+            val lokalno = si.safeer.lina.telecom.SamostojnaPripravljenost.jePripravljena(context) && !GatewayRuntime.isConnected()
+            Log.i(TAG, "zvok $callId: priprava, lokalno=$lokalno")
+            if (lokalno) {
+                val zagon = ShellLauncher.ensureRunning(context)
+                if (zagon !is ShellLauncher.Result.Running && zagon !is ShellLauncher.Result.Held) {
+                    Log.w(TAG, "call audio unavailable for $callId: $zagon")
+                    return false
+                }
+                return true
+            }
             val config = GatewayConfigStore(context).load()
             if (config.wsUrl.isBlank() || config.deviceToken.isBlank()) {
                 Log.w(TAG, "zvok se ne zacne za $callId: prehod ni nastavljen")

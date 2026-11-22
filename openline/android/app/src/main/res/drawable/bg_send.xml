@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gumb Poslji v vrstici za vnos (kot v aplikaciji Claude): okrogel, poudarjen; onemogocen je bled. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33FFFFFF">
+    <item>
+        <selector>
+            <item android:state_enabled="false"><shape android:shape="oval"><solid android:color="@color/line" /></shape></item>
+            <item><shape android:shape="oval"><gradient android:angle="315" android:startColor="#4C7BF5" android:endColor="#2F55C8" /></shape></item>
+        </selector>
+    </item>
+</ripple>
