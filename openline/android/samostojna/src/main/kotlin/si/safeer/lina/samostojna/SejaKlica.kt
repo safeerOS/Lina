@@ -22,11 +22,23 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
     @Synchronized fun dodajVhod(besedilo: String) {
         if (besedilo.isEmpty()) return
         zvokSlisan = true
-        vhod.append(besedilo)
+        dodajLocenoZaNovStavek(vhod, besedilo)
     }
 
     @Synchronized fun dodajIzhod(besedilo: String) {
-        izhod.append(besedilo)
+        if (besedilo.isEmpty()) return
+        dodajLocenoZaNovStavek(izhod, besedilo)
+    }
+
+    /**
+     * Odlomki prepisa pridejo brez locila med obrati (v dnevniku: "slovensko.Pa ni", "Ana NovakPravilno").
+     * Ce nov odlomek zacne z veliko crko takoj za crko ali koncnim locilom (brez presledka), gre v novo vrstico.
+     * Odlomek z malo crko ali s presledkom (nadaljevanje besede ali stavka) ostane nespremenjen.
+     */
+    private fun dodajLocenoZaNovStavek(cilj: StringBuilder, besedilo: String) {
+        if (cilj.isNotEmpty() && besedilo.first().isUpperCase() &&
+            (cilj.last().isLetter() || cilj.last() in ".!?")) cilj.append('\n')
+        cilj.append(besedilo)
     }
 
     /** Konec obrata (model je koncal): naslednji govor klicatelja gre v nov odstavek. */

@@ -11,6 +11,21 @@ class SejaKlicaTest {
     private val t0 = 1_795_000_000_000L // 2026-11-18 v Ljubljani, vrednost je pomembna samo za obliko imena
 
     @Test
+    fun `odlomki prepisa brez locila se ob veliki crki locijo z novo vrstico`() {
+        val s = SejaKlica(t0, "+38641123456")
+        s.dodajVhod("Prosim bolj pravilno slovensko.")
+        s.dodajVhod("Pa ni umetnikova inteligenca")
+        s.dodajVhod(", ampak pomocnica.")
+        s.dodajVhod(" Ana Novak")
+        s.dodajVhod("Pravilno.")
+        val z = s.zakljuci(t0 + 5_000)
+        assertEquals(
+            "Prosim bolj pravilno slovensko.\nPa ni umetnikova inteligenca, ampak pomocnica. Ana Novak\nPravilno.",
+            z.sporociloDobesedno,
+        )
+    }
+
+    @Test
     fun `klic s sporocilom ima ime, podjetje, povzetek in dobesedni zapis`() {
         val s = SejaKlica(t0, "+38641123456")
         s.dodajVhod("Dober dan, tukaj Miha Horvat ")
