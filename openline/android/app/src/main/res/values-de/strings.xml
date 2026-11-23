@@ -375,6 +375,10 @@
     <string name="chat_chip_calls">Letzte Anrufe zusammenfassen</string>
     <string name="chat_chip_remind">Erinnere mich …</string>
     <string name="home_calls_none">Heute noch keine Anrufe.</string>
+    <string name="home_recent_title">Letzte Anrufe</string>
+    <string name="home_all_calls">Alle Anrufe</string>
+    <string name="home_recent_none">Lina hat noch keine Anrufe angenommen.</string>
+    <string name="home_hidden_number">Unterdrückte Nummer</string>
     <string name="home_tile_summary">Angenommen</string>
     <string name="summary_title">Angenommene Anrufe</string>
     <string name="summary_all">Alle mit Lina zusammenfassen</string>

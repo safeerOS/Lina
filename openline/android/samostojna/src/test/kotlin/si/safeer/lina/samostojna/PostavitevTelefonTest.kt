@@ -77,6 +77,26 @@ class PostavitevTelefonTest {
         assertTrue(poId("homeChat").tagName.isNotEmpty())
     }
 
+    /**
+     * Lastnik 23. 11. 2026: »klici, ki jih je prevzela Lina, dosegljivi brez scrolling dol«. Kartica zadnjih klicev je takoj pod
+     * pozdravom in stanjem, z gumbom »Vsi klici« v glavi; obstojeca vsebina (Pogovor z Lino, hitri gumbi, Odpri mapo) ostane pod njo.
+     */
+    @Test fun `zadnji klici na Domovu nad ostalo vsebino, z gumbom Vsi klici`() {
+        val domov = poId("tabHome")
+        val otroci = (0 until domov.childNodes.length).map { domov.childNodes.item(it) }.filterIsInstance<Element>()
+            .map { it.getAttributeNS(ns, "id").removePrefix("@+id/") }.filter { it.isNotEmpty() }
+        assertEquals(listOf("homeGreeting", "connectionRow", "homeToday", "homeChat", "homeTiles", "homeOpenFolder"), otroci)
+        val gumb = poId("homeAllCalls")
+        assertEquals("@string/home_all_calls", gumb.getAttributeNS(ns, "text"))
+        var p = gumb.parentNode
+        while (p is Element && p.getAttributeNS(ns, "id") != "@+id/homeToday") p = p.parentNode
+        assertTrue(p is Element, "gumb Vsi klici je v kartici zadnjih klicev")
+        for (jezik in listOf("values", "values-sl", "values-de", "values-es", "values-fr", "values-it")) {
+            val nizi = listOf("../app/src/main/res/$jezik/strings.xml", "app/src/main/res/$jezik/strings.xml").map(::File).first { it.isFile }.readText()
+            for (k in listOf("home_all_calls", "home_recent_title", "home_recent_none", "home_hidden_number")) assertTrue("name=\"$k\"" in nizi, "$jezik: $k")
+        }
+    }
+
     /** Lastnik 22. 11. 2026: tipkanje takoj po prvem dotiku polja; fullScroll bi polju vzel fokus. */
     @Test fun `ob tipkovnici pomik pogovora ne vzame fokusa polju`() {
         val f = listOf("../app/src/main/kotlin/si/safeer/lina/DialerActivity.kt", "app/src/main/kotlin/si/safeer/lina/DialerActivity.kt").map(::File).first { it.isFile }

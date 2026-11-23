@@ -11,15 +11,17 @@ import si.safeer.lina.R
 import si.safeer.lina.samostojna.DelDneva
 import si.safeer.lina.samostojna.PloscaDomov
 import si.safeer.lina.samostojna.delDneva
-import si.safeer.lina.samostojna.obvestilaDanes
 import si.safeer.lina.samostojna.steviloDanes
+import si.safeer.lina.samostojna.vrsticZadnjihKlicev
+import si.safeer.lina.samostojna.vrsticaZadnjegaKlica
+import si.safeer.lina.samostojna.zadnjiKlici
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
  * Domov brez drsenja (prenova 22. 11. 2026, NAVODILA-SEJA-LINA-TELEFON-UI-2211.md, svet Duck.ai): pozdrav v eni vrstici, vrstica
- * stanja (klik odpre Pripravo), velik gumb »Pogovor z Lino«, kartica Danes (en klik do klicev, nujni z rdeco piko) in trije hitri
- * gumbi (Pogovor, Klici, Zapiski). Vse se racuna iz lokalnih podatkov, zato dela brez racunalnika.
+ * stanja (klik odpre Pripravo), kartica zadnjih klicev z gumbom »Vsi klici« (23. 11. 2026, nujni z rdeco piko), velik gumb
+ * »Pogovor z Lino« in trije hitri gumbi (Klici, Povzetek, Zapiski). Vse se racuna iz lokalnih podatkov, zato dela brez racunalnika.
  */
 class DomovPogled(
     private val a: Activity,
@@ -43,6 +45,7 @@ class DomovPogled(
     init {
         a.findViewById<Button>(R.id.homeChat).setOnClickListener { vprasaj() }
         a.findViewById<View>(R.id.homeToday).setOnClickListener { odpri(PloscaDomov.KLICI) }
+        a.findViewById<Button>(R.id.homeAllCalls).setOnClickListener { odpri(PloscaDomov.KLICI) }
         a.findViewById<View>(R.id.connectionRow).setOnClickListener { odpriPripravo() }
         a.findViewById<Button>(R.id.homeOpenFolder).setOnClickListener { odpriMapoKlicev() }
         zgradiGumbe()
@@ -79,7 +82,7 @@ class DomovPogled(
         }
     }
 
-    /** Ob vsakem prikazu Domova: pozdrav po uri in imenu, stevilo in do dve vrstici danasnjih klicev. */
+    /** Ob vsakem prikazu Domova: pozdrav po uri in imenu, stevilo danasnjih klicev in zadnji sprejeti klici (ime, cas, povzetek). */
     fun osvezi() {
         val zdaj = ZonedDateTime.now()
         val dan = a.getString(when (delDneva(zdaj.hour)) {
@@ -96,33 +99,46 @@ class DomovPogled(
         val n = steviloDanes(zapisi, ms, cona)
         stevec.text = if (n > 0) a.getString(R.string.home_today_fmt, n) else ""
         seznam.removeAllViews()
-        // Kartica je visoka najvec za dve vrstici: Domov se ne sme drsati (preostanek je v zavihku Klici).
-        val vrstice = obvestilaDanes(zapisi, ms, cona, najvec = 2, najvecZnakov = 48)
-        if (vrstice.isEmpty()) {
-            seznam.addView(TextView(a, null, 0, R.style.Gw_Muted).apply { setText(R.string.home_calls_none) })
+        // Zadnji klici (3–5 po visini zaslona), ne samo danasnji: Domov se ne sme drsati, preostanek je v zavihku Klici.
+        val cfg = a.resources.configuration
+        val izbrani = zadnjiKlici(zapisi, vrsticZadnjihKlicev(cfg.screenHeightDp, cfg.fontScale))
+        if (izbrani.isEmpty()) {
+            seznam.addView(TextView(a, null, 0, R.style.Gw_Muted).apply { setText(R.string.home_recent_none) })
             return
         }
-        for (v in vrstice) {
+        // Ime iz imenika samo za prikazane vrstice (starejsi zapisi ga nimajo shranjenega); napaka imenika ne sme podreti Domova.
+        val zImeni = runCatching { si.safeer.lina.ContactSearch(a).dopolniImena(izbrani) }.getOrDefault(izbrani)
+        for (v in zImeni.map { vrsticaZadnjegaKlica(it, ms, cona, najvecZnakov = 60) }) {
+            val kdo = v.kdo.ifEmpty { a.getString(R.string.home_hidden_number) }
             seznam.addView(LinearLayout(a).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(4), 0, dp(4))
-                addView(View(a).apply {
-                    background = a.getDrawable(R.drawable.dot)
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(a.getColor(if (v.nujno) R.color.bad else R.color.accent))
-                    layoutParams = LinearLayout.LayoutParams(dp(10), dp(10)).apply { marginEnd = dp(10) }
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(3), 0, dp(3))
+                addView(LinearLayout(a).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(View(a).apply {
+                        background = a.getDrawable(R.drawable.dot)
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(a.getColor(if (v.nujno) R.color.bad else R.color.accent))
+                        layoutParams = LinearLayout.LayoutParams(dp(10), dp(10)).apply { marginEnd = dp(10) }
+                    })
+                    addView(TextView(a, null, 0, R.style.Gw_Body).apply {
+                        text = kdo
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    })
+                    addView(TextView(a, null, 0, R.style.Gw_Muted).apply {
+                        text = v.ura
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) }
+                    })
                 })
-                addView(TextView(a, null, 0, R.style.Gw_Body).apply {
-                    text = v.ura
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) }
-                })
-                addView(TextView(a, null, 0, R.style.Gw_Body).apply {
-                    text = if (v.sporocilo.isEmpty()) v.kdo else "${v.kdo}: ${v.sporocilo}"
+                if (v.sporocilo.isNotEmpty()) addView(TextView(a, null, 0, R.style.Gw_Muted).apply {
+                    text = v.sporocilo
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    setPadding(dp(20), 0, 0, 0)
                 })
-                contentDescription = listOf(v.ura, v.kdo, v.sporocilo, if (v.nujno) a.getString(R.string.home_urgent) else "")
+                contentDescription = listOf(v.ura, kdo, v.sporocilo, if (v.nujno) a.getString(R.string.home_urgent) else "")
                     .filter { it.isNotEmpty() }.joinToString(", ")
             })
         }

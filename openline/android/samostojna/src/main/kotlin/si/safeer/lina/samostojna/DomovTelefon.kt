@@ -37,16 +37,51 @@ fun obvestilaDanes(
         .sortedWith(compareByDescending<ZapisKlica> { it.nujno }.thenByDescending { it.casZacetka })
         .take(najvec)
         .map { z ->
-            val besedilo = z.sporocilo.ifBlank { z.povzetek }.replace(Regex("\\s+"), " ").trim()
             VrsticaObvestila(
                 id = z.id,
                 ura = Instant.ofEpochMilli(z.casZacetka).atZone(cona).format(URA),
                 kdo = z.klicatelj.trim().ifBlank { z.stevilka },
-                sporocilo = if (besedilo.length > najvecZnakov) besedilo.take(najvecZnakov - 1).trimEnd() + "…" else besedilo,
+                sporocilo = kratkoSporocilo(z, najvecZnakov),
                 nujno = z.nujno,
             )
         }
 }
+
+/** Kratek povzetek klica v eni vrstici: sporocilo (Lina ga povzame), sicer povzetek; skrajsano na [najvecZnakov]. */
+private fun kratkoSporocilo(z: ZapisKlica, najvecZnakov: Int): String {
+    val besedilo = z.sporocilo.ifBlank { z.povzetek }.replace(Regex("\\s+"), " ").trim()
+    return if (besedilo.length > najvecZnakov) besedilo.take(najvecZnakov - 1).trimEnd() + "…" else besedilo
+}
+
+private val DATUM_URA = DateTimeFormatter.ofPattern("d. M. HH:mm")
+
+/**
+ * Zadnji klici, ki jih je prevzela Lina (lastnik 23. 11. 2026: »dosegljivi brez scrolling dol«): vsi dnevi, brez sistemskih zapisov,
+ * najnovejsi prvi. Vrne izvirne zapise, da jim aplikacija pred prikazom doda ime iz imenika samo za te vrstice.
+ */
+fun zadnjiKlici(zapisi: List<ZapisKlica>, najvec: Int): List<ZapisKlica> =
+    zapisi.filter(::jeKlicZapis).sortedByDescending { it.casZacetka }.take(najvec)
+
+/** Vrstica kartice zadnjih klicev: danes samo ura, sicer datum in ura; ime iz imenika (imeZaPrikaz), sicer stevilka; prazno = skrita. */
+fun vrsticaZadnjegaKlica(z: ZapisKlica, zdaj: Long, cona: ZoneId, najvecZnakov: Int = 60): VrsticaObvestila {
+    val cas = Instant.ofEpochMilli(z.casZacetka).atZone(cona)
+    val danes = cas.toLocalDate() == Instant.ofEpochMilli(zdaj).atZone(cona).toLocalDate()
+    return VrsticaObvestila(
+        id = z.id,
+        ura = cas.format(if (danes) URA else DATUM_URA),
+        kdo = imeZaPrikaz(z).ifBlank { z.stevilka.trim() },
+        sporocilo = kratkoSporocilo(z, najvecZnakov),
+        nujno = z.nujno,
+    )
+}
+
+/**
+ * Koliko zadnjih klicev (3–5) gre na Domov brez drsenja. Ocena: ~560 dp zasedejo vrstice zaslona in ostala vsebina Domova,
+ * ena vrstica klica ~44 dp; vecja pisava (fontScale) zmanjsa razpolozljivo visino.
+ * shortcut: ocena iz visine zaslona, ne meritev postavitve; ce se na napravi spodnji gumb odreze, izmeri pogled po postavitvi.
+ */
+fun vrsticZadnjihKlicev(visinaDp: Int, pisava: Float = 1f): Int =
+    ((visinaDp / maxOf(1f, pisava) - 560f) / 44f).toInt().coerceIn(3, 5)
 
 /** Stevilo danasnjih klicev (znacka na ploscici Klici); 0 = brez znacke. */
 fun steviloDanes(zapisi: List<ZapisKlica>, zdaj: Long, cona: ZoneId): Int {

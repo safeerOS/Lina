@@ -375,6 +375,10 @@
     <string name="chat_chip_calls">Povzemi zadnje klice</string>
     <string name="chat_chip_remind">Opomni me …</string>
     <string name="home_calls_none">Danes še ni klicev.</string>
+    <string name="home_recent_title">Zadnji klici</string>
+    <string name="home_all_calls">Vsi klici</string>
+    <string name="home_recent_none">Lina še ni sprejela nobenega klica.</string>
+    <string name="home_hidden_number">Skrita številka</string>
     <string name="home_tile_summary">Sprejeti</string>
     <string name="summary_title">Sprejeti klici</string>
     <string name="summary_all">Povzemi vse z Lino</string>

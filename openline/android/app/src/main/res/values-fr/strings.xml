@@ -375,6 +375,10 @@
     <string name="chat_chip_calls">Résume les derniers appels</string>
     <string name="chat_chip_remind">Rappelle-moi …</string>
     <string name="home_calls_none">Aucun appel aujourd\'hui.</string>
+    <string name="home_recent_title">Appels récents</string>
+    <string name="home_all_calls">Tous les appels</string>
+    <string name="home_recent_none">Lina n\'a encore répondu à aucun appel.</string>
+    <string name="home_hidden_number">Numéro masqué</string>
     <string name="home_tile_summary">Reçus</string>
     <string name="summary_title">Appels reçus</string>
     <string name="summary_all">Tout résumer avec Lina</string>

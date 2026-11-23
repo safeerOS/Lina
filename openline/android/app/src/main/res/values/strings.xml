@@ -375,6 +375,10 @@
     <string name="chat_chip_calls">Summarise recent calls</string>
     <string name="chat_chip_remind">Remind me …</string>
     <string name="home_calls_none">No calls yet today.</string>
+    <string name="home_recent_title">Recent calls</string>
+    <string name="home_all_calls">All calls</string>
+    <string name="home_recent_none">Lina has not answered any calls yet.</string>
+    <string name="home_hidden_number">Hidden number</string>
     <string name="home_tile_summary">Answered</string>
     <string name="summary_title">Answered calls</string>
     <string name="summary_all">Summarise all with Lina</string>

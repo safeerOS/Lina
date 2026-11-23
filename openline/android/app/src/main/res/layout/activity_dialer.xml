@@ -57,8 +57,8 @@
         android:tint="@color/muted" />
 </LinearLayout>
 
-<!-- Domov: en zaslon brez drsenja (prenova 22. 11. 2026, svet Duck.ai): pozdrav, stanje, velik gumb Pogovor z Lino,
-     kartica Danes in trije hitri gumbi. Vsebina, ki ne gre na zaslon, se skrajsa, ne drsi. Gradi DomovPogled. -->
+<!-- Domov: en zaslon brez drsenja (prenova 22. 11. 2026, svet Duck.ai): pozdrav, stanje, kartica zadnjih klicev (23. 11. 2026),
+     velik gumb Pogovor z Lino in trije hitri gumbi. Vsebina, ki ne gre na zaslon, se skrajsa, ne drsi. Gradi DomovPogled. -->
 <LinearLayout
     android:id="@+id/tabHome"
     android:layout_width="match_parent"
@@ -108,27 +108,13 @@
             android:textSize="14sp" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/homeChat"
-        style="@style/Gw.Button.Solid"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="16dp"
-        android:drawableStart="@drawable/ic_mic"
-        android:drawablePadding="10dp"
-        android:drawableTint="@color/on_accent"
-        android:gravity="center"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
-        android:text="@string/home_chat_button"
-        android:textSize="17sp" />
-
+    <!-- Zadnji sprejeti klici takoj pod stanjem (lastnik 23. 11. 2026: »dosegljivi brez scrolling dol«); ostala vsebina je pod kartico. -->
     <LinearLayout
         android:id="@+id/homeToday"
         style="@style/Gw.Panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_tile"
         android:clickable="true"
         android:focusable="true"
@@ -146,13 +132,24 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:accessibilityHeading="true"
-                android:text="@string/home_today_title" />
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/home_recent_title" />
 
             <TextView
                 android:id="@+id/homeTodayCount"
                 style="@style/Gw.Muted"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/homeAllCalls"
+                style="@style/Gw.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:text="@string/home_all_calls" />
         </LinearLayout>
 
         <LinearLayout
@@ -162,6 +159,21 @@
             android:layout_marginTop="6dp"
             android:orientation="vertical" />
     </LinearLayout>
+
+    <Button
+        android:id="@+id/homeChat"
+        style="@style/Gw.Button.Solid"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="16dp"
+        android:drawableStart="@drawable/ic_mic"
+        android:drawablePadding="10dp"
+        android:drawableTint="@color/on_accent"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:text="@string/home_chat_button"
+        android:textSize="17sp" />
 
     <LinearLayout
         android:id="@+id/homeTiles"

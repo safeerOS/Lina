@@ -375,6 +375,10 @@
     <string name="chat_chip_calls">Resume las últimas llamadas</string>
     <string name="chat_chip_remind">Recuérdame …</string>
     <string name="home_calls_none">Todavía no hay llamadas hoy.</string>
+    <string name="home_recent_title">Llamadas recientes</string>
+    <string name="home_all_calls">Todas las llamadas</string>
+    <string name="home_recent_none">Lina aún no ha atendido ninguna llamada.</string>
+    <string name="home_hidden_number">Número oculto</string>
     <string name="home_tile_summary">Atendidas</string>
     <string name="summary_title">Llamadas atendidas</string>
     <string name="summary_all">Resumir todo con Lina</string>
