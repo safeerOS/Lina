@@ -132,4 +132,10 @@ class MoskaOblikaTest {
         assertEquals("Zapisala sem in poslala sem sporočilo.", popraviMoskeOblike("Zapisal sem in poslal sem sporočilo."))
         assertEquals("Napisala sem: \"Poslal sem vam.\"", popraviMoskeOblike("Napisal sem: \"Poslal sem vam.\""))
     }
+
+    @Test fun `vprasanje o ze predani nalogi ne sproži nove naloge`() {
+        val n = SistemskoNavodilo.racunalnik(true)
+        assertTrue(n.contains("NE ponavljaj"))
+        assertTrue(n.contains("razlozi"))
+    }
 }

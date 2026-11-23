@@ -7,6 +7,8 @@ sealed class Odgovor {
     class Besedilo(val besedilo: String) : Odgovor()
     class Zapisek(val besedilo: String) : Odgovor()
     class Opomnik(val besedilo: String, val cas: String) : Odgovor()
+    /** Nov dogodek v koledarju telefona: zapise ga aplikacija po uporabnikovi potrditvi, ne model. */
+    class NoviDogodek(val naslov: String, val zacetekMs: Long, val konecMs: Long) : Odgovor()
     class Napaka(val sporocilo: String) : Odgovor()
     /** Naloga za racunalnik (Claude Code prek podpisanega kanala); izvede jo aplikacija, ne model. */
     class NalogaRacunalniku(val besedilo: String) : Odgovor()
@@ -26,6 +28,11 @@ class Asistent(
     private val koledar: KoledarIzvajalec? = null,
 ) {
     private val zgodovina = mutableListOf<Sporocilo>()
+    /** Zadnja naloga, predana racunalniku v tem pogovoru: vprasanje o nalogi jo razlozi in ne poslje nove (lastnik 23. 11. 2026). */
+    private var zadnjaNaloga: String? = null
+
+    /** Klice aplikacija, ko je racunalnik nalogo res sprejel (zavrnjena naloga ne sme postati »zadnja«). */
+    fun nalogaPredana(besedilo: String) { zadnjaNaloga = besedilo }
     // Orodja vzporedno (do 3 naenkrat) s predpomnilnikom uspesnih rezultatov v tem pogovoru (22. 11. 2026).
     private val izvajalec = IzvajalecOrodij({ k ->
         when (k.orodje) {
@@ -98,6 +105,14 @@ class Asistent(
                         .firstOrNull { it.startsWith("[[racunalnik:") && it.endsWith("]]") }
                         ?.let { it.substring(13, it.length - 2).trim() }
                     if (!nal.isNullOrEmpty()) {
+                        val prejsnja = zadnjaNaloga
+                        if (prejsnja != null && jeVprasanjeONalogi(vnos)) {
+                            // Model je namesto razlage izmislil novo nalogo: novih nalog ne pošiljamo, razložimo zadnjo.
+                            val razlaga = "Računalniku sem predala nalogo: »$prejsnja«. Potek in odobritve so v zavihku Računalnik."
+                            zgodovina.add(Sporocilo("model", razlaga))
+                            obrezi()
+                            return Odgovor.Besedilo(razlaga)
+                        }
                         zgodovina.add(Sporocilo("model", popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())))
                         obrezi()
                         return Odgovor.NalogaRacunalniku(nal)
@@ -119,6 +134,8 @@ class Asistent(
                         if (vsebina.isNotEmpty()) {
                             return Odgovor.Zapisek(vsebina)
                         }
+                    } else if (obrezana.startsWith("[[dogodek:") && obrezana.endsWith("]]")) {
+                        DogodekKoledarZapis.razclenji(obrezana.substring(10, obrezana.length - 2), System.currentTimeMillis())?.let { return it }
                     } else if (obrezana.startsWith("[[opomnik:") && obrezana.endsWith("]]")) {
                         val vsebina = obrezana.substring(10, obrezana.length - 2).trim()
                         val deli = vsebina.split("|", limit = 2)
@@ -154,4 +171,14 @@ class Asistent(
         private const val NAJVEC_KROGOV_ORODIJ = 2
         const val BREZ_ODGOVORA = "Odgovora zdaj nisem našla. Poskusi vprašati malo drugače."
     }
+}
+
+/** Uporabnik sprašuje o nalogi (ne daje nove): »kakšna je naloga«, »opiši nalogo, ki si jo dala računalniku«. */
+internal fun jeVprasanjeONalogi(vnos: String): Boolean {
+    val v = vnos.lowercase()
+    if (!v.contains("nalog")) return false
+    // Izrecna zahteva za novo nalogo ni vprasanje o prejsnji (CodeRabbit): »lahko predaš novo nalogo?«.
+    if (Regex("(nov[aeoi]?|drug[aeo]|še eno|se eno|ponovi)\\s+nalog").containsMatchIn(v) || Regex("^\\s*(predaj|pošlji|poslji|daj|naredi|ustvari)").containsMatchIn(v) ||
+        Regex("(lahko|bi)\\s+(predaš|predas|pošlješ|posljes|daš|das)").containsMatchIn(v)) return false
+    return v.contains("?") || listOf("razlož", "razloz", "opiš", "opis", "kakšn", "kaksn", "katero", "kaj si", "povej").any { v.contains(it) }
 }

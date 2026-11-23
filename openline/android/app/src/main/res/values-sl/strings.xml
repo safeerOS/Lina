@@ -424,4 +424,10 @@
     <string name="local_reminder_approx">Za opomnike na minuto dovolite Lini natančne alarme v nastavitvah telefona.</string>
     <string name="headset_key_label">Prevzem klica s tipko slušalk</string>
     <string name="headset_key_desc">Tipka na slušalkah prevzame klic, ki ga sprejema Lina: Lina utihne, mikrofon telefona se vklopi. Bere se samo tipka slušalk, vsebina zaslona ni dostopna.</string>
+    <string name="local_event_proposed">Predlagan dogodek v koledarju: %1$s, %2$s. Potrdi ga v oknu; če telefon vpraša za dostop do koledarja, ga dovoli in mi povej znova.</string>
+    <string name="local_event_confirm_title">Dodam v koledar?</string>
+    <string name="local_event_add">Dodaj</string>
+    <string name="local_event_cancel">Prekliči</string>
+    <string name="local_event_added">Dodano v koledar</string>
+    <string name="local_event_failed">Dogodka ni bilo mogoče dodati (brez dovoljenja ali brez koledarja za pisanje)</string>
 </resources>

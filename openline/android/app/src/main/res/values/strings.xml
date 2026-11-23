@@ -425,4 +425,10 @@
     <string name="local_reminder_approx">Allow exact alarms for Lina in the phone settings so reminders fire on the minute.</string>
     <string name="headset_key_label">Headset button takeover</string>
     <string name="headset_key_desc">Lets the headset button take over a call that Lina is answering: Lina stops and your phone microphone turns on. Only headset buttons are read; no screen content is accessed.</string>
+    <string name="local_event_proposed">Proposed calendar event: %1$s, %2$s. Confirm it in the dialog; if the phone asks for calendar access, allow it and tell me again.</string>
+    <string name="local_event_confirm_title">Add to calendar?</string>
+    <string name="local_event_add">Add</string>
+    <string name="local_event_cancel">Cancel</string>
+    <string name="local_event_added">Added to calendar</string>
+    <string name="local_event_failed">Could not add the event (no permission or no writable calendar)</string>
 </resources>

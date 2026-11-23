@@ -32,4 +32,43 @@ class KoledarAndroid(private val context: Context) : KoledarOrodje {
         }
         return izid
     }
+
+    /**
+     * Doda dogodek v prvi pisljivi koledar telefona (po uporabnikovi potrditvi). Vrne false brez dovoljenja WRITE_CALENDAR,
+     * brez pisljivega koledarja ali ob napaki; obstojecih dogodkov ne spreminja.
+     */
+    fun dodaj(naslov: String, zacetekMs: Long, konecMs: Long): Boolean = try {
+        val cr = context.contentResolver
+        val koledarId = cr.query(
+            CalendarContract.Calendars.CONTENT_URI,
+            arrayOf(CalendarContract.Calendars._ID),
+            "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ? AND ${CalendarContract.Calendars.VISIBLE} = 1",
+            arrayOf(CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR.toString()),
+            "${CalendarContract.Calendars.IS_PRIMARY} DESC, ${CalendarContract.Calendars._ID} ASC",
+        )?.use { if (it.moveToFirst()) it.getLong(0) else null }
+        if (koledarId == null) false
+        else {
+            val v = android.content.ContentValues().apply {
+                put(CalendarContract.Events.CALENDAR_ID, koledarId)
+                put(CalendarContract.Events.TITLE, naslov)
+                put(CalendarContract.Events.DTSTART, zacetekMs)
+                put(CalendarContract.Events.DTEND, konecMs)
+                put(CalendarContract.Events.EVENT_TIMEZONE, java.util.TimeZone.getDefault().id)
+            }
+            cr.insert(CalendarContract.Events.CONTENT_URI, v) != null
+        }
+    } catch (e: SecurityException) {
+        false
+    } catch (e: RuntimeException) {
+        false
+    }
+
+    companion object {
+        /** Dovoljenji za branje in pisanje koledarja; brez njiju Lina ne vidi urnika in ne more dodati dogodka. */
+        val DOVOLJENJA = arrayOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)
+        const val KODA_DOVOLJENJ = 7411
+
+        fun imaDovoljenja(c: Context): Boolean =
+            DOVOLJENJA.all { c.checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+    }
 }

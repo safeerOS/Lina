@@ -499,8 +499,13 @@ class LinaPogovorPogled(
                             a.getString(R.string.local_reminder_set, odgovor.besedilo, kdaj) + if (natancno) "" else " " + a.getString(R.string.local_reminder_approx)
                         }
                     }
+                    is Odgovor.NoviDogodek -> {
+                        val kdaj = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(odgovor.zacetekMs))
+                        potrdiDogodek(odgovor)
+                        a.getString(R.string.local_event_proposed, odgovor.naslov, kdaj)
+                    }
                     is Odgovor.NalogaRacunalniku ->
-                        if (posljiRacunalniku(odgovor.besedilo)) a.getString(R.string.local_task_sent, odgovor.besedilo)
+                        if (posljiRacunalniku(odgovor.besedilo)) { asist.nalogaPredana(odgovor.besedilo); a.getString(R.string.local_task_sent, odgovor.besedilo) }
                         else a.getString(R.string.local_task_busy)
                     is Odgovor.Napaka -> when (odgovor.sporocilo) {
                         "Brez povezave" -> a.getString(R.string.local_err_offline)
@@ -520,6 +525,26 @@ class LinaPogovorPogled(
                 osvezi()
             }
         }
+    }
+
+    /** Dogodek gre v koledar telefona sele po uporabnikovi potrditvi; brez dovoljenj se najprej zahtevajo (nato uporabnik znova povej). */
+    private fun potrdiDogodek(d: Odgovor.NoviDogodek) {
+        if (!KoledarAndroid.imaDovoljenja(a)) {
+            a.requestPermissions(KoledarAndroid.DOVOLJENJA, KoledarAndroid.KODA_DOVOLJENJ)
+            return
+        }
+        val kdaj = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(d.zacetekMs))
+        android.app.AlertDialog.Builder(a)
+            .setTitle(R.string.local_event_confirm_title)
+            .setMessage("${d.naslov}\n$kdaj")
+            .setPositiveButton(R.string.local_event_add) { _, _ ->
+                nit.execute {
+                    val ok = KoledarAndroid(a).dodaj(d.naslov, d.zacetekMs, d.konecMs)
+                    glavna.post { android.widget.Toast.makeText(a, if (ok) R.string.local_event_added else R.string.local_event_failed, android.widget.Toast.LENGTH_LONG).show() }
+                }
+            }
+            .setNegativeButton(R.string.local_event_cancel, null)
+            .show()
     }
 
     private fun odstraniZadnjo() {

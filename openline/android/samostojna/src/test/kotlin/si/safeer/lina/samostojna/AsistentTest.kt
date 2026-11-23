@@ -1,6 +1,7 @@
 package si.safeer.lina.samostojna
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -123,6 +124,39 @@ class AsistentTest {
         val odgovor = asistent.povej("Napaka")
         assertTrue(odgovor is Odgovor.Napaka)
         assertEquals("Neveljaven JSON", (odgovor as Odgovor.Napaka).sporocilo)
+    }
+
+    @Test
+    fun `vprasanje o nalogi ne poslje nove naloge racunalniku`() {
+        val prenos = LazenPrenos()
+        prenos.naslednjiTeloOdgovora = formatirajOdgovor("Predam.\\n[[racunalnik: Preveri posodobitev]]")
+        val asistent = Asistent(ustvariOdjemalca(prenos), "", racunalnikPovezan = { true })
+        assertTrue(asistent.povej("Predaj nalogo racunalniku") is Odgovor.NalogaRacunalniku)
+        asistent.nalogaPredana("Preveri posodobitev")
+        prenos.naslednjiTeloOdgovora = formatirajOdgovor("Takoj.\\n[[racunalnik: Izvedi celovit pregled sistema]]")
+        val odgovor = asistent.povej("Ne znas opisati naloge katero si dala racunalniku?")
+        assertTrue(odgovor is Odgovor.Besedilo, "vprasanje o nalogi mora vrniti razlago")
+        assertTrue((odgovor as Odgovor.Besedilo).besedilo.contains("Preveri posodobitev"))
+        assertFalse(odgovor.besedilo.contains("celovit pregled"))
+        assertTrue(asistent.povej("Predaj se eno nalogo racunalniku") is Odgovor.NalogaRacunalniku)
+        assertTrue(asistent.povej("Lahko predas novo nalogo racunalniku?") is Odgovor.NalogaRacunalniku)
+    }
+
+    @Test
+    fun `vrstica dogodek postane predlog dogodka, neveljavni se ne zapisejo`() {
+        val prenos = LazenPrenos()
+        val cez = java.time.ZonedDateTime.now().plusDays(1).withNano(0).toString()
+        prenos.naslednjiTeloOdgovora = formatirajOdgovor("Predlagam termin.\\n[[dogodek: $cez|45|Sestanek z Ano]]")
+        val d = Asistent(ustvariOdjemalca(prenos), "").povej("Dogovorila sva se za jutri")
+        assertTrue(d is Odgovor.NoviDogodek)
+        d as Odgovor.NoviDogodek
+        assertEquals("Sestanek z Ano", d.naslov)
+        assertEquals(45 * 60_000L, d.konecMs - d.zacetekMs)
+        val zdaj = System.currentTimeMillis()
+        assertEquals(null, DogodekKoledarZapis.razclenji("2020-01-01T10:00:00+01:00|60|Staro", zdaj))
+        assertEquals(null, DogodekKoledarZapis.razclenji("$cez|2|Prekratko", zdaj))
+        assertEquals(null, DogodekKoledarZapis.razclenji("$cez|60|  ", zdaj))
+        assertEquals(null, DogodekKoledarZapis.razclenji("$cez|60", zdaj))
     }
 
     @Test
