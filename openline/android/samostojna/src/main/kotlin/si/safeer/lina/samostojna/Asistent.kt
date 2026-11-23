@@ -98,12 +98,15 @@ class Asistent(
                         .firstOrNull { it.startsWith("[[racunalnik:") && it.endsWith("]]") }
                         ?.let { it.substring(13, it.length - 2).trim() }
                     if (!nal.isNullOrEmpty()) {
-                        zgodovina.add(Sporocilo("model", rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim()))
+                        zgodovina.add(Sporocilo("model", popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())))
                         obrezi()
                         return Odgovor.NalogaRacunalniku(nal)
                     }
                 }
-                val besedilo = rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim()
+                // Zenska oblika ze v zgodovini in spominu (23. 11. 2026): model v naslednjem obratu ne bere svojih moskih oblik nazaj.
+                val besedilo = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
+                    // Po zadnjem krogu orodij je lahko ostala samo vrstica orodja (navodilo jih zahteva brez besedila).
+                    .ifEmpty { BREZ_ODGOVORA }
                 zgodovina.add(Sporocilo("model", besedilo))
                 obrezi()
                 runCatching { spomin?.zapisi(vnos, besedilo) }
@@ -134,7 +137,7 @@ class Asistent(
                     }
                 }
 
-                return Odgovor.Besedilo(popraviMoskeOblike(besedilo))
+                return Odgovor.Besedilo(besedilo)
             }
             is Rezultat.Napaka -> {
                 repeat(dodano) { if (zgodovina.isNotEmpty()) zgodovina.removeAt(zgodovina.size - 1) } // uporabnik lahko ponovi
@@ -147,5 +150,8 @@ class Asistent(
         }
     }
 
-    private companion object { const val NAJVEC_KROGOV_ORODIJ = 2 }
+    companion object {
+        private const val NAJVEC_KROGOV_ORODIJ = 2
+        const val BREZ_ODGOVORA = "Odgovora zdaj nisem našla. Poskusi vprašati malo drugače."
+    }
 }

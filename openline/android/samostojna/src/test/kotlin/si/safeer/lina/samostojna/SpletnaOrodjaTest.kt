@@ -42,11 +42,13 @@ class SpletnaOrodjaTest {
     private fun orodja(p: Prenos, brave: String? = kljucBrave, tf: String? = kljucTf) = SpletnaOrodja(p, { brave }, { tf })
 
     @Test
-    fun `vprasanje - brez kontrolnih znakov, najvec 75 besed`() {
+    fun `vprasanje - brez kontrolnih znakov, najvec 50 besed in 400 znakov (meja Brave)`() {
         assertEquals("a b", SpletnaOrodja.pripraviVprasanje("a\u0000\n b"))
         assertNull(SpletnaOrodja.pripraviVprasanje("  \n\t "))
         val dolgo = (1..200).joinToString(" ") { "b$it" }
-        assertEquals(75, SpletnaOrodja.pripraviVprasanje(dolgo)!!.split(" ").size)
+        assertEquals(50, SpletnaOrodja.pripraviVprasanje(dolgo)!!.split(" ").size)
+        val dolge = (1..60).joinToString(" ") { "beseda$it" }
+        assertTrue(SpletnaOrodja.pripraviVprasanje(dolge)!!.length <= 400)
     }
 
     @Test
@@ -77,6 +79,9 @@ class SpletnaOrodjaTest {
         assertTrue(orodja(p).isci("vreme") is IzidOrodja.Besedilo)
         assertTrue(p.klici[0].url.contains("country=SI"))
         assertFalse(p.klici[1].url.contains("country=SI"))
+        // Manj virov = hitrejsi odgovor Brave in krajsi kontekst modelu (23. 11. 2026); v rezervi brez parametra.
+        assertTrue(p.klici[0].url.contains("count=10"))
+        assertFalse(p.klici[1].url.contains("count="))
         assertEquals("kljuc", (orodja(LazenPrenos(OdgovorHttp(401, ""))).isci("x") as IzidOrodja.Napaka).razlog)
         assertEquals("meja", (orodja(LazenPrenos(OdgovorHttp(429, ""))).isci("x") as IzidOrodja.Napaka).razlog)
         val brezPovezave = LazenPrenos().apply { izjema = IOException("izklopljeno") }

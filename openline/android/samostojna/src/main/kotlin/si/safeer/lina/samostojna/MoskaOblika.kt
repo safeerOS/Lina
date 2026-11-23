@@ -1,10 +1,32 @@
 package si.safeer.lina.samostojna
 
-private const val GLAGOLI = "zapisal|popravil|posodobil|razumel|shranil|slišal|slisal|poslal|pripravil|preveril|našel|nasel|zabeležil|zabelezil|naredil|pozabil|prebral|dodal|izbrisal|prestavil|zaključil|zakljucil"
+/**
+ * Moske oblike, s katerimi Lina govori o sebi, in zenske ustreznice (glagoli v pretekliku in pogosti pridevniki).
+ * 23. 11. 2026: dodani glagoli in pridevniki iz klicev in klepeta; »hotel« namenoma ni na seznamu (samostalnik: »Našla sem hotel.«).
+ */
+private val ZENSKE = mapOf(
+    "zapisal" to "zapisala", "popravil" to "popravila", "posodobil" to "posodobila", "razumel" to "razumela", "shranil" to "shranila",
+    "slišal" to "slišala", "slisal" to "slisala", "poslal" to "poslala", "pripravil" to "pripravila", "preveril" to "preverila",
+    "našel" to "našla", "nasel" to "nasla", "zabeležil" to "zabeležila", "zabelezil" to "zabelezila", "naredil" to "naredila",
+    "pozabil" to "pozabila", "prebral" to "prebrala", "dodal" to "dodala", "izbrisal" to "izbrisala", "prestavil" to "prestavila",
+    "zaključil" to "zaključila", "zakljucil" to "zakljucila",
+    "poklical" to "poklicala", "sporočil" to "sporočila", "sporocil" to "sporocila", "obvestil" to "obvestila", "poiskal" to "poiskala",
+    "iskal" to "iskala", "dobil" to "dobila", "pogledal" to "pogledala", "uredil" to "uredila", "odprl" to "odprla", "potrdil" to "potrdila",
+    "vprašal" to "vprašala", "vprasal" to "vprasala", "odgovoril" to "odgovorila", "nastavil" to "nastavila", "spremenil" to "spremenila",
+    "ustvaril" to "ustvarila", "opazil" to "opazila", "prejel" to "prejela", "mislil" to "mislila", "želel" to "želela", "zelel" to "zelela",
+    "vedel" to "vedela", "videl" to "videla", "posredoval" to "posredovala", "predal" to "predala", "napisal" to "napisala", "bil" to "bila",
+    "vesel" to "vesela", "prepričan" to "prepričana", "preprican" to "prepricana", "pripravljen" to "pripravljena",
+    "hvaležen" to "hvaležna", "hvalezen" to "hvalezna", "zadovoljen" to "zadovoljna", "gotov" to "gotova",
+)
 
-/** Pomožnik pred glagolom (sem, bi bil, nisem ...), nato morebitni predmet, nato glagol: »sem zapisal«, »bi bil zapisal«. */
+private val GLAGOLI = ZENSKE.keys.sortedByDescending { it.length }.joinToString("|")
+
+/** Kratke besede med pomoznikom in glagolom: »sem ponovno posodobil«, »sem ti že poslal«, »sem sporočilo zapisal« (do tri). */
+private const val VMES = "(?:(?:ti|vam|ga|jo|jih|mu|ji|to|vse|že|ze|še|ponovno|spet|tudi|ravnokar|pravkar|res|sporočilo|sporocilo)\\s+){0,3}"
+
+/** Pomožnik (sem, nisem, bi bil; »sem bil« tudi pred pridevnikom), nato do tri kratke besede, nato glagol: »sem zapisal«, »nisem bil prepričan«. */
 private val MOSKA_OBLIKA = Regex(
-    "\\b(?:sem|(?<!\\p{Lu}\\p{Ll}{1,20}\\s)bi\\s+bil|nisem|sem\\s+tudi|sem\\s+ravnokar)\\s+(?:ti\\s+|vam\\s+|to\\s+|vse\\s+|sporočilo\\s+|sporocilo\\s+)?($GLAGOLI)\\b",
+    "\\b(?:sem|(?<!\\p{Lu}\\p{Ll}{1,20}\\s)bi\\s+bil|nisem)\\s+(?:bil\\s+)?$VMES($GLAGOLI)\\b",
     RegexOption.IGNORE_CASE,
 )
 
@@ -15,13 +37,6 @@ private val MOSKA_OBLIKA_OBRATNO = Regex("(?<![\\p{L}\\p{N}»\"“„]\\s{0,3})\
 fun moskeOblikeLine(besedilo: String): List<String> =
     (MOSKA_OBLIKA.findAll(besedilo) + MOSKA_OBLIKA_OBRATNO.findAll(besedilo)).map { it.groupValues[1].lowercase() }.distinct().toList()
 
-private val ZENSKE = mapOf(
-    "zapisal" to "zapisala", "popravil" to "popravila", "posodobil" to "posodobila", "razumel" to "razumela", "shranil" to "shranila",
-    "slišal" to "slišala", "slisal" to "slisala", "poslal" to "poslala", "pripravil" to "pripravila", "preveril" to "preverila",
-    "našel" to "našla", "nasel" to "nasla", "zabeležil" to "zabeležila", "zabelezil" to "zabelezila", "naredil" to "naredila",
-    "pozabil" to "pozabila", "prebral" to "prebrala", "dodal" to "dodala", "izbrisal" to "izbrisala", "prestavil" to "prestavila",
-    "zaključil" to "zaključila", "zakljucil" to "zakljucila",
-)
 
 private fun zenskaOblika(glagol: String): String? {
     val zenska = ZENSKE[glagol.lowercase()] ?: return null
@@ -30,8 +45,27 @@ private fun zenskaOblika(glagol: String): String? {
 
 private val BI_BIL = Regex("\\bbil\\b", RegexOption.IGNORE_CASE)
 
-/** Besedilni odgovor: moške oblike, s katerimi Lina govori o sebi (»sem zapisal«, »bi bil zapisal«), zamenja z ženskimi (tudi pomožnik »bil« -> »bila«). */
-fun popraviMoskeOblike(besedilo: String): String {
+/**
+ * Besedilni odgovor: moške oblike, s katerimi Lina govori o sebi (»sem zapisal«, »bi bil zapisal«), zamenja z ženskimi (tudi pomožnik »bil« -> »bila«).
+ * Vrstice z oznakami ([[zapisek: ...]] ipd.) ostanejo dobesedne: v njih so besede uporabnika.
+ */
+fun popraviMoskeOblike(besedilo: String): String =
+    besedilo.lines().joinToString("\n") { v -> if (v.trim().startsWith("[[") && v.trim().endsWith("]]")) v else popraviVrstico(v) }
+
+/** Navedki (»...«, "...", „...“): besede nekoga drugega ali osnutek v uporabnikovem imenu - ostanejo dobesedni (23. 11. 2026). */
+private val NAVEDEK = Regex("»[^«]*«|„[^“”]*[“”]|\"[^\"]*\"")
+
+private fun popraviVrstico(vrstica: String): String {
+    val izhod = StringBuilder()
+    var od = 0
+    for (n in NAVEDEK.findAll(vrstica)) {
+        izhod.append(popraviOdsek(vrstica.substring(od, n.range.first))).append(n.value)
+        od = n.range.last + 1
+    }
+    return izhod.append(popraviOdsek(vrstica.substring(od))).toString()
+}
+
+private fun popraviOdsek(besedilo: String): String {
     val prvi = MOSKA_OBLIKA.replace(besedilo) { m ->
         val glagol = m.groupValues[1]
         val nova = zenskaOblika(glagol) ?: return@replace m.value

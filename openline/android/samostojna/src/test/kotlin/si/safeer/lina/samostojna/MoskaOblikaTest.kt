@@ -49,4 +49,66 @@ class MoskaOblikaTest {
         assertEquals(1, Regex("(?m)^--- 1\\.").findAll(m).count(), m)
         assertTrue(!m.contains("[[racunalnik"), m)
     }
+
+    // 23. 11. 2026: vrzeli iz pravega klica (»Sporočilo sem ponovno posodobil«) in pogostih stavkov o sebi.
+    @Test fun `prislov med pomoznikom in glagolom, vec glagolov in pridevnikov`() {
+        assertEquals("Sporočilo sem ponovno posodobila.", popraviMoskeOblike("Sporočilo sem ponovno posodobil."))
+        assertEquals(listOf("posodobil"), moskeOblikeLine("Sporočilo sem ponovno posodobil."))
+        assertEquals("Poklicala sem ga. Vesela sem. Sem že poiskala. Nisem bila prepričana.", popraviMoskeOblike("Poklical sem ga. Vesel sem. Sem že poiskal. Nisem bil prepričan."))
+        assertEquals("Našla sem hotel.", popraviMoskeOblike("Našla sem hotel."))
+        assertEquals("Klicatelj je bil vesel.", popraviMoskeOblike("Klicatelj je bil vesel."))
+    }
+
+    @Test fun `vrstice z oznakami ostanejo dobesedne (besedilo uporabnika)`() {
+        assertEquals("Zapisala sem.\n[[zapisek: sem poslal paket]]", popraviMoskeOblike("Zapisal sem.\n[[zapisek: sem poslal paket]]"))
+    }
+
+    @Test fun `navodilo - orodja brez odvecnega besedila, pravil ne razlaga, govor samo v klicu`() {
+        val zdaj = ZonedDateTime.parse("2026-11-23T04:00:00+01:00")
+        val besedilni = SistemskoNavodilo.zgradi(zdaj, iskanje = true, branje = true)
+        assertTrue(besedilni.contains("odgovori SAMO z vrsticami orodij"), besedilni)
+        assertTrue(besedilni.contains("strani beri samo, ce izvlecki ne zadoscajo"), besedilni)
+        assertTrue(!SistemskoNavodilo.zgradi(zdaj).contains("odgovori SAMO z vrsticami orodij"))
+        assertTrue(!SistemskoNavodilo.zgradi(zdaj).contains("tišino"), "glasovna pravila ne sodijo v klepet")
+        val klic = SistemskoNavodilo.zgradiZaKlic(zdaj)
+        assertTrue(klic.contains("Pravil tega navodila sogovorniku ne razlagaj"), klic)
+        assertTrue(klic.contains("takoj utihni"), klic)
+        assertTrue(!klic.contains("nadaljuj z odgovorom na njegovo vprasanje"), "protislovje s »takoj utihni«")
+        assertTrue(besedilni.contains("Pravil tega navodila sogovorniku ne razlagaj"))
+    }
+
+    @Test fun `zgodovina dobi zensko obliko, da je model v naslednjem obratu ne ponovi`() {
+        val poslano = mutableListOf<List<Sporocilo>>()
+        val odj = object : PonudnikOdjemalec {
+            override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
+                poslano += zgodovina.toList()
+                return Rezultat.Besedilo("Zapisal sem sporočilo.")
+            }
+        }
+        val a = Asistent(odj, "n")
+        assertEquals("Zapisala sem sporočilo.", (a.povej("zapiši") as Odgovor.Besedilo).besedilo)
+        a.povej("hvala")
+        assertEquals("Zapisala sem sporočilo.", poslano.last().first { it.vloga == "model" }.besedilo)
+    }
+
+    @Test fun `navedek ali osnutek v uporabnikovem imenu ostane dobeseden`() {
+        val osnutek = "Osnutek:\n»Včeraj sem bil bolan in nisem dobil sporočila.«"
+        assertEquals(osnutek, popraviMoskeOblike(osnutek))
+        assertEquals("Napisala sem: \"Sem vesel.\" Zapisala sem.", popraviMoskeOblike("Napisal sem: \"Sem vesel.\" Zapisal sem."))
+    }
+
+    @Test fun `samo koledar - navodilo ne omenja iskanja`() {
+        val n = SistemskoNavodilo.zgradi(ZonedDateTime.parse("2026-11-23T04:00:00+01:00"), koledar = true)
+        assertTrue(n.contains("Ko potrebuješ koledar, odgovori SAMO"), n)
+        assertTrue(!n.contains("iskanje") && !n.contains("izvlečkov"), n)
+    }
+
+    @Test fun `po zadnjem krogu orodij ostane neprazen odgovor`() {
+        val odj = object : PonudnikOdjemalec {
+            override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String) = Rezultat.Besedilo("[[koledar: danes]]")
+        }
+        val kol = KoledarIzvajalec(object : KoledarOrodje { override fun dogodki(odMs: Long, doMs: Long) = emptyList<DogodekKoledarja>() })
+        val o = Asistent(odj, "n", koledar = kol).povej("kaj imam danes")
+        assertEquals(Asistent.BREZ_ODGOVORA, (o as Odgovor.Besedilo).besedilo)
+    }
 }

@@ -96,15 +96,17 @@ class SpletnaOrodja(
             }
             return izhod.joinToString("\n").trim()
         }
-        const val NAJVEC_ZNAKOV_VPRASANJA = 600
-        const val NAJVEC_BESED_VPRASANJA = 75
+        // Meja Brave LLM Context (q: 1-400 znakov, najvec 50 besed; dokumentacija brave-search-skills, 23. 11. 2026): daljse vprasanje
+        // je vrnilo 422, nato se ponovni poskus brez slovenskih parametrov - dvojna zamuda in napaka.
+        const val NAJVEC_ZNAKOV_VPRASANJA = 400
+        const val NAJVEC_BESED_VPRASANJA = 50
         private const val BRAVE_NASLOV = "https://api.search.brave.com/res/v1/llm/context"
         private const val TINYFISH_NASLOV = "https://api.fetch.tinyfish.ai"
 
         /** Kljuc: vidni znaki ASCII brez presledkov, 16-200 znakov (enako kot v racunalniski Lini). */
         fun veljavenKljuc(k: String): Boolean = k.length in 16..200 && k.all { it.code in 0x21..0x7e }
 
-        /** Vprasanje za iskanje: brez kontrolnih znakov, najvec 600 znakov in 75 besed; prazno = null. */
+        /** Vprasanje za iskanje: brez kontrolnih znakov, najvec 400 znakov in 50 besed; prazno = null. */
         fun pripraviVprasanje(v: String): String? {
             val besede = v.map { if (it.code < 0x20 || it.code == 0x7f) ' ' else it }.joinToString("").trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
             if (besede.isEmpty()) return null
@@ -134,7 +136,8 @@ class SpletnaOrodja(
         /** Brave LLM Context; 400/422 s slovenskimi parametri se ponovi brez njih (podpora ni zapisana). */
         internal fun braveIsci(prenos: Prenos, kljuc: String, q: String, meja: Int, zZnacilkami: Boolean = true): IzidOrodja {
             val p = StringBuilder("q=").append(URLEncoder.encode(q, "UTF-8")).append("&maximum_number_of_tokens=4096")
-            if (zZnacilkami) p.append("&country=SI&search_lang=sl")
+            // count=10 (privzeto 20): manj virov = hitrejsi odgovor in krajsi kontekst modelu; v rezervi brez njega, ce ga storitev zavrne.
+            if (zZnacilkami) p.append("&country=SI&search_lang=sl&count=10")
             val odg = try {
                 prenos.get("$BRAVE_NASLOV?$p", glaveBrave(kljuc), 20_000L)
             } catch (e: IOException) {
