@@ -464,4 +464,18 @@
     <string name="addon_state_running">Deluje</string>
     <string name="addon_state_error">Napaka</string>
     <string name="addon_state_unavailable">Še ni na voljo</string>
+    <!-- Lina in Claude Code (23. 11. 2026): odgovor v nalogo, samodejni odgovori Line -->
+    <string name="assistant_waiting_answer">Claude Code sprašuje in čaka odgovor.</string>
+    <string name="assistant_answer_hint">Odgovor za Claude Code</string>
+    <string name="assistant_answer_send">Pošlji odgovor</string>
+    <string name="assistant_auto_stop">Ustavi samodejne odgovore Line</string>
+    <string name="assistant_auto_stopped">Samodejni odgovori Line za to nalogo so ustavljeni.</string>
+    <string name="assistant_auto_answered">Lina je odgovorila (%1$d/%2$d): %3$s</string>
+    <string name="assistant_owner_answered">Odgovoril si: %3$s</string>
+    <string name="assistant_auto_ask_owner">Lina ni odgovorila: %1$s Odgovori Claude Code sam.</string>
+    <string name="assistant_claude_asks">Claude Code sprašuje: »%1$s«\n%2$s Odgovori v zavihku Računalnik.</string>
+    <string name="assistant_auto_off">Samodejne odgovore za to nalogo si ustavil.</string>
+    <string name="assistant_auto_limit">Lina je v tej nalogi odgovorila že %1$d-krat.</string>
+    <string name="assistant_auto_no_brain">Lina nima nastavljenega modela.</string>
+    <string name="assistant_auto_busy">Pošiljanje je zasedeno.</string>
 </resources>

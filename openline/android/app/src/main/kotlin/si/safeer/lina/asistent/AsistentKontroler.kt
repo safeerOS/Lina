@@ -55,13 +55,28 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     var zadnjaSKodo = false; private set
     /** Nacin B: koda, ki jo je lastnik vtipkal v Lini, ni bila prava; Lina je vnos odprla znova. */
     var kodaNiBilaPrava = false; private set
+    /** Claude Code je vprasal in caka odgovor (reply vrsta=vprasanje ali »cakam na navodila«; 23. 11. 2026). */
+    var cakaOdgovor = false; private set
+    /** Besedilo naloge, ki jo je ta telefon poslal (za samodejni odgovor Line). */
+    var nalogaBesedilo: String? = null; private set
+    /** Koncana naloga, ki jo telefon se spremlja: Claude Code jo lahko odpre znova (lastnik v terminalu ali odgovor). */
+    private var spremljana: String? = null
+    /** Samodejni odgovori Line: najvec 10 na nalogo, lastnik jih lahko ustavi (SamodejniOdgovor.Stevec, preizkusi v modulu samostojna). */
+    val samodejni = si.safeer.lina.samostojna.SamodejniOdgovor.Stevec()
+    /** Klic ob vprasanju Claude Code (glavna nit): id naloge, besedilo naloge, vprasanje. */
+    var naVprasanje: ((String, String, String) -> Unit)? = null
+    /** Klic ob uspesnem izidu naloge (glavna nit): id, besedilo naloge, izid - Lina ga pregleda (23. 11. 2026, tocka (c)). */
+    var naIzid: ((String, String, String) -> Unit)? = null
     private val noveKode = java.util.concurrent.LinkedBlockingQueue<String>()
     @Volatile private var poizvedovalec: Thread? = null
     @Volatile private var ustavljen = false
 
     fun stanje() = StanjeAsistenta(
-        AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam, cakaPotrditev != null || korakKode != null,
+        AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam, cakaPotrditev != null || korakKode != null, cakaOdgovor,
     )
+
+    /** Id naloge, ki ji telefon lahko odgovori (tekoca ali spremljana koncana). */
+    fun nalogaZaOdgovor(): String? = nalogaId ?: spremljana
 
     fun vzemiKlice(): KlicnoVabilo? = kliciIzKode.also { kliciIzKode = null }
 
@@ -275,15 +290,17 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     private fun naGlavni(delo: () -> Unit) = glavna.post { if (!ustavljen) { delo(); obSpremembi() } }
 
-    private fun dodaj(besedilo: String) {
-        dnevnik.addLast(besedilo)
+    /** Zavihek Racunalnik kaze vsako sporocilo s casom (lastnik 23. 11. 2026: zadnje vmesno sporocilo in cas). */
+    fun dodaj(besedilo: String) {
+        val ura = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        dnevnik.addLast("$ura  $besedilo")
         while (dnevnik.size > 50) dnevnik.removeFirst()
     }
 
     /** true, ce je bila naloga sprejeta v obdelavo (ne pomeni, da jo je Lina sprejela). */
     fun poslji(vnos: String): Boolean {
         if (posiljam || nalogaId != null || NalogaLine.besedilo(vnos) == null) return false
-        posiljam = true; napaka = null; izid = null; dnevnik.clear()
+        posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
         obSpremembi()
         Thread {
             val pov = povezava()
@@ -296,6 +313,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 posiljam = false
                 if (odg is OdgovorLine.Ok && naloga != null) {
                     nalogaId = naloga.id
+                    nalogaBesedilo = naloga.besedilo
                     seja = true
                     poizveduj(naloga.id)
                 } else {
@@ -313,7 +331,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             var od = 0L
             var zaporednih = 0
             try {
-                while (!ustavljen && nalogaId == id) {
+                // koncana naloga se spremlja naprej (redkeje), dokler je Lina ne pozabi (1 h, 404) ali telefon ne da nove
+                while (!ustavljen && (nalogaId == id || spremljana == id)) {
                     val cas = System.currentTimeMillis()
                     val enkratni = NalogaLine.nakljucno(32)
                     val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()
@@ -327,14 +346,15 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                             zaporednih = 0
                             od = AsistentProtokol.zadnjaSt(odg.telo, od)
                             naGlavni { napaka = null; uporabi(id, d.dogodki, d.koncano) }
-                            if (d.koncano) return@Thread
+                            // Lina pri koncani nalogi ne caka (dolgo poizvedovanje): ne vrti zanke, preveri vsakih 10 s
+                            if (d.koncano) Thread.sleep(10_000)
                         }
                     } else {
                         zaporednih++
                         val s = NapakaLine.sporocilo(odg)
                         naGlavni { napaka = s }
                         if (s == SporociloNapake.NI_NALOGE || s == SporociloNapake.ZAVRNJENO) {
-                            naGlavni { if (nalogaId == id) { nalogaId = null; odprta = null } }
+                            naGlavni { if (nalogaId == id) { nalogaId = null; odprta = null }; if (spremljana == id) spremljana = null; cakaOdgovor = false }
                             return@Thread
                         }
                     }
@@ -350,13 +370,63 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     }
 
     private fun uporabi(id: String, dogodki: List<DogodekLine>, koncano: Boolean) {
-        if (nalogaId != id) return
+        if (nalogaId != id && spremljana != id) return
+        // spremljana koncana naloga je spet v teku (Claude Code je po koncu znova odgovoril)
+        if (!koncano && nalogaId == null && spremljana == id && dogodki.isNotEmpty()) { nalogaId = id; spremljana = null; izid = null }
+        // Lina samodejno odgovori samo na ZADNJE vprasanje v paketu (starejsa ne porabijo meje 10; pregled 24. 11. 2026)
+        val stanja = dogodki.filterIsInstance<DogodekLine.Stanje>()
+        val zadnje = si.safeer.lina.samostojna.SamodejniOdgovor.zadnjeVprasanje(stanja.map { it.besedilo to it.vprasanje })?.let { stanja[it] }
+        var zaPregled: DogodekLine.Izid? = null
         for (d in dogodki) when (d) {
-            is DogodekLine.Stanje -> dodaj(d.besedilo)
+            is DogodekLine.Stanje -> {
+                dodaj(d.besedilo)
+                if (si.safeer.lina.samostojna.SamodejniOdgovor.jeVprasanje(d.besedilo, d.vprasanje)) cakaOdgovor = true
+                else if (d.odgovor) cakaOdgovor = false
+            }
             is DogodekLine.Odobritev -> odprta = d
-            is DogodekLine.Izid -> { izid = d; dodaj(d.besedilo) }
+            is DogodekLine.Izid -> { izid = d; cakaOdgovor = false; dodaj(d.besedilo); zaPregled = d.takeIf { it.ok } }
         }
-        if (koncano) { nalogaId = null; odprta = null }
+        if (koncano) { nalogaId = null; odprta = null; cakaOdgovor = false; spremljana = id }
+        if (zadnje != null && cakaOdgovor) naVprasanje?.invoke(id, nalogaBesedilo.orEmpty(), zadnje.besedilo)
+        // Claude Code je javil konec (ok): Lina pregleda izid ob nacrtu in po potrebi da naslednji korak (AGENTS.md tocka (c))
+        else if (zaPregled != null && koncano) naIzid?.invoke(id, nalogaBesedilo.orEmpty(), zaPregled!!.besedilo)
+    }
+
+    /**
+     * Odgovor v ISTO nalogo (POST /nadaljuj, podpis nizNadaljevanja): lastnik ali Lina sama ([samodejno]). Odobritev s tem ni
+     * mogoca (racunalnik besedilno odobritev zavrne; odobritve ostanejo gumb). true, ce je bil odgovor sprejet v obdelavo.
+     */
+    fun nadaljuj(vnos: String, samodejno: Boolean = false): Boolean {
+        val id = nalogaZaOdgovor() ?: return false
+        if (posiljam || NalogaLine.besedilo(vnos) == null) return false
+        posiljam = true; napaka = null
+        obSpremembi()
+        Thread {
+            val pov = povezava()
+            val n = runCatching { NapravaKljuc.podpisiNadaljevanje(id, vnos, System.currentTimeMillis(), NalogaLine.nakljucno(32)) }.getOrNull()
+            val odg = if (pov == null || n == null) OdgovorLine.Nedosegljiva else pov.nadaljuj(AsistentProtokol.teloNadaljevanja(n))
+            pov?.zapri()
+            naGlavni {
+                posiljam = false
+                if (odg is OdgovorLine.Ok && n != null) {
+                    cakaOdgovor = false
+                    dodaj(context.getString(if (samodejno) si.safeer.lina.R.string.assistant_auto_answered else si.safeer.lina.R.string.assistant_owner_answered,
+                        samodejni.porabljenih(id), si.safeer.lina.samostojna.SamodejniOdgovor.NAJVEC_NA_NALOGO, n.besedilo))
+                    if (nalogaId == null && spremljana == id) { nalogaId = id; spremljana = null; izid = null }
+                } else {
+                    napaka = NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
+                }
+            }
+        }.start()
+        return true
+    }
+
+    /** Lastnik ustavi samodejne odgovore Line za tekoco nalogo (gumb v zavihku Racunalnik). */
+    fun ustaviSamodejne() {
+        val id = nalogaZaOdgovor() ?: return
+        samodejni.ustavi(id)
+        dodaj(context.getString(si.safeer.lina.R.string.assistant_auto_stopped))
+        obSpremembi()
     }
 
     /** Odobritev ali zavrnitev TOCNO prikazane zahteve; podpis vezan na nalogo in na prikazano (zgostitev). */

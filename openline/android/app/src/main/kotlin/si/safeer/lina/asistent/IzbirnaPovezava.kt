@@ -28,6 +28,7 @@ class IzbirnaPovezava(
     override fun sinhron(telo: String) = po { it.sinhron(telo) }
     override fun odobritev(telo: String) = po { it.odobritev(telo) }
     override fun ustavi(telo: String) = po { it.ustavi(telo) }
+    override fun nadaljuj(telo: String) = po { it.nadaljuj(telo) }
     override fun seznani(telo: String) = po { it.seznani(telo) }
     override fun stanjeSeznanitve(koda: String) = po { it.stanjeSeznanitve(koda) }
     override fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String) =

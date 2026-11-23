@@ -17,6 +17,24 @@ class NiziLineTest {
     private val zgostitev = "1ff96f9b02dde42794cc31a2f482cd354dceb99f074788ed51db8b1575772981"
 
     @Test
+    fun `niz nadaljevanja enak TS nizNadaljevanja, lastna predpona, podpis ni prenosljiv z naloge`() {
+        val besedilo = "Načrt je v docs/nacrt.md.\nKorak 2 😀"
+        val niz = NiziLine.nizNadaljevanja("naloga-vektor-01", id, besedilo, cas, "enkratni-vektor-0010")!!
+        // izracunano s TS: nizNadaljevanja("naloga-vektor-01", "n-5ef0fcb562008e97", besedilo, 1763120000000, "enkratni-vektor-0010")
+        assertEquals("safeer-lina-nadaljuj-v1\nnaloga-vektor-01\nn-5ef0fcb562008e97\n1763120000000\nenkratni-vektor-0010\nNačrt je v docs/nacrt.md.\nKorak 2 😀", niz)
+        assertFalse(KrogKljuc.preveriPodpisSKljucem(kljuc, niz.toByteArray(Charsets.UTF_8), podpisNaloge), "podpis naloge ne velja za nadaljevanje")
+        assertEquals(null, NiziLine.nizNadaljevanja("naloga\nvektor", id, "x", cas, "enkratni-vektor-0010"))
+        assertEquals(null, NiziLine.nizNadaljevanja("naloga-vektor-01", "$id\nx", "x", cas, "enkratni-vektor-0010"))
+        val par = java.security.KeyPairGenerator.getInstance("EC").apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }.generateKeyPair()
+        val p = NalogaLine.podpisiNadaljevanje("a".repeat(22), id, "  odgovor  ", cas, "enkratni-vektor-0011") { b ->
+            java.util.Base64.getEncoder().encodeToString(java.security.Signature.getInstance("SHA256withECDSA").apply { initSign(par.private); update(b) }.sign())
+        }!!
+        assertEquals("odgovor", p.besedilo)
+        assertEquals(null, NalogaLine.podpisiNadaljevanje("kratek", id, "x", cas, "enkratni-vektor-0011") { "" })
+        assertEquals(null, NalogaLine.podpisiNadaljevanje("a".repeat(22), id, "x".repeat(4001), cas, "enkratni-vektor-0011") { "" })
+    }
+
+    @Test
     fun `id iz kljuca kot Python in TS`() {
         assertEquals(id, KrogKljuc.idIzKljuca(kljuc))
         assertTrue(KrogKljuc.jeIdIzKljuca(id))

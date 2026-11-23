@@ -432,4 +432,18 @@
     <string name="local_reminder_approx">Erlaube Lina in den Telefoneinstellungen genaue Alarme, damit Erinnerungen minutengenau auslösen.</string>
     <string name="headset_key_label">Übernahme per Headset-Taste</string>
     <string name="headset_key_desc">Mit der Headset-Taste übernimmst du einen Anruf, den Lina annimmt: Lina verstummt, das Mikrofon des Telefons wird aktiviert. Es werden nur Headset-Tasten gelesen, kein Bildschirminhalt.</string>
+    <!-- Lina in Claude Code (23. 11. 2026): odgovor v nalogo, samodejni odgovori Line -->
+    <string name="assistant_waiting_answer">Claude Code fragt und wartet auf eine Antwort.</string>
+    <string name="assistant_answer_hint">Antwort an Claude Code</string>
+    <string name="assistant_answer_send">Antwort senden</string>
+    <string name="assistant_auto_stop">Automatische Antworten von Lina stoppen</string>
+    <string name="assistant_auto_stopped">Linas automatische Antworten für diese Aufgabe sind gestoppt.</string>
+    <string name="assistant_auto_answered">Lina hat geantwortet (%1$d/%2$d): %3$s</string>
+    <string name="assistant_owner_answered">Du hast geantwortet: %3$s</string>
+    <string name="assistant_auto_ask_owner">Lina hat nicht geantwortet: %1$s Antworte Claude Code selbst.</string>
+    <string name="assistant_claude_asks">Claude Code fragt: „%1$s“\n%2$s Antworte im Tab Computer.</string>
+    <string name="assistant_auto_off">Du hast die automatischen Antworten für diese Aufgabe gestoppt.</string>
+    <string name="assistant_auto_limit">Lina hat in dieser Aufgabe bereits %1$d-mal geantwortet.</string>
+    <string name="assistant_auto_no_brain">Für Lina ist kein Modell eingerichtet.</string>
+    <string name="assistant_auto_busy">Senden ist belegt.</string>
 </resources>

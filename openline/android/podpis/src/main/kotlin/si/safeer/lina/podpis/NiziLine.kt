@@ -28,6 +28,8 @@ object NiziLine {
     const val PREDPONA_NALOGE = "safeer-lina-naloga-v1"
     const val PREDPONA_ODOBRITVE = "safeer-lina-odobritev-v3"
     const val PREDPONA_USTAVITVE = "safeer-lina-ustavi-v1"
+    /** Odgovor v obstojeco nalogo (kanal-claude.ts nizNadaljevanja, 23. 11. 2026). */
+    const val PREDPONA_NADALJEVANJA = "safeer-lina-nadaljuj-v1"
     const val PREDPONA_SEZNANITVE = "safeer-lina-seznani-v1"
     const val PREDPONA_STANJA = "safeer-lina-stanje-v1"
     const val PREDPONA_DOGODKI = "safeer-lina-dogodki-v1"
@@ -88,6 +90,15 @@ object NiziLine {
     fun nizNaloge(id: String, posiljatelj: String, besedilo: String, cas: Long, enkratni: String): String? {
         if (!ID_NALOGE.matches(id) || !skupno(posiljatelj, cas, enkratni) || !praviUnicode(besedilo)) return null
         return "$PREDPONA_NALOGE\n$id\n$posiljatelj\n$cas\n$enkratni\n$besedilo"
+    }
+
+    /**
+     * Odgovor ali nadaljnje navodilo v ISTO nalogo (lastnik 23. 11. 2026 »Lina sama odgovori Claude Code«); lastna predpona,
+     * zato podpis naloge ni prenosljiv sem in obratno.
+     */
+    fun nizNadaljevanja(id: String, posiljatelj: String, besedilo: String, cas: Long, enkratni: String): String? {
+        if (!ID_NALOGE.matches(id) || !skupno(posiljatelj, cas, enkratni) || !praviUnicode(besedilo)) return null
+        return "$PREDPONA_NADALJEVANJA\n$id\n$posiljatelj\n$cas\n$enkratni\n$besedilo"
     }
 
     /** Podpis je vezan na nalogo (chatId) in na prikazano (zgostitev): odobritev ni prenosljiva na drugo vsebino. */

@@ -14,7 +14,8 @@ import kotlinx.serialization.json.put
 /** Dogodek naloge iz GET /dogodki (pogodba lina-asistent2 @e815ed0). */
 sealed class DogodekLine {
     abstract val st: Long
-    data class Stanje(override val st: Long, val besedilo: String) : DogodekLine()
+    /** [vprasanje]: Claude Code caka odgovor (reply vrsta=vprasanje, 23. 11. 2026); [odgovor]: odgovor Claude Code (ne sistemsko stanje). */
+    data class Stanje(override val st: Long, val besedilo: String, val vprasanje: Boolean = false, val odgovor: Boolean = false) : DogodekLine()
     /** [opis] je besedilo MODELA; telefon ga prikaze loceno od orodja in predogleda. */
     data class Odobritev(override val st: Long, val zahtevaId: String, val orodje: String, val predogled: String, val opis: String) : DogodekLine()
     data class Izid(override val st: Long, val ok: Boolean, val besedilo: String) : DogodekLine()
@@ -46,6 +47,9 @@ object AsistentProtokol {
             put("nalogaId", nalogaId); put("zahtevaId", zahtevaId); put("dovoli", dovoli); put("posiljatelj", posiljatelj)
             put("cas", cas); put("enkratni", enkratni); put("podpis", podpis)
         }.toString()
+
+    /** POST /nadaljuj: ista polja kot naloga (podpis nizNadaljevanja). */
+    fun teloNadaljevanja(n: PodpisanaNaloga): String = teloNaloge(n)
 
     fun teloUstavitve(id: String, posiljatelj: String, cas: Long, enkratni: String, podpis: String): String = buildJsonObject {
         put("id", id); put("posiljatelj", posiljatelj); put("cas", cas); put("enkratni", enkratni); put("podpis", podpis)
@@ -102,7 +106,11 @@ object AsistentProtokol {
             if (st <= zadnji) return null
             zadnji = st
             val d = when (niz(o, "vrsta", 32)) {
-                "stanje" -> DogodekLine.Stanje(st, niz(o, "besedilo") ?: return null)
+                "stanje" -> {
+                    // tip (vprasanje | vmesno) ima samo odgovor Claude Code; neznan tip = navadno stanje (novejsa Lina)
+                    val tip = (o["tip"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                    DogodekLine.Stanje(st, niz(o, "besedilo") ?: return null, vprasanje = tip == "vprasanje", odgovor = tip == "vprasanje" || tip == "vmesno")
+                }
                 "odobritev" -> {
                     val zid = niz(o, "zahtevaId", 5)?.takeIf { NiziLine.ID_ODOBRITVE.matches(it) } ?: return null
                     DogodekLine.Odobritev(st, zid, niz(o, "orodje", 100) ?: return null, niz(o, "predogled", 4000) ?: return null,

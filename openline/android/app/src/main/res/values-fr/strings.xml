@@ -432,4 +432,18 @@
     <string name="local_reminder_approx">Autorisez les alarmes exactes pour Lina dans les réglages du téléphone pour que les rappels sonnent à la minute.</string>
     <string name="headset_key_label">Reprise d\'appel par le bouton du casque</string>
     <string name="headset_key_desc">Le bouton du casque reprend un appel que Lina est en train de prendre : Lina se tait et le micro du téléphone s\'active. Seuls les boutons du casque sont lus, jamais le contenu de l\'écran.</string>
+    <!-- Lina in Claude Code (23. 11. 2026): odgovor v nalogo, samodejni odgovori Line -->
+    <string name="assistant_waiting_answer">Claude Code pose une question et attend une réponse.</string>
+    <string name="assistant_answer_hint">Réponse pour Claude Code</string>
+    <string name="assistant_answer_send">Envoyer la réponse</string>
+    <string name="assistant_auto_stop">Arrêter les réponses automatiques de Lina</string>
+    <string name="assistant_auto_stopped">Les réponses automatiques de Lina pour cette tâche sont arrêtées.</string>
+    <string name="assistant_auto_answered">Lina a répondu (%1$d/%2$d) : %3$s</string>
+    <string name="assistant_owner_answered">Vous avez répondu : %3$s</string>
+    <string name="assistant_auto_ask_owner">Lina n’a pas répondu : %1$s Répondez vous-même à Claude Code.</string>
+    <string name="assistant_claude_asks">Claude Code demande : « %1$s »\n%2$s Répondez dans l’onglet Ordinateur.</string>
+    <string name="assistant_auto_off">Vous avez arrêté les réponses automatiques pour cette tâche.</string>
+    <string name="assistant_auto_limit">Lina a déjà répondu %1$d fois dans cette tâche.</string>
+    <string name="assistant_auto_no_brain">Aucun modèle n’est configuré pour Lina.</string>
+    <string name="assistant_auto_busy">L’envoi est occupé.</string>
 </resources>

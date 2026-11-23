@@ -54,6 +54,9 @@ class Podpisnik(
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
         NalogaLine.podpisi(id, idNaprave(), vnos, cas, enkratni, podpisi)
 
+    fun podpisiNadaljevanje(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
+        NalogaLine.podpisiNadaljevanje(id, idNaprave(), vnos, cas, enkratni, podpisi)
+
     fun podpisiOdobritev(
         zahtevaId: String, dovoli: Boolean, cas: Long, enkratni: String, chatId: String, orodje: String, predogled: String, opis: String,
     ): String? {

@@ -1129,6 +1129,16 @@
                 android:text="@string/assistant_stop"
                 android:visibility="gone" />
 
+            <!-- Samodejni odgovori Line na vprasanja Claude Code (23. 11. 2026): lastnik jih za nalogo ustavi. -->
+            <Button
+                android:id="@+id/assistantAutoStopButton"
+                style="@style/Gw.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/assistant_auto_stop"
+                android:visibility="gone" />
+
             <!-- Vnos in gumb samo, ko je telefon seznanjen in nobena naloga ne tece (AsistentPrikaz). -->
             <EditText
                 android:id="@+id/assistantTaskInput"

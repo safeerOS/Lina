@@ -72,6 +72,10 @@ object NapravaKljuc {
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
         podpisnik.podpisiNalogo(id, vnos, cas, enkratni)
 
+    /** Odgovor v obstojeco nalogo (POST /nadaljuj, 23. 11. 2026); null, ce vnos ni veljaven. */
+    fun podpisiNadaljevanje(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =
+        podpisnik.podpisiNadaljevanje(id, vnos, cas, enkratni)
+
     /** Odobritev ene zahteve; zgostitev iz polj, ki jih je lastnik videl. Vrne podpis ali null. */
     fun podpisiOdobritev(
         zahtevaId: String, dovoli: Boolean, cas: Long, enkratni: String, chatId: String, orodje: String, predogled: String, opis: String,

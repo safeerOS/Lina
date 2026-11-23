@@ -21,6 +21,24 @@ class SpominPogovorovPogled(private val a: Activity, private val vsebnik: Linear
         @Volatile private var edini: SpominPogovorov? = null
         fun spomin(c: Context): SpominPogovorov =
             edini ?: synchronized(this) { edini ?: SpominPogovorov(File(c.applicationContext.filesDir, "spomin")).also { edini = it } }
+
+        @Volatile private var seja: si.safeer.lina.samostojna.ZgodovinaSeje? = null
+        /**
+         * Trajna zgodovina seje (23. 11. 2026) v zasebni mapi aplikacije; ista stikala kot spomin: izklop ustavi zapis in obnovo,
+         * »Izbriši vse« jo izbrise.
+         */
+        fun seja(c: Context): si.safeer.lina.samostojna.ZgodovinaSeje? {
+            if (!spomin(c).vklopljen()) return null
+            return seja ?: synchronized(this) {
+                seja ?: si.safeer.lina.samostojna.ZgodovinaSeje(
+                    si.safeer.lina.samostojna.DatotecnaShramba(File(c.applicationContext.filesDir, "zgodovina_seje.json")),
+                ).also { seja = it }
+            }
+        }
+
+        fun izbrisiSejo(c: Context) {
+            (seja ?: si.safeer.lina.samostojna.ZgodovinaSeje(si.safeer.lina.samostojna.DatotecnaShramba(File(c.applicationContext.filesDir, "zgodovina_seje.json")))).izbrisi()
+        }
     }
 
     private fun dp(v: Int) = (v * a.resources.displayMetrics.density).toInt()
@@ -43,7 +61,7 @@ class SpominPogovorovPogled(private val a: Activity, private val vsebnik: Linear
         stikalo.setOnCheckedChangeListener { _, vklop -> s.nastavi(vklop) }
         brisi.setOnClickListener {
             AlertDialog.Builder(a).setMessage(R.string.memory_delete_confirm)
-                .setPositiveButton(R.string.memory_delete) { _, _ -> stanje.setText(if (s.izbrisiVse()) R.string.memory_deleted else R.string.tool_err_net) }
+                .setPositiveButton(R.string.memory_delete) { _, _ -> izbrisiSejo(a); stanje.setText(if (s.izbrisiVse()) R.string.memory_deleted else R.string.tool_err_net) }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }

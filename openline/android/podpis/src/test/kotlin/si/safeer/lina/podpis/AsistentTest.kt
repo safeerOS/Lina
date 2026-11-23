@@ -24,6 +24,25 @@ class AsistentTest {
     }
 
     @Test
+    fun `stanje nosi tip odgovora Claude Code (vprasanje, vmesno), sistemsko stanje ga nima`() {
+        val telo = """{"dogodki":[{"st":1,"vrsta":"stanje","besedilo":"Katero vejo?","tip":"vprasanje"},
+            {"st":2,"vrsta":"stanje","besedilo":"Delam","tip":"vmesno"},{"st":3,"vrsta":"stanje","besedilo":"Povezava izgubljena"},
+            {"st":4,"vrsta":"stanje","besedilo":"x","tip":"novo"}],"koncano":false}"""
+        val d = assertNotNull(AsistentProtokol.razberiDogodke(telo, od = 0)).dogodki.map { it as DogodekLine.Stanje }
+        assertEquals(listOf(true to true, false to true, false to false, false to false), d.map { it.vprasanje to it.odgovor })
+    }
+
+    @Test
+    fun `med nalogo z vprasanjem je vnos odgovor, brez vprasanja ga ni`() {
+        val brez = AsistentPrikaz.izracunaj(StanjeAsistenta(seznanjen = true, nalogaTece = true, odprtaOdobritev = null))
+        assertFalse(brez.vnos); assertFalse(brez.odgovor)
+        val z = AsistentPrikaz.izracunaj(StanjeAsistenta(seznanjen = true, nalogaTece = true, odprtaOdobritev = null, cakaOdgovor = true))
+        assertTrue(z.vnos && z.poslji && z.odgovor && z.ustavi)
+        val prosto = AsistentPrikaz.izracunaj(StanjeAsistenta(seznanjen = true, nalogaTece = false, odprtaOdobritev = null))
+        assertTrue(prosto.vnos); assertFalse(prosto.odgovor)
+    }
+
+    @Test
     fun `neveljaven odgovor dogodkov se zavrze ves`() {
         for (s in listOf(
             """{"dogodki":[{"st":1,"vrsta":"stanje","besedilo":"x"}],"koncano":false}""", // st ni nad od=1

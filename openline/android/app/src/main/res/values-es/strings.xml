@@ -432,4 +432,18 @@
     <string name="local_reminder_approx">Permite a Lina alarmas exactas en los ajustes del teléfono para que los recordatorios suenen al minuto.</string>
     <string name="headset_key_label">Tomar la llamada con el botón del auricular</string>
     <string name="headset_key_desc">El botón del auricular toma una llamada que Lina está atendiendo: Lina se calla y se activa el micrófono del teléfono. Solo se leen los botones del auricular, no el contenido de la pantalla.</string>
+    <!-- Lina in Claude Code (23. 11. 2026): odgovor v nalogo, samodejni odgovori Line -->
+    <string name="assistant_waiting_answer">Claude Code pregunta y espera una respuesta.</string>
+    <string name="assistant_answer_hint">Respuesta para Claude Code</string>
+    <string name="assistant_answer_send">Enviar respuesta</string>
+    <string name="assistant_auto_stop">Detener las respuestas automáticas de Lina</string>
+    <string name="assistant_auto_stopped">Las respuestas automáticas de Lina para esta tarea están detenidas.</string>
+    <string name="assistant_auto_answered">Lina respondió (%1$d/%2$d): %3$s</string>
+    <string name="assistant_owner_answered">Respondiste: %3$s</string>
+    <string name="assistant_auto_ask_owner">Lina no respondió: %1$s Responde tú a Claude Code.</string>
+    <string name="assistant_claude_asks">Claude Code pregunta: «%1$s»\n%2$s Responde en la pestaña Ordenador.</string>
+    <string name="assistant_auto_off">Detuviste las respuestas automáticas para esta tarea.</string>
+    <string name="assistant_auto_limit">Lina ya respondió %1$d veces en esta tarea.</string>
+    <string name="assistant_auto_no_brain">Lina no tiene un modelo configurado.</string>
+    <string name="assistant_auto_busy">El envío está ocupado.</string>
 </resources>

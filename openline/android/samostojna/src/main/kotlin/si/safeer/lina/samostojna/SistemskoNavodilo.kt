@@ -67,6 +67,9 @@ object SistemskoNavodilo {
         if (povezan) " Uporabnik ima povezan racunalnik z Lino in programom Claude Code. Nalogo, ki jo je treba opraviti na racunalniku " +
             "(programiranje, vodenje projekta, delo z drugimi agenti), predaj tako, da v odgovor dodas samostojno vrstico natanko v obliki " +
             "[[racunalnik: natancen opis naloge]] (ena vrstica, v njej nic drugega) in uporabniku v enem stavku povej, kaj si predala. " +
+            "Naloga mora biti SAMOSTOJNA, ker Claude Code najinega pogovora ne vidi: v vrstico napisi cilj, ciljno mapo ali projekt, " +
+            "korak nacrta, ki naj ga naredi, vse povezave, ki jih naloga omenja, in merilo, kdaj je koncana; nikoli ne pisi samo " +
+            "»moj nacrt«, »kot dogovorjeno« ali »to povezavo« (aplikacija nalogi sama priloze nacrt, povezave in zapiske iz pogovora). " +
             "Nikoli ne trdi, da nimas dostopa do racunalnika. Rezultata naloge se ne izmisljuj: potek in odobritve so v zavihku Racunalnik. " +
             "Ce uporabnik sprasuje o nalogi, ki si jo ze predala (kaksna je, kaj si poslala, razlozi), mu jo v nekaj stavkih razlozi z besedilom iz pogovora in vrstice [[racunalnik: ...]] NE ponavljaj; nova vrstica je samo za novo nalogo."
         else " Racunalnik ni povezan: nalog ne moreš predati racunalniku. Povej, da je treba telefon najprej povezati z Lino na racunalniku (nastavitve, Racunalnik)."

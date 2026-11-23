@@ -513,6 +513,10 @@ class DialerActivity : Activity() {
         findViewById<Button>(R.id.setupCodeButton).setOnClickListener { izberiNacinKode() }
         assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
         assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
+        // Lina sama odgovori Claude Code (lastnik 23. 11. 2026); lastnik jo za nalogo ustavi s tem gumbom.
+        findViewById<Button>(R.id.assistantAutoStopButton).setOnClickListener { asistent.ustaviSamodejne(); renderAssistant() }
+        asistent.naVprasanje = { id, naloga, vprasanje -> samodejnoOdgovori(id, naloga, vprasanje) }
+        asistent.naIzid = { id, naloga, izid -> samodejnoOdgovori(id, naloga, izid, izid = true) }
         findViewById<Button>(R.id.assistantAllowButton).setOnClickListener { asistent.odgovori(dovoli = true) }
         findViewById<Button>(R.id.assistantDenyButton).setOnClickListener { asistent.odgovori(dovoli = false) }
         // Zacetni zaslon je Domov po skici Lina 2.0 (lastnik 22. 11. 2026); klicanje (ACTION_DIAL) odpre Klice.
@@ -638,6 +642,7 @@ class DialerActivity : Activity() {
             !stanje.seznanjen -> getString(R.string.assistant_no_link)
             asistent.napaka != null -> getString(napakaNiz(asistent.napaka!!))
             stanje.posiljam -> getString(R.string.assistant_sending)
+            stanje.nalogaTece && stanje.cakaOdgovor -> getString(R.string.assistant_waiting_answer)
             stanje.nalogaTece -> getString(R.string.assistant_running)
             asistent.izid != null -> getString(if (asistent.izid!!.ok) R.string.assistant_done_ok else R.string.assistant_done_fail)
             izidS == AsistentKontroler.IzidSeznanitve.SPREJETO -> getString(R.string.assistant_pair_accepted)
@@ -660,6 +665,11 @@ class DialerActivity : Activity() {
         assistantTaskInput.visibility = if (p.vnos) View.VISIBLE else View.GONE
         assistantSendButton.visibility = if (p.poslji) View.VISIBLE else View.GONE
         assistantStopButton.visibility = if (p.ustavi) View.VISIBLE else View.GONE
+        val zaOdgovor = asistent.nalogaZaOdgovor()
+        findViewById<Button>(R.id.assistantAutoStopButton).visibility =
+            if (p.ustavi && zaOdgovor != null && !asistent.samodejni.ustavljen(zaOdgovor)) View.VISIBLE else View.GONE
+        assistantTaskInput.hint = getString(if (p.odgovor) R.string.assistant_answer_hint else R.string.assistant_task_hint)
+        assistantSendButton.text = getString(if (p.odgovor) R.string.assistant_answer_send else R.string.assistant_send)
         assistantLog.text = asistent.dnevnik.joinToString("\n")
         assistantLog.visibility = if (asistent.dnevnik.isEmpty()) View.GONE else View.VISIBLE
         osveziNavRacunalnik()
@@ -844,8 +854,46 @@ class DialerActivity : Activity() {
     }
 
     private fun sendTask() {
-        if (!asistent.poslji(assistantTaskInput.text.toString())) return toast(getString(R.string.assistant_bad_text))
+        // Claude Code caka odgovor: besedilo gre v ISTO nalogo (POST /nadaljuj), ne kot nova naloga.
+        val odgovor = AsistentPrikaz.izracunaj(asistent.stanje()).odgovor
+        val ok = if (odgovor) asistent.nadaljuj(assistantTaskInput.text.toString()) else asistent.poslji(assistantTaskInput.text.toString())
+        if (!ok) return toast(getString(R.string.assistant_bad_text))
         assistantTaskInput.setText("")
+    }
+
+    /**
+     * Claude Code je vprasal (lastnik 23. 11. 2026 »Lina sama odgovori Claude Code«): Lina odgovori iz nacrta, zapiskov in pogovora.
+     * Meje v kodi (SamodejniOdgovor): najvec 10 na nalogo, nikoli odobritev, brisanje, push ali sudo; ce ne ve, vprasa lastnika.
+     * Deluje, dokler je aplikacija odprta (poizvedovanje se ustavi z zaslonom) - NEPREVERJENO na napravi.
+     */
+    private fun samodejnoOdgovori(id: String, naloga: String, vprasanje: String, izid: Boolean = false) {
+        val s = asistent.samodejni
+        val razlogBrez = when {
+            s.ustavljen(id) -> getString(R.string.assistant_auto_off)
+            !s.lahko(id) -> getString(R.string.assistant_auto_limit, si.safeer.lina.samostojna.SamodejniOdgovor.NAJVEC_NA_NALOGO)
+            !::samostojniPogled.isInitialized || !samostojniPogled.imaMozgane() -> getString(R.string.assistant_auto_no_brain)
+            else -> null
+        }
+        // pregled izida brez mozganov ali po meji: nic (naloga je koncana, lastnik izid vidi)
+        if (razlogBrez != null) return if (izid) Unit else vprasajLastnika(vprasanje, razlogBrez)
+        samostojniPogled.odgovoriClaudeCode(naloga, vprasanje, izid) { o ->
+            when (o) {
+                is si.safeer.lina.samostojna.SamodejniOdgovor.Odlocitev.Koncano -> Unit
+                is si.safeer.lina.samostojna.SamodejniOdgovor.Odlocitev.Poslji ->
+                    // lastnik je medtem morda ze odgovoril, ustavil ali dal novo nalogo: takrat Lina ne poslje nicesar
+                    if (asistent.nalogaZaOdgovor() == id && (asistent.cakaOdgovor || izid) && s.porabi(id)) {
+                        if (!asistent.nadaljuj(o.besedilo, samodejno = true)) vprasajLastnika(vprasanje, getString(R.string.assistant_auto_busy))
+                    }
+                is si.safeer.lina.samostojna.SamodejniOdgovor.Odlocitev.VprasajLastnika -> vprasajLastnika(vprasanje, o.razlog)
+            }
+            renderAssistant()
+        }
+    }
+
+    private fun vprasajLastnika(vprasanje: String, razlog: String) {
+        asistent.dodaj(getString(R.string.assistant_auto_ask_owner, razlog))
+        if (::samostojniPogled.isInitialized) samostojniPogled.obvestilo(getString(R.string.assistant_claude_asks, vprasanje.take(500), razlog))
+        renderAssistant()
     }
 
     private fun confirmAsistent(v: AsistentVabilo) {

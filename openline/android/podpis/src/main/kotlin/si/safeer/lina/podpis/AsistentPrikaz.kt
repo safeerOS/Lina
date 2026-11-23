@@ -12,6 +12,8 @@ data class StanjeAsistenta(
     val posiljam: Boolean = false,
     /** Telefon se je prijavil z QR in caka, da ga lastnik v Lini na racunalniku potrdi. */
     val cakaPotrditev: Boolean = false,
+    /** Claude Code je vprasal in caka odgovor (reply vrsta=vprasanje); lastnik lahko odgovori v isto nalogo (23. 11. 2026). */
+    val cakaOdgovor: Boolean = false,
 )
 
 data class PrikazAsistenta(
@@ -21,18 +23,22 @@ data class PrikazAsistenta(
     val poslji: Boolean,
     val ustavi: Boolean,
     val odobritev: Boolean,
+    /** Vnos in Poslji med nalogo posljeta ODGOVOR v isto nalogo (POST /nadaljuj), ne nove naloge. */
+    val odgovor: Boolean = false,
 )
 
 object AsistentPrikaz {
     fun izracunaj(s: StanjeAsistenta): PrikazAsistenta {
         val prosto = s.seznanjen && !s.nalogaTece && !s.posiljam
+        val odgovor = s.seznanjen && s.nalogaTece && s.cakaOdgovor && !s.posiljam
         return PrikazAsistenta(
             seznani = !s.seznanjen && !s.cakaPotrditev,
             pozabi = s.seznanjen && !s.nalogaTece,
-            vnos = prosto,
-            poslji = prosto,
+            vnos = prosto || odgovor,
+            poslji = prosto || odgovor,
             ustavi = s.seznanjen && s.nalogaTece,
             odobritev = s.seznanjen && s.nalogaTece && s.odprtaOdobritev != null,
+            odgovor = odgovor,
         )
     }
 }

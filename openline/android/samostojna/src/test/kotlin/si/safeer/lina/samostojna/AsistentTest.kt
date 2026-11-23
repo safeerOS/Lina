@@ -203,7 +203,9 @@ class AsistentTest {
         val asistent = Asistent(ustvariOdjemalca(prenos), "", racunalnikPovezan = { true })
         val odgovor = asistent.povej("Predaj nalogo racunalniku")
         assertTrue(odgovor is Odgovor.NalogaRacunalniku)
-        assertEquals("Izboljsaj zvok klica", (odgovor as Odgovor.NalogaRacunalniku).besedilo)
+        // samostojna naloga (23. 11. 2026): besedilo naloge ostane na zacetku, priloge in omejitve so dodane za njim
+        val nal = (odgovor as Odgovor.NalogaRacunalniku).besedilo
+        assertTrue(nal.startsWith("Izboljsaj zvok klica\n\n") && nal.endsWith(SamostojnaNaloga.OMEJITVE), nal)
         assertTrue(prenos.zadnjiPostTelo.contains("[[racunalnik:"), "navodilo mora modelu povedati, kako preda nalogo")
         assertTrue(prenos.zadnjiPostTelo.contains("Nikoli ne trdi, da nimas dostopa"))
     }

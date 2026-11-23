@@ -465,4 +465,18 @@
     <string name="addon_state_running">Running</string>
     <string name="addon_state_error">Error</string>
     <string name="addon_state_unavailable">Not available yet</string>
+    <!-- Lina in Claude Code (23. 11. 2026): odgovor v nalogo, samodejni odgovori Line -->
+    <string name="assistant_waiting_answer">Claude Code is asking and waiting for an answer.</string>
+    <string name="assistant_answer_hint">Answer to Claude Code</string>
+    <string name="assistant_answer_send">Send answer</string>
+    <string name="assistant_auto_stop">Stop Lina\'s automatic answers</string>
+    <string name="assistant_auto_stopped">Lina\'s automatic answers for this task are stopped.</string>
+    <string name="assistant_auto_answered">Lina answered (%1$d/%2$d): %3$s</string>
+    <string name="assistant_owner_answered">You answered: %3$s</string>
+    <string name="assistant_auto_ask_owner">Lina did not answer: %1$s Answer Claude Code yourself.</string>
+    <string name="assistant_claude_asks">Claude Code is asking: “%1$s”\n%2$s Answer in the Computer tab.</string>
+    <string name="assistant_auto_off">You stopped automatic answers for this task.</string>
+    <string name="assistant_auto_limit">Lina has already answered %1$d times in this task.</string>
+    <string name="assistant_auto_no_brain">Lina has no model set up.</string>
+    <string name="assistant_auto_busy">Sending is busy.</string>
 </resources>

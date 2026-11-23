@@ -42,4 +42,14 @@ object NalogaLine {
         val niz = NiziLine.nizNaloge(id, posiljatelj, b, cas, enkratni) ?: return null
         return PodpisanaNaloga(id, posiljatelj, b, cas, enkratni, podpisnik(niz.toByteArray(Charsets.UTF_8)))
     }
+
+    /** Podpisan odgovor v obstojeco nalogo [id] (POST /nadaljuj); iste meje besedila kot naloga. */
+    fun podpisiNadaljevanje(
+        id: String, posiljatelj: String, vnos: String, cas: Long, enkratni: String, podpisnik: (ByteArray) -> String,
+    ): PodpisanaNaloga? {
+        val b = besedilo(vnos) ?: return null
+        if (id.length < NAJKRAJSI_ID) return null
+        val niz = NiziLine.nizNadaljevanja(id, posiljatelj, b, cas, enkratni) ?: return null
+        return PodpisanaNaloga(id, posiljatelj, b, cas, enkratni, podpisnik(niz.toByteArray(Charsets.UTF_8)))
+    }
 }

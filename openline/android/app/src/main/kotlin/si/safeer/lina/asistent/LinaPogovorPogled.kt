@@ -332,7 +332,10 @@ class LinaPogovorPogled(
         val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo, koledar = true)
         vprasajZaKoledar()
-        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan, koledar = KoledarIzvajalec(KoledarAndroid(a))).also { asistent = it; asistentDan = danes }
+        // Trajna zgodovina seje in zapiski kot podatek (lastnik 23. 11. 2026: Lina je pozabljala pogovor in ni brala zapiskov).
+        return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan,
+            koledar = KoledarIzvajalec(KoledarAndroid(a)), seja = SpominPogovorovPogled.seja(a),
+            zapiski = { vidniZapiski(zapiski.beri()).map { it.besedilo } }).also { asistent = it; asistentDan = danes }
     }
 
     /** Enkrat (ob prvem pogovoru) vpraša za dovoljenje branja koledarja; zavrnitev se ne ponavlja (orodje takrat pove, da dovoljenja ni). */
@@ -342,6 +345,28 @@ class LinaPogovorPogled(
         if (a.checkSelfPermission(android.Manifest.permission.READ_CALENDAR) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
         prefs.edit().putBoolean("vprasano", true).apply()
         a.requestPermissions(arrayOf(android.Manifest.permission.READ_CALENDAR), 1010)
+    }
+
+    /**
+     * Lina sama odgovori Claude Code (23. 11. 2026): klic modela na niti pogovora (Asistent ni varen za hkratno rabo); rezultat
+     * na glavni niti. Podpis in posiljanje naredi AsistentKontroler.
+     */
+    fun odgovoriClaudeCode(
+        naloga: String, vprasanje: String, jeIzid: Boolean, izid: (si.safeer.lina.samostojna.SamodejniOdgovor.Odlocitev) -> Unit,
+    ) {
+        val asist = trenutniAsistent()
+        nit.execute {
+            val o = try { asist.odgovorZaClaudeCode(naloga, vprasanje, jeIzid) }
+                catch (e: Exception) { si.safeer.lina.samostojna.SamodejniOdgovor.Odlocitev.VprasajLastnika(e.javaClass.simpleName) }
+            glavna.post { if (!a.isFinishing) izid(o) }
+        }
+    }
+
+    /** Obvestilo Line v pogovoru (npr. Claude Code sprasuje in Lina ne ve odgovora); ostane v trajnem pogovoru. */
+    fun obvestilo(besedilo: String) {
+        sporocila += true to besedilo
+        runCatching { PogovorSkupni.dobi(a).dodaj("lina", besedilo) }
+        osvezi()
     }
 
     /** Ali ima Lina mozgane (kljuc ali prijava Google s projektom); uporablja povzetek klicatelja v zavihku Klici. */

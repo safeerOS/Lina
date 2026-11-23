@@ -432,4 +432,18 @@
     <string name="local_reminder_approx">Consenti a Lina le sveglie esatte nelle impostazioni del telefono perché i promemoria suonino al minuto.</string>
     <string name="headset_key_label">Subentro con il pulsante delle cuffie</string>
     <string name="headset_key_desc">Il pulsante delle cuffie subentra in una chiamata che Lina sta gestendo: Lina smette di parlare e si attiva il microfono del telefono. Vengono letti solo i pulsanti delle cuffie, mai il contenuto dello schermo.</string>
+    <!-- Lina in Claude Code (23. 11. 2026): odgovor v nalogo, samodejni odgovori Line -->
+    <string name="assistant_waiting_answer">Claude Code chiede e attende una risposta.</string>
+    <string name="assistant_answer_hint">Risposta per Claude Code</string>
+    <string name="assistant_answer_send">Invia risposta</string>
+    <string name="assistant_auto_stop">Ferma le risposte automatiche di Lina</string>
+    <string name="assistant_auto_stopped">Le risposte automatiche di Lina per questa attività sono ferme.</string>
+    <string name="assistant_auto_answered">Lina ha risposto (%1$d/%2$d): %3$s</string>
+    <string name="assistant_owner_answered">Hai risposto: %3$s</string>
+    <string name="assistant_auto_ask_owner">Lina non ha risposto: %1$s Rispondi tu a Claude Code.</string>
+    <string name="assistant_claude_asks">Claude Code chiede: «%1$s»\n%2$s Rispondi nella scheda Computer.</string>
+    <string name="assistant_auto_off">Hai fermato le risposte automatiche per questa attività.</string>
+    <string name="assistant_auto_limit">Lina ha già risposto %1$d volte in questa attività.</string>
+    <string name="assistant_auto_no_brain">Lina non ha un modello configurato.</string>
+    <string name="assistant_auto_busy">L’invio è occupato.</string>
 </resources>

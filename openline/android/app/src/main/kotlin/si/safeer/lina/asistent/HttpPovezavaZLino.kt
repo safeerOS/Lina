@@ -57,6 +57,7 @@ class HttpPovezavaZLino(
     override fun naloga(telo: String) = post("naloga", telo)
     override fun odobritev(telo: String) = post("odobritev", telo)
     override fun ustavi(telo: String) = post("ustavi", telo)
+    override fun nadaljuj(telo: String) = post("nadaljuj", telo)
 
     override fun seznani(telo: String) = post("seznani", telo)
     override fun klici(telo: String) = post("seznani/klici", telo)

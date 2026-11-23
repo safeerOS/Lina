@@ -28,8 +28,29 @@ class Asistent(
     private val racunalnikPovezan: () -> Boolean = { false },
     // Koledar telefona, samo branje (lastnik 22. 11. 2026); brez dovoljenja orodje odgovori z besedilom o dovoljenju.
     private val koledar: KoledarIzvajalec? = null,
+    // Trajna zgodovina seje (lastnik 23. 11. 2026: Lina je pozabljala pogovor ob ponovnem zagonu, novem dnevu in menjavi ponudnika).
+    private val seja: ZgodovinaSeje? = null,
+    // Vidni zapiski Line, najnovejsi prvi (23. 11. 2026: Lina jih bere sama in jih priloze nalogam za racunalnik).
+    private val zapiski: () -> List<String> = { emptyList() },
+    private val zdaj: () -> ZonedDateTime = { ZonedDateTime.now() },
 ) {
     private val zgodovina = mutableListOf<Sporocilo>()
+    /** Povzetek pogovora iz prejsnjih dni (iz [seja]); danasnji obrati so ze v [zgodovina]. */
+    private val povzetek: String
+
+    init {
+        val o = runCatching { seja?.obnovi(zdaj().toLocalDate(), zdaj().zone) }.getOrNull()
+        if (o != null) zgodovina.addAll(o.danes.takeLast(najvecSporocil).dropWhile { it.vloga != "user" })
+        povzetek = o?.povzetek ?: ""
+    }
+
+    /** Zapiski s skrivnostjo (kljuc, geslo) ne gredo ne modelu ne v nalogo za racunalnik. */
+    private fun zapiskiZdaj(): List<String> = runCatching { zapiski() }.getOrDefault(emptyList()).filterNot { SpominPogovorov.jeSkrivnost(it) }
+
+    /** Uspesna izmenjava gre v trajno zgodovino (skrivnosti ne). */
+    private fun zapomni(vnos: String, odgovor: String) {
+        runCatching { seja?.dodaj(vnos, odgovor, zdaj().toInstant().toEpochMilli()) }
+    }
     /** Zadnja naloga, predana racunalniku v tem pogovoru: vprasanje o nalogi jo razlozi in ne poslje nove (lastnik 23. 11. 2026). */
     private var zadnjaNaloga: String? = null
 
@@ -73,9 +94,14 @@ class Asistent(
 
     private fun povejNotranje(vnos: String, priponke: List<Priponka>): Odgovor {
         // Priklic starejsih sorodnih obratov (ne tistih, ki so ze v zgodovini seje); podatek, ne navodilo. Napaka spomina ne podre pogovora.
-        val priklic = runCatching { spomin?.prikliči(vnos, zgodovina.map { it.besedilo }) ?: "" }.getOrDefault("")
         val povezan = runCatching { racunalnikPovezan() }.getOrDefault(false)
-        val navodilo = sistemskoNavodilo + SistemskoNavodilo.racunalnik(povezan) + navodiloSpomina(priklic) + (if (priponke.isNotEmpty() || vnos.contains("--- Začetek datoteke")) NAVODILO_PRIPONK else "")
+        // Priprava naloge za racunalnik: vecji priklic (lastnik 23. 11. 2026), da Lina sama najde nacrt in povezave iz prejsnjih dni.
+        val zaNalogo = povezan && NAMEN_NALOGE.containsMatchIn(vnos)
+        val priklic = runCatching {
+            spomin?.let { if (zaNalogo) it.prikliči(vnos, zgodovina.map { z -> z.besedilo }, VECJI_PRIKLIC, ZNAKOV_VECJEGA_PRIKLICA) else it.prikliči(vnos, zgodovina.map { z -> z.besedilo }) } ?: ""
+        }.getOrDefault("")
+        val navodilo = sistemskoNavodilo + SistemskoNavodilo.racunalnik(povezan) + navodiloPovzetkaSeje(povzetek) + navodiloZapiskov(zapiskiZdaj()) +
+            navodiloSpomina(priklic) + (if (priponke.isNotEmpty() || vnos.contains("--- Začetek datoteke")) NAVODILO_PRIPONK else "")
 
         zgodovina.add(Sporocilo("user", vnos, priponke))
         var dodano = 1
@@ -113,11 +139,25 @@ class Asistent(
                             val razlaga = "Računalniku sem predala nalogo: »$prejsnja«. Potek in odobritve so v zavihku Računalnik."
                             zgodovina.add(Sporocilo("model", razlaga))
                             obrezi()
+                            zapomni(vnos, razlaga)
                             return Odgovor.Besedilo(razlaga)
                         }
-                        zgodovina.add(Sporocilo("model", popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())))
-                        obrezi()
-                        return Odgovor.NalogaRacunalniku(nal)
+                        // Samostojna naloga (23. 11. 2026): koda priloze nacrt, povezave, zapiske in omejitve; sklic brez vsebine = vprasaj lastnika.
+                        when (val p = SamostojnaNaloga.pripravi(nal, zgodovina.toList(), zapiskiZdaj())) {
+                            is SamostojnaNaloga.Izid.Manjka -> {
+                                zgodovina.add(Sporocilo("model", p.vprasanje))
+                                obrezi()
+                                zapomni(vnos, p.vprasanje)
+                                return Odgovor.Besedilo(p.vprasanje)
+                            }
+                            is SamostojnaNaloga.Izid.Pripravljena -> {
+                                val besedilo = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
+                                zgodovina.add(Sporocilo("model", besedilo))
+                                obrezi()
+                                zapomni(vnos, besedilo.ifEmpty { "Računalniku sem predala nalogo." } + "\n[naloga za računalnik: ${p.besedilo.take(300)}]")
+                                return Odgovor.NalogaRacunalniku(p.besedilo)
+                            }
+                        }
                     }
                 }
                 // Zenska oblika ze v zgodovini in spominu (23. 11. 2026): model v naslednjem obratu ne bere svojih moskih oblik nazaj.
@@ -126,7 +166,7 @@ class Asistent(
                 val besedilo = izModela.ifEmpty { BREZ_ODGOVORA }
                 zgodovina.add(Sporocilo("model", besedilo))
                 obrezi()
-                if (izModela.isNotEmpty()) runCatching { spomin?.zapisi(vnos, besedilo) }
+                if (izModela.isNotEmpty()) { runCatching { spomin?.zapisi(vnos, besedilo) }; zapomni(vnos, besedilo) }
 
                 val vrstice = besedilo.lines()
                 for (vrstica in vrstice) {
@@ -171,8 +211,32 @@ class Asistent(
         }
     }
 
+    /**
+     * Lina sama odgovori Claude Code (23. 11. 2026): en klic modela brez orodij, z zgodovino seje in zapiski; vprasanje Claude Code je
+     * podatek. Varovala (brisanje, push, sudo, odobritev, [[...]]) preveri koda - model ne more podpisati nicesar, kar jih zadene.
+     */
+    fun odgovorZaClaudeCode(naloga: String, vprasanje: String, izid: Boolean = false): SamodejniOdgovor.Odlocitev {
+        val kontekst = zgodovina.toList().let { if (it.lastOrNull()?.vloga == "user") it.dropLast(1) else it }.takeLast(20)
+        val priklic = runCatching {
+            spomin?.prikliči("$naloga\n$vprasanje", kontekst.map { it.besedilo }, VECJI_PRIKLIC, ZNAKOV_VECJEGA_PRIKLICA) ?: ""
+        }.getOrDefault("")
+        val navodilo = sistemskoNavodilo + navodiloPovzetkaSeje(povzetek) + navodiloZapiskov(zapiskiZdaj()) + navodiloSpomina(priklic) +
+            (if (izid) SamodejniOdgovor.NAVODILO_IZID else SamodejniOdgovor.NAVODILO)
+        val r = try { odjemalec.poslji(kontekst + Sporocilo("user", SamodejniOdgovor.poziv(naloga, vprasanje, izid)), navodilo) }
+            catch (e: Exception) { Rezultat.Napaka(null, e.javaClass.simpleName) }
+        return when (r) {
+            is Rezultat.Besedilo -> SamodejniOdgovor.izModela(popraviMoskeOblike(r.besedilo))
+            is Rezultat.Napaka -> SamodejniOdgovor.Odlocitev.VprasajLastnika("Lina ni mogla vprašati modela (${r.sporocilo.take(80)}).")
+            is Rezultat.Zavrnjeno -> SamodejniOdgovor.Odlocitev.VprasajLastnika("Model je zavrnil odgovor.")
+        }
+    }
+
     companion object {
         private const val NAJVEC_KROGOV_ORODIJ = 2
+        /** Vecji priklic za nalogo racunalniku in odgovor Claude Code (navadni: SpominPogovorov.NAJVEC_PRIKLICANIH po 300 znakov). */
+        const val VECJI_PRIKLIC = 15
+        const val ZNAKOV_VECJEGA_PRIKLICA = 800
+        private val NAMEN_NALOGE = Regex("claude|ra[čc]unalnik|nalog", RegexOption.IGNORE_CASE)
         const val BREZ_ODGOVORA = "Odgovora zdaj nisem našla. Poskusi vprašati malo drugače."
     }
 }

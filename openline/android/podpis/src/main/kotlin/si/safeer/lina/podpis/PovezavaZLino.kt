@@ -20,6 +20,8 @@ interface PovezavaZLino {
     fun sinhron(telo: String): OdgovorLine
     fun odobritev(telo: String): OdgovorLine
     fun ustavi(telo: String): OdgovorLine
+    /** POST /nadaljuj (23. 11. 2026): odgovor v isto nalogo; starejsa Lina poti nima (404). */
+    fun nadaljuj(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
     fun seznani(telo: String): OdgovorLine
     fun stanjeSeznanitve(koda: String): OdgovorLine
     fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine

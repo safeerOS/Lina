@@ -145,7 +145,10 @@ class SpominPogovorov(
      * Priklic: obrati s katerokoli besedo vprasanja (vsaj 3 znaki, brez stresic), ki NISO ze v vidnem pogovoru; razvrsceni po stevilu
      * ujemajocih se besed, nato novejsi prej; izpis kronolosko. Prazen niz, ce ni zadetka ali je spomin izklopljen.
      */
-    fun prikliči(vprasanje: String, zeVidno: Collection<String> = emptyList()): String {
+    /** [najvec] in [znakov]: vecji priklic za pripravo naloge in odgovor Claude Code (lastnik 23. 11. 2026, »vecji priklic za ta namen«). */
+    fun prikliči(
+        vprasanje: String, zeVidno: Collection<String> = emptyList(), najvec: Int = NAJVEC_PRIKLICANIH, znakov: Int = NAJVEC_ZNAKOV_V_PRIKLICU,
+    ): String {
         if (!vklopljen()) return ""
         val iskane = besede(vprasanje)
         if (iskane.isEmpty()) return ""
@@ -155,13 +158,13 @@ class SpominPogovorov(
             .map { it to besede(it.besedilo).count { b -> b in iskane || iskane.any { q -> b.startsWith(q) } } }
             .filter { it.second > 0 }
             .sortedWith(compareByDescending<Pair<Obrat, Int>> { it.second }.thenByDescending { it.first.cas })
-            .take(NAJVEC_PRIKLICANIH)
+            .take(najvec)
             .map { it.first }
             .sortedBy { it.cas }
         return izbrani.joinToString("\n") { o ->
             val datum = Instant.ofEpochMilli(o.cas).atOffset(ZoneOffset.UTC).toLocalDate().toString()
             val kdo = if (o.vloga == "lina") "Lina" else "Uporabnik"
-            "- $datum $kdo: ${o.besedilo.replace(Regex("\\s+"), " ").trim().take(NAJVEC_ZNAKOV_V_PRIKLICU)}"
+            "- $datum $kdo: ${o.besedilo.replace(Regex("\\s+"), " ").trim().take(znakov)}"
         }
     }
 
