@@ -434,6 +434,6 @@
     <string name="local_alarm_proposed">Proposed alarm: %1$s. Confirm it in the dialog and the Clock app will ring.</string>
     <string name="local_alarm_confirm_title">Set the alarm?</string>
     <string name="local_alarm_add">Set</string>
-    <string name="local_alarm_set">Alarm set in the Clock app</string>
+    <string name="local_alarm_set">Alarm handed to the Clock app; check it there</string>
     <string name="local_alarm_failed">Could not set the alarm (no Clock app accepted it)</string>
 </resources>

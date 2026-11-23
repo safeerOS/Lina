@@ -569,6 +569,11 @@ class LinaPogovorPogled(
                     .putExtra(android.provider.AlarmClock.EXTRA_HOUR, b.ura)
                     .putExtra(android.provider.AlarmClock.EXTRA_MINUTES, b.minuta)
                     .putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
+                    .putExtra(android.provider.AlarmClock.EXTRA_VIBRATE, true)
+                // Izrecno zvok budilke: brez njega Ura obstojeco (morda tiho) budilko ob isti uri samo vklopi in ta ostane tiha.
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)?.let {
+                    namen.putExtra(android.provider.AlarmClock.EXTRA_RINGTONE, it.toString())
+                }
                 if (b.oznaka.isNotBlank()) namen.putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, b.oznaka)
                 // ISO 1 = ponedeljek ... 7 = nedelja -> java.util.Calendar (nedelja = 1, ponedeljek = 2 ...).
                 if (b.dnevi.isNotEmpty()) namen.putExtra(android.provider.AlarmClock.EXTRA_DAYS, ArrayList(b.dnevi.map { (it % 7) + 1 }))
