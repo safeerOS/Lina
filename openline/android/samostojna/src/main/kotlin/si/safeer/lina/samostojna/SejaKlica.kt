@@ -99,10 +99,28 @@ private val ZNAKI_PREPOVEDANI = Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]")
 private fun cistoIme(besedilo: String): String =
     besedilo.replace(ZNAKI_PREPOVEDANI, " ").replace(Regex("\\s+"), " ").trim()
 
-/** Ime datoteke klica: cas, ime in priimek (ali Neznan) in stevilka vedno poleg imena. Primer: 2026-11-20 14-35 Miha Horvat 041123456.txt */
+private fun primerjalnoIme(s: String) = s.trim().replace(Regex("\\s+"), " ").lowercase()
+
+/**
+ * Ime klicatelja za prikaz (lastnik 23. 11. 2026: »Lina ne shranjuje klicev po imenu, katere imam v imeniku«): povedano ime in ime iz
+ * imenika telefona. Samo imenik: »Ana Novak (imenik)«; povedal drugo ime: »Miha (v imeniku: Ana Novak)«; prazno = ni ne enega ne drugega.
+ */
+fun imeZaPrikaz(povedano: String, imenik: String): String {
+    val p = povedano.trim()
+    val i = imenik.trim()
+    return when {
+        i.isEmpty() -> p
+        p.isEmpty() || primerjalnoIme(p) == primerjalnoIme(i) -> "$i (imenik)"
+        else -> "$p (v imeniku: $i)"
+    }
+}
+
+fun imeZaPrikaz(zapis: ZapisKlica): String = imeZaPrikaz(zapis.klicatelj, zapis.imeImenik)
+
+/** Ime datoteke klica: cas, ime in priimek (povedano, sicer iz imenika, sicer Neznan) in stevilka vedno poleg imena. Primer: 2026-11-20 14-35 Miha Horvat 041123456.txt */
 fun imeDatotekeKlica(zapis: ZapisKlica, zona: ZoneId = ZoneId.systemDefault()): String {
     val cas = DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm").format(Instant.ofEpochMilli(zapis.casZacetka).atZone(zona))
-    var ime = cistoIme(zapis.klicatelj).ifEmpty { "Neznan" }
+    var ime = cistoIme(zapis.klicatelj).ifEmpty { cistoIme(zapis.imeImenik) }.ifEmpty { "Neznan" }
     val stevilka = cistoIme(zapis.stevilka).ifEmpty { "skrita številka" }
     // Skrajsamo samo ime: cas in celotna stevilka ostaneta v imenu (meja 150 znakov).
     val prostor = 150 - cas.length - stevilka.length - 2
@@ -119,7 +137,7 @@ fun besediloDatotekeKlica(zapis: ZapisKlica, zona: ZoneId = ZoneId.systemDefault
     return buildString {
         appendLine("Klic, ki ga je sprejela Lina")
         appendLine()
-        appendLine("Klicatelj: ${zapis.klicatelj.ifBlank { "ni povedal imena" }}")
+        appendLine("Klicatelj: ${imeZaPrikaz(zapis).ifBlank { "ni povedal imena" }}")
         appendLine("Številka: ${zapis.stevilka}")
         appendLine("Podjetje: ${zapis.podjetje.ifBlank { "ni povedal" }}")
         appendLine("Čas klica: $cas, trajanje $trajanje")

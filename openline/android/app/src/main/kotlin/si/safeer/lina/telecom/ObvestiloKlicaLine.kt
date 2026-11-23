@@ -46,7 +46,7 @@ object ObvestiloKlicaLine {
                 if (zapis.nujno) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_DEFAULT,
             ).apply { lockscreenVisibility = Notification.VISIBILITY_PRIVATE },
         )
-        val kdo = zapis.klicatelj.trim().ifBlank {
+        val kdo = si.safeer.lina.samostojna.imeZaPrikaz(zapis).ifBlank {
             si.safeer.lina.ContactSearch(context).nameOf(zapis.stevilka) ?: zapis.stevilka.ifBlank { context.getString(R.string.unknown_number) }
         }
         val besedilo = zapis.sporocilo.ifBlank { zapis.povzetek }.trim()

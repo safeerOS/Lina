@@ -60,4 +60,16 @@ class ImeTozilnikTest {
         assertEquals("Dober večer", ImeTozilnik.dobrDan(ura(19)))
         assertTrue(ImeTozilnik.pozdrav("Ana", zdaj = ura(19)).startsWith("Dober večer. Tukaj Lina"))
     }
+
+    // AGENTS.md »Pozdrav: ime lastnika samo znanim klicateljem« (lastnik 23. 11. 2026).
+    @Test
+    fun `ime lastnika samo znanim klicateljem`() {
+        val ime = "Ana" to ""
+        assertEquals(ime, ImeTozilnik.imeZaPozdrav(ime, samoZnanim = true, znan = true))
+        assertEquals("" to "", ImeTozilnik.imeZaPozdrav(ime, samoZnanim = true, znan = false))
+        assertEquals(ime, ImeTozilnik.imeZaPozdrav(ime, samoZnanim = false, znan = false))
+        val (i, t) = ImeTozilnik.imeZaPozdrav(ime, samoZnanim = true, znan = false)
+        assertTrue(ImeTozilnik.pozdrav(i, t).contains("Dosegli ste glasovno tajnico."))
+        assertTrue(ImeTozilnik.pozdrav(i, t).startsWith("Dober dan. Tukaj Lina, umetna inteligenca."))
+    }
 }

@@ -21,11 +21,19 @@ object ImeUporabnika {
     const val PREFS = "lina_ime"
     const val KLJUC_IME = "ime"
     const val KLJUC_TOZILNIK = "tozilnik"
+    /** Stikalo »Ime povej samo znanim klicateljem« (lastnik 23. 11. 2026), privzeto vklopljeno. */
+    const val KLJUC_SAMO_ZNANIM = "samo_znanim"
     private const val NAJVEC = 60
 
     fun preberi(c: Context): Pair<String, String> {
         val p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return (p.getString(KLJUC_IME, "") ?: "") to (p.getString(KLJUC_TOZILNIK, "") ?: "")
+    }
+
+    fun samoZnanim(c: Context): Boolean = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KLJUC_SAMO_ZNANIM, true)
+
+    fun nastaviSamoZnanim(c: Context, vklop: Boolean) {
+        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KLJUC_SAMO_ZNANIM, vklop).apply()
     }
 
     fun shrani(c: Context, ime: String, tozilnik: String) {
@@ -40,6 +48,10 @@ object ImeUporabnika {
  * Vstavi se v [vsebnik] od mesta [zacetek]; [dodanih] pove, koliko pogledov je dodal.
  */
 class ImeUporabnikaPogled(private val a: Activity, private val vsebnik: LinearLayout, zacetek: Int) {
+    companion object {
+        /** Koda zahteve za imenik; rezultat ni potreben (ob naslednjem klicu se dovoljenje preveri znova). */
+        const val KODA_IMENIK = 1031
+    }
     var dodanih = 0
         private set
     private fun dp(v: Int) = (v * a.resources.displayMetrics.density).toInt()
@@ -69,6 +81,23 @@ class ImeUporabnikaPogled(private val a: Activity, private val vsebnik: LinearLa
         vrstica(predogled, 6)
         val shrani = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.name_save) }
         vrstica(shrani, 8)
+        // Lastnik 23. 11. 2026 (po klicu prevaranta): ime samo znanim klicateljem; stikalo se shrani takoj.
+        vrstica(android.widget.CheckBox(a).apply {
+            setText(R.string.name_known_only)
+            setTextAppearance(R.style.Gw_Body)
+            minimumHeight = dp(48)
+            isChecked = ImeUporabnika.samoZnanim(a)
+            setOnCheckedChangeListener { _, vklop -> ImeUporabnika.nastaviSamoZnanim(a, vklop) }
+        }, 12)
+        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.name_known_only_note) }, 4)
+        // Imenik: brez dovoljenja je vsak klicatelj neznan (brez imena v pozdravu in v seznamu klicev); zavrnitev nicesar ne pokvari.
+        if (a.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.contacts_permission_reason) }, 8)
+            vrstica(Button(a, null, 0, R.style.Gw_Button).apply {
+                setText(R.string.contacts_permission_allow)
+                setOnClickListener { a.requestPermissions(arrayOf(android.Manifest.permission.READ_CONTACTS), KODA_IMENIK) }
+            }, 6)
+        }
 
         fun osvezi() {
             val ime = imePolje.text.toString()

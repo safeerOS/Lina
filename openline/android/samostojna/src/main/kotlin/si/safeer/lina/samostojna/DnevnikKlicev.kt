@@ -78,7 +78,9 @@ data class ZapisKlica(
     /** Zakaj sporocila ni (klicatelj je prekinil, zvok ni deloval ...); prazno, kadar sporocilo obstaja. */
     val brezSporocilaRazlog: String = "",
     /** Dobesedno, kar je rekla Lina (prepis njenega govora; glasu klicatelja se ne snema). Zadnje polje (pozicijski klici); ZapisKlicaSinhronizacija ga ne nosi, torej ne gre na racunalnik. */
-    val linaDobesedno: String = ""
+    val linaDobesedno: String = "",
+    /** Ime iz imenika telefona za to stevilko ob koncu klica (lastnik 23. 11. 2026); prazno = ni v imeniku ali ni dovoljenja. Samo lokalno: ZapisKlicaSinhronizacija ga ne nosi. */
+    val imeImenik: String = ""
 ) {
     constructor(
         id: String,

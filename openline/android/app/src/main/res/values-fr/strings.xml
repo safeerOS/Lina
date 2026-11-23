@@ -330,6 +330,10 @@
     <string name="memory_delete_confirm">Supprimer vraiment toutes les conversations mémorisées ?</string>
     <string name="memory_deleted">Mémoire des conversations supprimée.</string>
     <string name="name_save">Enregistrer</string>
+    <string name="name_known_only">Ne dire votre nom qu\'aux appelants connus</string>
+    <string name="name_known_only_note">Les appelants de vos contacts ou de la liste de confiance entendent votre nom. Les autres entendent : « Vous êtes sur la messagerie vocale. »</string>
+    <string name="contacts_permission_reason">Lina lit vos contacts pour afficher le nom dans les appels reçus et ne dire votre nom qu\'aux personnes connues. Sans accès, tout appelant est inconnu.</string>
+    <string name="contacts_permission_allow">Autoriser les contacts</string>
     <string name="memory_heading">Mémoire</string>
 
     <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->

@@ -98,4 +98,22 @@ class KlicateljiSkupineTest {
         val lokalno = povzetekVsehBrezModela(skupineKlicateljev(zapisi))
         assertTrue(lokalno.lines().last().contains("ni v povzetku: 2"), lokalno)
     }
+
+    // Lastnik 23. 11. 2026: ime iz imenika v seznamu klicev; v poziv modelu gre samo povedano ime (kot stevilke tudi imenik ostane lokalno).
+    @Test
+    fun `skupina pokaze ime iz imenika, poziv modelu ga ne vsebuje`() {
+        val zapisi = listOf(
+            klic("a", 2_000, "+99955501001", sporocilo = "Poklici nazaj").copy(imeImenik = "Ana Novak"),
+            klic("b", 1_000, "+99955501001", ime = "Miha", sporocilo = "Prvi klic"),
+        )
+        val s = skupineKlicateljev(zapisi).single()
+        assertEquals("Miha (v imeniku: Ana Novak)", s.prikaz)
+        assertTrue(povzetekKlicateljaBrezModela(s, zona).startsWith("Miha (v imeniku: Ana Novak) je klical 2-krat"))
+        assertTrue(zaKlicNazaj(listOf(s)).contains("Miha (v imeniku: Ana Novak): +99955501001"))
+        assertTrue(!pozivPovzetkaKlicatelja(s, zona).contains("Ana Novak"))
+        assertTrue(!pozivPovzetkaVsehKlicev(listOf(s), zona).contains("Ana Novak"))
+        val samoImenik = skupineKlicateljev(listOf(zapisi[0])).single()
+        assertEquals("Ana Novak (imenik)", samoImenik.prikaz)
+        assertTrue(povzetekVsehBrezModela(listOf(samoImenik)).startsWith("• Ana Novak (imenik) (1)"))
+    }
 }

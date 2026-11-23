@@ -127,4 +127,25 @@ class SejaKlicaTest {
         assertTrue(datoteka.contains("Dobesedno, kar je rekla Lina:\nDober dan, tukaj Lina. Kako vam lahko pomagam?\nSem zapisala."))
         assertTrue(datoteka.contains("Dobesedno, kar je povedal klicatelj:\nProsim za povratni klic."))
     }
+
+    // Lastnik 23. 11. 2026: »Lina ne shranjuje klicev po imenu, katere imam v imeniku«. Imena izmisljena.
+    @Test
+    fun `ime za prikaz zdruzi povedano ime in ime iz imenika`() {
+        assertEquals("", imeZaPrikaz("", ""))
+        assertEquals("Miha Horvat", imeZaPrikaz("Miha Horvat", ""))
+        assertEquals("Ana Novak (imenik)", imeZaPrikaz("", "Ana Novak"))
+        assertEquals("Ana Novak (imenik)", imeZaPrikaz(" ana  novak ", "Ana Novak"))
+        assertEquals("Miha (v imeniku: Ana Novak)", imeZaPrikaz("Miha", "Ana Novak"))
+    }
+
+    @Test
+    fun `datoteka klica pokaze ime iz imenika, ce klicatelj ni povedal imena`() {
+        val z = SejaKlica(t0, "+99955501001").zakljuci(t0 + 5_000).copy(imeImenik = "Ana Novak")
+        val besedilo = besediloDatotekeKlica(z, zona)
+        assertTrue(besedilo.contains("Klicatelj: Ana Novak (imenik)\n"), besedilo)
+        assertTrue(imeDatotekeKlica(z, zona).contains(" Ana Novak +99955501001"), imeDatotekeKlica(z, zona))
+        val drugo = z.copy(klicatelj = "Miha Horvat")
+        assertTrue(besediloDatotekeKlica(drugo, zona).contains("Klicatelj: Miha Horvat (v imeniku: Ana Novak)\n"))
+        assertTrue(besediloDatotekeKlica(z.copy(imeImenik = ""), zona).contains("Klicatelj: ni povedal imena\n"))
+    }
 }

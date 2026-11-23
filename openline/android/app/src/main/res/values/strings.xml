@@ -330,6 +330,10 @@
     <string name="memory_delete_confirm">Really delete all remembered conversations?</string>
     <string name="memory_deleted">Conversation memory deleted.</string>
     <string name="name_save">Save</string>
+    <string name="name_known_only">Say your name only to known callers</string>
+    <string name="name_known_only_note">Callers in your contacts or on the trusted list hear your name. Others hear: “You have reached the voice assistant.”</string>
+    <string name="contacts_permission_reason">Lina reads your contacts to show the caller\'s name in received calls and to say your name only to people you know. Without access every caller is treated as unknown.</string>
+    <string name="contacts_permission_allow">Allow contacts</string>
     <string name="memory_heading">Memory</string>
 
     <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->

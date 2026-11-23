@@ -74,6 +74,10 @@ object LokalniPrehodUpravljalnik {
             dnevnik = dnevnik,
             wsFabrika = OkHttpWsFabrika(),
             imeUporabnika = { si.safeer.lina.asistent.ImeUporabnika.preberi(context) },
+            // Lastnik 23. 11. 2026: ime iz imenika v zapisu klica; ime lastnika v pozdravu samo znanim (imenik ali zaupani, kot GatewayInCallService).
+            imeIzImenika = { st -> si.safeer.lina.ContactSearch(context).nameOf(st) },
+            zaupanKlicatelj = { st -> si.safeer.lina.protocol.TakeoverPolicy.onAllowlist(st, si.safeer.lina.config.LinaSettingsStore(context).load().allowlist) },
+            imeSamoZnanim = { si.safeer.lina.asistent.ImeUporabnika.samoZnanim(context) },
             casovniZapis = { android.util.Log.i("LinaPozdrav", "${System.currentTimeMillis() % 100000} ms: $it") },
             zajemIzhoda = ZajemIzhodaLine(context.filesDir)::zapisi,
             obdelavaZvoka = context.getSharedPreferences("lina_zvok", Context.MODE_PRIVATE).getBoolean("obdelava_zvoka", true)

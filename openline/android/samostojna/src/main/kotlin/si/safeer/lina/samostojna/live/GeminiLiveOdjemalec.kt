@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import si.safeer.lina.samostojna.DnevnikKlicev
 import si.safeer.lina.samostojna.GoogleZeton
+import si.safeer.lina.samostojna.ImeTozilnik
 import si.safeer.lina.samostojna.SejaKlica
 import si.safeer.lina.samostojna.ZapisKlica
 import si.safeer.lina.samostojna.ShranjevalnikKljuca
@@ -37,6 +38,12 @@ class GeminiLiveOdjemalec(
     private val wsFabrika: WsFabrika,
     /** Ime uporabnika in rocni tozilnik za pozdrav osebne tajnice (lastnik 21. 11. 2026); prazno = »Dosegli ste glasovno tajnico.«. */
     private val imeUporabnika: () -> Pair<String, String> = { "" to "" },
+    /** Ime iz imenika telefona za stevilko (null = ni v imeniku ali ni dovoljenja READ_CONTACTS); za pozdrav in zapis klica. */
+    private val imeIzImenika: (String) -> String? = { null },
+    /** Stevilka je med zaupanimi klicatelji (seznam izjem v nastavitvah prevzema). */
+    private val zaupanKlicatelj: (String) -> Boolean = { false },
+    /** Stikalo »Ime povej samo znanim klicateljem« (lastnik 23. 11. 2026, privzeto vklopljeno). Napaka = vklopljeno. */
+    private val imeSamoZnanim: () -> Boolean = { true },
     /** Casovni zapis poteka pozdrava (brez vsebine klica): »dvig«, »seja nared«, »uvod poslan«, »prvi zvok Line«, »konec obrata«. */
     private val casovniZapis: (String) -> Unit = {},
     // Diagnosticni zajem tistega, kar klicatelj sliši (glas Line, 16 kHz s16le mono). Samo izhod Line, nikoli glas klicatelja.
@@ -151,6 +158,20 @@ class GeminiLiveOdjemalec(
         Thread({ runCatching { poskusiPovezavo() } }, "lina-live-priprava").start()
     }
 
+    /** Ali klicatelj sme slisati ime lastnika (AGENTS.md »Pozdrav: ime lastnika samo znanim klicateljem«). Vsaka napaka = neznan = brez imena. */
+    private fun imeZaTaKlic(): Pair<String, String> {
+        val ime = runCatching(imeUporabnika).getOrDefault("" to "")
+        val samoZnanim = runCatching(imeSamoZnanim).getOrDefault(true)
+        if (!samoZnanim || ime.first.isBlank()) return ime
+        val stevilka = stevilkaNaslednjegaKlica
+        val t0 = System.nanoTime()
+        val znan = stevilka.isNotBlank() &&
+            (runCatching { imeIzImenika(stevilka) != null }.getOrDefault(false) || runCatching { zaupanKlicatelj(stevilka) }.getOrDefault(false))
+        // Samo trajanje (brez stevilke in imena): zacetek klica se ne sme opazno upocasniti.
+        casovniZapis("imenik preverjen v ${(System.nanoTime() - t0) / 1_000_000} ms")
+        return ImeTozilnik.imeZaPozdrav(ime, samoZnanim, znan)
+    }
+
     private fun posljiUvodCeNared() {
         val poslji = synchronized(vhodniMutex) {
             if (uvodPoslan || stanje != StanjePovezave.PRIPRAVLJEN || isClosed.get()) false
@@ -235,7 +256,7 @@ class GeminiLiveOdjemalec(
                 }
                 if (!sendSetup) return
                 izbiraPoti.uspeh(pot)
-                val (ime, tozilnik) = runCatching(imeUporabnika).getOrDefault("" to "")
+                val (ime, tozilnik) = imeZaTaKlic()
                 val sysNav = SistemskoNavodilo.zgradiZaKlic(ZonedDateTime.now(), ime, tozilnik)
                 
                 val keySetupStr = if (UPORABI_CONFIG_NAMESTO_SETUP && jeApiKljuc) "config" else "setup"
@@ -428,7 +449,10 @@ class GeminiLiveOdjemalec(
     private fun zakljuciKlic() {
         val s = seja ?: return
         seja = null
-        val zapis = s.zakljuci(System.currentTimeMillis())
+        val osnova = s.zakljuci(System.currentTimeMillis())
+        // Ime iz imenika telefona (lastnik 23. 11. 2026); brez dovoljenja ali ob napaki zapis ostane brez njega.
+        val imenik = if (s.stevilka.isBlank()) "" else runCatching { imeIzImenika(s.stevilka) }.getOrNull()?.trim()?.take(SejaKlica.MEJA_IMENA).orEmpty()
+        val zapis = if (imenik.isEmpty()) osnova else osnova.copy(imeImenik = imenik)
         // Zapis ne sme izginiti zaradi enkratne napake shrambe: do trikrat poskusimo z istim zapisom.
         var shranjen = false
         for (poskus in 0 until 3) { if (dnevnik.dodaj(zapis)) { shranjen = true; break } }

@@ -330,6 +330,10 @@
     <string name="memory_delete_confirm">Eliminare davvero tutte le conversazioni ricordate?</string>
     <string name="memory_deleted">Memoria delle conversazioni eliminata.</string>
     <string name="name_save">Salva</string>
+    <string name="name_known_only">Dire il nome solo a chi conosci</string>
+    <string name="name_known_only_note">Chi è in rubrica o nell\'elenco fidato sente il tuo nome. Gli altri sentono: «Ha raggiunto l\'assistente vocale.»</string>
+    <string name="contacts_permission_reason">Lina legge la rubrica per mostrare il nome nelle chiamate ricevute e dire il tuo nome solo a chi conosci. Senza accesso ogni chiamante è sconosciuto.</string>
+    <string name="contacts_permission_allow">Consenti rubrica</string>
     <string name="memory_heading">Memoria</string>
 
     <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->

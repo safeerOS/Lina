@@ -566,4 +566,81 @@ class GeminiLiveOdjemalecTest {
         // prav tako ne sme biti clientContent
         assertTrue(ujetaSporocila.none { it.contains("clientContent") })
     }
+
+    /** Navodilo (setup), ki ga odjemalec poslje modelu za klic s stevilke [stevilka]. */
+    private fun navodiloZaKlic(stevilka: String, imenik: (String) -> String?, zaupan: (String) -> Boolean = { false }, samoZnanim: Boolean = true): String {
+        var setup = ""
+        val fabrika = object : WsFabrika {
+            override fun odpri(url: String, glave: Map<String, String>, poslusalec: WsPoslusalec): WsPovezava {
+                val pov = object : WsPovezava {
+                    override fun posiljiBesedilo(besedilo: String) { if (besedilo.contains("\"setup\":")) setup = besedilo }
+                    override fun zapri(koda: Int, razlog: String) {}
+                }
+                poslusalec.onOpen(pov)
+                return pov
+            }
+        }
+        val odj = GeminiLiveOdjemalec(
+            apiKljuc = object : ShranjevalnikKljuca {
+                override fun shrani(k: KljucGemini) {}
+                override fun preberi() = KljucGemini("k")
+                override fun izbrisi() {}
+            },
+            googleZeton = GoogleZeton { "z" },
+            projekt = { "p" },
+            dnevnik = DnevnikKlicev(si.safeer.lina.samostojna.PomnilniskaShramba()),
+            izbiraPoti = IzbiraPotiLive(naVoljo = { it == PotLive.VERTEX }),
+            wsFabrika = fabrika,
+            imeUporabnika = { "Tomaž" to "Tomaža" },
+            imeIzImenika = imenik,
+            zaupanKlicatelj = zaupan,
+            imeSamoZnanim = { samoZnanim },
+        )
+        odj.stevilkaNaslednjegaKlica = stevilka
+        odj.vKlic(ByteArray(0))
+        odj.konecKlica()
+        assertTrue(setup.isNotEmpty(), "setup ni bil poslan")
+        return setup
+    }
+
+    // AGENTS.md »Pozdrav: ime lastnika samo znanim klicateljem« (lastnik 23. 11. 2026, po klicu prevaranta). Stevilke izmisljene.
+    @Test
+    fun `ime lastnika je v navodilu samo za znanega klicatelja`() {
+        val neznan = navodiloZaKlic("+99955501001", imenik = { null })
+        assertTrue(!neznan.contains("Tomaž"), "neznan klicatelj ne sme dobiti imena lastnika nikjer v navodilu")
+        assertTrue(neznan.contains("Dosegli ste glasovno tajnico."))
+        assertTrue(!navodiloZaKlic("", imenik = { "Ana" }).contains("Tomaž"), "skrita stevilka je neznan klicatelj")
+        assertTrue(!navodiloZaKlic("+99955501001", imenik = { throw SecurityException("brez dovoljenja") }).contains("Tomaž"))
+        assertTrue(navodiloZaKlic("+99955501001", imenik = { if (it == "+99955501001") "Ana Novak" else null }).contains("Poklicali ste Tomaža."))
+        assertTrue(navodiloZaKlic("+99955501001", imenik = { null }, zaupan = { true }).contains("Poklicali ste Tomaža."))
+        assertTrue(navodiloZaKlic("+99955501001", imenik = { null }, samoZnanim = false).contains("Poklicali ste Tomaža."))
+    }
+
+    @Test
+    fun `zapis klica dobi ime iz imenika telefona`() {
+        val dn = DnevnikKlicev(si.safeer.lina.samostojna.PomnilniskaShramba())
+        val odj = GeminiLiveOdjemalec(
+            apiKljuc = object : ShranjevalnikKljuca {
+                override fun shrani(k: KljucGemini) {}
+                override fun preberi() = KljucGemini("k")
+                override fun izbrisi() {}
+            },
+            googleZeton = GoogleZeton { "z" },
+            projekt = { "p" },
+            dnevnik = dn,
+            izbiraPoti = IzbiraPotiLive(naVoljo = { it == PotLive.VERTEX }),
+            wsFabrika = object : WsFabrika {
+                override fun odpri(url: String, glave: Map<String, String>, poslusalec: WsPoslusalec): WsPovezava = object : WsPovezava {
+                    override fun posiljiBesedilo(besedilo: String) {}
+                    override fun zapri(koda: Int, razlog: String) {}
+                }
+            },
+            imeIzImenika = { if (it == "+99955501002") "Ana Novak" else null },
+        )
+        odj.stevilkaNaslednjegaKlica = "+99955501002"
+        odj.nastaviIzhod { }
+        odj.konecKlica()
+        val zapis = dn.seznam().single { it.stevilka == "+99955501002" }
+        assertEquals("Ana Novak", zapis.imeImenik)
+    }
 }

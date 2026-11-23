@@ -38,7 +38,7 @@ class LinaKlicPogled(
     /** Klicati z glavne niti ob prikazu zavihka. */
     fun osvezi() {
         val zapisi = runCatching { DnevnikKlicevSkupni.dobi(a).seznamPoDatumu(nujniNaVrhu = false) }.getOrDefault(emptyList())
-        skupine = skupineKlicateljev(zapisi)
+        skupine = skupineKlicateljev(si.safeer.lina.ContactSearch(a).dopolniImena(zapisi))
         pogled.removeAllViews()
         if (skupine.isEmpty()) { pogled.visibility = View.GONE; return }
         pogled.visibility = View.VISIBLE
@@ -62,7 +62,7 @@ class LinaKlicPogled(
         val oblika = ZapiskiIzvoz(a)
         for (s in skupine.take(30)) {
             val zadnji = s.klici.first()
-            val ime = s.ime.ifBlank { a.getString(R.string.lina_calls_unknown) }
+            val ime = s.prikaz.ifBlank { a.getString(R.string.lina_calls_unknown) }
             // Brez sporocila: razlog + klicateljeve besede dobesedno (22. 11. 2026: razlog je obljubljal »spodaj je dobesedno«, pod njim pa ni bilo nic).
             val sporocilo = zadnji.sporocilo.ifBlank { dobesednoZRazlogom(zadnji) }
             val stevec = if (s.klici.size > 1) a.getString(R.string.lina_calls_count_fmt, s.klici.size) + " · " else ""
@@ -104,7 +104,7 @@ class LinaKlicPogled(
                 appendLine()
             }
         }.trim()
-        val naslov = s.ime.ifBlank { a.getString(R.string.lina_calls_unknown) } + " · " + s.stevilka
+        val naslov = s.prikaz.ifBlank { a.getString(R.string.lina_calls_unknown) } + " · " + s.stevilka
         val d = AlertDialog.Builder(a)
             .setTitle(naslov)
             .setMessage(besedilo)

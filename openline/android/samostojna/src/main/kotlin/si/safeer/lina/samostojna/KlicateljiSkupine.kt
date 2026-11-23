@@ -17,7 +17,12 @@ data class SkupinaKlicatelja(
     val stevilka: String,
     /** Klici od najnovejsega do najstarejsega. */
     val klici: List<ZapisKlica>,
-)
+    /** Ime iz imenika telefona (najnovejse neprazno); samo za prikaz na telefonu, v pozive modelu ne gre. */
+    val imeImenik: String = "",
+) {
+    /** Ime za prikaz: povedano in iz imenika (imeZaPrikaz); prazno = ni ne enega ne drugega. */
+    val prikaz: String get() = imeZaPrikaz(ime, imeImenik)
+}
 
 private const val SKRITA = "skrita"
 
@@ -55,6 +60,7 @@ fun skupineKlicateljev(zapisi: List<ZapisKlica>): List<SkupinaKlicatelja> =
                 ime = urejeni.firstOrNull { it.klicatelj.isNotBlank() }?.klicatelj?.trim().orEmpty(),
                 stevilka = urejeni.first().stevilka,
                 klici = urejeni,
+                imeImenik = urejeni.firstOrNull { it.imeImenik.isNotBlank() }?.imeImenik?.trim().orEmpty(),
             )
         }
         .sortedByDescending { it.klici.first().casZacetka }
@@ -90,7 +96,7 @@ fun pozivPovzetkaKlicatelja(s: SkupinaKlicatelja, zona: ZoneId = ZoneId.systemDe
 
 /** Povzetek brez modela (ni kljuca ali ni omrezja): stevilo klicev in sporocila od najnovejsega. */
 fun povzetekKlicateljaBrezModela(s: SkupinaKlicatelja, zona: ZoneId = ZoneId.systemDefault()): String = buildString {
-    val kdo = s.ime.ifBlank { s.stevilka.ifBlank { "Neznan klicatelj" } }
+    val kdo = s.prikaz.ifBlank { s.stevilka.ifBlank { "Neznan klicatelj" } }
     append("$kdo je klical ${s.klici.size}-krat")
     if (s.klici.any { it.nujno }) append(", vsaj enkrat nujno")
     appendLine(".")
@@ -126,19 +132,19 @@ fun pozivPovzetkaVsehKlicev(skupine: List<SkupinaKlicatelja>, zona: ZoneId = Zon
 /** Lokalni ključ k pozivu: »Klicatelj N« = ime in številka. Ne gre modelu. */
 fun legendaKlicateljev(skupine: List<SkupinaKlicatelja>): String =
     skupine.take(NAJVEC_KLICATELJEV_V_POVZETKU).withIndex().joinToString("\n") { (i, s) ->
-        "Klicatelj ${i + 1}: ${s.ime.ifBlank { "brez imena" }}, ${s.stevilka.ifBlank { "skrita številka" }}"
+        "Klicatelj ${i + 1}: ${s.prikaz.ifBlank { "brez imena" }}, ${s.stevilka.ifBlank { "skrita številka" }}"
     }
 
 /** Blok, ki ga aplikacija sama pripne pod povzetek: komu in na katero številko poklicati nazaj (model številk ne vidi). */
 fun zaKlicNazaj(skupine: List<SkupinaKlicatelja>): String =
     skupine.take(NAJVEC_KLICATELJEV_V_POVZETKU).withIndex().joinToString("\n", prefix = "Za klic nazaj:\n") { (i, s) ->
-        "• Klicatelj ${i + 1} – ${s.ime.ifBlank { "brez imena" }}: ${s.stevilka.ifBlank { "skrita številka" }}"
+        "• Klicatelj ${i + 1} – ${s.prikaz.ifBlank { "brez imena" }}: ${s.stevilka.ifBlank { "skrita številka" }}"
     }
 
 /** Povzetek vseh klicev brez modela: ena vrstica na klicatelja (stevilo klicev in zadnje sporocilo). */
 fun povzetekVsehBrezModela(skupine: List<SkupinaKlicatelja>): String {
     val vrstice = skupine.take(NAJVEC_KLICATELJEV_V_POVZETKU).joinToString("\n") { s ->
-        val kdo = s.ime.ifBlank { s.stevilka.ifBlank { "Neznan klicatelj" } }
+        val kdo = s.prikaz.ifBlank { s.stevilka.ifBlank { "Neznan klicatelj" } }
         "• $kdo (${s.klici.size}): ${sporociloKlica(s.klici.first()).take(200)}"
     }
     val izpuscenih = skupine.size - NAJVEC_KLICATELJEV_V_POVZETKU

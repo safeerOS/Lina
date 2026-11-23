@@ -33,7 +33,7 @@ class PovzetekKlicevPogled(
     fun osvezi() {
         var napakaBranja = false
         val zapisi = try { DnevnikKlicevSkupni.dobi(a).seznamPoDatumu(nujniNaVrhu = false) } catch (e: Exception) { napakaBranja = true; emptyList() }
-        val klici = zapisi.filter(::jeKlicZapis).sortedByDescending { it.casZacetka }
+        val klici = si.safeer.lina.ContactSearch(a).dopolniImena(zapisi.filter(::jeKlicZapis).sortedByDescending { it.casZacetka })
         naslov.text = a.getString(R.string.summary_title) + if (klici.isEmpty()) "" else " (" + klici.size + ")"
         prazno.setText(if (napakaBranja) R.string.summary_read_error else R.string.summary_empty)
         prazno.visibility = if (klici.isEmpty()) View.VISIBLE else View.GONE
@@ -51,7 +51,7 @@ class PovzetekKlicevPogled(
         val oblika = java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT)
         seznam.removeAllViews()
         for (z in klici) {
-            val kdo = z.klicatelj.trim().let { ime -> if (ime.isBlank()) z.stevilka else "$ime (${z.stevilka.ifBlank { "?" }})" }
+            val kdo = si.safeer.lina.samostojna.imeZaPrikaz(z).let { ime -> if (ime.isBlank()) z.stevilka else "$ime (${z.stevilka.ifBlank { "?" }})" }
             val vrstica = LinearLayout(a).apply {
                 orientation = LinearLayout.HORIZONTAL
                 isClickable = true

@@ -41,6 +41,15 @@ class ContactSearch(private val context: Context) {
         }.getOrNull()
     }
 
+    /** Starejsim zapisom klicev (pred 23. 11. 2026) brez imena iz imenika ga doda za prikaz; ena poizvedba na stevilko. */
+    fun dopolniImena(zapisi: List<si.safeer.lina.samostojna.ZapisKlica>): List<si.safeer.lina.samostojna.ZapisKlica> {
+        val znana = HashMap<String, String>()
+        return zapisi.map { z ->
+            if (z.imeImenik.isNotBlank() || z.stevilka.isBlank()) z
+            else znana.getOrPut(z.stevilka) { nameOf(z.stevilka).orEmpty() }.let { ime -> if (ime.isEmpty()) z else z.copy(imeImenik = ime) }
+        }
+    }
+
     /** Ali je stevilka v imeniku (brez dovoljenja za imenik vedno false). Lahko z glavne niti: ena hitra poizvedba. */
     fun isKnown(number: String): Boolean {
         if (number.isBlank()) return false

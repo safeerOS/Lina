@@ -330,6 +330,10 @@
     <string name="memory_delete_confirm">Res izbrišem vse zapomnjene pogovore?</string>
     <string name="memory_deleted">Spomin pogovorov je izbrisan.</string>
     <string name="name_save">Shrani</string>
+    <string name="name_known_only">Ime povej samo znanim klicateljem</string>
+    <string name="name_known_only_note">Klicatelji iz imenika ali s seznama zaupanih slišijo vaše ime. Drugi slišijo: »Dosegli ste glasovno tajnico.«</string>
+    <string name="contacts_permission_reason">Lina bere imenik, da pri sprejetih klicih pokaže ime klicatelja in da vaše ime pove samo znanim. Brez dostopa je vsak klicatelj neznan.</string>
+    <string name="contacts_permission_allow">Dovoli imenik</string>
     <string name="memory_heading">Spomin</string>
 
     <!-- Domov po skici Lina 2.0 in obracun Google (22. 11. 2026) -->

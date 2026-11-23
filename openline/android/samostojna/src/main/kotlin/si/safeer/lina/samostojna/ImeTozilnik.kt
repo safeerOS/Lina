@@ -85,6 +85,13 @@ object ImeTozilnik {
         else -> "Dober večer"
     }
 
+    /**
+     * AGENTS.md »Pozdrav: ime lastnika samo znanim klicateljem« (lastnik 23. 11. 2026, po klicu prevaranta): ime in tozilnik lastnika
+     * gresta v navodilo klica samo, ce je stikalo izklopljeno ali je klicatelj znan (imenik, zaupani); sicer oba prazna.
+     */
+    fun imeZaPozdrav(ime: Pair<String, String>, samoZnanim: Boolean, znan: Boolean): Pair<String, String> =
+        if (!samoZnanim || znan) ime else "" to ""
+
     fun pozdrav(ime: String, uporabnikovZapis: String = "", snemanje: Boolean = false, zdaj: java.time.ZonedDateTime? = null): String {
         val toz = imeVTozilniku(ime, uporabnikovZapis)
         val poklicali = if (toz.isNotEmpty()) "Poklicali ste $toz." else "Dosegli ste glasovno tajnico."
