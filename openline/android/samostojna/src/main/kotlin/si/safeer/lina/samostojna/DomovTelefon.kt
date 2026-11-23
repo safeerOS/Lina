@@ -76,12 +76,12 @@ fun vrsticaZadnjegaKlica(z: ZapisKlica, zdaj: Long, cona: ZoneId, najvecZnakov: 
 }
 
 /**
- * Koliko zadnjih klicev (3–5) gre na Domov brez drsenja. Ocena: ~560 dp zasedejo vrstice zaslona in ostala vsebina Domova,
- * ena vrstica klica ~44 dp; vecja pisava (fontScale) zmanjsa razpolozljivo visino.
+ * Koliko zadnjih klicev (3–5) gre na Domov brez drsenja. Ocena: ~640 dp zasedejo sistemske vrstice (targetSdk 35: screenHeightDp
+ * jih vsebuje), zgornja vrstica, zavihki in ostala vsebina Domova; ena vrstica klica ~44 dp; vecja pisava zmanjsa visino.
  * shortcut: ocena iz visine zaslona, ne meritev postavitve; ce se na napravi spodnji gumb odreze, izmeri pogled po postavitvi.
  */
 fun vrsticZadnjihKlicev(visinaDp: Int, pisava: Float = 1f): Int =
-    ((visinaDp / maxOf(1f, pisava) - 560f) / 44f).toInt().coerceIn(3, 5)
+    ((visinaDp / maxOf(1f, pisava) - 640f) / 44f).toInt().coerceIn(3, 5)
 
 /** Stevilo danasnjih klicev (znacka na ploscici Klici); 0 = brez znacke. */
 fun steviloDanes(zapisi: List<ZapisKlica>, zdaj: Long, cona: ZoneId): Int {
