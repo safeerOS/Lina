@@ -65,8 +65,13 @@ class PovzetekKlicevPogled(
                 setTextAppearance(R.style.Gw_Muted)
             })
             vsebina.addView(TextView(a).apply {
-                text = z.sporocilo.ifBlank { z.povzetek }.ifBlank { z.brezSporocilaRazlog }
-                maxLines = 4
+                text = z.sporocilo.ifBlank {
+                    // Brez sporocila: razlog (»Spodaj je dobesedno ...«) mora imeti pod seboj res dobesedni zapis klicatelja (lastnik 23. 11. 2026, posnetek Sprejetih).
+                    val osnova = z.povzetek.ifBlank { z.brezSporocilaRazlog }
+                    val dobesedno = z.sporociloDobesedno.replace(Regex("\\s+"), " ").trim()
+                    if (z.brezSporocilaRazlog.isNotBlank() && dobesedno.isNotBlank()) osnova + "\n»" + dobesedno + "«" else osnova
+                }
+                maxLines = 6
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 setTextAppearance(R.style.Gw_Body)
             })

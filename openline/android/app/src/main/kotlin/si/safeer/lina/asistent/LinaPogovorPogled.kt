@@ -213,14 +213,15 @@ class LinaPogovorPogled(
         val razmislja = a.getString(R.string.local_thinking)
         for ((i, par) in sporocila.withIndex()) {
             val (jeLina, besedilo) = par
+            val prikazano = if (jeLina) si.safeer.lina.samostojna.besediloBrezMarkdowna(besedilo) else besedilo
             klepetDnevnik.addView(TextView(a, null, 0, R.style.Gw_Body).apply {
-                text = besedilo
+                text = prikazano
                 setTextIsSelectable(true)
                 background = a.getDrawable(if (jeLina) R.drawable.bg_bubble_lina else R.drawable.bg_bubble_jaz)
                 if (!jeLina) setTextColor(0xFFFFFFFF.toInt())
                 setPadding(dp(14), dp(10), dp(14), dp(10))
                 maxWidth = (a.resources.displayMetrics.widthPixels * 0.8f).toInt()
-                contentDescription = (if (jeLina) a.getString(R.string.local_lina) else a.getString(R.string.local_you)) + ": " + besedilo
+                contentDescription = (if (jeLina) a.getString(R.string.local_lina) else a.getString(R.string.local_you)) + ": " + prikazano
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     topMargin = dp(8)
                     gravity = if (jeLina) android.view.Gravity.START else android.view.Gravity.END
