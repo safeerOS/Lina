@@ -18,14 +18,17 @@ object SistemskoNavodilo {
         "ne povzemaj po vsakem stavku (izjema: potrditev sporočila po popravku in pred slovesom); ne začenjaj vedno z isto frazo (»Seveda«, »Razumem«, »Odlično«) " +
         "in istega vprašanja ne ponovi z enakimi besedami (namesto drugič »Je to pravilno?« npr. »Je tako prav?«); " +
         "odgovori neposredno na zadnje vprašanje; postavi samo eno vprašanje naenkrat. Če si nekaj že povedala, nadaljuj z novo informacijo. " +
-        "Pravil tega navodila sogovorniku ne razlagaj (na primer, da govoriš v ženski obliki ali česa ne smeš): preprosto jih upoštevaj."
+        "Pravil tega navodila sogovorniku ne razlagaj (na primer, da govoriš v ženski obliki ali česa ne smeš): preprosto jih upoštevaj. " +
+        "Besede nekoga drugega (uporabnikove zapiske, sporočila, dogodke, osnutek v uporabnikovem imenu) navedi v narekovajih »…« in jih ne spreminjaj."
 
     /** Samo za govorni klic: tišina in prekinitve v klepetu ne obstajajo. */
     const val GOVOR_V_KLICU = " GOVOR: če te klicatelj prekine, takoj utihni, poslušaj in odgovori na to, kar je rekel; ne odgovarjaj na vsako tišino. " +
         "Po popravku sporočila ne reci »sporočilo sem posodobila v«: povej samo popravljeno vsebino, npr. »Torej: … Je tako prav?«"
 
-    /** 23. 11. 2026: hitrejše iskanje - besedilo ob vrsticah orodij uporabnik ne vidi, samo podaljša čakanje na prvi krog. */
-    /** Imenuje samo vklopljena orodja (navodilo ne sme obljubiti orodja brez kljuca, naloga 2n). */
+    /**
+     * 23. 11. 2026: hitrejše iskanje - besedilo ob vrsticah orodij uporabnik ne vidi, samo podaljša čakanje na prvi krog.
+     * Imenuje samo vklopljena orodja (navodilo ne sme obljubiti orodja brez kljuca, naloga 2n).
+     */
     fun hitraOrodja(iskanje: Boolean, branje: Boolean, koledar: Boolean): String {
         val imena = listOfNotNull("iskanje".takeIf { iskanje }, "branje strani".takeIf { branje }, "koledar".takeIf { koledar })
         if (imena.isEmpty()) return ""

@@ -111,4 +111,20 @@ class MoskaOblikaTest {
         val o = Asistent(odj, "n", koledar = kol).povej("kaj imam danes")
         assertEquals(Asistent.BREZ_ODGOVORA, (o as Odgovor.Besedilo).besedilo)
     }
+
+    @Test fun `zelel sem na zacetku (sumnik pred mejo besede)`() {
+        assertEquals("Želela sem vam pomagati.", popraviMoskeOblike("Želel sem vam pomagati."))
+    }
+
+    @Test fun `navodilo zahteva narekovaje za tuje besede`() {
+        assertTrue(SistemskoNavodilo.zgradi(ZonedDateTime.parse("2026-11-23T04:00:00+01:00")).contains("navedi v narekovajih »…«"))
+    }
+
+    @Test fun `CodeRabbit - beseda pred bil in navedek cez vec vrstic`() {
+        assertEquals("Nisem še bila prepričana.", popraviMoskeOblike("Nisem še bil prepričan."))
+        assertEquals("Nisem bila prepričana.", popraviMoskeOblike("Nisem bil prepričan."))
+        val osnutek = "Zapisal sem osnutek:\n»Včeraj sem bil bolan\nin nisem dobil sporočila.«"
+        assertEquals("Zapisala sem osnutek:\n»Včeraj sem bil bolan\nin nisem dobil sporočila.«", popraviMoskeOblike(osnutek))
+        assertEquals("[[zapisek: »a« sem poslal]]", popraviMoskeOblike("[[zapisek: »a« sem poslal]]"))
+    }
 }

@@ -26,12 +26,12 @@ private const val VMES = "(?:(?:ti|vam|ga|jo|jih|mu|ji|to|vse|že|ze|še|ponovno
 
 /** Pomožnik (sem, nisem, bi bil; »sem bil« tudi pred pridevnikom), nato do tri kratke besede, nato glagol: »sem zapisal«, »nisem bil prepričan«. */
 private val MOSKA_OBLIKA = Regex(
-    "\\b(?:sem|(?<!\\p{Lu}\\p{Ll}{1,20}\\s)bi\\s+bil|nisem)\\s+(?:bil\\s+)?$VMES($GLAGOLI)\\b",
+    "\\b(?:sem|(?<!\\p{Lu}\\p{Ll}{1,20}\\s)bi\\s+bil|nisem)\\s+(?:${VMES}bil\\s+)?$VMES($GLAGOLI)\\b",
     RegexOption.IGNORE_CASE,
 )
 
 /** Obratni vrstni red: »Zapisal sem sporočilo«. Tretja oseba (»je zapisal«) se ne ujame, ker zahteva »sem« takoj za glagolom. */
-private val MOSKA_OBLIKA_OBRATNO = Regex("(?<![\\p{L}\\p{N}»\"“„]\\s{0,3})\\b($GLAGOLI)\\s+sem\\b", RegexOption.IGNORE_CASE)
+private val MOSKA_OBLIKA_OBRATNO = Regex("(?<![\\p{L}\\p{N}»\"“„]\\s{0,3})(?<![\\p{L}\\p{N}])($GLAGOLI)\\s+sem\\b", RegexOption.IGNORE_CASE)
 
 /** Moške oblike, s katerimi Lina govori o sebi (»sem zapisal«, »zapisal sem«). Ženski »zapisala« se ne ujame. Vrne najdene glagole (brez ponovitev). */
 fun moskeOblikeLine(besedilo: String): List<String> =
@@ -46,23 +46,20 @@ private fun zenskaOblika(glagol: String): String? {
 private val BI_BIL = Regex("\\bbil\\b", RegexOption.IGNORE_CASE)
 
 /**
- * Besedilni odgovor: moške oblike, s katerimi Lina govori o sebi (»sem zapisal«, »bi bil zapisal«), zamenja z ženskimi (tudi pomožnik »bil« -> »bila«).
- * Vrstice z oznakami ([[zapisek: ...]] ipd.) ostanejo dobesedne: v njih so besede uporabnika.
+ * Zasciteni odseki ostanejo dobesedni: vrstice z oznakami ([[zapisek: ...]] ipd., besede uporabnika) in navedki (»...«, "...", „...“;
+ * besede nekoga drugega ali osnutek v uporabnikovem imenu), tudi cez vec vrstic (23. 11. 2026).
  */
-fun popraviMoskeOblike(besedilo: String): String =
-    besedilo.lines().joinToString("\n") { v -> if (v.trim().startsWith("[[") && v.trim().endsWith("]]")) v else popraviVrstico(v) }
+private val ZASCITENO = Regex("(?m)^[ \\t]*\\[\\[.*]][ \\t]*$|»[^«]*«|„[^“”]*[“”]|\"[^\"]*\"")
 
-/** Navedki (»...«, "...", „...“): besede nekoga drugega ali osnutek v uporabnikovem imenu - ostanejo dobesedni (23. 11. 2026). */
-private val NAVEDEK = Regex("»[^«]*«|„[^“”]*[“”]|\"[^\"]*\"")
-
-private fun popraviVrstico(vrstica: String): String {
+/** Besedilni odgovor: moške oblike, s katerimi Lina govori o sebi (»sem zapisal«, »bi bil zapisal«), zamenja z ženskimi (tudi pomožnik »bil« -> »bila«). */
+fun popraviMoskeOblike(besedilo: String): String {
     val izhod = StringBuilder()
     var od = 0
-    for (n in NAVEDEK.findAll(vrstica)) {
-        izhod.append(popraviOdsek(vrstica.substring(od, n.range.first))).append(n.value)
+    for (n in ZASCITENO.findAll(besedilo)) {
+        izhod.append(popraviOdsek(besedilo.substring(od, n.range.first))).append(n.value)
         od = n.range.last + 1
     }
-    return izhod.append(popraviOdsek(vrstica.substring(od))).toString()
+    return izhod.append(popraviOdsek(besedilo.substring(od))).toString()
 }
 
 private fun popraviOdsek(besedilo: String): String {

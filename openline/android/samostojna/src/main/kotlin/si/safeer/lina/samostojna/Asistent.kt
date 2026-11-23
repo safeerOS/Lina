@@ -104,12 +104,12 @@ class Asistent(
                     }
                 }
                 // Zenska oblika ze v zgodovini in spominu (23. 11. 2026): model v naslednjem obratu ne bere svojih moskih oblik nazaj.
-                val besedilo = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
-                    // Po zadnjem krogu orodij je lahko ostala samo vrstica orodja (navodilo jih zahteva brez besedila).
-                    .ifEmpty { BREZ_ODGOVORA }
+                val izModela = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
+                // Po zadnjem krogu orodij je lahko ostala samo vrstica orodja (navodilo jih zahteva brez besedila); nadomestni stavek ne gre v spomin.
+                val besedilo = izModela.ifEmpty { BREZ_ODGOVORA }
                 zgodovina.add(Sporocilo("model", besedilo))
                 obrezi()
-                runCatching { spomin?.zapisi(vnos, besedilo) }
+                if (izModela.isNotEmpty()) runCatching { spomin?.zapisi(vnos, besedilo) }
 
                 val vrstice = besedilo.lines()
                 for (vrstica in vrstice) {
