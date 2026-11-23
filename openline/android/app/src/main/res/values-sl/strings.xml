@@ -443,4 +443,25 @@
     <string name="local_alarm_add">Nastavi</string>
     <string name="local_alarm_set">Budilka je predana aplikaciji Ura; preveri jo tam</string>
     <string name="local_alarm_failed">Budilke ni bilo mogoče nastaviti (aplikacija Ura je ni sprejela)</string>
+    <!-- Dodatki na racunalniku (23. 11. 2026) -->
+    <string name="addons_title">Dodatki na računalniku</string>
+    <string name="addons_desc">Vklopi ali izklopi Paperclip, n8n, AFFiNE in slovenski model na povezanem računalniku.</string>
+    <string name="addons_refresh">Osveži</string>
+    <string name="addons_loading">Sprašujem računalnik …</string>
+    <string name="addons_turn_on">Vklopi</string>
+    <string name="addons_err_unreachable">Računalnik ni dosegljiv. Preveri, ali Lina na računalniku teče in ali je telefon v istem omrežju, nato tapni Osveži.</string>
+    <string name="addons_err_denied">Računalnik je zahtevo zavrnil. Telefon znova poveži z Lino na računalniku.</string>
+    <string name="addons_err_busy">Preveč zahtev. Počakaj minuto in tapni Osveži.</string>
+    <string name="addons_err_old">Lina na računalniku dodatkov še ne zna upravljati. Posodobi Lino na računalniku.</string>
+    <string name="addons_err_generic">Nekaj je šlo narobe. Tapni Osveži.</string>
+    <string name="addon_paperclip">Paperclip</string>
+    <string name="addon_n8n">n8n</string>
+    <string name="addon_affine">AFFiNE</string>
+    <string name="addon_slovenski">Slovenski model</string>
+    <string name="addon_slovenski_explain">Ob prvem vklopu računalnik prenese in namesti približno 1,6 GB, model pa med delovanjem zaseda pomnilnik. Ga vklopim?</string>
+    <string name="addon_state_off">Izklopljen</string>
+    <string name="addon_state_starting">Se zaganja</string>
+    <string name="addon_state_running">Deluje</string>
+    <string name="addon_state_error">Napaka</string>
+    <string name="addon_state_unavailable">Še ni na voljo</string>
 </resources>

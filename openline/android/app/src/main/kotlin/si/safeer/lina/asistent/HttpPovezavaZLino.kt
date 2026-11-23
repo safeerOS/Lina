@@ -61,6 +61,7 @@ class HttpPovezavaZLino(
     override fun seznani(telo: String) = post("seznani", telo)
     override fun klici(telo: String) = post("seznani/klici", telo)
     override fun sinhron(telo: String) = post("sinhron", telo)
+    override fun dodatek(telo: String) = post("dodatek", telo)
 
     // Seznanitev s kodo (pogodba @fdd787b); /koda/zacni gre prek OdtisPrvePovezave, drugo pripeto na videni odtis.
     fun kodaZacni(telo: String) = post("koda/zacni", telo)
@@ -77,6 +78,11 @@ class HttpPovezavaZLino(
     override fun stanjeSeznanitve(koda: String) = get("seznani") { addQueryParameter("koda", koda) }
 
     override fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String) = get("stanje") {
+        addQueryParameter("posiljatelj", posiljatelj); addQueryParameter("cas", cas.toString())
+        addQueryParameter("enkratni", enkratni); addQueryParameter("podpis", podpis)
+    }
+
+    override fun stanjeDodatkov(posiljatelj: String, cas: Long, enkratni: String, podpis: String) = get("dodatki") {
         addQueryParameter("posiljatelj", posiljatelj); addQueryParameter("cas", cas.toString())
         addQueryParameter("enkratni", enkratni); addQueryParameter("podpis", podpis)
     }

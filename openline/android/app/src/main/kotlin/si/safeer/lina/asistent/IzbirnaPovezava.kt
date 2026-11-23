@@ -32,6 +32,9 @@ class IzbirnaPovezava(
     override fun stanjeSeznanitve(koda: String) = po { it.stanjeSeznanitve(koda) }
     override fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String) =
         po { it.stanjeSeje(posiljatelj, cas, enkratni, podpis) }
+    override fun stanjeDodatkov(posiljatelj: String, cas: Long, enkratni: String, podpis: String) =
+        po { it.stanjeDodatkov(posiljatelj, cas, enkratni, podpis) }
+    override fun dodatek(telo: String) = po { it.dodatek(telo) }
 
     fun zapri() {
         (lan as? HttpPovezavaZLino)?.zapri()

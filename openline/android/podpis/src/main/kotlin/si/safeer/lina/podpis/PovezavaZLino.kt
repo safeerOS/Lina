@@ -23,6 +23,10 @@ interface PovezavaZLino {
     fun seznani(telo: String): OdgovorLine
     fun stanjeSeznanitve(koda: String): OdgovorLine
     fun stanjeSeje(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine
+    /** GET /dodatki (23. 11. 2026): stanje dodatkov na racunalniku; privzeto ga povezava nima (404 kot stara Lina). */
+    fun stanjeDodatkov(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** POST /dodatek (23. 11. 2026): vklop ali izklop enega dodatka. */
+    fun dodatek(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
 }
 
 /** Kaj uporabnik izve ob napaki (kljuc besedila v aplikaciji). Vse 403 so ista koda (Lina ne pove razloga). */

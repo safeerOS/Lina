@@ -33,6 +33,10 @@ object NiziLine {
     const val PREDPONA_DOGODKI = "safeer-lina-dogodki-v1"
     const val PREDPONA_KLICI = "safeer-lina-klici-v1"
     const val PREDPONA_SINHRON = "safeer-lina-sinhron-v1"
+    const val PREDPONA_DODATKI_STANJE = "safeer-lina-dodatki-stanje-v1"
+    const val PREDPONA_DODATEK = "safeer-lina-dodatek-v1"
+    /** Dodatki na racunalniku, ki jih telefon sme videti in preklopiti (kanal-claude.ts DODATKI_TELEFONA, 23. 11. 2026). */
+    val DODATKI = listOf("paperclip", "n8n", "affine", "slovenski")
     /** Enkratna koda asistentke iz zdruzenega QR v1 (linakoda). */
     val KODA_SEZNANITVE = Regex("^[A-Za-z0-9_-]{22,64}$")
     private val B64 = Regex("^[A-Za-z0-9+/]{40,200}={0,2}$")
@@ -119,6 +123,18 @@ object NiziLine {
     fun nizSinhron(posiljatelj: String, cas: Long, enkratni: String, zgostitev: String): String? {
         if (!skupno(posiljatelj, cas, enkratni) || !ZGOSTITEV.matches(zgostitev)) return null
         return "$PREDPONA_SINHRON\n$posiljatelj\n$cas\n$enkratni\n$zgostitev"
+    }
+
+    /** Branje stanja dodatkov na racunalniku (kanal-claude.ts nizStanjaDodatkov). */
+    fun nizStanjaDodatkov(posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_DODATKI_STANJE\n$posiljatelj\n$cas\n$enkratni"
+    }
+
+    /** Vklop ali izklop enega dodatka (kanal-claude.ts nizDodatka): podpis veze dodatek in smer. */
+    fun nizDodatka(posiljatelj: String, dodatek: String, vklop: Boolean, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni) || dodatek !in DODATKI) return null
+        return "$PREDPONA_DODATEK\n$posiljatelj\n$dodatek\n${if (vklop) "vklopi" else "izklopi"}\n$cas\n$enkratni"
     }
 
     /** Besedilo brez osamljenih nadomestnih znakov; tako besedilo se zavrne, ne popravi (praviUnicode v Lini). */

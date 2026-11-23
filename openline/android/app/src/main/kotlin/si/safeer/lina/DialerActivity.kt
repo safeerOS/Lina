@@ -140,6 +140,7 @@ class DialerActivity : Activity() {
     private lateinit var tabLina: View
     private lateinit var tabSettings: View
     private lateinit var tabComputer: View
+    private lateinit var dodatkiRacunalnika: si.safeer.lina.asistent.DodatkiRacunalnikaPogled
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
@@ -467,6 +468,7 @@ class DialerActivity : Activity() {
         tabLina = findViewById(R.id.tabLina)
         tabSettings = findViewById(R.id.tabSettings)
         tabComputer = findViewById(R.id.tabComputer)
+        dodatkiRacunalnika = si.safeer.lina.asistent.DodatkiRacunalnikaPogled(this, tabComputer as android.widget.LinearLayout)
         tabHome = findViewById(R.id.tabHome)
         tabNotes = findViewById(R.id.tabNotes)
         tabSummary = findViewById(R.id.tabSummary)
@@ -608,6 +610,7 @@ class DialerActivity : Activity() {
         // Domov kaze stanje povezave (vrstica stanja je zdaj na Domovu).
         if (z == Zavihek.DOMOV) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
+        if (z == Zavihek.RACUNALNIK) dodatkiRacunalnika.osvezi()
         osveziNavRacunalnik()
     }
 

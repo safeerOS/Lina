@@ -444,4 +444,25 @@
     <string name="local_alarm_add">Set</string>
     <string name="local_alarm_set">Alarm handed to the Clock app; check it there</string>
     <string name="local_alarm_failed">Could not set the alarm (no Clock app accepted it)</string>
+    <!-- Dodatki na racunalniku (23. 11. 2026) -->
+    <string name="addons_title">Add-ons on the computer</string>
+    <string name="addons_desc">Turn Paperclip, n8n, AFFiNE and the Slovenian model on the paired computer on or off.</string>
+    <string name="addons_refresh">Refresh</string>
+    <string name="addons_loading">Asking the computer…</string>
+    <string name="addons_turn_on">Turn on</string>
+    <string name="addons_err_unreachable">The computer is not reachable. Check that Lina is running on the computer and that the phone is on the same network, then tap Refresh.</string>
+    <string name="addons_err_denied">The computer refused the request. Pair this phone with Lina on the computer again.</string>
+    <string name="addons_err_busy">Too many requests. Wait a minute and tap Refresh.</string>
+    <string name="addons_err_old">Lina on the computer cannot manage add-ons yet. Update Lina on the computer.</string>
+    <string name="addons_err_generic">Something went wrong. Tap Refresh.</string>
+    <string name="addon_paperclip">Paperclip</string>
+    <string name="addon_n8n">n8n</string>
+    <string name="addon_affine">AFFiNE</string>
+    <string name="addon_slovenski">Slovenian model</string>
+    <string name="addon_slovenski_explain">The first time it is turned on, the computer downloads and installs about 1.6 GB and the model then uses memory while it runs. Turn it on?</string>
+    <string name="addon_state_off">Off</string>
+    <string name="addon_state_starting">Starting</string>
+    <string name="addon_state_running">Running</string>
+    <string name="addon_state_error">Error</string>
+    <string name="addon_state_unavailable">Not available yet</string>
 </resources>

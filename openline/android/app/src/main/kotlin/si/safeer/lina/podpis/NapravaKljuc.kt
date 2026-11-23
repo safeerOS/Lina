@@ -79,4 +79,8 @@ object NapravaKljuc {
 
     /** Ustavitev naloge, ki jo je dala ta naprava. Vrne podpis ali null. */
     fun podpisiUstavitev(id: String, cas: Long, enkratni: String): String? = podpisnik.podpisiUstavitev(id, cas, enkratni)
+
+    /** Dodatki na racunalniku (23. 11. 2026): branje stanja in preklop enega dodatka. */
+    fun podpisiStanjeDodatkov(cas: Long, enkratni: String): String? = podpisnik.podpisiStanjeDodatkov(cas, enkratni)
+    fun podpisiDodatek(dodatek: String, vklop: Boolean, cas: Long, enkratni: String): String? = podpisnik.podpisiDodatek(dodatek, vklop, cas, enkratni)
 }
