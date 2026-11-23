@@ -82,3 +82,15 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
 ## Dnevnik dela in iskanje (lastnik 19. 11. 2026)
 - Pred delom preberi zadnje bloke `DNEVNIK-DELA.md` in poisci, ali je kdo to ze delal: `python3 orodja/isci-dnevnik.py --zadnji 5` ali `python3 orodja/isci-dnevnik.py <besede>` (FTS5 kazalo v binarni datoteki, iscejo c/c, s/s, z/z; orodje in dnevnik hrani vodja izven repozitorija).
 - Ob koncu vsake naloge (tudi nedokoncane) dopisi blok: naslov (datum, agent, projekt/veja), narocilo, narejeno (commiti, dokaz), ni narejeno (in zakaj), stanje, naslednji korak. Brez dostopa: v porocilu razdelek »Za zapis«.
+
+## Pozdrav: ime lastnika samo znanim klicateljem (23. 11. 2026)
+- Ime lastnika v pozdravu SAMO znanim klicateljem (lastnik 23. 11. 2026, po klicu prevaranta iz tujine: »Ja lahko naredimo da lina pove
+  ime samo klicateljem ki jih pozna«). Osebna tajnica: »Poklicali ste <ime v tozilniku>« samo, ce je klicatelj znan - v imeniku telefona,
+  med zaupanimi/znanimi klicatelji Line ali je ze kdaj pustil sporocilo z imenom, ki ga lastnik ni oznacil kot prevaro. Neznan, skrit ali
+  blokiran/oznacen klicatelj dobi pozdrav brez imena (npr. »Dober dan. Tukaj Lina, umetna inteligenca. Pogovor se zapisuje. Kaj naj
+  sporocim?«). Velja na telefonu (samostojni klic) in racunalniku; stalni stavki za glas morajo imeti obe razlicici (priprava sloga).
+  Privzeto vklopljeno, stikalo »Ime povej samo znanim klicateljem«. V kodi na telefonu (23. 11. 2026): znan = imenik telefona (READ_CONTACTS)
+  ali seznam zaupanih (allowlist); brez dovoljenja, skrita stevilka ali napaka = neznan, ime lastnika ni nikjer v navodilu klica
+  (ImeTozilnik.imeZaPozdrav, GeminiLiveOdjemalec). Merilo »ze pustil sporocilo z imenom« in racunalnik: SE NI V KODI.
+- Ime iz imenika v sprejetih klicih (lastnik 23. 11. 2026): zapis klica hrani ime iz imenika (ZapisKlica.imeImenik, samo lokalno, ne gre na
+  racunalnik ne v pozive modelu); prikaz »Ana Novak (imenik)«, ce je klicatelj povedal drugo ime »Miha (v imeniku: Ana Novak)« (imeZaPrikaz).
