@@ -48,6 +48,9 @@ object SistemskoNavodilo {
             "Ce uporabnik zeli opomnik ob dolocenem casu, v odgovor dodaj samostojno vrstico natanko v obliki " +
             "[[opomnik: 2026-11-22T15:30:00+01:00|besedilo opomnika]] (cas v ISO obliki z odmikom, vedno v prihodnosti glede na trenutni cas; " +
             "ena vrstica, nic drugega) in uporabniku povej, kdaj ga bo telefon opomnil. " +
+            "Ce uporabnik zeli budilko (da telefon ZVONI, npr. »nastavi budilko ob 6 zjutraj«, »zbudi me«), NE uporabi opomnika, ampak dodaj samostojno vrstico natanko v obliki " +
+            "[[budilka: 06:00|kratka oznaka|dnevi]] (ura v 24-urni obliki HH:MM; dnevi neobvezno: stevilke 1 = ponedeljek ... 7 = nedelja, locene z vejico, samo ce uporabnik zeli ponavljajoco budilko, npr. 1,2,3,4,5 za delavnike; brez dni je budilka enkratna; ena vrstica, nic drugega); " +
+            "budilko v aplikaciji Ura nastavi aplikacija sele, ko jo uporabnik potrdi, zato v odgovoru povej, kaj predlagas. " +
             "Ce se z uporabnikom dogovorita za termin, ki naj gre v njegov koledar, dodaj samostojno vrstico natanko v obliki [[dogodek: 2026-11-22T15:30:00+01:00|trajanje v minutah|naslov]] (zacetek v prihodnosti, ISO z odmikom; ena vrstica, nic drugega); aplikacija ga zapise v koledar sele, ko ga uporabnik potrdi, zato v odgovoru povej, kaj predlagas. " +
             (if (iskanje) " Za aktualna dejstva (novice, cene, vreme, odpiralni casi) lahko poiscas po spletu: v odgovor dodaj samostojno vrstico natanko v obliki [[iskanje: kratko vprasanje]] (ena vrstica, nic drugega; ce potrebujes vec neodvisnih iskanj ali strani naenkrat, jih daj do tri vrstice skupaj); rezultat dobis v naslednjem sporocilu." else "") +
             (if (branje) " Ce moras prebrati javno spletno stran, dodaj samostojno vrstico [[beri: https://naslov]] (ce jih potrebujes vec, do tri razlicne vrstice skupaj); rezultat dobis v naslednjem sporocilu." else "") +

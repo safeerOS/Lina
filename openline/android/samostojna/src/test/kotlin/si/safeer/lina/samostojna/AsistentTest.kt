@@ -160,6 +160,32 @@ class AsistentTest {
     }
 
     @Test
+    fun `vrstica budilka postane predlog budilke, opomnik ostane opomnik`() {
+        val prenos = LazenPrenos()
+        prenos.naslednjiTeloOdgovora = formatirajOdgovor("Predlagam budilko.\\n[[budilka: 06:00|Sluzba|1,2,3,4,5]]")
+        val b = Asistent(ustvariOdjemalca(prenos), "").povej("Nastavi budilko ob 6 zjutraj za v sluzbo")
+        assertTrue(b is Odgovor.NovaBudilka)
+        b as Odgovor.NovaBudilka
+        assertEquals(6, b.ura)
+        assertEquals(0, b.minuta)
+        assertEquals("Sluzba", b.oznaka)
+        assertEquals(listOf(1, 2, 3, 4, 5), b.dnevi)
+        val enkratna = BudilkaZapis.razclenji("7:30")!!
+        assertEquals(7, enkratna.ura)
+        assertEquals(30, enkratna.minuta)
+        assertEquals(emptyList<Int>(), enkratna.dnevi)
+        assertEquals("", enkratna.oznaka)
+        assertEquals(listOf(6, 7), BudilkaZapis.razclenji("09.15|Vikend|7,6,7")!!.dnevi)
+        assertEquals(null, BudilkaZapis.razclenji("24:00"))
+        assertEquals(null, BudilkaZapis.razclenji("6:60"))
+        assertEquals(null, BudilkaZapis.razclenji("jutri ob 6"))
+        assertEquals(null, BudilkaZapis.razclenji("06:00|x|0"))
+        assertEquals(null, BudilkaZapis.razclenji("06:00|x|8"))
+        assertEquals(null, BudilkaZapis.razclenji("06:00|x|pon"))
+        assertTrue(SistemskoNavodilo.zgradi(java.time.ZonedDateTime.now()).contains("[[budilka:"))
+    }
+
+    @Test
     fun `povej - SAFETY zavrnitev`() {
         val prenos = LazenPrenos()
         prenos.naslednjiTeloOdgovora = """{"candidates":[{"finishReason":"SAFETY"}]}"""

@@ -9,6 +9,8 @@ sealed class Odgovor {
     class Opomnik(val besedilo: String, val cas: String) : Odgovor()
     /** Nov dogodek v koledarju telefona: zapise ga aplikacija po uporabnikovi potrditvi, ne model. */
     class NoviDogodek(val naslov: String, val zacetekMs: Long, val konecMs: Long) : Odgovor()
+    /** Budilka v aplikaciji Ura: nastavi jo aplikacija po uporabnikovi potrditvi. dnevi: ISO 1 = ponedeljek ... 7 = nedelja; prazno = enkratna. */
+    class NovaBudilka(val ura: Int, val minuta: Int, val oznaka: String, val dnevi: List<Int>) : Odgovor()
     class Napaka(val sporocilo: String) : Odgovor()
     /** Naloga za racunalnik (Claude Code prek podpisanega kanala); izvede jo aplikacija, ne model. */
     class NalogaRacunalniku(val besedilo: String) : Odgovor()
@@ -134,6 +136,8 @@ class Asistent(
                         if (vsebina.isNotEmpty()) {
                             return Odgovor.Zapisek(vsebina)
                         }
+                    } else if (obrezana.startsWith("[[budilka:") && obrezana.endsWith("]]")) {
+                        BudilkaZapis.razclenji(obrezana.substring(10, obrezana.length - 2))?.let { return it }
                     } else if (obrezana.startsWith("[[dogodek:") && obrezana.endsWith("]]")) {
                         DogodekKoledarZapis.razclenji(obrezana.substring(10, obrezana.length - 2), System.currentTimeMillis())?.let { return it }
                     } else if (obrezana.startsWith("[[opomnik:") && obrezana.endsWith("]]")) {

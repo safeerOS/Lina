@@ -499,6 +499,10 @@ class LinaPogovorPogled(
                             a.getString(R.string.local_reminder_set, odgovor.besedilo, kdaj) + if (natancno) "" else " " + a.getString(R.string.local_reminder_approx)
                         }
                     }
+                    is Odgovor.NovaBudilka -> {
+                        potrdiBudilko(odgovor)
+                        a.getString(R.string.local_alarm_proposed, opisBudilke(odgovor))
+                    }
                     is Odgovor.NoviDogodek -> {
                         val kdaj = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(odgovor.zacetekMs))
                         potrdiDogodek(odgovor)
@@ -542,6 +546,34 @@ class LinaPogovorPogled(
                     val ok = KoledarAndroid(a).dodaj(d.naslov, d.zacetekMs, d.konecMs)
                     glavna.post { android.widget.Toast.makeText(a, if (ok) R.string.local_event_added else R.string.local_event_failed, android.widget.Toast.LENGTH_LONG).show() }
                 }
+            }
+            .setNegativeButton(R.string.local_event_cancel, null)
+            .show()
+    }
+
+    /** Opis za uporabnika: ura, oznaka in dnevi (kratka imena dni v jeziku telefona). */
+    private fun opisBudilke(b: Odgovor.NovaBudilka): String {
+        val ura = String.format(java.util.Locale.ROOT, "%02d:%02d", b.ura, b.minuta)
+        val imena = java.text.DateFormatSymbols.getInstance().shortWeekdays
+        val dnevi = b.dnevi.joinToString(", ") { imena[(it % 7) + 1] }
+        return listOf(ura, b.oznaka, dnevi).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
+    /** Budilka gre v aplikacijo Ura (AlarmClock.ACTION_SET_ALARM) sele po uporabnikovi potrditvi. */
+    private fun potrdiBudilko(b: Odgovor.NovaBudilka) {
+        android.app.AlertDialog.Builder(a)
+            .setTitle(R.string.local_alarm_confirm_title)
+            .setMessage(opisBudilke(b))
+            .setPositiveButton(R.string.local_alarm_add) { _, _ ->
+                val namen = android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM)
+                    .putExtra(android.provider.AlarmClock.EXTRA_HOUR, b.ura)
+                    .putExtra(android.provider.AlarmClock.EXTRA_MINUTES, b.minuta)
+                    .putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
+                if (b.oznaka.isNotBlank()) namen.putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, b.oznaka)
+                // ISO 1 = ponedeljek ... 7 = nedelja -> java.util.Calendar (nedelja = 1, ponedeljek = 2 ...).
+                if (b.dnevi.isNotEmpty()) namen.putExtra(android.provider.AlarmClock.EXTRA_DAYS, ArrayList(b.dnevi.map { (it % 7) + 1 }))
+                val ok = runCatching { a.startActivity(namen) }.isSuccess
+                android.widget.Toast.makeText(a, if (ok) R.string.local_alarm_set else R.string.local_alarm_failed, android.widget.Toast.LENGTH_LONG).show()
             }
             .setNegativeButton(R.string.local_event_cancel, null)
             .show()

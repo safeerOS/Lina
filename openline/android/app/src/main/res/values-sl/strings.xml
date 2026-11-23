@@ -430,4 +430,9 @@
     <string name="local_event_cancel">Prekliči</string>
     <string name="local_event_added">Dodano v koledar</string>
     <string name="local_event_failed">Dogodka ni bilo mogoče dodati (brez dovoljenja ali brez koledarja za pisanje)</string>
+    <string name="local_alarm_proposed">Predlagana budilka: %1$s. Potrdi jo v oknu in aplikacija Ura bo zvonila.</string>
+    <string name="local_alarm_confirm_title">Nastavim budilko?</string>
+    <string name="local_alarm_add">Nastavi</string>
+    <string name="local_alarm_set">Budilka je nastavljena v aplikaciji Ura</string>
+    <string name="local_alarm_failed">Budilke ni bilo mogoče nastaviti (aplikacija Ura je ni sprejela)</string>
 </resources>
