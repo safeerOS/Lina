@@ -31,7 +31,7 @@ private val MOSKA_OBLIKA = Regex(
 )
 
 /** Obratni vrstni red: »Zapisal sem sporočilo«. Tretja oseba (»je zapisal«) se ne ujame, ker zahteva »sem« takoj za glagolom. */
-private val MOSKA_OBLIKA_OBRATNO = Regex("(?<![\\p{L}\\p{N}»\"“„]\\s{0,3})(?<![\\p{L}\\p{N}])($GLAGOLI)\\s+sem\\b", RegexOption.IGNORE_CASE)
+private val MOSKA_OBLIKA_OBRATNO = Regex("(?:(?<![\\p{L}\\p{N}»\"“„]\\s{0,3})|(?<=(?<!\\p{L})(?:in|ter|pa|ali|ampak|ker)\\s{1,3}))(?<![\\p{L}\\p{N}])($GLAGOLI)\\s+sem\\b", RegexOption.IGNORE_CASE)
 
 /** Moške oblike, s katerimi Lina govori o sebi (»sem zapisal«, »zapisal sem«). Ženski »zapisala« se ne ujame. Vrne najdene glagole (brez ponovitev). */
 fun moskeOblikeLine(besedilo: String): List<String> =

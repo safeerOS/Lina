@@ -19,4 +19,8 @@ class BesediloObliokaTest {
         assertEquals("Poklici `__init__` in **ne** tole.".replace("**ne**", "ne"), besediloBrezMarkdowna("Poklici `__init__` in **ne** tole."))
         assertEquals("```\n**x** __y__\n```", besediloBrezMarkdowna("```\n**x** __y__\n```"))
     }
+
+    @Test fun `znak nic v izvirnem besedilu ne podre izrisa`() {
+        assertEquals("a0b `x`", besediloBrezMarkdowna("a\u00000\u0000b `x`"))
+    }
 }

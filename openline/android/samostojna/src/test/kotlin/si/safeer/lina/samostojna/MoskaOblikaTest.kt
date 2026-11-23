@@ -127,4 +127,9 @@ class MoskaOblikaTest {
         assertEquals("Zapisala sem osnutek:\n»Včeraj sem bil bolan\nin nisem dobil sporočila.«", popraviMoskeOblike(osnutek))
         assertEquals("[[zapisek: »a« sem poslal]]", popraviMoskeOblike("[[zapisek: »a« sem poslal]]"))
     }
+
+    @Test fun `CodeRabbit - obratni vrstni red za veznikom`() {
+        assertEquals("Zapisala sem in poslala sem sporočilo.", popraviMoskeOblike("Zapisal sem in poslal sem sporočilo."))
+        assertEquals("Napisala sem: \"Poslal sem vam.\"", popraviMoskeOblike("Napisal sem: \"Poslal sem vam.\""))
+    }
 }

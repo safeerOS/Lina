@@ -14,7 +14,8 @@ private val KODA = Regex("""```[\s\S]*?```|`[^`\n]*`""")
 fun besediloBrezMarkdowna(s: String): String {
     // Koda (vrstična in ograjena) je dobesedno besedilo: __init__ ostane __init__ (CodeRabbit 23. 11. 2026).
     val koda = ArrayList<String>()
-    val zavarovano = s.replace(KODA) { koda.add(it.value); "\u0000${koda.size - 1}\u0000" }
+    // Znak U+0000 v izvirnem besedilu bi se bral kot nadomestilo kode (CodeRabbit): odstranimo ga, nadomestila so tako vedno nasa.
+    val zavarovano = s.replace("\u0000", "").replace(KODA) { koda.add(it.value); "\u0000${koda.size - 1}\u0000" }
     val urejeno = zavarovano.replace(ALINEJA, "$1• ")
         .replace(DEBELO, "$1")
         .replace(DEBELO2, "$1")

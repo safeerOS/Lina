@@ -83,7 +83,8 @@ class SpletnaOrodja(
                 val povezave = POVEZAVA.findAll(v).toList()
                 if (povezave.size >= 3) {
                     val zunaj = POVEZAVA.replace(v, "").replace(Regex("[\\s*\\-|•>·]+"), "")
-                    if (zunaj.length * 5 <= v.length) continue   // meni ali seznam povezav
+                    val vidno = POVEZAVA.replace(v) { it.groupValues[1] }   // dolzina naslovov povezav ne steje (CodeRabbit)
+                    if (zunaj.length * 5 <= vidno.length) continue   // meni ali seznam povezav
                 }
                 v = POVEZAVA.replace(v) { it.groupValues[1] }
                 if (PISKOTKI.containsMatchIn(v)) continue
@@ -91,7 +92,8 @@ class SpletnaOrodja(
                     if (izhod.isNotEmpty() && izhod.last().isNotEmpty()) izhod.add("")
                     continue
                 }
-                if (v.length > 3 && !v.trimStart().startsWith("#") && !videno.add(v.trim())) continue
+                if (v.trimStart().startsWith("#")) videno.clear()   // nova razdelka: iste vrednosti pod drugim naslovom ostanejo
+                else if (v.length > 3 && !videno.add(v.trim())) continue
                 izhod.add(v)
             }
             return izhod.joinToString("\n").trim()

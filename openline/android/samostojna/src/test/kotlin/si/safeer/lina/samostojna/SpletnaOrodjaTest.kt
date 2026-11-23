@@ -223,4 +223,11 @@ class SpletnaOrodjaTest {
         val izhod = SpletnaOrodja.ocistiStran(vhod)
         assertEquals("# Naslov\n\nOdpiralni cas je tukaj: od 8. do 16. ure.", izhod)
     }
+
+    @Test fun `CodeRabbit - dolge povezave ne naredijo stavka za meni, isti odgovor pod drugim naslovom ostane`() {
+        val dolga = "https://primer.si/" + "a".repeat(100)
+        val stavek = "Primerjaj [A]($dolga) z [B]($dolga) in [C]($dolga) pred nakupom."
+        assertEquals("Primerjaj A z B in C pred nakupom.", SpletnaOrodja.ocistiStran(stavek))
+        assertEquals("# Ponedeljek\nZaprto\n# Torek\nZaprto", SpletnaOrodja.ocistiStran("# Ponedeljek\nZaprto\n# Torek\nZaprto"))
+    }
 }
