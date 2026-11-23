@@ -99,3 +99,23 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
   (ImeTozilnik.imeZaPozdrav, GeminiLiveOdjemalec). Merilo »ze pustil sporocilo z imenom« in racunalnik: SE NI V KODI.
 - Ime iz imenika v sprejetih klicih (lastnik 23. 11. 2026): zapis klica hrani ime iz imenika (ZapisKlica.imeImenik, samo lokalno, ne gre na
   racunalnik ne v pozive modelu); prikaz »Ana Novak (imenik)«, ce je klicatelj povedal drugo ime »Miha (v imeniku: Ana Novak)« (imeZaPrikaz).
+
+## Lina ne pozablja in sama vodi Claude Code (lastnik 23. 11. 2026; celotne zahteve v Lininem AGENTS.md, iste tocke)
+- Trajna zgodovina seje (»lina na telefonu je pozabljala najin pogovor«): zadnjih 80 sporocil v zasebni datoteki aplikacije
+  `zgodovina_seje.json` (ZgodovinaSeje); ob zagonu se danasnja vrnejo kot pogovor, starejsa kot povzetek z datumom v navodilu
+  (podatek, ne navodilo). Skrivnosti se ne shranijo (SpominPogovorov.jeSkrivnost); stikalo in »Izbrisi vse« spomina veljata tudi zanjo.
+  Vidni zapiski Line so v navodilu modelu kot podatek (brez zapiskov s skrivnostjo); priprava naloge in odgovor Claude Code imata
+  vecji priklic iz spomina (15 obratov po 800 znakov namesto 6 po 300). V KODI 24. 11. 2026.
+- Samostojne naloge: koda (SamostojnaNaloga.pripravi, ne model) nalogi za racunalnik priloze nacrt iz pogovora, povezave (tudi brez
+  https, npr. github.com/...), zapiske, ki se nanjo nanasajo, in omejitve (AGENTS.md, brez brisanja/push/sudo, reply vrsta).
+  Sklic brez vsebine (»po mojem nacrtu«, »kot dogovorjeno«, »to povezavo«) brez najdenega vira = naloga se NE poslje, Lina vprasa
+  lastnika. V KODI 24. 11. 2026.
+- Stanje naloge: dogodek »stanje« nosi tip (vprasanje | vmesno) iz reply Claude Code; naloga je koncana samo z izidom. Zavihek
+  Racunalnik kaze vsako sporocilo z uro; koncana naloga se spremlja naprej (Claude Code jo lahko odpre). V KODI 24. 11. 2026.
+- Lina sama odgovori Claude Code (SamodejniOdgovor): ob vprasanju (tip vprasanje ali »cakam na navodila«) odgovori iz nacrta,
+  zapiskov, pogovora in pravil; ob uspesnem izidu pregleda, ali je nacrt koncan, in po potrebi da naslednji korak. Meje v KODI:
+  najvec 10 samodejnih odgovorov na nalogo, odgovor samo na zadnje vprasanje v paketu, nikoli odobritev (gumb lastnika ostane),
+  nikoli brisanje/push/sudo/[[...]] v odgovoru, ce ne ve - [[vprasaj_lastnika: ...]] -> obvestilo lastniku. Podpis odgovora
+  (POST /nadaljuj, niz safeer-lina-nadaljuj-v1) naredi kljuc naprave; racunalnik ne podpisuje. Gumb »Ustavi samodejne odgovore«
+  v zavihku Racunalnik. OMEJITEV: deluje samo, dokler je aplikacija odprta; stevec je v pomnilniku (ponovni zagon ga ponastavi).
+  Modul app ni preveden lokalno (brez Gradla) - NEPREVERJENO na napravi.
