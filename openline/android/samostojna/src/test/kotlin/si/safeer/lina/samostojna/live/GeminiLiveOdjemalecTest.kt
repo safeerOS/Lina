@@ -568,7 +568,7 @@ class GeminiLiveOdjemalecTest {
     }
 
     /** Navodilo (setup), ki ga odjemalec poslje modelu za klic s stevilke [stevilka]. */
-    private fun navodiloZaKlic(stevilka: String, imenik: (String) -> String?, zaupan: (String) -> Boolean = { false }, samoZnanim: Boolean = true): String {
+    private fun navodiloZaKlic(stevilka: String, imenik: (String) -> String?, zaupan: (String) -> Boolean = { false }, samoZnanim: Boolean = true, ime: Pair<String, String> = "Tomaž" to "Tomaža"): String {
         var setup = ""
         val fabrika = object : WsFabrika {
             override fun odpri(url: String, glave: Map<String, String>, poslusalec: WsPoslusalec): WsPovezava {
@@ -591,7 +591,7 @@ class GeminiLiveOdjemalecTest {
             dnevnik = DnevnikKlicev(si.safeer.lina.samostojna.PomnilniskaShramba()),
             izbiraPoti = IzbiraPotiLive(naVoljo = { it == PotLive.VERTEX }),
             wsFabrika = fabrika,
-            imeUporabnika = { "Tomaž" to "Tomaža" },
+            imeUporabnika = { ime },
             imeIzImenika = imenik,
             zaupanKlicatelj = zaupan,
             imeSamoZnanim = { samoZnanim },
@@ -609,6 +609,7 @@ class GeminiLiveOdjemalecTest {
         val neznan = navodiloZaKlic("+99955501001", imenik = { null })
         assertTrue(!neznan.contains("Tomaž"), "neznan klicatelj ne sme dobiti imena lastnika nikjer v navodilu")
         assertTrue(neznan.contains("Dosegli ste glasovno tajnico."))
+        assertTrue(!navodiloZaKlic("+99955501001", imenik = { null }, ime = "" to "Tomaža").contains("Tomaž"), "samo rocni tozilnik brez imena je tudi ime")
         assertTrue(!navodiloZaKlic("", imenik = { "Ana" }).contains("Tomaž"), "skrita stevilka je neznan klicatelj")
         assertTrue(!navodiloZaKlic("+99955501001", imenik = { throw SecurityException("brez dovoljenja") }).contains("Tomaž"))
         assertTrue(navodiloZaKlic("+99955501001", imenik = { if (it == "+99955501001") "Ana Novak" else null }).contains("Poklicali ste Tomaža."))

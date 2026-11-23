@@ -43,6 +43,8 @@ class ContactSearch(private val context: Context) {
 
     /** Starejsim zapisom klicev (pred 23. 11. 2026) brez imena iz imenika ga doda za prikaz; ena poizvedba na stevilko. */
     fun dopolniImena(zapisi: List<si.safeer.lina.samostojna.ZapisKlica>): List<si.safeer.lina.samostojna.ZapisKlica> {
+        if (context.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return zapisi
+        // shortcut: ena poizvedba na razlicno stevilko ob vsakem osvezevanju na glavni niti; ob sto in vec razlicnih stevilkah omeji na prikazane vrstice.
         val znana = HashMap<String, String>()
         return zapisi.map { z ->
             if (z.imeImenik.isNotBlank() || z.stevilka.isBlank()) z

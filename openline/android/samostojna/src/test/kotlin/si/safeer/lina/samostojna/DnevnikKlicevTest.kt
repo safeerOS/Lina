@@ -870,4 +870,13 @@ class DnevnikKlicevTest {
         assertTrue(dnevnik.dodaj(f6Klic("f6e-1", "+38640600501")))
         assertEquals(2, dnevnik.seznamPoDatumu().size)
     }
+
+    // Lastnik 23. 11. 2026: ime iz imenika ostane v zapisu klica tudi po ponovnem branju dnevnika (nova instanca nad isto shrambo).
+    @Test
+    fun `ime iz imenika prezivi shranjevanje in ponovno branje`() {
+        val shramba = PomnilniskaShramba()
+        val zapis = ZapisKlica(id = "klic-imenik-1", casZacetka = 1_000L, stevilka = "+99955501001", trajanjeS = 12, povzetek = "Poklici nazaj", imeImenik = "Ana Novak")
+        assertTrue(DnevnikKlicev(shramba).dodaj(zapis))
+        assertEquals("Ana Novak", DnevnikKlicev(shramba).seznam().single { it.id == "klic-imenik-1" }.imeImenik)
+    }
 }

@@ -162,7 +162,8 @@ class GeminiLiveOdjemalec(
     private fun imeZaTaKlic(): Pair<String, String> {
         val ime = runCatching(imeUporabnika).getOrDefault("" to "")
         val samoZnanim = runCatching(imeSamoZnanim).getOrDefault(true)
-        if (!samoZnanim || ime.first.isBlank()) return ime
+        // Prazno ime z rocnim tozilnikom se vedno izgovori ime (imeVTozilniku vrne rocni zapis), zato preskok samo, ce sta prazna oba.
+        if (!samoZnanim || (ime.first.isBlank() && ime.second.isBlank())) return ime
         val stevilka = stevilkaNaslednjegaKlica
         val t0 = System.nanoTime()
         val znan = stevilka.isNotBlank() &&
