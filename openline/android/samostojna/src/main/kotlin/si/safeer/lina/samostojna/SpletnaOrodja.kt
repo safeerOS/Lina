@@ -58,11 +58,44 @@ class SpletnaOrodja(
             null
         }
         if (besedilo.isNullOrBlank()) return IzidOrodja.Napaka("prazno")
-        return IzidOrodja.Besedilo(besedilo.take(MEJA_ZNAKOV))
+        val ocisceno = ocistiStran(besedilo)
+        if (ocisceno.isBlank()) return IzidOrodja.Napaka("prazno")
+        return IzidOrodja.Besedilo(ocisceno.take(MEJA_ZNAKOV))
     }
 
     companion object {
         const val MEJA_ZNAKOV = 12_000
+
+        private val SLIKA = Regex("!\\[[^\\]]*]\\([^)]*\\)")
+        private val POVEZAVA = Regex("\\[([^\\]]*)]\\(([^)]*)\\)")
+        private val PISKOTKI = Regex("(?i)(we use cookies|accept all cookies|cookie settings|cookie policy|manage cookies|uporablja pi[sš]kotke|sprejmi vse pi[sš]kotke|nastavitve pi[sš]kotkov)")
+
+        /**
+         * Strani s spleta prihranijo prostor v meji [MEJA_ZNAKOV]: odstrani slike, menije (vrstice, ki so skoraj samo povezave),
+         * obvestila o piskotkih, podvojene vrstice in odvecne prazne vrstice; povezave ostanejo kot besedilo brez naslova.
+         * Besedilo ostane nezaupan podatek (nevtraliziraj ga skrbi pri vracanju modelu).
+         */
+        internal fun ocistiStran(vhod: String): String {
+            val videno = HashSet<String>()
+            val izhod = ArrayList<String>()
+            for (surova in vhod.lines()) {
+                var v = SLIKA.replace(surova, "").trimEnd()
+                val povezave = POVEZAVA.findAll(v).toList()
+                if (povezave.size >= 3) {
+                    val zunaj = POVEZAVA.replace(v, "").replace(Regex("[\\s*\\-|•>·]+"), "")
+                    if (zunaj.length * 5 <= v.length) continue   // meni ali seznam povezav
+                }
+                v = POVEZAVA.replace(v) { it.groupValues[1] }
+                if (PISKOTKI.containsMatchIn(v)) continue
+                if (v.isBlank()) {
+                    if (izhod.isNotEmpty() && izhod.last().isNotEmpty()) izhod.add("")
+                    continue
+                }
+                if (v.length > 3 && !v.trimStart().startsWith("#") && !videno.add(v.trim())) continue
+                izhod.add(v)
+            }
+            return izhod.joinToString("\n").trim()
+        }
         const val NAJVEC_ZNAKOV_VPRASANJA = 600
         const val NAJVEC_BESED_VPRASANJA = 75
         private const val BRAVE_NASLOV = "https://api.search.brave.com/res/v1/llm/context"

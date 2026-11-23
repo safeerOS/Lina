@@ -203,4 +203,19 @@ class SpletnaOrodjaTest {
         assertFalse(SistemskoNavodilo.zgradi(zdaj, iskanje = true).contains("[[beri"))
         assertTrue(SistemskoNavodilo.zgradi(zdaj, branje = true).contains("[[beri"))
     }
+
+    @Test fun `ociscena stran brez slik, menijev, piskotkov in podvojenih vrstic, povezave ostanejo kot besedilo`() {
+        val vhod = listOf(
+            "[Domov](/a) | [Novice](/b) | [Kontakt](/c) | [Prijava](/d)",
+            "![logo](https://x.si/l.png)",
+            "We use cookies to improve your experience.",
+            "# Naslov",
+            "",
+            "",
+            "Odpiralni cas je [tukaj](https://x.si/ure): od 8. do 16. ure.",
+            "Odpiralni cas je [tukaj](https://x.si/ure): od 8. do 16. ure.",
+        ).joinToString("\n")
+        val izhod = SpletnaOrodja.ocistiStran(vhod)
+        assertEquals("# Naslov\n\nOdpiralni cas je tukaj: od 8. do 16. ure.", izhod)
+    }
 }
