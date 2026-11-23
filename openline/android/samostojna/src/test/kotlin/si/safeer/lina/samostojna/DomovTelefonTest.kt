@@ -89,10 +89,10 @@ class DomovTelefonTest {
     @Test
     fun `stevilo vrstic po visini zaslona 3 do 5, vecja pisava manj`() {
         assertEquals(3, vrsticZadnjihKlicev(640))
-        assertEquals(3, vrsticZadnjihKlicev(720))
-        assertEquals(4, vrsticZadnjihKlicev(760))
-        assertEquals(5, vrsticZadnjihKlicev(820))
+        assertEquals(3, vrsticZadnjihKlicev(780)) // 1080x2340 pri gostoti 3,0 (360x780 dp)
+        assertEquals(4, vrsticZadnjihKlicev(820))
+        assertEquals(5, vrsticZadnjihKlicev(891)) // 1080x2340 pri gostoti 2,625
         assertEquals(5, vrsticZadnjihKlicev(2000))
-        assertEquals(3, vrsticZadnjihKlicev(820, pisava = 1.3f))
+        assertEquals(3, vrsticZadnjihKlicev(891, pisava = 1.3f))
     }
 }
