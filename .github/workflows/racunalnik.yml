@@ -132,6 +132,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: lina-deb
           path: |
@@ -140,7 +141,7 @@ jobs:
             vsebina-deb.txt
             tsc.log
           retention-days: 14
-          if-no-files-found: error
+          if-no-files-found: warn
 
   preizkusi:
     # Ob strani paketa, a rdec ob vsakem padcu (23. 11. 2026: cel nabor 2201/2201 zelen; padec = napaka, ki jo je treba resiti).
@@ -168,6 +169,9 @@ jobs:
           {
             echo "### Preizkusi (koda ${KODA})"
             grep -E '^# (tests|pass|fail|cancelled|skipped)' preizkusi.log || true
+            echo '```'
+            grep -E '^ *not ok' preizkusi.log | head -40 || true
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $KODA
 
@@ -183,6 +187,7 @@ jobs:
           exit $KODA
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: lina-preizkusi
           path: |
