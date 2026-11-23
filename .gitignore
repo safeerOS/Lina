@@ -14,3 +14,10 @@ node_modules/
 izid/
 __pycache__/
 .pytest_cache/
+.output/
+.nitro/
+.tanstack/
+dist/
+*.tsbuildinfo
+openline-paket/
+jazz-paket/

@@ -1,0 +1,9 @@
+{
+  "opis": "Preverjene zamenjave izgovora (pisano -> govorjeno) za skil lina-slovenski-klici ({{ZAMENJAVE_IZGOVORA}}). Samo, kar potrdi posluh lastnika ali slovar; izvor je v AGENTS.md.",
+  "zamenjave": [
+    {
+      "pisano": "pojutrišnjem",
+      "govorjeno": "čez dva dni"
+    }
+  ]
+}

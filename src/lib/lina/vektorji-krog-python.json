@@ -1,0 +1,422 @@
+{
+ "opis": "Pythonov link_krog.Krog.je_clan (windows-uskladitev core) za iste vhode; lina = pricakovan izid Line; kjer se razlikuje od pythona, je Lina namenoma STROZJA (nikoli bolj popustljiva)",
+ "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+ "id": "n-f995e93f79cf793f",
+ "vzorci": [
+  {
+   "ime": "brez umikov",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    }
+   },
+   "opomba": "",
+   "python": true,
+   "lina": true
+  },
+  {
+   "ime": "umiki null",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": null
+   },
+   "opomba": "",
+   "python": true,
+   "lina": true
+  },
+  {
+   "ime": "umiki prazen objekt",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {}
+   },
+   "opomba": "",
+   "python": true,
+   "lina": true
+  },
+  {
+   "ime": "umik starejsi od vpisa",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": {
+      "umaknjeno": 500,
+      "umaknil": "x"
+     }
+    }
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umik ENAK vpisu (umaknjeno == dodano)",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": {
+      "umaknjeno": 1000,
+      "umaknil": "x"
+     }
+    }
+   },
+   "opomba": "",
+   "python": true,
+   "lina": true
+  },
+  {
+   "ime": "umik novejsi od vpisa",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": {
+      "umaknjeno": 2000,
+      "umaknil": "n-1111111111111111"
+     }
+    }
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umik tujega id-ja",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-ffffffffffffffff": {
+      "umaknjeno": 2000,
+      "umaknil": "n-1111111111111111"
+     }
+    }
+   },
+   "opomba": "",
+   "python": true,
+   "lina": true
+  },
+  {
+   "ime": "umiki niz",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": "x"
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umiki stevilo",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": 5
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umiki true",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": true
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umiki polje z id-jem",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": [
+     "n-f995e93f79cf793f"
+    ]
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umiki prazno polje",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": []
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  },
+  {
+   "ime": "umiki prazen niz",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": ""
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  },
+  {
+   "ime": "umiki 0",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": 0
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  },
+  {
+   "ime": "umiki false",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": false
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  },
+  {
+   "ime": "umik clana je null",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": null
+    }
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  },
+  {
+   "ime": "umik clana je niz",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": "x"
+    }
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  },
+  {
+   "ime": "umaknjeno niz, novejsi od vpisa",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": {
+      "umaknjeno": "2000"
+     }
+    }
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umaknjeno niz, starejsi od vpisa",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": {
+      "umaknjeno": "500"
+     }
+    }
+   },
+   "opomba": "",
+   "python": false,
+   "lina": false
+  },
+  {
+   "ime": "umik brez casa",
+   "krog": {
+    "v": 1,
+    "clani": {
+     "n-f995e93f79cf793f": {
+      "kljuc": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjXWpjQL5oS02lS7/lGnyF32LBqBrxUOtsYjwJXkBwOHwH1bkZZKyhEG9XJMaUWd7GVDcS+ZBSDABZ1TKG9XqLA==",
+      "ime": "T",
+      "platforma": "android",
+      "dodano": 1000,
+      "dodal": "n-0000000000000000"
+     }
+    },
+    "umiki": {
+     "n-f995e93f79cf793f": {}
+    }
+   },
+   "opomba": "",
+   "python": true,
+   "lina": false
+  }
+ ]
+}

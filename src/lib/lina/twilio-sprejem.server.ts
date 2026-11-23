@@ -1,0 +1,115 @@
+import { loadPravila } from "./pravila.server.ts";
+import { resolveDataDir } from "./store.server.ts";
+import { glava, preberi, zahtevaTwilio, type ZahtevaTwilio } from "./twilio-racun.server.ts";
+import { merjeno } from "./meritve.server.ts";
+
+/**
+ * Sprejem vhodnega klica na preizkusnem racunu Twilio (lastnik 12. 11. 2026: sprejem po isti poti kot testni klic).
+ * Preizkusni racun zahtev webhooka ne podpise (izmerjeno 10. 11. 2026), zato nepodpisano zahtevo VHODNEGA klica sprejmemo
+ * samo, ce Twilio z API kljucem potrdi: klic je vhoden in poteka, je na stevilko NASEGA racuna, ta kaze na Linin naslov,
+ * From/To pa se ujemata z zahtevo. Podpisa se ne rahlja: zahteva z (napacnim) podpisom je 403 (voice.server.ts).
+ */
+const OSNOVA = "https://api.twilio.com/2010-04-01/";
+/**
+ * 16. 11. 2026 (lastnik: uporabnik mora sprejem klicev preizkusiti IZ PROGRAMA, brez konzole, na Linuxu in Windows, preden
+ * nadgradi Twilio). Preizkusni racun nima stevilke v IncomingPhoneNumbers (izmerjeno: 0 stevilk; preizkusna stevilka obstaja
+ * samo na strani Try out Voice), zato preverba »stevilka kaze na Linin naslov« ne more uspeti. Dokler tece javni naslov
+ * (hitri tunel), velja casovno omejeno TESTNO OKNO: ce racun NIMA nobene stevilke, zadosca, da Twilio z API kljucem potrdi
+ * vhodni klic z istim CallSid, From in To. Ugasne ob zaustavitvi tunela in po TESTNO_OKNO_MS; racun s stevilko ostane pri polni preverbi.
+ */
+export const TESTNO_OKNO_MS = 30 * 60_000;
+let testnoOknoDo = 0;
+export function vklopiTestnoOknoSprejema(zdaj: number = Date.now()): void {
+  testnoOknoDo = zdaj + TESTNO_OKNO_MS;
+}
+export function ugasniTestnoOknoSprejema(): void {
+  testnoOknoDo = 0;
+}
+export function testnoOknoAktivno(zdaj: number = Date.now()): boolean {
+  return zdaj < testnoOknoDo;
+}
+const SID_KLICA = /^CA[0-9a-f]{32}$/i;
+const E164 = /^\+[1-9][0-9]{7,14}$/;
+const STANJA = new Set(["ringing", "in-progress"]);
+const ROK_KLICA_MS = 60 * 60_000;
+const ROK_PREVERBE_MS = 30_000;
+const ROK_ZAVRNITVE_MS = 60_000;
+/** Najvec toliko preverb neznanih klicev na minuto: nepodpisan tok zahtev ne sme obremeniti racuna Twilio. */
+const NAJVEC_PREVERB_NA_MINUTO = 30;
+const NAJVEC_ZAPISOV = 500;
+
+type Sprejet = { od: string; za: string; rok: number; preverjenDo: number };
+const sprejeti = new Map<string, Sprejet>();
+const zavrnjeni = new Map<string, number>();
+const casiPreverb: number[] = [];
+
+export function pozabiSprejemKlicev(): void {
+  sprejeti.clear();
+  zavrnjeni.clear();
+  casiPreverb.length = 0;
+}
+
+function pocisti(zdaj: number): void {
+  for (const [sid, n] of sprejeti) if (n.rok <= zdaj) sprejeti.delete(sid);
+  for (const [sid, rok] of zavrnjeni) if (rok <= zdaj) zavrnjeni.delete(sid);
+  while (casiPreverb.length && casiPreverb[0] <= zdaj - 60_000) casiPreverb.shift();
+}
+
+/** From se primerja samo, ce sta obe strani prava stevilka; klicatelj s prikrito stevilko (Twilio jo poda kot anonymous ali prazno) ima v Twilio lahko drugo obliko. */
+function fromUjema(rest: unknown, zahteva: string): boolean {
+  if (typeof rest === "string" && E164.test(rest) && E164.test(zahteva)) return rest === zahteva;
+  return true;
+}
+
+const brezKoncnihLom = (naslov: string): string => naslov.trim().replace(/\/+$/, "");
+
+/** Ali je nepodpisana zahteva za ta vhodni CallSid dovoljena. Nikoli ne vrze: vsaka napaka je »ne«. */
+export async function sprejetKlicVeljaven(
+  callSid: string,
+  dir: string | undefined,
+  zahteva: ZahtevaTwilio = zahtevaTwilio,
+  zdaj: number = Date.now(),
+  odZa: { od: string; za: string } | null = null,
+): Promise<boolean> {
+  try {
+    // Klicatelj je lahko KATERAKOLI stevilka, tudi s prikrito stevilko (lastnik 12. 11. 2026): From ni pogoj, samo vezava.
+    if (!SID_KLICA.test(callSid) || !odZa || !E164.test(odZa.za) || odZa.od.length > 64) return false;
+    if (process.env.LINA_TEST_VHOD_BREZ_PREVERBE === "1") return true; // SAMO PREIZKUSNA KOPIJA, ni v izdelku
+    pocisti(zdaj);
+    if ((zavrnjeni.get(callSid) ?? 0) > zdaj) return false;
+    const znan = sprejeti.get(callSid);
+    // From in To sta ob prvi sprejeti zahtevi vezana: poznavalec CallSid ju pozneje ne more spremeniti.
+    if (znan && (znan.od !== odZa.od || znan.za !== odZa.za)) return false;
+    if (znan && zdaj < znan.preverjenDo) return true;
+    if (!znan) {
+      if (casiPreverb.length >= NAJVEC_PREVERB_NA_MINUTO) return false;
+      casiPreverb.push(zdaj);
+    }
+    const koren = resolveDataDir(dir);
+    const r = await preberi(koren);
+    if (!r) return false;
+    const zavrni = (): false => {
+      if (zavrnjeni.size >= NAJVEC_ZAPISOV) zavrnjeni.clear();
+      zavrnjeni.set(callSid, zdaj + ROK_ZAVRNITVE_MS);
+      sprejeti.delete(callSid);
+      return false;
+    };
+    const klic = await merjeno("twilioRest", () => zahteva(`${OSNOVA}Accounts/${r.sid}/Calls/${callSid}.json`, { method: "GET", headers: glava(r.sid, r.kljucSid, r.skrivnost) }));
+    const j = (klic.json ?? {}) as Record<string, unknown>;
+    if (klic.status !== 200) return klic.status === 404 ? zavrni() : false;
+    if (j.sid !== callSid || j.direction !== "inbound" || j.to !== odZa.za || !fromUjema(j.from, odZa.od) || typeof j.status !== "string" || !STANJA.has(j.status)) return zavrni();
+    const javni = brezKoncnihLom((await loadPravila(koren)).javniNaslov ?? "");
+    if (!javni) return zavrni();
+    const st = await merjeno("twilioRest", () => zahteva(`${OSNOVA}Accounts/${r.sid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(odZa.za)}`, { method: "GET", headers: glava(r.sid, r.kljucSid, r.skrivnost) }));
+    if (st.status !== 200) return false;
+    const seznam = (st.json as { incoming_phone_numbers?: Array<Record<string, unknown>> } | null)?.incoming_phone_numbers;
+    const nasa = Array.isArray(seznam) && seznam.some((s) => s.phone_number === odZa.za && typeof s.voice_url === "string" && brezKoncnihLom(s.voice_url) === `${javni}/api/voice/incoming`);
+    const brezStevilk = Array.isArray(seznam) && seznam.length === 0 && testnoOknoAktivno(zdaj);
+    if (!nasa && !brezStevilk) return zavrni();
+    if (sprejeti.size >= NAJVEC_ZAPISOV) sprejeti.clear();
+    sprejeti.set(callSid, { od: odZa.od, za: odZa.za, rok: znan?.rok ?? zdaj + ROK_KLICA_MS, preverjenDo: zdaj + ROK_PREVERBE_MS });
+    return true;
+  } catch {
+    return false;
+  }
+}

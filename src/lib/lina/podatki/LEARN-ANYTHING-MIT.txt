@@ -1,0 +1,3 @@
+learn-anything-teme.json je kopija indeksa tem iz github.com/gendotnew/attempt (web/app/data/graph.json), stanje 22. 11. 2026, 931 tem.
+Licenca MIT. Obvestilo o licenci je treba ohraniti ob vsaki objavi te datoteke.
+Vsebuje samo ime teme, prikazno ime in povezane teme. Viri (razdelki in povezave) NISO del te datoteke: na strani learn-anything.xyz se nalozijo v brskalniku (Jazz) in jih strani brez JavaScripta ne prikaze.

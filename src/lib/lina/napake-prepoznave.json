@@ -1,0 +1,33 @@
+{
+  "opis": "Tipicne napake prepoznave govora (STT) iz pravih klicev Line: slisano -> kar je klicatelj rekel. Uporabljajo jih pravila (popraviPrepoznavo, samo za namen) in skil lina-slovenski-klici ({{NAPAKE_PREPOZNAVE}}). Nov primer: ena vrstica + dva preizkusa (skil, DOPOLNJEVANJE); izvor je v AGENTS.md, ne tu.",
+  "napake": [
+    {
+      "slisano": "aleš si",
+      "pomeni": "ali si"
+    },
+    {
+      "slisano": "po novi",
+      "pomeni": "ponovi"
+    },
+    {
+      "slisano": "ne to slišimo kasneje",
+      "pomeni": "se slišimo kasneje"
+    },
+    {
+      "slisano": "a imaš moj številk",
+      "pomeni": "ali imate mojo številko"
+    },
+    {
+      "slisano": "je preden odgovoriš",
+      "pomeni": "počakaj, preden odgovoriš"
+    },
+    {
+      "slisano": "moj je sporočilo",
+      "pomeni": "moje sporočilo"
+    },
+    {
+      "slisano": "moj sporočilo",
+      "pomeni": "moje sporočilo"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "name": "lina-lupina",
+  "productName": "Lina",
+  "version": "0.2.9",
+  "description": "Lina - AI telefonska tajnica",
+  "author": "Safeer <info@safeer.si>",
+  "homepage": "https://safeer.si",
+  "main": "main.js",
+  "private": true,
+  "devDependencies": {
+    "electron": "45.3.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "si.safeer.lina.lupina",
+    "productName": "Lina",
+    "directories": {
+      "output": "../izid"
+    },
+    "files": [
+      "main.js",
+      "ikona.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../.output",
+        "to": "lina/.output"
+      },
+      {
+        "from": "../openline-paket",
+        "to": "lina/openline"
+      },
+      {
+        "from": "../jazz-paket/node_modules",
+        "to": "lina/node_modules"
+      },
+      {
+        "from": "../scripts/lina-posodobi.sh",
+        "to": "lina/posodobi.sh"
+      },
+      {
+        "from": "../scripts/rsdo-streznik.py",
+        "to": "lina/rsdo-streznik.py"
+      }
+    ],
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "ikona.png",
+      "maintainer": "Safeer <info@safeer.si>",
+      "synopsis": "Lina - AI telefonska tajnica"
+    }
+  }
+}

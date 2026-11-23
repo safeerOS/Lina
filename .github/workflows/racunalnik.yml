@@ -1,0 +1,192 @@
+name: Lina racunalnik (deb)
+
+# Ena gradnja na sklop sprememb (odlocitev lastnika): gradnja se sprozi s potiskom na vejo lina-racunalnik-* (samo
+# spremembe programa) ali rocno. Potisk na vejo naredi ena oseba ENKRAT na sklop. Zagon samo prek rocnega sprozilca bi
+# zahteval, da je delovni tok ze na privzeti veji.
+# Program: vite build (TanStack Start + Nitro) -> lupina Electron -> paket deb za Linux.
+# Preverba tipov ustavi gradnjo ob vsaki napaki; preizkusi tecejo v locenem poslu in so rdeci ob vsakem padcu.
+# Rezultat obeh je v povzetku teka in v artefaktu, da se opozorila ne zgubijo.
+on:
+  push:
+    branches: ["lina-racunalnik-*"]
+    paths:
+      - "src/**"
+      - "server/**"
+      - "scripts/**"
+      - "public/**"
+      - "skili/**"
+      - "lupina/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vite.config.ts"
+      - ".github/workflows/racunalnik.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lina-racunalnik-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    env:
+      NITRO_PRESET: node-server
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Namestitev odvisnosti programa
+        run: npm ci --no-audit --no-fund
+
+      - name: Gradnja programa (vite build, nato preverba skila v gradnji)
+        run: npm run build
+
+      - name: Preverba tipov (0 napak, sicer gradnja pade)
+        run: |
+          set +e
+          npx tsc --noEmit -p . > tsc.log 2>&1
+          KODA=$?
+          N=$(grep -c 'error TS' tsc.log)
+          echo "### Preverba tipov: ${N} napak (koda ${KODA})" >> "$GITHUB_STEP_SUMMARY"
+          grep 'error TS' tsc.log | head -40 >> "$GITHUB_STEP_SUMMARY" || true
+          exit $KODA
+
+      - name: Zagon zgrajenega streznika (hitra preverba, ob napaki rdec korak, paket se vseeno zgradi)
+        continue-on-error: true
+        run: |
+          export HOST=127.0.0.1 NITRO_HOST=127.0.0.1 PORT=18080 NITRO_PORT=18080 LINA_DATA="$RUNNER_TEMP/lina-podatki"
+          mkdir -p "$LINA_DATA"
+          node .output/server/index.mjs > streznik.log 2>&1 &
+          PID=$!
+          USPEH=0
+          for i in $(seq 1 40); do
+            if curl -fsS -o /dev/null http://127.0.0.1:18080/; then USPEH=1; break; fi
+            sleep 1
+          done
+          kill "$PID" 2>/dev/null || true
+          if [ "$USPEH" != 1 ]; then echo "Streznik se ni odzval"; tail -40 streznik.log; exit 1; fi
+          echo "### Zgrajeni streznik odgovori na / (HTTP 200)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Paket OpenLine (prevod + samo produkcijski node_modules)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ol"
+          tar -C openline/server --exclude=node_modules --exclude=dist --exclude=tests -cf - . | tar -C "$RUNNER_TEMP/ol" -xf -
+          cd "$RUNNER_TEMP/ol"
+          npm ci --no-audit --no-fund
+          npm run build
+          npm ci --omit=dev --no-audit --no-fund
+          test -f dist/index.js
+          mkdir -p "$GITHUB_WORKSPACE/openline-paket"
+          cp -r dist package.json node_modules "$GITHUB_WORKSPACE/openline-paket/"
+          if [ -d public ]; then cp -r public "$GITHUB_WORKSPACE/openline-paket/"; fi
+
+      - name: Paket jazz (samoucenje)
+        run: |
+          mkdir -p jazz-paket
+          echo '{"name":"jp","private":true}' > jazz-paket/package.json
+          cd jazz-paket
+          npm install --omit=dev --no-audit --no-fund jazz-tools@0.8.23 cojson@0.8.23 cojson-transport-ws@0.8.23
+          test -d node_modules/jazz-tools
+
+      - name: Namestitev lupine (Electron in electron-builder)
+        working-directory: lupina
+        run: npm install --no-audit --no-fund
+
+      - name: Paket deb
+        working-directory: lupina
+        run: npx electron-builder --linux deb --publish never
+
+      - name: Preverba paketa
+        run: |
+          DEB=$(ls izid/*.deb)
+          echo "Paket: $DEB"
+          dpkg-deb -I "$DEB"
+          dpkg-deb -c "$DEB" > vsebina-deb.txt
+          grep -q 'opt/Lina/lina-lupina$' vsebina-deb.txt
+          grep -q 'resources/lina/.output/server/index.mjs' vsebina-deb.txt
+          grep -q 'resources/lina/.output/public/favicon.svg' vsebina-deb.txt
+          grep -q 'resources/lina/openline/dist/index.js' vsebina-deb.txt
+          grep -q 'resources/lina/node_modules/jazz-tools/package.json' vsebina-deb.txt
+          grep -q 'resources/lina/rsdo-streznik.py' vsebina-deb.txt
+          grep -E 'resources/lina/posodobi.sh$' vsebina-deb.txt | grep -q '^-rwx'
+          sha256sum "$DEB" | tee izid/sha256.txt
+          {
+            echo "### Paket deb"
+            echo '```'
+            cat izid/sha256.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lina-deb
+          path: |
+            izid/*.deb
+            izid/sha256.txt
+            vsebina-deb.txt
+            tsc.log
+          retention-days: 14
+          if-no-files-found: error
+
+  preizkusi:
+    # Ob strani paketa, a rdec ob vsakem padcu (23. 11. 2026: cel nabor 2201/2201 zelen; padec = napaka, ki jo je treba resiti).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Namestitev odvisnosti
+        run: npm ci --no-audit --no-fund
+
+      - name: Preizkusi (node --test, zakasnitev 30 min)
+        run: |
+          set +e
+          timeout 1800 npm test > preizkusi.log 2>&1
+          KODA=$?
+          {
+            echo "### Preizkusi (koda ${KODA})"
+            grep -E '^# (tests|pass|fail|cancelled|skipped)' preizkusi.log || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $KODA
+
+      - name: Preizkusi vitest (specifikacije .spec.ts)
+        run: |
+          set +e
+          npx vitest run > vitest.log 2>&1
+          KODA=$?
+          {
+            echo "### Vitest (koda ${KODA})"
+            tail -15 vitest.log
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $KODA
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lina-preizkusi
+          path: |
+            preizkusi.log
+            vitest.log
+          retention-days: 14
+          if-no-files-found: warn
