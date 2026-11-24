@@ -143,3 +143,15 @@ Celotno pravilo: projekt-3/AGENTS.md »Lina gradi APK in deb na GitHubu«. Na te
   (lastUpdateTime > firstInstallTime) IN neprazne nastavitve lina_policy ali gateway_config (namestitev, ki je kdaj ocenila klic,
   ima v lina_policy vsaj line_id_key; privzeto Lina brez seznama klica ne prevzame). Po »Pocisti podatke« velja za novo. Oznaka se
   zapise enkrat ob prvem zagonu procesa (GatewayApplication). Odobritev (dovoli) ni zaprta: odlocitev za vodjo.
+
+## Agenti in naloge s telefona (lastnik 24. 11. 2026: »Bo gumb na telefonu?« - DA; projekt-3/AGENTS.md, ista vrstica)
+- Zavihek Racunalnik, kartica »Agenti in naloge« TIK NAD obstojecim Dovoli/Zavrni za Claude Code (isto mesto; vprasanja ima samo
+  Claude Code prek kanala Line, drugi agenti jih na telefon ne posiljajo). Vrsta: agent, mapa, stanje, kdaj, ura konca po ljubljanskem
+  casu, opomnik; »Prekliči« za dodeljeno ali zamujeno. »Dodeli nalogo«: agent s seznama pripravljenih z racunalnika, mapa s seznama
+  dovoljenih (prostega vnosa poti NI), besedilo, kdaj (zdaj / ob uri / ko konca naloga); okno pred podpisom pokaze vse.
+- Podpis s kljucem naprave = lastnikova potrditev za EN zagon; podpis veze zgostitev (agent, mapa, besedilo, pogoj), ki jo telefon
+  izracuna SAM (JSON.stringify bajt za bajtom, navzkrizni vektor s TS). Brez »Razumem« se dodelitev ne podpise (Podpisnik); branje in
+  preklic ostaneta. Samo domace omrezje (HttpPovezavaZLino, ne IzbirnaPovezava).
+- V kodi (24. 11. 2026): modul podpis (AgentiLine, NiziLine.niz*AgentNalog*, AgentiLineTest), app samo pogled (AgentiNalogePogled).
+  Racunalnik polja `mape` v GET /agent-naloge SE NE POSILJA: dokler ga ni, telefon ponudi samo mape, ki so ze v vrsti.
+  »Zazeni zdaj« za zamujeno nalogo s telefona: SE NI (ni poti na racunalniku). NEPREVERJENO na napravi.
