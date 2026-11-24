@@ -119,3 +119,24 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
   (POST /nadaljuj, niz safeer-lina-nadaljuj-v1) naredi kljuc naprave; racunalnik ne podpisuje. Gumb »Ustavi samodejne odgovore«
   v zavihku Racunalnik. OMEJITEV: deluje samo, dokler je aplikacija odprta; stevec je v pomnilniku (ponovni zagon ga ponastavi).
   Modul app ni preveden lokalno (brez Gradla) - NEPREVERJENO na napravi.
+
+## Lina gradi APK na GitHubu in ga namesti (lastnik 24. 11. 2026)
+»Naj lina zna tudi graditi apk na githube«, »In mi povedati kam ga shrani ter namestiti na moje naprave prav tako programe«.
+Celotno pravilo: projekt-3/AGENTS.md »Lina gradi APK in deb na GitHubu«. Na telefonu:
+- Lastnik lahko gradnjo predlaga s telefona; zagon izvede racunalnik (gh), potrditev je podpisan gumb na telefonu (kljuc naprave).
+- Telefon pokaze stanje teka, uro konca, polno pot shranjenega APK na racunalniku in sha256.
+- »Namesti na ta telefon«: APK prenese z racunalnika po obstojeci podpisani LAN poti v cacheDir, preveri, da je SHA-256 podpisnega
+  certifikata enak namescenemu (PackageManager GET_SIGNING_CERTIFICATES), nato PackageInstaller seja (STATUS_PENDING_USER_ACTION ->
+  sistemsko okno potrdi lastnik). Dovoljenje REQUEST_INSTALL_PACKAGES; ce ga ni, odpre nastavitev z NATANCNIM imenom na Samsungu.
+  Brez adb in brez roota. Po namestitvi pobrise svojo kopijo v cacheDir.
+- V kodi (24. 11. 2026): logika v modulu podpis (GradnjeLine, NamestitevApk, NiziLine.niz*Gradnj*, navzkrizni vektor s TS v
+  GradnjeLineTest), app samo pogled (GradnjePogled, NamestitevPaketa). Zgostitev za potrditev telefon izracuna sam iz prikazanega
+  toka in veje. Napis gumba v nastavitvah Samsung besedilo NE ugiba (splosno besedilo); tocen napis preveri vodja na napravi.
+
+## Opozorilo ob prvem zagonu (lastnik 24. 11. 2026; projekt-3/AGENTS.md »Objava Line na safeer.si in opozorilo uporabniku«)
+- Besedilo sl/en = razdelek »Pomembno« osnutka strani (first_run_body), pripeto na OpozoriloLine.RAZLICICA in ZGOSTITEV_BESEDILA
+  (preizkus pade, ce se besedilo spremeni brez nove razlicice). Vedno v Nastavitve > O Lini.
+- Odlocitev (24. 11. 2026): brez »Razumem« (trenutna razlicica) kljuc naprave NE podpise nalog, nadaljevanj (tudi samodejnih
+  odgovorov) in gradenj (Podpisnik, varovalo v kodi; branje stanja, ustavitev in odobritev ostanejo). Klici: nova namestitev brez
+  potrditve klica ne prevzame (GatewayInCallService.evaluate, CallCommandController ANSWER); ze namescena Lina (posodobitev cez
+  starejso razlicico, oznaka se zapise enkrat ob prvem zagonu procesa) prevzema klice kot prej, dokler ne potrdi.
