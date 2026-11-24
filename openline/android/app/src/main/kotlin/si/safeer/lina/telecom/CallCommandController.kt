@@ -92,6 +92,8 @@ class CallCommandController(context: Context) {
             lineAllowed = LinaLine.allowed(appContext, ringing),
         )
         if (!answer.allowed) return Result(false, answer.reason)
+        // Opozorilo ob prvem zagonu (24. 11. 2026): isto varovalo kot prevzem po casu zvonjenja.
+        if (!si.safeer.lina.config.OpozoriloShramba(appContext).smeSprejematiKlice()) return Result(false, "first_run_warning")
         if (!LinaCallGate.beginAnswer(command.callId)) return Result(false, "call_controlled_locally")
 
         val result = try {

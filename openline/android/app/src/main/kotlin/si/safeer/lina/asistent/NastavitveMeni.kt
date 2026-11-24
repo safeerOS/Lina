@@ -13,7 +13,11 @@ import si.safeer.lina.R
  * izbran podmeni pokaze samo svojo skupino z vrstico »‹ Nastavitve«. Pogledi ostanejo isti (NastavitveKljuciPogled in ostali
  * jih se naprej upravljajo), samo prestavijo se v svoje plosce.
  */
-class NastavitveMeni(private val a: Activity, private val odpriPripravo: () -> Unit, private val odpriRacunalnik: () -> Unit) {
+class NastavitveMeni(
+    private val a: Activity, private val odpriPripravo: () -> Unit, private val odpriRacunalnik: () -> Unit,
+    /** Nastavitve > O Lini: opozorilo (osebna raba, odgovornost, nadzor), vedno dosegljivo (24. 11. 2026). */
+    private val odpriOLini: () -> Unit,
+) {
     enum class Podmeni { IME, MOZGANI, SPOMIN, ORODJA, KLICI, ZAPISKI }
 
     private val koren: LinearLayout = a.findViewById(R.id.tabSettings)
@@ -114,6 +118,7 @@ class NastavitveMeni(private val a: Activity, private val odpriPripravo: () -> U
         }
         meni.addView(vrstica(R.string.set_menu_setup, R.string.set_menu_setup_desc) { odpriPripravo() })
         meni.addView(vrstica(R.string.set_menu_computer, R.string.set_menu_computer_desc) { odpriRacunalnik() })
+        meni.addView(vrstica(R.string.set_menu_about, R.string.set_menu_about_desc) { odpriOLini() })
     }
 
     fun pokaziMeni() {

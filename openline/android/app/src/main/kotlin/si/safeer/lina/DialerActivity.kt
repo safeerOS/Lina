@@ -141,6 +141,9 @@ class DialerActivity : Activity() {
     private lateinit var tabSettings: View
     private lateinit var tabComputer: View
     private lateinit var dodatkiRacunalnika: si.safeer.lina.asistent.DodatkiRacunalnikaPogled
+    private lateinit var gradnje: si.safeer.lina.asistent.GradnjePogled
+    /** Opozorilo ob prvem zagonu in Nastavitve > O Lini (24. 11. 2026). */
+    private val opozorilo by lazy { si.safeer.lina.asistent.OpozoriloPogled(this) }
     private lateinit var navButtons: Map<Zavihek, Button>
 
     /** Podmeniji spodnje navigacije (lastnik 18. 11. 2026: brez dolgega drsenja, vsak sklop svoj meni). */
@@ -264,6 +267,7 @@ class DialerActivity : Activity() {
     override fun onResume() {
         super.onResume()
         wifiPromptShown = false
+        opozorilo.obOdprtju()
         si.safeer.lina.asistent.SinhronizacijaZLino.zazeni(this)
         notifyMissedWithoutPermission()
         renderSteps()
@@ -469,6 +473,7 @@ class DialerActivity : Activity() {
         tabSettings = findViewById(R.id.tabSettings)
         tabComputer = findViewById(R.id.tabComputer)
         dodatkiRacunalnika = si.safeer.lina.asistent.DodatkiRacunalnikaPogled(this, tabComputer as android.widget.LinearLayout)
+        gradnje = si.safeer.lina.asistent.GradnjePogled(this, tabComputer as android.widget.LinearLayout) { opozorilo.pokazi() }
         tabHome = findViewById(R.id.tabHome)
         tabNotes = findViewById(R.id.tabNotes)
         tabSummary = findViewById(R.id.tabSummary)
@@ -502,7 +507,7 @@ class DialerActivity : Activity() {
             racunalnikPovezan = { AsistentShramba.beri(this) != null },
             posljiRacunalniku = { ::asistent.isInitialized && asistent.poslji(it) })
         // Podmeniji nastavitev (lastnik 22. 11. 2026); po LinaPogovorPogled, ker ta v nastavitve vstavi razdelka Ime in Spomin.
-        nastavitveMeni = si.safeer.lina.asistent.NastavitveMeni(this, { showTab(Zavihek.TELEFON) }, { showTab(Zavihek.RACUNALNIK) })
+        nastavitveMeni = si.safeer.lina.asistent.NastavitveMeni(this, { showTab(Zavihek.TELEFON) }, { showTab(Zavihek.RACUNALNIK) }, { opozorilo.pokazi() })
         assistantApproval = findViewById(R.id.assistantApproval)
         assistantApprovalTool = findViewById(R.id.assistantApprovalTool)
         assistantApprovalPreview = findViewById(R.id.assistantApprovalPreview)
@@ -614,7 +619,7 @@ class DialerActivity : Activity() {
         // Domov kaze stanje povezave (vrstica stanja je zdaj na Domovu).
         if (z == Zavihek.DOMOV) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
-        if (z == Zavihek.RACUNALNIK) dodatkiRacunalnika.osvezi()
+        if (z == Zavihek.RACUNALNIK) { dodatkiRacunalnika.osvezi(); gradnje.osvezi() }
         osveziNavRacunalnik()
     }
 
@@ -856,6 +861,8 @@ class DialerActivity : Activity() {
     private fun sendTask() {
         // Claude Code caka odgovor: besedilo gre v ISTO nalogo (POST /nadaljuj), ne kot nova naloga.
         val odgovor = AsistentPrikaz.izracunaj(asistent.stanje()).odgovor
+        // Brez »Razumem« kljuc naprave naloge ne podpise (Podpisnik); tu samo jasno sporocilo namesto »ni dosegljiv«.
+        if (!si.safeer.lina.config.OpozoriloShramba(this).smeDelati()) { toast(getString(R.string.builds_need_warning)); opozorilo.pokazi(); return }
         val ok = if (odgovor) asistent.nadaljuj(assistantTaskInput.text.toString()) else asistent.poslji(assistantTaskInput.text.toString())
         if (!ok) return toast(getString(R.string.assistant_bad_text))
         assistantTaskInput.setText("")

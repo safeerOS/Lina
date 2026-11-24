@@ -29,6 +29,12 @@ interface PovezavaZLino {
     fun stanjeDodatkov(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
     /** POST /dodatek (23. 11. 2026): vklop ali izklop enega dodatka. */
     fun dodatek(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** GET /gradnje (24. 11. 2026): stanje gradenj na GitHubu; samo domace omrezje (od zunaj 403). Privzeto 404 kot stara Lina. */
+    fun stanjeGradenj(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** POST /gradnja/predlog: nic ne zazene. */
+    fun predlogGradnje(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** POST /gradnja/potrdi: zagon po lastnikovem podpisanem gumbu. */
+    fun potrditevGradnje(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
 }
 
 /** Kaj uporabnik izve ob napaki (kljuc besedila v aplikaciji). Vse 403 so ista koda (Lina ne pove razloga). */

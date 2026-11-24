@@ -148,6 +148,37 @@ object NiziLine {
         return "$PREDPONA_DODATEK\n$posiljatelj\n$dodatek\n${if (vklop) "vklopi" else "izklopi"}\n$cas\n$enkratni"
     }
 
+    const val PREDPONA_GRADNJE_STANJE = "safeer-lina-gradnje-stanje-v1"
+    const val PREDPONA_GRADNJA_PREDLOG = "safeer-lina-gradnja-predlog-v1"
+    const val PREDPONA_GRADNJA_POTRDI = "safeer-lina-gradnja-potrdi-v1"
+    const val PREDPONA_GRADNJA_APK = "safeer-lina-gradnja-apk-v1"
+    /** Id predloga gradnje (asistent-streznik.server.ts potrdiGradnjo). */
+    val ID_GRADNJE = Regex("^[a-f0-9]{16}$")
+
+    /** Gradnje na GitHubu (kanal-claude.ts nizStanjaGradenj, 24. 11. 2026): branje stanja. */
+    fun nizStanjaGradenj(posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_GRADNJE_STANJE\n$posiljatelj\n$cas\n$enkratni"
+    }
+
+    /** Predlog gradnje (kanal-claude.ts nizPredlogaGradnje): tok s stalnega seznama, veja prave oblike (gradnje-github.ts oblikaVeje). */
+    fun nizPredlogaGradnje(posiljatelj: String, tok: String, veja: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni) || tok !in GradnjeLine.TOKOVI || !GradnjeLine.oblikaVeje(veja)) return null
+        return "$PREDPONA_GRADNJA_PREDLOG\n$posiljatelj\n$tok\n$veja\n$cas\n$enkratni"
+    }
+
+    /** Potrditev zagona (kanal-claude.ts nizPotrditveGradnje): podpis veze id predloga in zgostitev (repozitorij, tok, veja). */
+    fun nizPotrditveGradnje(posiljatelj: String, id: String, zgostitev: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni) || !ID_GRADNJE.matches(id) || !ZGOSTITEV.matches(zgostitev)) return null
+        return "$PREDPONA_GRADNJA_POTRDI\n$posiljatelj\n$id\n$zgostitev\n$cas\n$enkratni"
+    }
+
+    /** Prenos APK zadnje potrjene gradnje (kanal-claude.ts nizApkGradnje). */
+    fun nizApkGradnje(posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_GRADNJA_APK\n$posiljatelj\n$cas\n$enkratni"
+    }
+
     /** Besedilo brez osamljenih nadomestnih znakov; tako besedilo se zavrne, ne popravi (praviUnicode v Lini). */
     fun praviUnicode(s: String): Boolean {
         var i = 0
