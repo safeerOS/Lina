@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import si.safeer.lina.samostojna.KljucGemini
+import si.safeer.lina.samostojna.ModelShramba
 import si.safeer.lina.samostojna.OdgovorHttp
 import si.safeer.lina.samostojna.Ponudnik
 import si.safeer.lina.samostojna.Prenos
@@ -167,6 +168,13 @@ class TwilioShramba(private val context: Context) {
     fun ime(): String? = prefs().getString("twilio_ime", null)
     fun shrani(sid: String, ime: String) { prefs().edit().putString("twilio_sid", sid).putString("twilio_ime", ime).apply() }
     fun izbrisi() { prefs().edit().remove("twilio_sid").remove("twilio_ime").apply() }
+}
+
+/** Samodejno izbran model za ponudnika (lastnik 24. 11. 2026); ni skrivnost, zato navadne nastavitve. */
+class ModelShrambaAndroid(private val context: Context) : ModelShramba {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+    override fun beri(p: Ponudnik): String? = prefs().getString("model_${p.id}", null)
+    override fun shrani(p: Ponudnik, model: String) { prefs().edit().putString("model_${p.id}", model).apply() }
 }
 
 /** Izbran ponudnik (ni skrivnost, zato navadne nastavitve). */

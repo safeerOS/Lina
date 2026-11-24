@@ -23,7 +23,7 @@ import si.safeer.lina.samostojna.VertexOdjemalec
 import si.safeer.lina.samostojna.poPrijaviGoogle
 import si.safeer.lina.samostojna.vklopiVertex
 import si.safeer.lina.samostojna.Ponudnik
-import si.safeer.lina.samostojna.ustvariOdjemalca
+import si.safeer.lina.samostojna.SamodejniOdjemalec
 import si.safeer.lina.samostojna.IzbiraAsistentke
 import si.safeer.lina.samostojna.KljucGemini
 import si.safeer.lina.samostojna.Odgovor
@@ -334,7 +334,9 @@ class LinaPogovorPogled(
         // A4, C (24. 11. 2026): kljuc samo za asistentko ima prednost; brez njega isti ponudnik kot klici (A6).
         val nastavitveAsistentke = AsistentkaShramba(a)
         val odjemalec = IzbiraAsistentke.odjemalec(SkupniKljuci.shrambaAsistentke(a), nastavitveAsistentke.model(), nastavitveAsistentke.brezplacni(), prenos)
-            ?: if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
+            // Lastnik 24. 11. 2026: model, ki ga ponudnik ne pozna vec, Lina sama zamenja z delujocim istega ponudnika.
+            ?: if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos)
+            else SamodejniOdjemalec(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos, ModelShrambaAndroid(a))
         val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo, koledar = true)
         vprasajZaKoledar()

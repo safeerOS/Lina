@@ -244,6 +244,8 @@
     <string name="local_provider_selected">sélectionné</string>
     <string name="local_key_save">Enregistrer la clé</string>
     <string name="local_key_bad">Cela ne ressemble pas à une clé Gemini.</string>
+    <string name="local_key_model_fmt">Clé enregistrée. Lina a choisi le modèle %1$s (l’appel de test a répondu).</string>
+    <string name="local_key_model_unchecked_fmt">Clé enregistrée avec le modèle par défaut %1$s ; le fournisseur était injoignable pour la vérification.</string>
     <string name="local_key_forget">Oublier la clé</string>
     <string name="local_chat_hint">Demandez ou dites quelque chose à Lina…</string>
     <string name="local_send">Envoyer</string>

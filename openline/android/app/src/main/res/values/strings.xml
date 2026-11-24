@@ -244,6 +244,8 @@
     <string name="local_provider_selected">selected</string>
     <string name="local_key_save">Save key</string>
     <string name="local_key_bad">That does not look like a Gemini key.</string>
+    <string name="local_key_model_fmt">Key saved. Lina chose the model %1$s (the test call answered).</string>
+    <string name="local_key_model_unchecked_fmt">Key saved with the default model %1$s; the provider could not be reached to check it.</string>
     <string name="local_key_forget">Forget key</string>
     <string name="local_chat_hint">Ask or tell Lina…</string>
     <string name="local_send">Send</string>

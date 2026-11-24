@@ -244,6 +244,8 @@
     <string name="local_provider_selected">izbran</string>
     <string name="local_key_save">Shrani ključ</string>
     <string name="local_key_bad">To ni videti kot ključ Gemini.</string>
+    <string name="local_key_model_fmt">Ključ je shranjen. Lina je izbrala model %1$s (preizkusni klic je uspel).</string>
+    <string name="local_key_model_unchecked_fmt">Ključ je shranjen s privzetim modelom %1$s; ponudnik ni bil dosegljiv za preverbo.</string>
     <string name="local_key_forget">Pozabi ključ</string>
     <string name="local_chat_hint">Vprašajte ali povejte Lini …</string>
     <string name="local_send">Pošlji</string>

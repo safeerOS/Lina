@@ -18,11 +18,16 @@ import java.net.http.HttpTimeoutException
  * Ponudniki, ki jih uporabnik izbere s svojim kljucem (lastnik 18. 11. 2026: na telefonu manjkajo kljuci drugih agentov).
  * Naslovi so vgrajeni in nespremenljivi: kljuc nikoli ne gre na naslov, ki bi ga vnesel uporabnik ali napadalec.
  */
+/**
+ * Privzeti modeli, preverjeni proti javni dokumentaciji 24. 11. 2026 (enako kot racunalnik types.ts DEFAULT_BRAIN_MODELS):
+ * gemini-2.5-flash zastarel, gpt-4.1-mini zastarel, claude-sonnet-4-5 se umakne 30. 11. 2026, grok-4 ni vec na seznamu xAI.
+ * Ce ponudnik model kljub temu ne pozna, ga Lina zamenja sama (SamodejniModel.kt).
+ */
 enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
-    GEMINI("gemini", "Gemini", "gemini-2.5-flash"),
-    OPENAI("openai", "OpenAI", "gpt-4.1-mini"),
-    CLAUDE("claude", "Claude", "claude-sonnet-4-5"),
-    GROK("grok", "Grok", "grok-4"),
+    GEMINI("gemini", "Gemini", "gemini-3.8-flash"),
+    OPENAI("openai", "OpenAI", "gpt-6-luna"),
+    CLAUDE("claude", "Claude", "claude-sonnet-5-5"),
+    GROK("grok", "Grok", "grok-4.5"),
     /** Lastnik 22. 11. 2026: tudi kljuc OpenRouter (kot na racunalniku; ID modela s predpono ponudnika). */
     OPENROUTER("openrouter", "OpenRouter", "openai/gpt-4o"),
     /** Prijava z Google racunom (Vertex AI); namesto kljuca zeton Google. */
@@ -232,13 +237,13 @@ class ClaudeOdjemalec(
     }
 }
 
-/** Odjemalec za izbranega ponudnika; naslovi so vgrajeni (Grok: xAI). */
-fun ustvariOdjemalca(p: Ponudnik, shramba: ShranjevalnikKljuca, prenos: Prenos): PonudnikOdjemalec = when (p) {
-    Ponudnik.GEMINI -> GeminiOdjemalec(shramba, prenos = prenos)
-    Ponudnik.OPENAI -> OpenAiOdjemalec(shramba, "https://api.openai.com", Ponudnik.OPENAI.model, prenos)
-    Ponudnik.CLAUDE -> ClaudeOdjemalec(shramba, prenos = prenos)
-    Ponudnik.GROK -> OpenAiOdjemalec(shramba, "https://api.x.ai", Ponudnik.GROK.model, prenos)
-    Ponudnik.OPENROUTER -> OpenAiOdjemalec(shramba, "https://openrouter.ai/api", Ponudnik.OPENROUTER.model, prenos, openRouter = true)
+/** Odjemalec za izbranega ponudnika; naslovi so vgrajeni (Grok: xAI). Model je samodejno izbran ali privzeti. */
+fun ustvariOdjemalca(p: Ponudnik, shramba: ShranjevalnikKljuca, prenos: Prenos, model: String = p.model): PonudnikOdjemalec = when (p) {
+    Ponudnik.GEMINI -> GeminiOdjemalec(shramba, model = model, prenos = prenos)
+    Ponudnik.OPENAI -> OpenAiOdjemalec(shramba, "https://api.openai.com", model, prenos)
+    Ponudnik.CLAUDE -> ClaudeOdjemalec(shramba, model = model, prenos = prenos)
+    Ponudnik.GROK -> OpenAiOdjemalec(shramba, "https://api.x.ai", model, prenos)
+    Ponudnik.OPENROUTER -> OpenAiOdjemalec(shramba, "https://openrouter.ai/api", model, prenos, openRouter = true)
     // Vertex ne uporablja kljuca: odjemalca gradi aplikacija z zetonom Google (glej VertexOdjemalec).
     Ponudnik.VERTEX -> throw IllegalArgumentException("Vertex: uporabi VertexOdjemalec")
 }
