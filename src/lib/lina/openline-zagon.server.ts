@@ -192,6 +192,9 @@ async function ustaviOtroka(otrok: ChildProcess, rokMs: number): Promise<void> {
   await cakanjeKill;
 }
 
+/** Okno zivosti po zapisu nastavitev (ms): otrok, ki v tem casu umre, ni javljen kot pripravljen. */
+const OKNO_ZIVOSTI_MS = 150;
+
 function pocakajPripravljenost(
   otrok: ChildProcess,
   zbiralnik: ZbiralnikIzpisa,
@@ -431,7 +434,22 @@ export async function zagotoviOpenLine(
           naslov,
         });
 
-        if (s.generacija !== mojaGeneracija || otrokKoncan || !jeOtrokZiv(otrok)) {
+        // Dogodek 'exit' pride sele v naslednjih krogih zanke dogodkov: otrok, ki umre med zapisom, je lahko se »ziv«
+        // (CI 24. 11. 2026: zapis je trajal manj kot izhod). Kratko okno zivosti, preden ga razglasimo za pripravljenega.
+        const zivOtrok = otrok;
+        const umrlVOknu = await new Promise<boolean>((koncaj) => {
+          if (otrokKoncan || !jeOtrokZiv(zivOtrok)) return koncaj(true);
+          const obIzhoduOkna = () => {
+            clearTimeout(okno);
+            koncaj(true);
+          };
+          const okno = setTimeout(() => {
+            zivOtrok.removeListener("exit", obIzhoduOkna);
+            koncaj(false);
+          }, OKNO_ZIVOSTI_MS);
+          zivOtrok.once("exit", obIzhoduOkna);
+        });
+        if (s.generacija !== mojaGeneracija || otrokKoncan || umrlVOknu || !jeOtrokZiv(otrok)) {
           throw new Error("OpenLine se ni pripravil");
         }
 

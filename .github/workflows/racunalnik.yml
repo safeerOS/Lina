@@ -186,6 +186,14 @@ jobs:
       - name: Namestitev odvisnosti
         run: npm ci --no-audit --no-fund
 
+      # Peskovnik agentov (bwrap) potrebuje neprivilegirane imenske prostore; Ubuntu 24.04 jih z AppArmor privzeto omeji.
+      # Brez tega preizkusi resnicnega peskovnika v CI padejo z »brez-peskovnika« (24. 11. 2026), na racunalnikih uporabnikov pa delajo.
+      - name: Peskovnik bwrap za preizkuse
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-all true && echo "bwrap deluje"
+
       - name: Preizkusi (node --test, zakasnitev 30 min)
         run: |
           set +e
