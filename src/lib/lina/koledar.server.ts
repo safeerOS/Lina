@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { requireOwner } from "./auth.server.ts";
-import { MEJA_ZAPISOV, ocistiVnos, type VhodKoledar, type ZapisKoledar } from "./koledar.ts";
+import { MEJA_ZAPISOV, ocistiVnos, razlogVnosa, type RazlogVnosa, type VhodKoledar, type ZapisKoledar } from "./koledar.ts";
+import { sl as BESEDILA_SL } from "./besedila.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
 /** Koledar uporabnika: samo lokalno v podatkovni mapi (koledar.json). Vsak klic zahteva prijavo lastnika. */
@@ -41,12 +42,12 @@ export async function koledarSeznam(token: string | null, dir?: string): Promise
 }
 
 /** Dodaj zapis; napaka vnosa je sporocilo, ne izjema. Klice ga tudi pogovor (ze overjen lastnik). */
-export function dodajZapis(root: string, vhod: VhodKoledar): Promise<{ ok: true; zapis: ZapisKoledar; zapisi: ZapisKoledar[] } | { ok: false; sporocilo: string }> {
+export function dodajZapis(root: string, vhod: VhodKoledar): Promise<{ ok: true; zapis: ZapisKoledar; zapisi: ZapisKoledar[] } | { ok: false; sporocilo: string; razlog: RazlogVnosa | "kolNapPolno" | null }> {
   return vVrsti(async () => {
     const ocisceno = ocistiVnos(vhod);
-    if (typeof ocisceno === "string") return { ok: false as const, sporocilo: ocisceno };
+    if (typeof ocisceno === "string") return { ok: false as const, sporocilo: ocisceno, razlog: razlogVnosa(ocisceno) };
     const zapisi = await preberi(root);
-    if (zapisi.length >= MEJA_ZAPISOV) return { ok: false as const, sporocilo: `V koledarju je največ ${MEJA_ZAPISOV} zapisov. Izbrišite stare.` };
+    if (zapisi.length >= MEJA_ZAPISOV) return { ok: false as const, sporocilo: BESEDILA_SL.kolNapPolno.replace("{n}", String(MEJA_ZAPISOV)), razlog: "kolNapPolno" as const };
     const zapis: ZapisKoledar = { id: randomUUID(), ...ocisceno, opravljeno: false, obvesceno: false, ustvarjeno: new Date().toISOString() };
     const nova = [...zapisi, zapis];
     await writeJson(root, DATOTEKA, nova);

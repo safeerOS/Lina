@@ -1,5 +1,6 @@
 import { TinyFishKljuc } from "@/components/tinyfish-kljuc.tsx";
 import { GithubDostop } from "@/components/github-dostop.tsx";
+import { NacrtStikalo } from "@/components/nacrt-stikalo.tsx";
 import { OLiniPanel } from "@/components/opozorilo.tsx";
 import { imeVTozilniku } from "@/lib/lina/ime-tozilnik.ts";
 import { zaShranjevanje } from "@/lib/lina/pravila-shranjevanje.ts";
@@ -8,12 +9,14 @@ import { useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { dodajBesedilo, MEJA_DOKUMENTA_BAJTOV, MEJA_ZNANJA, preberiDokument } from "@/lib/lina/znanje-besedilo.ts";
 import { ZnanjeDatoteke } from "@/components/znanje-datoteke.tsx";
-import { t, type Beseda } from "@/lib/lina/besedila.ts";
+import { sporociloNapake, sporociloStreznika, t, type Beseda } from "@/lib/lina/besedila.ts";
+import { jePredHiso, PRED_HISO } from "@/lib/lina/paket.ts";
 import { PoveziTelefon } from "@/components/povezi-telefon.tsx";
-import { casKlica, korakiNastavitve, stanjeKlica, vstavi, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
+import { casKlica, korakiNastavitve, uraGlave, stanjeKlica, vstavi, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
 import { FOKUS, GUMB, GUMB_OBROBA, GUMB_SIGNAL, IZBIRA, NAMIG, OZNAKA_POLJA, PLOSCA, POLJE, Podrazdelek, Razdelek, StanjeNalaganja, StanjeNapaka, StanjePrazno, Znacka } from "@/components/ui-lina.tsx";
 import { SpominLastnika } from "@/components/spomin-lastnika.tsx";
 import { TemaPreklop } from "@/components/tema-preklop.tsx";
+import { JezikPreklop } from "@/components/jezik-preklop.tsx";
 import { GooglePrijava } from "@/components/google-prijava.tsx";
 import { PotNaslova } from "@/components/pot-naslova.tsx";
 import { TwilioRacun } from "@/components/twilio-racun.tsx";
@@ -25,9 +28,12 @@ import { tM } from "@/lib/lina/besedila-mozgani.ts";
 import { SonioxNastavitve } from "@/components/soniox-nastavitve.tsx";
 import { posodobiLinoFn, stanjeDodatkovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
 import { StraniNastavitve } from "@/components/strani-nastavitve.tsx";
+import { DovoljenjaNastavitve } from "@/components/dovoljenja-nastavitve.tsx";
+import { NarocilaNastavitve } from "@/components/narocila-nastavitve.tsx";
 import type { IzidPosodobitve, RazlogZavrnitve, StanjePosodobitve } from "@/lib/lina/posodobitev.server.ts";
 import { GOVOR_MODELI } from "@/lib/lina/govor-model.ts";
 import { razvrstiKlice } from "@/lib/lina/tajnica.ts";
+import { OMNIROUTE_PRIVZETI_NASLOV } from "@/lib/lina/omniroute.ts";
 import { stanjeOmnirouteFn, shraniOmnirouteFn, pozabiOmnirouteFn, logoutFn, setupOwnerFn, phoneTurn, publishLine, speak, saveBrainFn, checkBrainFn, chooseStorageFn, savePravilaFn, dodajVrzelFn, vajaKlicaFn, preberiSpletFn, preberiPredlogFn, potekSpletaFn, potrdiPredlogFn, zavrziPredlogFn, pogledMapeZapiskovFn, izberiMapoZapiskovFn, odpriMapoZapiskovFn, seznamZapiskovFn, preberiZapisekFn, preberiPosnetekFn, zdruziZapiskeFn, povzetekKlicateljaFn } from "@/lib/lina/functions.ts";
 import type { MapaZapiskov, Zapisek, ZapisekVsebina } from "@/lib/lina/zapiski.ts";
 import { delezKratkih } from "@/lib/lina/povzetek.ts";
@@ -39,6 +45,7 @@ import { obveznoBesedilo, prazenSeznamBesedilo, razdelekViden, vajaNamigBesedilo
 import { nizZaVklop, PREVERJENI_OPERATERJI, type Operater, type VrstaPreusmeritve } from "@/lib/lina/iphone.ts";
 import { Podokna } from "@/components/podokna.tsx";
 import { CiscenjeZvokaStikalo, SamoucenjeStikalo, SpominPogovorovStikalo } from "@/components/lina2/mediji.tsx";
+import { StrokeKartica } from "@/components/lina2/stroke-kartica.tsx";
 import { GradnjeStikalo } from "@/components/lina2/racunalnik.tsx";
 import { ObvestilaNastavitve } from "@/components/lina2/obvestila-nastavitve.tsx";
 import {
@@ -64,7 +71,7 @@ const TABS: Array<{ id: Tab; label: Beseda }> = [
 ];
 
 function fault(cause: unknown): string {
-  return cause instanceof Error && cause.message ? cause.message : t("uiNapakaSplosna");
+  return sporociloNapake(cause);
 }
 
 async function playReply(callSid: string, text: string) {
@@ -789,6 +796,9 @@ export function LinaDesk({
           <div>
             <h2 className="display text-3xl">{t("uiNastavitveNaslov")}</h2>
             <p className="mt-1 max-w-prose text-sm text-[var(--color-moss)]">{t("uiNastavitveUvod")}</p>
+            <div className="mt-3">
+              <JezikPreklop />
+            </div>
           </div>
           <NastavitveVsebina
             pravila={pravila}
@@ -921,6 +931,11 @@ function Settings({
   const [note, setNote] = useState("");
   const [dela, setDela] = useState("");
   const vertex = provider === "vertex";
+  const omniroute = provider === "omniroute";
+  const omZapis = brain.shranjeni?.find((p) => p.provider === "omniroute");
+  const [omNaslovVnos, setOmNaslovVnos] = useState(omZapis?.naslov ?? OMNIROUTE_PRIVZETI_NASLOV);
+  // Za klice samo izrecna izbira (AGENTS.md »OmniRoute kot ponudnik mozganov«): privzeto ne, razen ce je OmniRoute ze za klice.
+  const [omZaKlice, setOmZaKlice] = useState(brain.provider === "omniroute");
   // Ključ velja za posameznega ponudnika: prazno polje ohrani shranjenega, ce ga ima IZBRANI ponudnik.
   const imaKljuc = brain.shranjeni ? brain.shranjeni.some((p) => p.provider === provider) : brain.provider === provider && brain.nastavljen;
   useEffect(() => {
@@ -928,8 +943,10 @@ function Settings({
     setModel(brain.model || DEFAULT_BRAIN_MODELS[brain.provider ?? "grok"]);
     setProject(brain.projekt ?? "");
     setLocation(brain.lokacija || "global");
+    setOmZaKlice(brain.provider === "omniroute");
+    if (omZapis?.naslov) setOmNaslovVnos(omZapis.naslov);
     // Odvisnost so VREDNOSTI, ne predmet: osvezitev nalagalnika (vsake 3 s med pripravo glasu) ne sme pobrisati izbire v teku.
-  }, [brain.provider, brain.model, brain.projekt, brain.lokacija]);
+  }, [brain.provider, brain.model, brain.projekt, brain.lokacija, omZapis?.naslov]);
   async function save(samodejniProjekt?: string) {
     onBusy(true);
     setDela("shrani");
@@ -944,6 +961,7 @@ function Settings({
           project: samodejniProjekt ?? project,
           location,
           samodejno: !rocniModel,
+          ...(omniroute ? { naslov: omNaslovVnos, zaKlice: omZaKlice } : {}),
         },
       });
       onBrain(next);
@@ -971,10 +989,11 @@ function Settings({
           key,
           project,
           location,
+          ...(omniroute ? { naslov: omNaslovVnos } : {}),
         },
       });
-      setNote(result.sporocilo);
-      if (!result.ok) onError(result.sporocilo);
+      setNote(sporociloStreznika(result.sporocilo));
+      if (!result.ok) onError(sporociloStreznika(result.sporocilo));
     } catch (cause) {
       onError(fault(cause));
     } finally {
@@ -993,6 +1012,7 @@ function Settings({
           <>
             {t("uiMozganiKljucOpis")}
             {provider === "openrouter" ? <span className="mt-1 block">{t("uiMozganiOpenRouter")}</span> : null}
+            {omniroute ? <span className="mt-1 block">{t("omPonudnikOpis")}</span> : null}
             {brain.shranjeni && brain.shranjeni.length > 0 ? (
               <span className="mt-1 block">
                 {t("uiMozganiShranjeni")}:{" "}
@@ -1033,6 +1053,7 @@ function Settings({
             <option value="claude">Claude</option>
             <option value="grok">Grok</option>
             <option value="openrouter">OpenRouter</option>
+            <option value="omniroute">OmniRoute</option>
           </select>
         </label>
         <details className="sm:col-span-2">
@@ -1042,6 +1063,7 @@ function Settings({
             <input
               id="model"
               value={model}
+              list={omniroute ? "omniroute-modeli" : undefined}
               aria-describedby="model-samodejno"
               onChange={(event) => {
                 setModel(event.target.value);
@@ -1050,10 +1072,39 @@ function Settings({
               className={POLJE}
             />
           </label>
+          {omniroute ? (
+            <datalist id="omniroute-modeli">
+              {(omZapis?.modeli ?? []).map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          ) : null}
           <p id="model-samodejno" className="mt-1 text-xs text-[var(--color-moss)]">
             {t("uiModelSamodejno")}
           </p>
         </details>
+        {omniroute ? (
+          <>
+            <label className={`${OZNAKA_POLJA} sm:col-span-2`} htmlFor="omniroute-naslov">
+              {t("omPonudnikNaslov")}
+              <input
+                id="omniroute-naslov"
+                value={omNaslovVnos}
+                autoComplete="off"
+                inputMode="url"
+                onChange={(event) => setOmNaslovVnos(event.target.value)}
+                className={POLJE}
+              />
+            </label>
+            <p role="note" className="sm:col-span-2 text-sm text-[var(--color-ink)]">
+              {t("omPonudnikOpozorilo")}
+            </p>
+            <label className="sm:col-span-2 flex items-start gap-2 text-sm text-[var(--color-ink)]" htmlFor="omniroute-klici">
+              <input id="omniroute-klici" type="checkbox" checked={omZaKlice} onChange={(event) => setOmZaKlice(event.target.checked)} className="mt-1" />
+              {t("omPonudnikZaKlice")}
+            </label>
+          </>
+        ) : null}
         {vertex ? (
           <>
             <label className={OZNAKA_POLJA} htmlFor="projekt">
@@ -1192,8 +1243,7 @@ function StoragePanel({
 }
 
 function casZapiska(iso: string): string {
-  const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d.toLocaleString("sl-SI") : "";
+  return casKlica(iso);
 }
 
 /** Oddelek »Zapiski«: seznam po casu, izbira vec zapiskov, Zdruzi in »Odpri« v vrstici vsakega zapiska. */
@@ -1717,10 +1767,7 @@ function Slip({ call }: { call: CallSession | null }) {
           {(call.nujniDogodki ?? []).map((d, i) => (
             <Row
               label={t(d.vrsta === "obvestilo" ? "nujniDogodekObvestilo" : "nujniDogodekPrevezava")}
-              value={`${new Date(d.cas).toLocaleTimeString("sl-SI", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}: ${t(IZID_NUJNEGA[d.izid])}`}
+              value={`${uraGlave(new Date(d.cas))}: ${t(IZID_NUJNEGA[d.izid])}`}
               dolg={true}
               key={`${d.cas}-${i}`}
             />
@@ -2183,7 +2230,7 @@ export function Knowledge({
         onClick={onSave}
         className="rounded-full bg-[var(--color-ink-fill)] px-4 py-2 text-sm text-white"
       >
-        Shrani znanje
+        {t("uiShraniZnanje")}
       </button>
     </div>
   );
@@ -2258,17 +2305,17 @@ export function Knowledge({
         "zn-izdelki": (
           <div id="zn-izdelki" className="grid gap-3 lg:grid-cols-2">
             <div>
-              <h2 className="display text-2xl">Materiali</h2>
+              <h2 className="display text-2xl">{t("uiKatMateriali")}</h2>
               {catalog.materials.map((material, index) => (
                 <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2" key={`${material.id}-${index}`}>
                   <input
-                    aria-label="Ime materiala"
+                    aria-label={t("uiKatImeMateriala")}
                     value={material.name}
                     onChange={(event) => patchMaterial(index, { name: event.target.value })}
                     className="rounded-xl border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2"
                   />
                   <input
-                    aria-label="Opomba materiala"
+                    aria-label={t("uiKatOpombaMateriala")}
                     value={material.note}
                     onChange={(event) => patchMaterial(index, { note: event.target.value })}
                     className="rounded-xl border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2"
@@ -2283,7 +2330,7 @@ export function Knowledge({
                       })
                     }
                   >
-                    Odstrani
+                    {t("telOdstrani")}
                   </button>
                 </div>
               ))}
@@ -2304,24 +2351,24 @@ export function Knowledge({
                   })
                 }
               >
-                + material
+                {t("uiKatDodajMaterial")}
               </button>
             </div>
             <div>
-              <h2 className="display text-2xl">Izdelki</h2>
+              <h2 className="display text-2xl">{t("uiKatIzdelki")}</h2>
               {catalog.products.map((product, index) => (
                 <fieldset className="mt-2 rounded-2xl border border-[var(--color-rule)] p-3" key={`${product.id}-${index}`}>
                   <input
-                    aria-label="Ime izdelka"
+                    aria-label={t("uiKatImeIzdelka")}
                     value={product.name}
                     onChange={(event) => patchProduct(index, { name: event.target.value })}
                     className="w-full rounded-xl border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2"
                   />
                   <input
-                    aria-label="Vrsta izdelka"
+                    aria-label={t("uiKatVrstaIzdelka")}
                     value={product.kind}
                     onChange={(event) => patchProduct(index, { kind: event.target.value })}
-                    placeholder="vrsta, npr. jedilna miza"
+                    placeholder={t("uiKatVrstaPrimer")}
                     className="mt-2 w-full rounded-xl border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2"
                   />
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -2357,7 +2404,7 @@ export function Knowledge({
                   })
                 }
               >
-                + izdelek
+                {t("uiKatDodajIzdelek")}
               </button>
             </div>
           </div>
@@ -2573,7 +2620,7 @@ export function NastavitveVsebina({
                         <input
                           id="prevezava-urnik"
                           value={pravila.prevezavaUrnik ?? ""}
-                          placeholder="pon-pet 07.00-15.00"
+                          placeholder={t("uiUrnikPrimer")}
                           maxLength={120}
                           onChange={(event) => onChange({ ...pravila, prevezavaUrnik: event.target.value })}
                           className={POLJE}
@@ -2640,6 +2687,7 @@ export function NastavitveVsebina({
               <CiscenjeZvokaStikalo razred={IZBIRA} />
               <SpominPogovorovStikalo razred={IZBIRA} />
               <SamoucenjeStikalo razred={IZBIRA} />
+              <StrokeKartica razred={IZBIRA} />
               <GradnjeStikalo razred={IZBIRA} />
               <ObvestilaNastavitve razred={IZBIRA} />
               {pravila.nacinKlica !== "osebna" ? (
@@ -2747,16 +2795,30 @@ export function NastavitveVsebina({
                   {/* Dostava paketa (lastnik 23. 11. 2026): navodilo slisi samo klicatelj, ki se predstavi kot dostava; prazno = izklopljeno. */}
                   <fieldset className="mt-4">
                     <legend className={OZNAKA_POLJA}>{t("paketNaslov")}</legend>
-                    <textarea
-                      id="paket-navodilo"
-                      aria-label={t("paketNaslov")}
-                      aria-describedby="paket-namig"
-                      value={pravila.paketNavodilo ?? ""}
-                      maxLength={160}
-                      rows={2}
-                      onChange={(event) => onChange({ ...pravila, paketNavodilo: event.target.value.replace(/\s*\n\s*/g, " ") })}
-                      className={`${POLJE} mt-2`}
-                    />
+                    {/* Lastnik 24. 11. 2026: »Pred hišo« (ena kljukica) ali »Drugo mesto« (besedilo); oboje je paketNavodilo, prazno = izklopljeno. */}
+                    <label className="mt-2 flex items-center gap-2 text-sm" htmlFor="paket-pred-hiso">
+                      <input
+                        id="paket-pred-hiso"
+                        type="checkbox"
+                        className={`h-5 w-5 ${FOKUS}`}
+                        checked={jePredHiso(pravila.paketNavodilo)}
+                        onChange={(event) => onChange({ ...pravila, paketNavodilo: event.target.checked ? PRED_HISO : "" })}
+                      />
+                      {t("paketPredHiso")}
+                    </label>
+                    {/* Polje ostane vedno prikazano: »pred hišo pod nadstreškom« med tipkanjem ne sme izginiti. */}
+                    <label className={`${OZNAKA_POLJA} mt-2 block`} htmlFor="paket-navodilo">
+                        {t("paketDrugoMesto")}
+                        <textarea
+                          id="paket-navodilo"
+                          aria-describedby="paket-namig"
+                          value={pravila.paketNavodilo ?? ""}
+                          maxLength={160}
+                          rows={2}
+                          onChange={(event) => onChange({ ...pravila, paketNavodilo: event.target.value.replace(/\s*\n\s*/g, " ") })}
+                          className={`${POLJE} mt-2`}
+                        />
+                    </label>
                     <p id="paket-namig" className={NAMIG}>
                       {t("paketNamig")}
                     </p>
@@ -3181,8 +3243,19 @@ export function NastavitveVsebina({
             <StraniNastavitve onError={onError} />
           </Razdelek>
         ),
+        "nast-narocila": (
+          <Razdelek id="nast-narocila" naslov={t("nastPodNarocila")}>
+            <NarocilaNastavitve onError={onError} />
+          </Razdelek>
+        ),
+        "nast-dovoljenja": (
+          <Razdelek id="nast-dovoljenja" naslov={t("dovoljenjaNaslov")}>
+            <DovoljenjaNastavitve onError={onError} />
+          </Razdelek>
+        ),
         "nast-posodobitev": <PosodobitevPanel onError={onError} />,
         "nast-github": <GithubDostop id="nast-github" onError={onError} />,
+        "nast-agenti": <NacrtStikalo id="nast-agenti" />,
         "nast-o-lini": <OLiniPanel id="nast-o-lini" />,
         "nast-iphone": <IphoneNavodila />,
         "nast-mozgani": (
@@ -3535,7 +3608,7 @@ function OmnirouteNastavitve({ onError }: { onError: (sporocilo: string) => void
     try {
       prevzemi(await shraniOmnirouteFn({ data: vnos }));
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "");
+      onError(fault(cause));
     } finally {
       setZaposlen(false);
     }
@@ -3618,7 +3691,7 @@ function OmnirouteNastavitve({ onError }: { onError: (sporocilo: string) => void
           onClick={() =>
             void pozabiOmnirouteFn()
               .then(prevzemi)
-              .catch((c) => onError(c instanceof Error ? c.message : ""))
+              .catch((c) => onError(fault(c)))
           }
         >
           {t("omPozabi")}
@@ -3752,7 +3825,7 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
     const opis =
       i.koda === "namesceno" ? t("posIzidNamesceno") : i.koda === "preklicano" ? t("posIzidPreklicano") : i.koda === "napaka" ? t("posIzidNapaka") : t("posIzidZavrnjeno");
     const cas = new Date(i.cas);
-    return `${t("posZadnjiIzid")}: ${i.razlicica}, ${opis}${Number.isNaN(cas.getTime()) ? "" : ` (${cas.toLocaleString("sl-SI")})`}`;
+    return `${t("posZadnjiIzid")}: ${i.razlicica}, ${opis}${Number.isNaN(cas.getTime()) ? "" : ` (${casKlica(i.cas)})`}`;
   };
   const napisNapake = (r: RazlogZavrnitve): string =>
     r === "ze_tece" ? t("posNapakaZeTece") : r === "napacen_paket" || r === "vsota" ? t("posNapakaPreverba") : r === "prenos" || r === "ni_vira" ? t("posNapakaPrenos") : r === "ni_novejsa" ? t("posNiNovejse") : t("posNapaka");
@@ -3842,10 +3915,10 @@ function DodatkiPanel({ pravila, busy, onChange, onSave, onError }: { pravila: P
     if (k === "slovenski" && s === "deluje") return t("uiSlovenskiNalozen");
     if (k === "slovenski" && s === "se_zaganja") return t("uiSlovenskiNalaga");
     if (k === "slovenski" && s === "napaka") return t(RAZLOG_SLOVENSKI[stanja.slovenskiRazlog ?? ""] ?? "uiSlovenskiNapaka");
-    if (s === "deluje") return "deluje";
-    if (s === "se_zaganja") return "se zaganja …";
-    if (s === "napaka") return "napaka pri zagonu";
-    if (s === "ni_na_voljo") return "še ni na voljo";
+    if (s === "deluje") return t("uiDodatekDeluje");
+    if (s === "se_zaganja") return t("uiDodatekZaganja");
+    if (s === "napaka") return t("uiDodatekNapaka");
+    if (s === "ni_na_voljo") return t("uiDodatekNiNaVoljo");
     return "";
   };
   const vrstice: Array<[keyof NonNullable<Pravila["dodatki"]>, string]> = [

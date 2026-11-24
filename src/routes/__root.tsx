@@ -1,4 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { zacetniJezik } from "@/components/jezik-preklop.tsx";
+import { nastaviJezikVmesnika, t, type Jezik } from "@/lib/lina/besedila.ts";
 import lina2Css from "@/components/lina2/lina2.css?url";
 import appCss from "../styles.css?url";
 
@@ -29,14 +32,31 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  // Zasloni se izrisejo SELE, ko je jezik razresen (N4): sicer otroci ze v slovenscini klicejo streznik (misel dneva z zapiski),
+  // nato jih menjava jezika priklopi se enkrat. Streznik in prvi izris brskalnika sta oba brez zaslonov, zato brez neujemanja.
+  const [jezik, setJezik] = useState<Jezik | null>(null);
+  useEffect(() => {
+    let ziv = true;
+    // Napaka pri razresevanju ne sme pustiti praznega vmesnika: rezerva je slovenscina.
+    void zacetniJezik().catch((): Jezik => "sl").then((j) => {
+      if (!ziv) return;
+      nastaviJezikVmesnika(j);
+      document.title = t("uiNaslovStrani");
+      document.querySelector('meta[name="description"]')?.setAttribute("content", t("uiOpisStrani"));
+      setJezik(j);
+    });
+    return () => {
+      ziv = false;
+    };
+  }, []);
   return (
-    <html lang="sl">
+    <html lang={jezik ?? "sl"}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: SKRIPT_TEMA }} />
         <HeadContent />
       </head>
       <body>
-        <Outlet />
+        {jezik ? <Outlet key={jezik} /> : null}
         <Scripts />
       </body>
     </html>

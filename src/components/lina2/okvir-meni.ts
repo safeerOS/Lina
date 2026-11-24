@@ -4,13 +4,13 @@
  * in preimenuje vnos "narocila" v "Sporočila" / "Messages" (zavihekSporocila iz lib/lina/besedila.ts).
  * Podjetje in nedolocen nacin ostaneta nespremenjena: vseh 12 vnosov v starem vrstnem redu in z istimi oznakami.
  */
-import { t } from "../../lib/lina/besedila.ts";
+import { jezikVmesnika, t, type Jezik } from "../../lib/lina/besedila.ts";
 import { fold } from "../../lib/lina/guards.ts";
 import { jeOsebniNacin, razdelekViden, type NacinKlica } from "../../lib/lina/osebni-nacin.ts";
 import type { RazdelekLine } from "../../lib/lina/ui-videz.ts";
 import { t2, type Beseda2 } from "./besedila.ts";
 
-export type Stran = "domov" | "pogovor" | "koledar" | "imenik" | "novice" | "mediji" | "racunalnik" | RazdelekLine;
+export type Stran = "domov" | "pogovor" | "koledar" | "imenik" | "novice" | "mediji" | "kontrola" | "racunalnik" | RazdelekLine;
 
 export type VnosMenija = { id: Stran; ikona: string; oznaka: string };
 
@@ -28,6 +28,7 @@ const OSNOVNI_MENI: ReadonlyArray<{ id: Stran; ikona: string; oznaka: Beseda2 }>
   { id: "zapiski", ikona: "zapiski", oznaka: "navZapiski" },
   { id: "telefon", ikona: "telefon", oznaka: "navTelefon" },
   { id: "linija", ikona: "linija", oznaka: "navLinija" },
+  { id: "kontrola", ikona: "kontrola", oznaka: "navKontrola" },
   { id: "racunalnik", ikona: "racunalnik", oznaka: "navRacunalnik" },
   { id: "nastavitve", ikona: "nastavitve", oznaka: "navNastavitve" },
 ];
@@ -35,12 +36,14 @@ const OSNOVNI_MENI: ReadonlyArray<{ id: Stran; ikona: string; oznaka: Beseda2 }>
 /** Vidni vnosi levega menija za izbrani nacin in jezik. */
 export function menijStrani(
   nacin: NacinKlica | string | undefined,
-  jezik: "sl" | "en" = "sl",
+  jezik: Jezik = jezikVmesnika(),
 ): VnosMenija[] {
   const osebno = jeOsebniNacin(nacin);
   const izid: VnosMenija[] = [];
   for (const vnos of OSNOVNI_MENI) {
     if (vnos.id === "znanje" && !razdelekViden("znanje", nacin)) continue;
+    // Kontrola tiska je orodje podjetja (tiskarna); v osebnem nacinu je ni.
+    if (vnos.id === "kontrola" && osebno) continue;
     const oznaka =
       vnos.id === "narocila" && osebno
         ? t("zavihekSporocila", jezik)
@@ -64,7 +67,7 @@ export function veljavnaStran(stran: Stran, nacin: NacinKlica | string | undefin
 export function najdiStran(
   poizvedba: string,
   nacin: NacinKlica | string | undefined,
-  jezik: "sl" | "en" = "sl",
+  jezik: Jezik = jezikVmesnika(),
 ): Stran | undefined {
   const f = fold(poizvedba);
   if (!f) return undefined;

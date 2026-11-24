@@ -153,7 +153,7 @@ test("zaledje telefona: prava vrsta, izvor »telefon«, ocena in opomnik v stanj
   const token = await setupOwner("geslo-test-1234", podatki);
   await potrdiOpozorilo(podatki); // brez potrditve opozorila Lina agentov ne zaganja (opozorilo.test.ts)
   const o: Odvisnosti = {
-    dom, platforma: "linux", najdi: (x) => (["xterm", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null),
+    dom, platforma: "linux", najdi: (x) => (["xterm", "bwrap", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null),
     preveriZagon: async () => ({ koda: 0, izpis: "1.0", potekel: false }), zazeni: async () => 1,
   };
   const ura = new Date(Date.now() + 60 * 60_000).toISOString();

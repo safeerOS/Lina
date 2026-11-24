@@ -28,12 +28,21 @@ export function koncnicaIzvedljive(platforma: Platforma = platformaZdaj()): stri
   return jeWindows(platforma) ? ".exe" : "";
 }
 
+/**
+ * Peskovnik za agente z omejenimi mapami (najdba A4): samo Linux z bubblewrap. Drugje (Windows, macOS) null - tak agent tam ni na voljo,
+ * nikoli brez peskovnika.
+ */
+export function programPeskovnika(najdi: (ime: string) => string | null, platforma: Platforma = platformaZdaj()): string | null {
+  return platforma === "linux" ? najdi("bwrap") : null;
+}
+
 /** Terminali za zagon Claude Code (claude-naloge.server.ts), po vrsti; predpona je zastavica pred ukazom in njegovimi argumenti. */
 const TERMINALI: ReadonlyArray<readonly [string, readonly string[]]> = [
   ["x-terminal-emulator", ["-e"]],
-  ["gnome-terminal", ["--"]],
+  // N5: --wait (gnome-terminal >= 3.28) in --disable-server: terminal ne preda okna strezniku in se ne konca takoj, PID ostane znan
+  ["gnome-terminal", ["--wait", "--"]],
   ["konsole", ["-e"]],
-  ["xfce4-terminal", ["-x"]],
+  ["xfce4-terminal", ["--disable-server", "-x"]],
   ["xterm", ["-e"]],
 ];
 
@@ -66,8 +75,8 @@ const PRAVI_E: ReadonlyMap<string, readonly string[]> = new Map([
   ["xterm", ["-e"]],
   ["uxterm", ["-e"]],
   ["konsole", ["-e"]],
-  ["xfce4-terminal", ["-x"]],
-  ["xfce4-terminal.wrapper", ["-x"]],
+  ["xfce4-terminal", ["--disable-server", "-x"]],
+  ["xfce4-terminal.wrapper", ["--disable-server", "-x"]],
 ]);
 
 function razresiPot(p: string): string {

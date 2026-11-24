@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ADC_MANJKA, pozabiZeton, vertexAccessToken } from "./adc.server.ts";
 import {
   filtrirajIzhod,
@@ -10,7 +11,7 @@ import { zapisiDnevnikFiltra } from "./izhodni-filter.server.ts";
 import { BREZPLACNI_SAMO_ASISTENTKA, DEFAULT_BRAIN_MODELS, DEFAULT_VERTEX_LOCATION, IME_PONUDNIKA, jeBrezplacenModel, jeTocnoBrezplacen, type BrainProvider } from "./types.ts";
 import { zabeleziOdgovor } from "./meritve.server.ts";
 import { topliFetch } from "./povezave.server.ts";
-import { naslovKlica, smePrekPrehoda, type PrehodNastavitve } from "./omniroute.ts";
+import { naslovKlica, OMNIROUTE_PRIVZETI_NASLOV, smePrekPrehoda, veljavenNaslovOmniroute, veljavenNaslovPrehoda, type PrehodNastavitve } from "./omniroute.ts";
 import { prehodZaKlic } from "./omniroute.server.ts";
 import { lastniOdgovor, lastniZahtevek, normirajNaslov } from "./lastni-streznik.ts";
 
@@ -37,7 +38,7 @@ export type ProviderCall = {
   maxTokens?: number;
   project?: string;
   location?: string;
-  /** Naslov lastnega streznika (samo ponudnik »custom«, samo pogovor z asistentko). */
+  /** Naslov lastnega streznika (»custom«, samo pogovor z asistentko) ali prehoda OmniRoute (»omniroute«; brez njega shranjeni). */
   naslov?: string;
   /** Rok klica v ms. Privzeto 25 s; obrat telefonskega pogovora ima krajsega, da klic ne molci. */
   timeoutMs?: number;
@@ -65,6 +66,37 @@ export type ProviderCall = {
 
 export const PRIVZETA_MEJA_ZNAKOV = 500;
 const NAJVEC_ZNAKOV = 6000;
+
+/** M5 (slepi pregled mozganov): najvec bajtov odgovora ponudnika ali prehoda; vecji odgovor se prekine (pomnilnik streznika). */
+export const NAJVEC_BAJTOV_ODGOVORA = 2 * 1024 * 1024;
+
+/** Telo odgovora kot besedilo, najvec `meja` bajtov; vecje telo prekine branje in vrze napako. */
+export async function besediloZMejo(odg: Response, meja: number): Promise<string> {
+  const dolzina = Number(odg.headers?.get("content-length") ?? NaN);
+  if (Number.isFinite(dolzina) && dolzina > meja) {
+    await odg.body?.cancel().catch(() => undefined);
+    throw new Error("Odgovor ponudnika je prevelik.");
+  }
+  if (!odg.body) {
+    const besedilo = await odg.text();
+    if (Buffer.byteLength(besedilo) > meja) throw new Error("Odgovor ponudnika je prevelik.");
+    return besedilo;
+  }
+  const bralnik = odg.body.getReader();
+  const kosi: Uint8Array[] = [];
+  let skupaj = 0;
+  for (;;) {
+    const { done, value } = await bralnik.read();
+    if (done) break;
+    skupaj += value.byteLength;
+    if (skupaj > meja) {
+      await bralnik.cancel().catch(() => undefined);
+      throw new Error("Odgovor ponudnika je prevelik.");
+    }
+    kosi.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(kosi));
+}
 
 /** Veljavna meja odgovora: celo stevilo med 1 in 6000, sicer privzeta. */
 export function mejaZnakov(vrednost: number | undefined): number {
@@ -152,12 +184,13 @@ async function klicPrekPrehoda(input: ProviderCall): Promise<{ text: string } | 
       signal: AbortSignal.timeout(Math.max(500, Math.min(PROVIDER_TIMEOUT_MS, Math.round(input.timeoutMs ?? PROVIDER_TIMEOUT_MS)))),
     });
     if (!odg.ok) return { napaka: `Prehod je zavrnil klic (${odg.status}).` };
-    const surovo = await odg.text();
+    const surovo = await besediloZMejo(odg, NAJVEC_BAJTOV_ODGOVORA);
     let besedilo = "";
     try { besedilo = readText(JSON.parse(surovo) as Parameters<typeof readText>[0]); } catch { /* ni JSON */ }
     return besedilo ? { text: hideSecret(besedilo.slice(0, mejaZnakov(input.najvecZnakov)), prehod.kljuc) } : { napaka: "Prehod ni vrnil besedila." };
   } catch (error) {
-    return { napaka: hideSecret(/redirect/i.test(String(error)) ? "Preusmeritev ni dovoljena." : "Prehod ni dosegljiv.", prehod.kljuc) };
+    const besedilo = String(error);
+    return { napaka: hideSecret(/redirect/i.test(besedilo) ? "Preusmeritev ni dovoljena." : /prevelik/.test(besedilo) ? "Odgovor prehoda je prevelik." : "Prehod ni dosegljiv.", prehod.kljuc) };
   }
 }
 
@@ -245,9 +278,12 @@ export function providerRequest(input: ProviderCall): { url: string; init: Reque
     headers.authorization = `Bearer ${input.key}`;
     headers["x-goog-user-project"] = project;
     body = geminiBody(input, text, model);
-  } else if (input.provider === "openai" || input.provider === "grok" || input.provider === "openrouter") {
-    url =
-      input.provider === "openai"
+  } else if (input.provider === "openai" || input.provider === "grok" || input.provider === "openrouter" || input.provider === "omniroute") {
+    const omniroute = input.provider === "omniroute" ? veljavenNaslovOmniroute(input.naslov ?? OMNIROUTE_PRIVZETI_NASLOV) : null;
+    if (input.provider === "omniroute" && !omniroute) throw new Error("Naslov OmniRoute ni veljaven: http samo za 127.0.0.1 ali localhost, sicer https.");
+    url = omniroute
+      ? `${omniroute}/chat/completions`
+      : input.provider === "openai"
         ? "https://api.openai.com/v1/chat/completions"
         : input.provider === "openrouter"
           ? "https://openrouter.ai/api/v1/chat/completions"
@@ -304,7 +340,8 @@ export function providerRequest(input: ProviderCall): { url: string; init: Reque
   }
 
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:") throw new Error("Klic ponudnika je dovoljen samo prek https.");
+  // OmniRoute: http samo na zanki (preverjeno z veljavenNaslovOmniroute zgoraj); vsi ostali samo https.
+  if (parsed.protocol !== "https:" && input.provider !== "omniroute") throw new Error("Klic ponudnika je dovoljen samo prek https.");
   if (input.key && parsed.href.includes(input.key)) throw new Error("Ključ ne sme biti v naslovu.");
   if (input.provider === "openrouter" && parsed.hostname !== "openrouter.ai") {
     throw new Error("OpenRouter sme klicati samo openrouter.ai.");
@@ -336,6 +373,30 @@ export async function httpsFetch(url: string, init: RequestInit = {}, timeoutMs 
   });
   zabeleziOdgovor(odgovor.status, performance.now() - zacetek);
   return odgovor;
+}
+
+/**
+ * Klic prehoda OmniRoute: http samo na 127.0.0.1/localhost (sicer https), brez preusmeritev, z istim rokom kot httpsFetch.
+ * Brez toplega bazena (ta je samo za Googlove gostitelje).
+ */
+export async function omnirouteFetch(url: string, init: RequestInit = {}, timeoutMs = PROVIDER_TIMEOUT_MS, zgornjaMeja = PROVIDER_TIMEOUT_MS): Promise<Response> {
+  if (!veljavenNaslovOmniroute(url)) throw new Error("Naslov OmniRoute ni veljaven: http samo za 127.0.0.1 ali localhost, sicer https.");
+  const rok = Math.max(500, Math.min(Math.min(zgornjaMeja, PROVIDER_TIMEOUT_PRIPONKE_MS), Math.round(timeoutMs)));
+  const zacetek = performance.now();
+  const odgovor = await fetch(url, {
+    ...init,
+    redirect: "error",
+    signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(rok)]) : AbortSignal.timeout(rok),
+  });
+  zabeleziOdgovor(odgovor.status, performance.now() - zacetek);
+  return odgovor;
+}
+
+/** Naslov OmniRoute za klic: iz vhoda, sicer shranjen (klicatelji activeBrain ga ne podajo vsi), sicer privzeti. */
+async function zNaslovomOmniroute(input: ProviderCall): Promise<ProviderCall> {
+  if (input.provider !== "omniroute" || input.naslov) return input;
+  const { naslovOmniroute } = await import("./keys.server.ts");
+  return { ...input, naslov: (await naslovOmniroute().catch(() => null)) ?? OMNIROUTE_PRIVZETI_NASLOV };
 }
 
 function readText(json: {
@@ -410,7 +471,8 @@ export async function callProvider(input: ProviderCall): Promise<RezultatPonudni
   // Nastavitve prehoda iz shrambe, ce jih klicatelj ni podal. Varno privzeto: vsak klic nosi vsebino klica, razen ce klicatelj
   // izrecno poda vsebinaKlica: false (pogovor lastnika z asistentko).
   // Lasten streznik nikoli ne gre prek prehoda (tretja stran).
-  const brezPrehoda = filtriranVhod.provider === "custom";
+  // OmniRoute kot ponudnik je ze prehod: ne gre se enkrat prek prehoda.
+  const brezPrehoda = filtriranVhod.provider === "custom" || filtriranVhod.provider === "omniroute";
   const sPriponkami = (filtriranVhod.priponke?.length ?? 0) > 0;
   const prehod = filtriranVhod.prehod ?? (filtriranVhod.audio || sPriponkami || brezPrehoda ? undefined : await prehodZaKlic().catch(() => undefined));
   if (!filtriranVhod.audio && !sPriponkami && !brezPrehoda && smePrekPrehoda(prehod, vsebinaKlica)) {
@@ -418,6 +480,9 @@ export async function callProvider(input: ProviderCall): Promise<RezultatPonudni
     if ("text" in izid) return { ok: true, text: obnovi(izid.text) };
     // Ne tiho na tretjega: vrnemo se na izbranega ponudnika in uporabniku pokazemo razlog.
     opozorilo = `${izid.napaka} Uporabljen je izbrani ponudnik.`;
+  } else if (prehod?.vklop === true && !veljavenNaslovPrehoda(prehod.naslov)) {
+    // M8: vklopljen prehod z naslovom, ki ni vec dovoljen (http v domace omrezje) - brez prehoda, a uporabnik izve zakaj.
+    opozorilo = "Naslov prehoda ni dovoljen (http samo za ta računalnik, sicer https). Uporabljen je izbrani ponudnik.";
   }
   const izidPonudnika = await callProviderNeposredno(filtriranVhod);
   if (!izidPonudnika.ok) return izidPonudnika;
@@ -483,7 +548,7 @@ async function callLastni(input: ProviderCall): Promise<RezultatPonudnika> {
     });
     const response = await lastniFetch(url, input.signal ? { ...init, signal: input.signal } : init, input.timeoutMs);
     if (response.status >= 300 && response.status < 400) return { ok: false, sporocilo: "Preusmeritev ni dovoljena." };
-    const raw = await response.text();
+    const raw = await besediloZMejo(response, NAJVEC_BAJTOV_ODGOVORA);
     if (!response.ok) return { ok: false, sporocilo: hideSecret(`Strežnik je zavrnil klic (${response.status}).`, secret) };
     const izid = lastniOdgovor(raw);
     if (!izid.ok) return { ok: false, sporocilo: hideSecret(izid.sporocilo, secret) };
@@ -524,8 +589,15 @@ async function napakaOpenRouter(input: ProviderCall, status: number, secret: str
 
 /**
  * Model, ki ga ponudnik ne pozna vec -> delujoc model istega ponudnika (v tem procesu; trajno ga zapise keys.server.ts).
- * shortcut: kljuc je ponudnik+model, ne kljuc racuna; ce bi dva kljuca istega ponudnika videla razlicne modele, dodaj odtis kljuca.
+ * Kljuc zamenjave (slepi pregled M3): ponudnik + naslov + odtis kljuca racuna + model - zamenjava enega racuna nikoli ne preusmeri
+ * drugega mimo preizkusa. Vloga je v kljucu samo pri OmniRoute (klici tam nimajo samodejne zamenjave, M2); drugje velja ista izbira
+ * za obe vlogi, zato tekoci klic istega racuna s starim modelom dobi zamenjavo asistentke.
  */
+function kljucZamenjaveModela(input: ProviderCall, model: string): string {
+  const odtis = createHash("sha256").update(input.key ?? "").digest("hex").slice(0, 16);
+  const vloga = input.provider === "omniroute" ? (input.vsebinaKlica === false ? "asistentka" : "klici") : "";
+  return [input.provider, input.naslov ?? "", odtis, vloga, model].join("|");
+}
 const zamenjaniModeli = new Map<string, string>();
 const izbireVTeku = new Map<string, Promise<{ ok: true; model: string } | { ok: false; sporocilo: string; vzrok?: VzrokNapake }>>();
 
@@ -554,12 +626,17 @@ export async function preizkusiModel(input: ProviderCall): Promise<RezultatPonud
  */
 async function poZamenjaviModela(input: ProviderCall, model: string, secret: string, status: number): Promise<RezultatPonudnika> {
   if (input.brezZamenjave) return { ok: false, sporocilo: razlogVzroka(input.provider, "model"), vzrok: "model" };
+  const zaKlice = input.vsebinaKlica !== false;
+  // M2 (slepi pregled): OmniRoute posreduje k razlicnim (tudi brezplacnim, tretjim) ponudnikom; vsebine klica Lina ne preusmeri sama.
+  if (input.provider === "omniroute" && zaKlice) {
+    return { ok: false, sporocilo: hideSecret(`${razlogVzroka(input.provider, "model")} Za klice izberite model sami.`, secret), vzrok: "model" };
+  }
   // Samo shranjen model (klici, ponudnik, izbira asistentke); klicatelj s stalnim, izmerjenim modelom (npr. razumevanje) ga obdrzi.
   const kljuci = await import("./keys.server.ts");
   if (!(await kljuci.jeShranjenModel(input.provider, model).catch(() => false))) {
     return { ok: false, sporocilo: hideSecret(`Ponudnik je zavrnil klic (${status}).`, secret), vzrok: "model" };
   }
-  const kljucZamenjave = `${input.provider}|${model}`;
+  const kljucZamenjave = kljucZamenjaveModela(input, model);
   let izbira = izbireVTeku.get(kljucZamenjave);
   if (!izbira) {
     const { izberiDelujocModel } = await import("./samodejni-model.server.ts");
@@ -568,8 +645,10 @@ async function poZamenjaviModela(input: ProviderCall, model: string, secret: str
       key: input.key,
       ...(input.project !== undefined ? { project: input.project } : {}),
       ...(input.location !== undefined ? { location: input.location } : {}),
-      zaKlice: input.vsebinaKlica !== false,
+      ...(input.naslov !== undefined ? { naslov: input.naslov } : {}),
+      zaKlice,
       izkljuci: [model],
+      istiIzdelovalecKot: model,
     }).finally(() => izbireVTeku.delete(kljucZamenjave));
     izbireVTeku.set(kljucZamenjave, izbira);
   }
@@ -579,15 +658,16 @@ async function poZamenjaviModela(input: ProviderCall, model: string, secret: str
   const ponovno = await callProviderNeposredno({ ...input, model: izid.model, brezZamenjave: true });
   if (!ponovno.ok) return ponovno;
   const obvestilo = `Model ${model} pri ponudniku ${IME_PONUDNIKA[input.provider]} ni več na voljo, zato je Lina preklopila na ${izid.model}.`;
-  await kljuci.zamenjajModel(input.provider, model, izid.model, obvestilo).catch(() => undefined);
+  await kljuci.zamenjajModel(input.provider, model, izid.model, obvestilo, undefined, { zaKlice, kljuc: input.key }).catch(() => undefined);
   return { ...ponovno, povratek: obvestilo };
 }
 
 async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonudnika> {
   if (vhod.provider === "custom") return callLastni(vhod);
-  // Model, ki ga je ponudnik ze zavrnil: takoj nadomestni (tekoci klic ima stari model v pomnilniku).
-  const nadomestni = vhod.brezZamenjave ? undefined : zamenjaniModeli.get(`${vhod.provider}|${cleanModel(vhod.model, vhod.provider)}`);
-  const input = nadomestni ? { ...vhod, model: nadomestni } : vhod;
+  // Model, ki ga je ponudnik ze zavrnil: takoj nadomestni (tekoci klic ima stari model v pomnilniku); samo isti racun, naslov in vloga.
+  const zNaslovom = await zNaslovomOmniroute(vhod);
+  const nadomestni = vhod.brezZamenjave ? undefined : zamenjaniModeli.get(kljucZamenjaveModela(zNaslovom, cleanModel(vhod.model, vhod.provider)));
+  const input = nadomestni ? { ...zNaslovom, model: nadomestni } : zNaslovom;
   let secret = input.key;
   try {
     if (input.provider === "vertex") {
@@ -595,12 +675,12 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
     }
     const { url, init } = providerRequest(input.provider === "vertex" ? { ...input, key: secret } : input);
     const zgornjaMeja = input.priponke?.length ? PROVIDER_TIMEOUT_PRIPONKE_MS : PROVIDER_TIMEOUT_MS;
-    const response = await httpsFetch(url, input.signal ? { ...init, signal: input.signal } : init, input.timeoutMs, zgornjaMeja);
+    const response = await (input.provider === "omniroute" ? omnirouteFetch : httpsFetch)(url, input.signal ? { ...init, signal: input.signal } : init, input.timeoutMs, zgornjaMeja);
     if (input.provider === "vertex" && response.status === 401) pozabiZeton();
     if (response.status >= 300 && response.status < 400) {
       return { ok: false, sporocilo: "Preusmeritev ni dovoljena." };
     }
-    const raw = await response.text();
+    const raw = await besediloZMejo(response, NAJVEC_BAJTOV_ODGOVORA);
     if (!response.ok) {
       const vzrok = vzrokNapake(response.status, raw);
       const model = cleanModel(input.model, input.provider);

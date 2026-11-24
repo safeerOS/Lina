@@ -4,13 +4,14 @@ import { LinaDesk } from "@/components/lina-desk.tsx";
 import { izberiModelFn, logoutFn } from "@/lib/lina/functions.ts";
 import { IME_PONUDNIKA } from "@/lib/lina/types.ts";
 import { kliciZaPrikaz, steviloNovih } from "@/lib/lina/imenik.ts";
-import type { RazdelekLine } from "@/lib/lina/ui-videz.ts";
+import { datumGlave, uraGlave, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
 import { Cvet, DomovPanel, Ikona, ImenikPanel } from "./domov.tsx";
 import { KoledarPanel } from "./koledar.tsx";
 import { ImeKartica } from "./ime-kartica.tsx";
 import { MedijiPanel } from "./mediji.tsx";
 import { NovicePanel } from "./novice.tsx";
 import { RacunalnikPanel } from "./racunalnik.tsx";
+import { KontrolaTiskaPanel } from "./kontrola-tiska.tsx";
 import { AsistentPanel } from "./pogovor.tsx";
 import { t2 } from "./besedila.ts";
 import { jeStran, menijStrani, najdiStran, veljavnaStran, type Stran } from "./okvir-meni.ts";
@@ -22,7 +23,7 @@ import { jeStran, menijStrani, najdiStran, veljavnaStran, type Stran } from "./o
  */
 type Props = Parameters<typeof LinaDesk>[0];
 
-const LASTNI: ReadonlyArray<Stran> = ["domov", "pogovor", "koledar", "imenik", "novice", "mediji", "racunalnik"];
+const LASTNI: ReadonlyArray<Stran> = ["domov", "pogovor", "koledar", "imenik", "novice", "mediji", "kontrola", "racunalnik"];
 const KLJUC_MENIJA = "lina2-menu-zmanjsan";
 const KLJUC_OGLED = "lina-klici-ogled";
 
@@ -124,8 +125,8 @@ export function Lina2Okvir(props: Props) {
     setIskanje("");
   }
 
-  const ura = zdaj?.toLocaleTimeString("sl-SI", { hour: "2-digit", minute: "2-digit" }) ?? "";
-  const datum = zdaj?.toLocaleDateString("sl-SI", { weekday: "short", day: "numeric", month: "short" }) ?? "";
+  const ura = zdaj ? uraGlave(zdaj) : "";
+  const datum = zdaj ? datumGlave(zdaj) : "";
   const odprta = props.line.open;
   const mozgani = props.brain.nastavljen || props.llm;
 
@@ -221,6 +222,7 @@ export function Lina2Okvir(props: Props) {
             {aktivnaStran === "imenik" ? <ImenikPanel calls={props.calls} /> : null}
             {aktivnaStran === "novice" ? <NovicePanel /> : null}
             {aktivnaStran === "mediji" ? <MedijiPanel /> : null}
+            {aktivnaStran === "kontrola" ? <KontrolaTiskaPanel /> : null}
             {aktivnaStran === "racunalnik" ? <RacunalnikPanel /> : null}
             {LASTNI.includes(aktivnaStran) ? null : <LinaDesk {...props} zacetniZavihek={aktivnaStran as RazdelekLine} vdelan />}
           </div>

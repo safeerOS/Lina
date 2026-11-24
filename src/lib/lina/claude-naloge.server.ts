@@ -12,17 +12,20 @@
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { constants, accessSync } from "node:fs";
+import { constants, accessSync, existsSync, realpathSync } from "node:fs";
 import { lstat, mkdir, open, readdir, readFile, readlink, realpath, rename, writeFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { ownerExists, requireOwner } from "./auth.server.ts";
 import {
   AGENTI,
   ClaudeNalogaNapaka,
+  DATOTEKA_NACRTA,
   DATOTEKA_NALOGE,
   DATOTEKA_POROCILA,
   MAPA_NALOG,
+  NAJVEC_BAJTOV_NACRTA,
   NAJVEC_BAJTOV_POROCILA,
   NAJVEC_CAKAJOCIH,
   NAJVEC_CAKAJOCIH_LINE,
@@ -36,12 +39,14 @@ import {
   imaNevidne,
   jeAgent,
   jeIdNaloge,
+  jeNacrtovanje,
   jePotekel,
   naslednjiOpomnik,
   ocenaTrajanja,
   ocistiBesediloNaloge,
   obreziZgodovino,
   ocistiPorocilo,
+  ovijNacrt,
   pogojIzOznake,
   pozivZaClaude,
   preveriMapo,
@@ -62,20 +67,64 @@ import {
   type StanjeNaloge,
   type ZapisNaloge,
 } from "./claude-naloge.ts";
+import {
+  MAPA_DELA as MAPA_DELA_VODJE,
+  NAJVEC_KROGOV,
+  besediloPopravka,
+  besediloSpora,
+  jeArgvPreizkusa,
+  jeKoncnaFaza,
+  navodiloPregleda,
+  opisNapake,
+  razberiNajdbe,
+  type RazlogVodje,
+  type VlogaNaloge,
+  type VodjaNaloge,
+} from "./claude-naloge-vodja.ts";
+import {
+  diffKopije,
+  git as gitVodje,
+  izvoziZdruzitev,
+  jeZdruzitev,
+  osveziZIzvirnikom,
+  pripraviPregled,
+  pripraviSporMape,
+  privzetoIzvedi,
+  ustvariKopijo,
+  uveljavi,
+  vDelu,
+  zdruzi,
+  type DepsVodje,
+  type Izvedi,
+  type Zdruzitev,
+} from "./claude-naloge-vodja.server.ts";
 import { opozoriloPotrjeno } from "./opozorilo.server.ts";
-import { platformaZdaj, ukazTerminala, type Platforma } from "./platforma.server.ts";
+import {
+  besediloPredlogaTock,
+  navodiloTock,
+  oceniTocke,
+  potVProjektu,
+  povzetekTock,
+  tockeNaloge,
+  type IzidTocke,
+  type PovzetekTock,
+} from "./tocke-naloge.ts";
+import { platformaZdaj, programPeskovnika, ukazTerminala, type Platforma } from "./platforma.server.ts";
 import { jeNovProjekt, sestaviPregledProjekta } from "./pregled-projekta.server.ts";
 import { kazaloZaProjekt, zapisiOpazanjeNaloge } from "./spomin-nalog.server.ts";
-import { resolveDataDir } from "./store.server.ts";
+import { resolveDataDir, writeJson } from "./store.server.ts";
 import { casZagonaProcesa } from "./tunel.server.ts";
 
 export type { DogodekNalogaKoncana } from "./claude-naloge.ts";
+import { najdiDovoljenje, zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
+import { jeTveganoDejanje } from "./dovoljenja-podobne.ts";
 
 export const DATOTEKA_STANJA = "claude-naloge.json";
 const NAJVEC_MAP = 10;
 const NAJVEC_PREPOVEDANIH = 20;
 /** Najvec dodeljenih nalog, ki cakajo pogoj (vrsta ne raste brez meje). */
 const NAJVEC_DODELJENIH = 20;
+const NAJVEC_UKAZOV_PREIZKUSOV = 5;
 
 type Stanje = {
   v: 1;
@@ -85,6 +134,10 @@ type Stanje = {
   agenti?: Partial<Record<AgentId, boolean>>;
   /** Prepovedane mape za agente z omejenimi mapami (opencode, agy); shranjene dobesedno, preverjene po zapisu IN po realpath. */
   prepovedane?: string[];
+  /** Lina kot vodja: pregledovalec (privzeto claude), ukazi preizkusov po projektu (privzeto zaznani), zdruzitve po projektu. */
+  pregledovalec?: AgentId;
+  preizkusi?: Record<string, string[][]>;
+  zdruzitve?: Record<string, Zdruzitev>;
 };
 
 /** Zagon terminala; vrne PID, ce proces terminala po zagonu se zivi (za stetje hkratnih, N5). */
@@ -117,6 +170,9 @@ export type Odvisnosti = {
   preveriZagon?: PreverbaZagona;
   /** Cas zagona Line (razporejevalnik: kar je zamujeno pred njim, potrebuje novo potrditev); privzeto zagon tega procesa. */
   zagonLine?: Date;
+  /** Lina kot vodja: git, diff in patch (privzeto pravi programi brez lupine) in ukazi preizkusov (ze z mejo pomnilnika). */
+  izvedi?: Izvedi;
+  izvediPreizkus?: Izvedi;
 };
 
 export type JavnaNaloga = {
@@ -135,6 +191,34 @@ export type JavnaNaloga = {
   ocena: { konec: string; groba: boolean } | null;
   opomnik: Opomnik | null;
   koncano: string | null;
+  /** V mapi naloge je nacrt.html, ki prestane varno branje (vsebino da samo nacrtClaudeNaloge). */
+  nacrt: boolean;
+  /** Lina kot vodja: polna pot kopije, vloga (pregled/popravek/spor) in za katero nalogo, faza pregleda in zdruzitve. */
+  kopija: string | null;
+  vloga: VlogaNaloge | null;
+  za: string | null;
+  vodja: VodjaNaloge | null;
+  /** Tocke naloge s preverjenimi dokazi (»3/5 narejeno« in manjkajoce), ko je agent koncal; null brez tock ali pred koncem. */
+  tocke: PovzetekTock | null;
+  /** Predlog nove naloge za manjkajoce tocke (id) ali »napaka«; null, ce ga ni bilo treba. */
+  predlogTock: string | null;
+};
+
+export type JavnaZdruzitev = {
+  projekt: string;
+  pot: string;
+  git: boolean;
+  veja: string | null;
+  naloge: string[];
+  zgostitev: string | null;
+  diff: string | null;
+  /** Lina posodablja zdruzeno delo z izvirnikom; razlog, ce zadnja posodobitev ni uspela. */
+  osvezi: boolean;
+  razlog: Zdruzitev["razlog"] | null;
+  /** Tocki 7/8: besedilo razloga (koda opisa, podrobnost) in pot izvozenega popravka. */
+  opis: Zdruzitev["opis"] | null;
+  podrobnost: string | null;
+  izvoz: string | null;
 };
 
 export type StanjeAgenta = {
@@ -142,7 +226,8 @@ export type StanjeAgenta = {
   ime: string;
   pot: string | null;
   /** pripravljen = zaznan in zagon brez okna je uspel; samo tak agent je v izbiri. */
-  stanje: "pripravljen" | "ni-najden" | "ne-deluje" | "prijava" | "izklopljen";
+  /** brez-peskovnika: agent z omejenimi mapami, bwrap manjka ali ne deluje (ali Windows) - ni na voljo (A4). */
+  stanje: "pripravljen" | "ni-najden" | "ne-deluje" | "prijava" | "izklopljen" | "brez-peskovnika";
   razlicica: string;
   vklopljen: boolean;
   kanal: boolean;
@@ -158,6 +243,11 @@ export type JavnoStanjeNalog = {
   naloge: JavnaNaloga[];
   agenti: StanjeAgenta[];
   prepovedane: string[];
+  pregledovalec: AgentId;
+  preizkusi: Record<string, string[][]>;
+  zdruzitve: JavnaZdruzitev[];
+  /** N7: omrezje agentov z omejenimi mapami - »loceno« (pasta) ali »gostitelj« (namig: namesti passt); null, ce takega agenta ni. */
+  omrezjeAgentov: "loceno" | "gostitelj" | null;
 };
 
 /** Program na PATH (izvedljiva datoteka) ali null. */
@@ -184,7 +274,7 @@ const ROK_ZAGONA_MS = 1500;
  * okno strezniku in se konca); takrat PID ni znan. Sicer vrne PID.
  * shortcut: terminal, ki se konca s kodo 0, ceprav Claude Code ni zagnan, ostane »tece« do porocila ali roka 2 h; potrditev zagona bi potrebovala ovoj okoli claude.
  */
-const privzetiZagon: Zagon = (program, args, cwd, okolje) =>
+export const privzetiZagonTerminala: Zagon = (program, args, cwd, okolje) =>
   new Promise((razresi, zavrni) => {
     const otrok = spawn(program, [...args], { cwd, env: okolje, detached: true, stdio: "ignore", windowsHide: true, shell: false });
     let rok: ReturnType<typeof setTimeout> | undefined;
@@ -290,6 +380,13 @@ async function preberi(root: string): Promise<Stanje> {
       naloge: Array.isArray(s.naloge) ? obreziZgodovino(s.naloge.filter((n) => n && jeIdNaloge(n.id)), new Date()) : [],
       agenti,
       prepovedane: Array.isArray(s.prepovedane) ? s.prepovedane.filter((m): m is string => typeof m === "string" && path.isAbsolute(m)).slice(0, NAJVEC_PREPOVEDANIH) : [],
+      ...(jeAgent(s.pregledovalec) ? { pregledovalec: s.pregledovalec } : {}),
+      preizkusi: Object.fromEntries(
+        Object.entries(s.preizkusi && typeof s.preizkusi === "object" ? s.preizkusi : {}).filter(
+          ([k, v]) => path.isAbsolute(k) && Array.isArray(v) && v.length <= NAJVEC_UKAZOV_PREIZKUSOV && v.every(jeArgvPreizkusa),
+        ),
+      ),
+      zdruzitve: Object.fromEntries(Object.entries(s.zdruzitve && typeof s.zdruzitve === "object" ? s.zdruzitve : {}).filter(([k, v]) => jeZdruzitev(v, root) && v.projekt === k)),
     };
   } catch {
     return { v: 1, mape: [], naloge: [], agenti: {}, prepovedane: [] };
@@ -356,7 +453,8 @@ const NAJVEC_VNOSOV_POVEZAV = 20_000;
 /**
  * A4 (delno, brez peskovnika): simbolna povezava v projektni mapi, ki se razresi v prepovedano mapo (ali nad/pod njo). Povezavam se ne
  * sledi, node_modules se preskoci, visece povezave ne motijo.
- * shortcut: globina 8 in 20 000 vnosov; vecji projekt se zavrne (fail-closed), dokler ni peskovnika (bubblewrap/landlock).
+ * Zdaj dodatna plast poleg peskovnika (ovojPeskovnika: prepovedane mape so v bwrap prekrite, tudi prek povezave).
+ * shortcut: globina 8 in 20 000 vnosov; vecji projekt se zavrne (fail-closed); ko je peskovnik dokazan z resnicnimi agenti, se lahko meja sprosti.
  */
 async function povezavaVPrepovedano(koren: string, prepovedane: readonly string[]): Promise<boolean> {
   let vnosov = 0;
@@ -379,32 +477,275 @@ async function povezavaVPrepovedano(koren: string, prepovedane: readonly string[
   return false;
 }
 
+// ------------------------------------------------------------------ A4: peskovnik (bubblewrap) za agente z omejenimi mapami
+
+/**
+ * Osnova peskovnika: ves datotecni sistem samo za branje, svoj /dev, /proc samo procesov peskovnika (--unshare-pid), prazen /tmp, BREZ
+ * omrezja (N7, pregled agentov 24. 11.: loopback gostitelja - lokalni strezniki, spomin sej - in abstraktne vticnice X11 bi obsli prekrivko
+ * prepovedanih map; fail-closed, dokler ni posrednika samo do ponudnika agenta). Prekrit /run (vticnice: docker.sock = root, vodilo seje: `systemd-run --user` ali gdbus bi zagnal ukaz zunaj
+ * peskovnika, Wayland) razen mape razresevalnika DNS, kamor kaze /etc/resolv.conf; brez DISPLAY/XAUTHORITY. Brez --new-session: interaktivni
+ * agent potrebuje svoj terminal (TIOCSTI je v jedru >= 6.2 privzeto izklopljen).
+ */
+function osnovaPeskovnika(okolje: NodeJS.ProcessEnv = process.env, brezOmrezja = true): string[] {
+  const xdg = okolje.XDG_RUNTIME_DIR;
+  const izvajalne = ["/run", ...(xdg && path.isAbsolute(xdg) && !vPrepovedani(xdg, ["/run"]) ? [xdg] : [])].filter((p) => existsSync(p));
+  let dns: string | null = null;
+  try {
+    dns = path.dirname(realpathSync("/etc/resolv.conf"));
+  } catch {
+    /* brez resolv.conf */
+  }
+  return [
+    "--die-with-parent", "--unshare-pid", "--unshare-ipc", ...(brezOmrezja ? ["--unshare-net"] : []),
+    "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
+    ...izvajalne.flatMap((p) => ["--tmpfs", p]),
+    ...(dns && dns !== "/run" && vPrepovedani(dns, ["/run"]) ? ["--ro-bind-try", dns, dns] : []),
+    ...["DBUS_SESSION_BUS_ADDRESS", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"].flatMap((k) => ["--unsetenv", k]),
+  ];
+}
+
+/**
+ * N3: kar je v peskovniku vedno skrito poleg prepovedanih map: mapa podatkov Line (seje, sifrirani kljuci, stanje nalog), kljuci in seje v
+ * domu (drugi agenti, ssh, gpg, brskalniki, piskotek X11) in mape nastavitev DRUGIH agentov. Obstojece po realpath; mapa = tmpfs, datoteka =
+ * /dev/null. Kopija naloge je pod mapo podatkov: veze se ZA tem skrivanjem.
+ */
+const SKRITO_V_DOMU = [
+  ".claude", ".claude.json", ".claude-mem", ".codex", ".ssh", ".gnupg", ".aws", ".kube", ".docker", ".netrc", ".git-credentials",
+  ".password-store", ".mozilla", ".Xauthority", ".ICEauthority", ".local/share/keyrings", ".config/gh", ".config/google-chrome",
+  ".config/chromium", ".config/BraveSoftware", ".config/git", ".gitconfig",
+];
+
+async function prekrij(poti: Iterable<string>): Promise<string[]> {
+  const izid: string[] = [];
+  for (const p of new Set(poti)) {
+    const k = await kanonicna(p);
+    const st = k ? await lstat(k).catch(() => null) : null;
+    if (!k || !st) continue; // ne obstaja: ni kaj brati
+    izid.push(...(st.isDirectory() ? ["--tmpfs", k] : ["--ro-bind", "/dev/null", k]));
+  }
+  return izid;
+}
+
+async function skritoVPeskovniku(root: string | undefined, o: Odvisnosti, agent: AgentId | null): Promise<string[]> {
+  const dom = o.dom ?? homedir();
+  const tuje = AGENTI.filter((a) => a !== agent).flatMap((a) => OPIS_AGENTOV[a].nastavitve ?? []);
+  return prekrij([...(root ? [root] : []), ...[...SKRITO_V_DOMU, ...tuje].map((r) => path.join(dom, r))]);
+}
+
+/**
+ * N4: predpona bwrap za preizkuse v mapi zdruzitve (dela agenta z omejenimi mapami): brez omrezja in vodila seje, podatki Line, kljuci doma
+ * in prepovedane mape skriti, zapisljiva samo mapa zdruzitve. Brez bwrap null (preizkusi se ne pozenejo).
+ */
+export async function ovojPreizkusa(root: string, o: Odvisnosti, mapa: string): Promise<string[] | null> {
+  const bwrap = programPeskovnika(o.najdi ?? ((ime: string) => najdiNaPoti(ime)), o.platforma ?? platformaZdaj());
+  if (!bwrap || !vDelu(root, mapa)) return null;
+  const s = await preberi(root);
+  return [
+    bwrap, ...osnovaPeskovnika(), ...(await skritoVPeskovniku(root, o, null)), "--bind", mapa, mapa, ...(await prekrij(s.prepovedane ?? [])),
+    "--chdir", mapa, "--",
+  ];
+}
+
+/** Preverba ob zaznavi: bwrap z isto osnovo zares zazene ukaz (uporabniski imenski prostori dovoljeni, AppArmor ga ne ustavi). */
+async function peskovnikDeluje(o: Odvisnosti, preveri: PreverbaZagona): Promise<boolean> {
+  const bwrap = programPeskovnika(o.najdi ?? ((ime: string) => najdiNaPoti(ime)), o.platforma ?? platformaZdaj());
+  if (!bwrap) return false;
+  const v = await preveri(bwrap, [...osnovaPeskovnika(), "--", "/bin/sh", "-c", ":"], ROK_PREVERBE_MS);
+  return !v.potekel && v.koda === 0;
+}
+
+/**
+ * Ukaz bwrap pred programom agenta. Zapisljiva je samo delovna mapa: izvirni projekt, ce naloga nima kopije; sicer SAMO kopija (N3: izvirnik
+ * in njegov .git ostaneta samo za branje - git agenta v worktree kopije ne more pisati, commit naredi Lina v diffKopije). Mape nastavitev
+ * agenta samo za branje (N10: zapis vticnika ali streznika MCP bi se izvedel zunaj peskovnika ob naslednjem zagonu).
+ * shortcut: agent, ki mora pisati v svoje nastavitve (prijava, zgodovina), v peskovniku tega ne more; bwrap 0.9 nima --tmp-overlay.
+ * Skrito: podatki Line, kljuci doma, nastavitve drugih agentov (skritoVPeskovniku). Prepovedane mape (po realpath; obstojece) prekrite s praznim tmpfs ZADNJE, da zmagajo tudi znotraj zapisljive mape; datoteka z /dev/null.
+ * Brez bwrap: napaka »peskovnik« (fail-closed, nikoli zagon brez peskovnika).
+ */
+async function nastavitveAgenta(agent: AgentId, dom: string): Promise<string[]> {
+  const izid: string[] = [];
+  for (const r of OPIS_AGENTOV[agent].nastavitve ?? []) {
+    const p = path.join(dom, r);
+    // prvi zagon ali prijava: mapa mora obstajati, sicer je bwrap ne more vezati in agent ne more zapisati prijave
+    await mkdir(p, { recursive: true, mode: 0o700 }).catch(() => undefined);
+    const k = await kanonicna(p);
+    if (k && (await lstat(k).catch(() => null))?.isDirectory()) izid.push("--bind", k, k);
+  }
+  return izid;
+}
+
+/**
+ * N7 (vodja 24. 11.): agent z omejenimi mapami ima omrezje (sicer ne doseze ponudnika). Ce pasta deluje: lasten imenski prostor omrezja
+ * BREZ dostopa do gostitelja (--no-map-gw: naslov prehoda ni gostitelj; -T/-U none: brez posredovanja na vrata loopbacka gostitelja;
+ * -t/-u none: brez vhodnih vrat) in DNS prek --dns-forward (resolv.conf gostitelja kaze na 127.0.0.53, ki ga v novem imenskem prostoru ni).
+ * Sicer omrezje gostitelja (loopback gostitelja in Linin streznik sta dosegljiva; Nastavitve pokazejo namig za passt).
+ * shortcut: slirp4netns ni podprt (potrebuje PID ze tekocega procesa); zastavice pasta so preverjene samo z laznim pasta (na tem racunalniku ga ni).
+ */
+const DNS_PASTA = "169.254.1.53";
+const ZASTAVICE_PASTA = ["--config-net", "--quiet", "--no-map-gw", "-t", "none", "-u", "none", "-T", "none", "-U", "none", "--dns-forward", DNS_PASTA, "--"];
+const pastaPreverjen = new WeakMap<PreverbaZagona, boolean>();
+
+async function pastaDeluje(o: Odvisnosti, osvezi = false): Promise<string | null> {
+  const pasta = (o.najdi ?? ((ime: string) => najdiNaPoti(ime)))("pasta");
+  // samo za agente, ki so ze prestali preverbo bwrap (programPeskovnika: samo Linux)
+  if (!pasta) return null;
+  const preveri = o.preveriZagon ?? privzetaPreverba;
+  if (osvezi || !pastaPreverjen.has(preveri)) {
+    // prava veriga kot ob zagonu (pasta -> bwrap brez --unshare-net): ce bwrap v imenskem prostoru pasta ne dela, ostane omrezje gostitelja
+    const bwrap = programPeskovnika(o.najdi ?? ((ime: string) => najdiNaPoti(ime)), o.platforma ?? platformaZdaj());
+    const v = !bwrap
+      ? { koda: 1, potekel: false }
+      : await preveri(pasta, [...ZASTAVICE_PASTA, bwrap, ...osnovaPeskovnika(process.env, false), "--", "/bin/sh", "-c", ":"], ROK_PREVERBE_MS)
+          .catch(() => ({ koda: 1, potekel: false }));
+    pastaPreverjen.set(preveri, !v.potekel && v.koda === 0);
+  }
+  return pastaPreverjen.get(preveri) ? pasta : null;
+}
+
+/** Predpona pasta in vezava resolv.conf v bwrap (prazno = omrezje gostitelja). */
+async function omrezjeAgenta(root: string | undefined, o: Odvisnosti): Promise<{ pred: string[]; dns: string[] }> {
+  const pasta = root ? await pastaDeluje(o) : null;
+  if (!pasta || !root) return { pred: [], dns: [] };
+  const datoteka = path.join(root, "peskovnik-resolv.conf");
+  writeFileSync(datoteka, `nameserver ${DNS_PASTA}\n`, { mode: 0o644 });
+  let cilj = "/etc/resolv.conf";
+  try {
+    cilj = realpathSync(cilj);
+  } catch {
+    /* brez resolv.conf: veze se na /etc/resolv.conf */
+  }
+  return { pred: [pasta, ...ZASTAVICE_PASTA], dns: ["--ro-bind", datoteka, cilj] };
+}
+
+async function ovojPeskovnika(root: string, agent: AgentId, z: ZapisNaloge, delovna: string, s: Stanje, o: Odvisnosti): Promise<string[]> {
+  const bwrap = programPeskovnika(o.najdi ?? ((ime: string) => najdiNaPoti(ime)), o.platforma ?? platformaZdaj());
+  if (!bwrap) throw new ClaudeNalogaNapaka("peskovnik");
+  const dom = o.dom ?? homedir();
+  const pisanje = [...new Set([...(z.kopija ? [z.kopija] : [z.mapa]), delovna])].flatMap((p) => ["--bind", p, p]);
+  // N10 (vodja 24. 11.): lastne mape nastavitev zapisljive (prijava, zgodovina) PRED skrivanjem: skrito in prepovedano zmaga tudi prek povezave
+  const nastavitve = await nastavitveAgenta(agent, dom);
+  const skrij = await prekrij(s.prepovedane ?? []);
+  const net = await omrezjeAgenta(root, o);
+  return [
+    ...net.pred, bwrap, ...osnovaPeskovnika(process.env, false), ...net.dns, ...nastavitve, ...(await skritoVPeskovniku(root, o, agent)), ...pisanje,
+    ...skrij, "--chdir", delovna, "--",
+  ];
+}
+
 /**
  * Mapa naloge in porocilo: brez sledenja simbolnim povezavam (agent bi lahko povezavo podtaknil namesto porocila). Drugi pregled 0.2.10:
  * odpiranje brez blokiranja (O_NONBLOCK: cev brez pisca ne ustavi stanja in vrste, CodeRabbit), samo navadna datoteka z ENO povezavo
  * (trda povezava na tujo datoteko, N4) in istim lastnikom kot Lina; mapa naloge mora biti ista kot ob zagonu (dev:ino).
  * shortcut: med preverbo mape in odprtjem ostane kratko okno (Node nima openat); agent ima tako ali tako dostop do istih datotek.
  */
-async function preberiPorocilo(z: ZapisNaloge): Promise<{ besedilo: string; cas: string } | null> {
-  const mapaNalog = path.join(z.mapa, MAPA_NALOG);
+async function preberiPorocilo(root: string, z: ZapisNaloge): Promise<{ besedilo: string; cas: string } | null> {
+  const p = await preberiDatotekoNaloge(root, z, DATOTEKA_POROCILA, NAJVEC_BAJTOV_POROCILA, "rezi");
+  return p && { besedilo: ocistiPorocilo(p.besedilo), cas: p.cas };
+}
+
+/**
+ * Datoteka iz mape naloge (POROCILO.md, nacrt.html) z enakimi ovirami za vse: brez simbolnih povezav, ena povezava, isti uid, mapa naloge
+ * ista kot ob zagonu. »rezi«: preberi do meje (porocilo); »cela«: vecja od meje = null (nacrt); »preveri«: samo ovire, brez branja.
+ */
+async function preberiDatotekoNaloge(
+  root: string, z: ZapisNaloge, ime: string, meja: number, nacin: "rezi" | "cela" | "preveri",
+): Promise<{ besedilo: string; cas: string } | null> {
+  // Lina kot vodja: naloga s kopijo bere iz kopije, ki mora biti pod <podatki>/delo (ponarejen zapis stanja se ne bere)
+  if (z.kopija !== undefined && !vDelu(root, z.kopija)) return null;
+  const mapaNalog = path.join(z.kopija ?? z.mapa, MAPA_NALOG);
   const mapaNaloge = path.join(mapaNalog, z.id);
   try {
     for (const p of [mapaNalog, mapaNaloge]) if (!(await lstat(p)).isDirectory()) return null;
     if (z.mapaId && z.mapaId !== (await idMape(mapaNaloge))) return null;
-    const ds = await open(path.join(mapaNaloge, DATOTEKA_POROCILA), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const ds = await open(path.join(mapaNaloge, ime), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
     try {
       const st = await ds.stat();
       if (!st.isFile() || st.nlink !== 1) return null;
       if (typeof process.getuid === "function" && st.uid !== process.getuid()) return null;
-      const buf = Buffer.alloc(Math.min(st.size, NAJVEC_BAJTOV_POROCILA));
+      if (nacin !== "rezi" && st.size > meja) return null;
+      if (nacin === "preveri") return { besedilo: "", cas: st.mtime.toISOString() };
+      const buf = Buffer.alloc(Math.min(st.size, meja));
       const { bytesRead } = await ds.read(buf, 0, buf.length, 0);
-      return { besedilo: ocistiPorocilo(buf.subarray(0, bytesRead).toString("utf8")), cas: st.mtime.toISOString() };
+      return { besedilo: buf.subarray(0, bytesRead).toString("utf8"), cas: st.mtime.toISOString() };
     } finally {
       await ds.close();
     }
   } catch {
     return null;
   }
+}
+
+// ------------------------------------------------------------------ tocke naloge s preverbo dokazov (lastnik 24. 11. 2026)
+
+/**
+ * Dokazi iz porocila (nezaupljivo, oceniTocke): pot je navadna datoteka ali mapa v projektu (kopiji), brez simbolne povezave na nobenem
+ * delu poti (povezava bi kazala ven); commit obstaja v gitu projekta. Kopija izven <podatki>/delo nima nobenega dokaza.
+ */
+async function preveriTocke(root: string, z: ZapisNaloge, porocilo: string, o: Odvisnosti): Promise<IzidTocke[]> {
+  const delovna = z.kopija ?? z.mapa;
+  const veljavna = z.kopija === undefined || vDelu(root, z.kopija);
+  return oceniTocke(porocilo, z.tocke?.length ?? 0, delovna, {
+    pot: async (rel, mapa) => veljavna && (await potVProjektu(delovna, rel, mapa)),
+    commit: async (h) => veljavna && (await gitVodje(depsVodje(o), delovna, ["cat-file", "-e", `${h}^{commit}`])).koda === 0,
+  });
+}
+
+/** Stanje, ko je agent koncal (porocilo IN terminal ne dela): naloga s tockami je »koncano« samo, ce ima vsaka tocka preverjen dokaz. */
+function stanjeKonca(z: ZapisNaloge, izid: IzidTocke[] | undefined): StanjeNaloge {
+  return z.tocke?.length && izid && !povzetekTock(z.tocke, izid).popolno ? "nepopolno" : "koncano";
+}
+
+/**
+ * Predlog nove naloge za manjkajoce tocke (besedilo samo iz tock naloge, nikoli iz porocila). Samo predlog: zagon po lastnikovi potrditvi.
+ * Ne uspe (polno cakajocih, mapa ...): predlogTock = »napaka«, manjkajoce ostanejo vidne na nalogi in lastnik lahko predlog ponovi.
+ */
+async function predlagajManjkajoce(root: string, id: string, izvor: IzvorNaloge, o: Odvisnosti, zdaj: Date): Promise<string | null> {
+  const z = (await preberi(root)).naloge.find((n) => n.id === id);
+  if (!z?.tocke || !z.izidTock || z.stanje !== "nepopolno") return null;
+  const besedilo = besediloPredlogaTock(z.id, povzetekTock(z.tocke, z.izidTock), NAJVEC_ZNAKOV_NALOGE_LINE);
+  const predlog = await dodajPredlog(root, izvor, z.mapa, besedilo, o, zdaj, z.agent ?? "claude").catch(() => null);
+  await vVrsti(root, async () => {
+    const s = await preberi(root);
+    const m = s.naloge.find((n) => n.id === id);
+    if (!m) return;
+    m.predlogTock = predlog?.id ?? "napaka";
+    await zapisi(root, s);
+  });
+  return predlog?.id ?? null;
+}
+
+// ------------------------------------------------------------------ nacrt z diagramom (lastnik 24. 11. 2026)
+
+export const NACRT_NASTAVITVE = "nacrt-diagram.json";
+
+/** Stikalo »najprej nacrt z diagramom«: privzeto VKLOPLJENO; izklopi samo izrecni false (pokvarjena datoteka = vklopljeno). */
+export async function jeNacrtVklopljen(dir?: string): Promise<boolean> {
+  try {
+    const j = JSON.parse(await readFile(path.join(resolveDataDir(dir), NACRT_NASTAVITVE), "utf8")) as { vklopljen?: unknown } | null;
+    return j?.vklopljen !== false;
+  } catch {
+    return true;
+  }
+}
+
+export async function nastaviNacrt(vklopljen: boolean, dir?: string): Promise<boolean> {
+  const v = vklopljen === true;
+  await writeJson(resolveDataDir(dir), NACRT_NASTAVITVE, { vklopljen: v });
+  return v;
+}
+
+/**
+ * nacrt.html zagnane naloge za prikaz v izoliranem okvirju: varno branje (kot porocilo, vecji od meje = null) in ovoj s CSP.
+ * Samo seja lastnika; naloga, ki je Lina ni zagnala (brez dev:ino mape), nima nacrta.
+ */
+export async function nacrtClaudeNaloge(token: string | null, id: unknown, dir?: string): Promise<string | null> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  if (!jeIdNaloge(id)) throw new ClaudeNalogaNapaka("ni-najdeno");
+  const z = (await preberi(root)).naloge.find((n) => n.id === id);
+  if (!z?.mapaId) return null;
+  const p = await preberiDatotekoNaloge(root, z, DATOTEKA_NACRTA, NAJVEC_BAJTOV_NACRTA, "cela");
+  return p ? ovijNacrt(p.besedilo) : null;
 }
 
 /** dev:ino mape (N4). */
@@ -438,11 +779,12 @@ async function preveriAgenta(id: AgentId, pot: string, preveri: PreverbaZagona):
   return { pot, stanje: "pripravljen", razlicica };
 }
 
-async function stanjeAgentov(s: Stanje, o: Odvisnosti, osvezi = false): Promise<StanjeAgenta[]> {
+async function stanjeAgentov(s: Stanje, o: Odvisnosti, osvezi = false, root?: string): Promise<StanjeAgenta[]> {
   const najdi = o.najdi ?? ((ime: string) => najdiNaPoti(ime));
   const preveri = o.preveriZagon ?? privzetaPreverba;
   let pomnilnik = predpomnilnik.get(preveri);
   if (!pomnilnik || osvezi) predpomnilnik.set(preveri, (pomnilnik = new Map()));
+  if (osvezi) await pastaDeluje(o, true);
   const izid: StanjeAgenta[] = [];
   for (const id of AGENTI) {
     const opis = OPIS_AGENTOV[id];
@@ -455,7 +797,10 @@ async function stanjeAgentov(s: Stanje, o: Odvisnosti, osvezi = false): Promise<
       const prej = pomnilnik.get(id);
       if (prej && prej.pot === pot && prej.do > Date.now()) p = prej;
       else {
-        p = await preveriAgenta(id, pot, preveri);
+        // A4: agent z omejenimi mapami brez delujocega peskovnika se ne zaganja niti za --version
+        p = opis.omejeneMape && !(await peskovnikDeluje(o, preveri))
+          ? { pot, stanje: "brez-peskovnika", razlicica: "" }
+          : await preveriAgenta(id, pot, opis.omejeneMape ? await preverbaVPeskovniku(id, s, o, preveri, root) : preveri);
         pomnilnik.set(id, { ...p, do: Date.now() + ROK_PREDPOMNILNIKA_MS });
       }
     }
@@ -467,10 +812,27 @@ async function stanjeAgentov(s: Stanje, o: Odvisnosti, osvezi = false): Promise<
   return izid;
 }
 
+/**
+ * N10: --version in prijava agenta z omejenimi mapami tudi v peskovniku (agent ob zagonu nalozi svoje nastavitve in vticnike, ki jih je
+ * morda zapisal v prejsnji nalogi). Vrne preverbo, ki ukaz ovije z bwrap.
+ */
+async function preverbaVPeskovniku(agent: AgentId, s: Stanje, o: Odvisnosti, preveri: PreverbaZagona, root?: string): Promise<PreverbaZagona> {
+  const bwrap = programPeskovnika(o.najdi ?? ((ime: string) => najdiNaPoti(ime)), o.platforma ?? platformaZdaj())!;
+  const dom = o.dom ?? homedir();
+  const net = await omrezjeAgenta(root, o);
+  const predpona = [
+    ...osnovaPeskovnika(process.env, false), ...net.dns, ...(await nastavitveAgenta(agent, dom)), ...(await skritoVPeskovniku(root, o, agent)),
+    ...(await prekrij(s.prepovedane ?? [])), "--chdir", "/tmp", "--",
+  ];
+  const [prvi, ...pred] = [...net.pred, bwrap];
+  return (program, args, rokMs) => preveri(prvi!, [...pred, ...predpona, program, ...args], rokMs);
+}
+
 /** Agent, ki ga Lina sme zagnati z nalogo: vklopljen, preverjen in z zacetnim pozivom. Vrne pot programa. */
-async function agentZaNalogo(agent: AgentId, s: Stanje, o: Odvisnosti): Promise<string> {
-  const a = (await stanjeAgentov(s, o)).find((x) => x.id === agent)!;
+async function agentZaNalogo(agent: AgentId, s: Stanje, o: Odvisnosti, root: string): Promise<string> {
+  const a = (await stanjeAgentov(s, o, false, root)).find((x) => x.id === agent)!;
   if (!a.vklopljen) throw new ClaudeNalogaNapaka("agent-izklopljen");
+  if (a.stanje === "brez-peskovnika") throw new ClaudeNalogaNapaka("peskovnik");
   // claude: stara koda razloga (vmesnik in preizkusi pred 24. 11. 2026)
   if (a.stanje !== "pripravljen" || !a.pot) throw new ClaudeNalogaNapaka(agent === "claude" ? "ni-claude" : "agent-ni-pripravljen");
   if (!a.zacetniPoziv) throw new ClaudeNalogaNapaka("agent-brez-poziva");
@@ -481,7 +843,7 @@ async function agentZaNalogo(agent: AgentId, s: Stanje, o: Odvisnosti): Promise<
 
 /** Porocilo naloge; ko obstaja, gre (enkrat na nalogo, spomin-nalog) se v spomin nalog projekta. */
 async function porociloVSpomin(root: string, z: ZapisNaloge): Promise<{ besedilo: string; cas: string } | null> {
-  const p = await preberiPorocilo(z);
+  const p = await preberiPorocilo(root, z);
   if (p) await zapisiOpazanjeNaloge(root, { nalogaId: z.id, projekt: z.mapa, naloga: z.besedilo, porocilo: p.besedilo }).catch(() => undefined);
   return p;
 }
@@ -501,25 +863,50 @@ async function zazeniZapis(root: string, s: Stanje, z: ZapisNaloge, o: Odvisnost
   if (!jeAgent(agent) || zgostitevNaloge(z.mapa, z.besedilo, agent) !== z.zgostitev) throw new ClaudeNalogaNapaka("zgostitev");
   const razlog = razlogTerminala(o);
   if (razlog) throw new ClaudeNalogaNapaka(razlog);
-  const program = await agentZaNalogo(agent, s, o);
+  const program = await agentZaNalogo(agent, s, o, root);
   // Opozorilo ob prvem zagonu (lastnik 24. 11. 2026): brez potrditve »Razumem« Lina ne zazene nobenega agenta (tudi iz razporejevalnika).
   if (!(await opozoriloPotrjeno(root))) throw new ClaudeNalogaNapaka("opozorilo");
   if ((await steviloHkratnih(root, s, o, zdaj)) >= NAJVEC_HKRATNIH) throw new ClaudeNalogaNapaka("polno-hkratne");
   if ((await resnicnaMapa(z.mapa, root, s, o)) !== z.mapa) throw new ClaudeNalogaNapaka("mapa");
   await preveriPrepoved(agent, z.mapa, s);
-  // A1: v isti mapi, nad- ali podmapi ze dela drug agent (ziv terminal ali neznan PID do roka) - ne hkrati na istih datotekah
+  // Lina kot vodja: v istem projektu ze dela drug agent -> ta naloga dobi svojo kopijo (nikoli ista mapa, nikoli prepis)
+  const vKopiji = z.kopija !== undefined || (!z.vloga && potrebujeKopijo(s, z));
+  // A1: v isti mapi, nad- ali podmapi ze dela drug agent (ziv terminal ali neznan PID do roka) - ne hkrati na istih datotekah.
+  // Velja za nalogo brez kopije (tudi ce sosednja dela v kopiji: previdno); naloga v svoji kopiji ne dela na izvirniku.
   const casZagona = o.casZagona ?? casZagonaProcesa;
-  if (s.naloge.some((n) => n !== z && vPrepovedani(z.mapa, [n.mapa]) && terminalZaseda(n, zivi(n, casZagona), zdaj))) {
+  // N5: korak v ISTI kopiji (popravek, spor) ne tece hkrati z agentom, ki v njej se dela
+  const ista = (n: ZapisNaloge) => (vKopiji ? z.kopija !== undefined && n.kopija === z.kopija : vPrepovedani(z.mapa, [n.mapa]));
+  if (s.naloge.some((n) => n !== z && ista(n) && terminalZaseda(n, zivi(n, casZagona), zdaj))) {
     throw new ClaudeNalogaNapaka("mapa-zasedena");
   }
+  if (z.kopija === undefined && vKopiji) {
+    try {
+      const k = await ustvariKopijo(depsVodje(o), root, z.id, z.mapa);
+      z.kopija = k.kopija;
+      z.vodja = { projekt: z.mapa, git: k.git, osnova: k.osnova, faza: "dela", krog: 0, najdbe: null, pregledovalec: s.pregledovalec ?? "claude" };
+    } catch {
+      throw new ClaudeNalogaNapaka("kopija");
+    }
+  }
+  if (z.kopija !== undefined && !vDelu(root, z.kopija)) throw new ClaudeNalogaNapaka("kopija");
+  const delovna = z.kopija ?? z.mapa;
+  // A4: agent z omejenimi mapami samo v peskovniku (tudi s praznim seznamom prepovedanih); pred NALOGA.md, da zavrnitev ne pusti sledi
+  const peskovnik = OPIS_AGENTOV[agent].omejeneMape ? await ovojPeskovnika(root, agent, z, delovna, s, o) : [];
 
-  const pregledProjekta = jeNovProjekt(s.naloge, z.mapa, z.id)
+  // slepi pregled: pregledovalec dobi samo diff (brez pregleda projekta in spomina prejsnjih nalog)
+  const slepo = z.vloga === "pregled";
+  const pregledProjekta = !slepo && jeNovProjekt(s.naloge, z.mapa, z.id)
     ? await sestaviPregledProjekta(z.mapa, { dir: root }).catch(() => "")
     : "";
-  const spominKazalo = await kazaloZaProjekt(root, z.mapa, { poizvedba: z.besedilo }).catch(() => "");
+  const spominKazalo = slepo ? "" : await kazaloZaProjekt(root, z.mapa, { poizvedba: z.besedilo }).catch(() => "");
+  // prvi korak NACRT: samo Claude Code ima skil diagram-design, drugi agenti dobijo navodilo za preprost SVG
+  // koraki vodje (pregled, popravek, spor) nimajo koraka NACRT: besedilo popravka vsebuje najdbe pregledovalca
+  const nacrt = !z.vloga && jeNacrtovanje(z.besedilo) && (await jeNacrtVklopljen(root)) ? (agent === "claude" ? "diagram-design" : "svg") : undefined;
+  // tocke naloge (24. 11. 2026): vsaka potrebuje dokaz v porocilu; koraki vodje imajo svojo obliko porocila (razberiNajdbe)
+  if (!z.vloga) z.tocke ??= tockeNaloge(z.besedilo);
 
   // Nova mapa naloge; obstojeca (ali simbolna povezava) se ne uporabi. NALOGA.md samo z »wx« (nikoli prepis).
-  const mapaNalog = path.join(z.mapa, MAPA_NALOG);
+  const mapaNalog = path.join(delovna, MAPA_NALOG);
   await mkdir(mapaNalog, { mode: 0o700 }).catch((e: NodeJS.ErrnoException) => {
     if (e.code !== "EEXIST") throw e;
   });
@@ -527,7 +914,7 @@ async function zazeniZapis(root: string, s: Stanje, z: ZapisNaloge, o: Odvisnost
   const mapaNaloge = path.join(mapaNalog, z.id);
   try {
     await mkdir(mapaNaloge, { mode: 0o700 });
-    await writeFile(path.join(mapaNaloge, DATOTEKA_NALOGE), vsebinaNaloge(z, zdaj, { pregledProjekta, spominKazalo }), { mode: 0o600, flag: "wx" });
+    await writeFile(path.join(mapaNaloge, DATOTEKA_NALOGE), vsebinaNaloge(z, zdaj, { pregledProjekta, spominKazalo, nacrt, tocke: z.tocke && navodiloTock(z.tocke) }), { mode: 0o600, flag: "wx" });
   } catch {
     throw new ClaudeNalogaNapaka("naloga-obstaja");
   }
@@ -548,7 +935,7 @@ async function zazeniZapis(root: string, s: Stanje, z: ZapisNaloge, o: Odvisnost
   z.razlog = null;
   await zapisi(root, s);
   try {
-    const pid = await (o.zazeni ?? privzetiZagon)(terminal.program, [...terminal.predpona, program, ...argv], z.mapa, okoljeZaAgenta());
+    const pid = await (o.zazeni ?? privzetiZagonTerminala)(terminal.program, [...terminal.predpona, ...peskovnik, program, ...argv], delovna, okoljeZaAgenta());
     z.stanje = "tece";
     if (typeof pid === "number") {
       z.pid = pid;
@@ -572,6 +959,249 @@ export function obNalogaKoncana(fn: (d: DogodekNalogaKoncana) => void): () => vo
   };
 }
 
+// ------------------------------------------------------------------ Lina kot vodja: pregled in zdruzitev dela vec agentov
+
+/**
+ * Kopija je potrebna, ko v istem projektu ze dela drug agent (tece v izvirniku ali je v poteku pregleda/zdruzitve) ali ko zdruzeno delo
+ * caka na »Uveljavi«. Naloga, ki je v projektu sama, dela v izvirniku kot prej (brez pregleda in zdruzitve, zgostitev enaka).
+ */
+function potrebujeKopijo(s: Stanje, z: ZapisNaloge): boolean {
+  return s.naloge.some(
+    (n) =>
+      n.id !== z.id &&
+      n.mapa === z.mapa &&
+      ((n.kopija === undefined && (n.stanje === "tece" || n.stanje === "zaganja")) || (n.vodja !== undefined && !jeKoncnaFaza(n.vodja.faza))),
+  ) || (s.zdruzitve?.[z.mapa]?.naloge.length ?? 0) > 0; // zdruzeno delo caka na »Uveljavi«: izvirnik se ne sme premakniti mimo njega
+}
+
+function depsVodje(o: Odvisnosti, root?: string): DepsVodje {
+  return {
+    ...(root ? { peskovnik: (mapa: string) => ovojPreizkusa(root, o, mapa) } : {}),
+    najdi: o.najdi ?? ((ime: string) => najdiNaPoti(ime)),
+    platforma: o.platforma ?? platformaZdaj(),
+    izvedi: o.izvedi ?? privzetoIzvedi,
+    izvediPreizkus: o.izvediPreizkus ?? privzetoIzvedi,
+    okolje: { ...vodiloSeje(okoljeZaAgenta()), GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" },
+  };
+}
+
+/** systemd-run --user potrebuje vodilo seje; ce ga Lina nima v okolju (zagon kot storitev), privzeto /run/user/<uid> kot z-mejo-pomnilnika. */
+function vodiloSeje(okolje: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (typeof process.getuid !== "function") return okolje;
+  const xdg = okolje.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`;
+  return { ...okolje, XDG_RUNTIME_DIR: xdg, DBUS_SESSION_BUS_ADDRESS: okolje.DBUS_SESSION_BUS_ADDRESS || `unix:path=${xdg}/bus` };
+}
+
+/** »zamujeno« (Lina se je vmes znova zagnala) ni neuspeh: korak caka lastnikovo potrditev (Zazeni zdaj) kot vsaka zamujena naloga. */
+const NEUSPELI_KORAK: readonly StanjeNaloge[] = ["napaka", "poteklo", "odklonjeno", "preklicano"];
+
+/**
+ * Naloga, ki jo Lina doda sama za glavno nalogo (pregled, popravek, spor): »dodeljeno« s pogojem zdaj, zagon prek razporejevalnika z
+ * ISTIMI vrati kot vsak zagon (agent vklopljen in preverjen, opozorilo, meja hkratnih, mapa izvirnega projekta, prepovedane mape).
+ * Pooblastilo: lastnikova potrditev glavne naloge velja za njen pregled in popravke (najvec NAJVEC_KROGOV krogov), nato odloci lastnik.
+ */
+function dodajKorak(s: Stanje, m: ZapisNaloge, vloga: VlogaNaloge, agent: AgentId, besedilo: string, kopija: string, zdaj: Date): ZapisNaloge | null {
+  // N8: besedilo, ki ni sprejeto, nikoli ne postane prazna naloga (samo »popravek«): korak gre k lastniku z razlogom
+  const cisto = ocistiBesediloNaloge(besedilo) ?? ocistiBesediloNaloge(besedilo.slice(0, 7000));
+  if (!cisto) {
+    vLastnika(m, "korak");
+    return null;
+  }
+  const z: ZapisNaloge = {
+    id: randomBytes(8).toString("hex"), izvor: "lina", agent, mapa: m.mapa, besedilo: cisto, zgostitev: zgostitevNaloge(m.mapa, cisto, agent),
+    stanje: "dodeljeno", ustvarjeno: zdaj.toISOString(), potrjeno: null, razlog: null, pogoj: { vrsta: "zdaj" }, sprozeno: zdaj.toISOString(),
+    vloga, za: m.id, kopija,
+  };
+  s.naloge = obreziZgodovino([...s.naloge, z], zdaj);
+  m.vodja!.korak = z.id;
+  return z;
+}
+
+function vLastnika(m: ZapisNaloge, razlog: RazlogVodje, napaka?: string): void {
+  m.vodja!.faza = "lastnik";
+  m.vodja!.razlog = razlog;
+  delete m.vodja!.opis;
+  delete m.vodja!.podrobnost;
+  if (napaka === undefined) return;
+  const o = opisNapake(napaka);
+  m.vodja!.opis = o.opis;
+  if (o.podrobnost) m.vodja!.podrobnost = o.podrobnost;
+}
+
+/**
+ * Tocka 8: zdruzitev po neuspelem »Uveljavi«. Izvirnik je sel NAPREJ (git) -> osvezitev kot prej (korak vodje zdruzi izvirnik in preizkusi).
+ * Vse drugo (premaknjena veja, umazan ali spremenjen izvirnik, nevarna nastavitev, patch) -> razlog »uveljavi« z besedilom; vmesnik ponudi
+ * »Osvezi na novo osnovo« (ponovna zdruzitev pregledanega dela na trenutni izvirnik, preizkusi, ob sporu nov pregled) in »Prenesi kot popravek«.
+ */
+export function zdruzitevPoNeuspehu(zd: Zdruzitev, napaka: string): Zdruzitev {
+  const { opis: _o, podrobnost: _p, ...brez } = zd;
+  if (napaka === "izvirnik: premaknjen" && zd.git && zd.razlog !== "vrnjen") return { ...brez, osvezi: true, razlog: null };
+  const o = opisNapake(napaka);
+  return { ...brez, osvezi: false, razlog: "uveljavi", opis: o.opis, ...(o.podrobnost ? { podrobnost: o.podrobnost } : {}) };
+}
+
+function potDiffa(root: string, m: ZapisNaloge): string {
+  return path.join(root, MAPA_DELA_VODJE, m.id, `krog-${m.vodja!.krog}.diff`);
+}
+
+type IzidDela = { ok: true; v: unknown } | { ok: false; napaka: string };
+type DeloVodje = { id: string; izvedi: () => Promise<unknown>; zapisi: (s: Stanje, m: ZapisNaloge, izid: IzidDela) => void };
+
+/** Naslednje delo vodje iz stanja (klice se v vVrsti); pocasni del (git, diff, preizkusi) je v izvedi, zunaj vrste. */
+async function izberiDeloVodje(root: string, s: Stanje, o: Odvisnosti, zdaj: Date): Promise<DeloVodje | null> {
+  const d = depsVodje(o, root);
+  for (const m of s.naloge) {
+    const v = m.vodja;
+    if (!v || jeKoncnaFaza(v.faza) || m.kopija === undefined) continue;
+    const kopija = m.kopija;
+    // diff za pregled: glavni agent, popravek ali razresitev spora je koncal
+    const diffInPregled = (): DeloVodje => ({
+      id: m.id,
+      izvedi: async () => {
+        const krog = v.krog + 1;
+        const df = await diffKopije(d, root, m.id, kopija, v, krog);
+        return { df, krog, mapa: df.prazen ? null : await pripraviPregled(root, m.id, krog, df.pot) };
+      },
+      zapisi: (s2, m2, izid) => {
+        if (!izid.ok) return vLastnika(m2, "diff", izid.napaka);
+        const r = izid.v as { df: { sha: string; prazen: boolean; glava?: string }; krog: number; mapa: string | null };
+        if (r.df.prazen || !r.mapa) {
+          m2.vodja!.faza = "prazno";
+          return;
+        }
+        const agent = s2.pregledovalec ?? "claude";
+        m2.vodja!.krog = r.krog;
+        m2.vodja!.diff = r.df.sha;
+        if (r.df.glava) m2.vodja!.glava = r.df.glava;
+        m2.vodja!.pregledovalec = agent;
+        m2.vodja!.faza = "pregled";
+        dodajKorak(s2, m2, "pregled", agent, navodiloPregleda(), r.mapa, zdaj);
+      },
+    });
+    if (v.faza === "dela") {
+      // nepopolna naloga je tudi koncala delo: pregled in zdruzitev tega, kar je narejeno (manjkajoce gredo v predlog)
+      if (m.stanje === "koncano" || m.stanje === "nepopolno") return diffInPregled();
+      if (NEUSPELI_KORAK.includes(m.stanje)) return { id: m.id, izvedi: async () => null, zapisi: (_s, m2) => vLastnika(m2, "korak") };
+      continue;
+    }
+    if (v.faza === "pregled" || v.faza === "popravek" || v.faza === "spor") {
+      const k = s.naloge.find((n) => n.id === v.korak);
+      if (!k || NEUSPELI_KORAK.includes(k.stanje)) return { id: m.id, izvedi: async () => null, zapisi: (_s, m2) => vLastnika(m2, "korak") };
+      if (k.stanje !== "koncano") continue;
+      if (v.faza !== "pregled") return diffInPregled();
+      const porocilo = (await preberiPorocilo(root, k))?.besedilo ?? "";
+      return {
+        id: m.id,
+        izvedi: async () => null,
+        zapisi: (s2, m2) => {
+          const najdbe = razberiNajdbe(porocilo);
+          m2.vodja!.najdbe = najdbe;
+          if (najdbe === 0) m2.vodja!.faza = "zdruzi";
+          else if (m2.vodja!.krog >= NAJVEC_KROGOV) vLastnika(m2, "krogi");
+          else {
+            m2.vodja!.faza = "popravek";
+            dodajKorak(s2, m2, "popravek", m2.agent ?? "claude", besediloPopravka(porocilo), kopija, zdaj);
+          }
+        },
+      };
+    }
+  }
+  // zdruzitev po vrsti: najprej naloga, ki je prej koncala; ena zdruzitev naenkrat (to je edino delo, dokler tece)
+  const cakajo = s.naloge
+    .filter((m) => m.vodja?.faza === "zdruzi" && m.kopija !== undefined)
+    .sort((a, b) => Date.parse(a.koncano ?? "") - Date.parse(b.koncano ?? ""));
+  const m = cakajo[0];
+  if (!m) return osvezitev(root, s, d);
+  const v = m.vodja!;
+  const prej = s.zdruzitve?.[v.projekt];
+  const diff = potDiffa(root, m);
+  const nastavljeni = s.preizkusi?.[v.projekt];
+  return {
+    id: m.id,
+    izvedi: async () => {
+      const omejeno = OPIS_AGENTOV[jeAgent(m.agent) ? m.agent : "claude"].omejeneMape;
+      const r = await zdruzi(d, root, prej, { id: m.id, vodja: v, omejeno }, diff, nastavljeni);
+      const spor = r.izid === "spor" && !r.zd.git ? await pripraviSporMape(root, m.id, r.zd, diff) : null;
+      return { r, spor };
+    },
+    zapisi: (s2, m2, izid) => {
+      if (!izid.ok) return vLastnika(m2, "zdruzitev", izid.napaka);
+      const { r, spor } = izid.v as { r: Awaited<ReturnType<typeof zdruzi>>; spor: Awaited<ReturnType<typeof pripraviSporMape>> | null };
+      s2.zdruzitve = { ...s2.zdruzitve, [r.zd.projekt]: r.zd };
+      if (r.izid === "ok") m2.vodja!.faza = "zdruzeno";
+      else if (r.izid === "padlo") vLastnika(m2, "preizkusi");
+      else if (r.izid === "brez-meje") vLastnika(m2, "brez-meje");
+      else if (r.izid === "brez-peskovnika") vLastnika(m2, "brez-peskovnika");
+      else {
+        if (spor) {
+          m2.kopija = spor.kopija;
+          m2.vodja!.osnova = spor.osnova;
+        }
+        m2.vodja!.faza = "spor";
+        dodajKorak(s2, m2, "spor", m2.agent ?? "claude", besediloSpora(r.zd.git, spor ? spor.vir : r.zd.veja!), m2.kopija!, zdaj);
+      }
+    },
+  };
+}
+
+/** Posodobitev zdruzitve z izvirnikom, ki je sel naprej (po lastnikovem »Uveljavi«, ki je bil zato zavrnjen). */
+function osvezitev(root: string, s: Stanje, d: DepsVodje): DeloVodje | null {
+  const zd = Object.values(s.zdruzitve ?? {}).find((z) => z.osvezi);
+  if (!zd) return null;
+  const nastavljeni = s.preizkusi?.[zd.projekt];
+  return {
+    id: "",
+    izvedi: () => osveziZIzvirnikom(d, root, zd, nastavljeni),
+    zapisi: (s2, _m, izid) => {
+      const nova: Zdruzitev = izid.ok
+        ? (() => {
+            const r = izid.v as Awaited<ReturnType<typeof osveziZIzvirnikom>>;
+            return { ...r.zd, razlog: r.izid === "ok" ? null : r.izid === "padlo" ? "padlo" : r.izid === "brez-meje" || r.izid === "brez-peskovnika" ? r.izid : (r.zd.razlog ?? "spor") };
+          })()
+        : { ...zd, razlog: "spor" };
+      s2.zdruzitve = { ...s2.zdruzitve, [zd.projekt]: { ...nova, osvezi: false } };
+    },
+  };
+}
+
+/** Delo vodje tece za ta koren (pocasni del zunaj vVrsti); »Uveljavi« ga ne sme prehiteti. */
+const vodjaDela = new Set<string>();
+
+/**
+ * Korak vodje (casovnik po vsakem koraku razporejevalnika; stanje je v zapisu, zato prezivi ponovni zagon Line). Izbira in zapis v vVrsti,
+ * pocasno delo (diff, zdruzitev, preizkusi do 20 min) zunaj, da vmesnik in vrsta ne cakata. Dodelitev ga NE caka (samo casovnik).
+ */
+export async function korakVodje(dir: string | undefined, o: Odvisnosti = {}, zdaj = new Date()): Promise<void> {
+  const root = resolveDataDir(dir);
+  for (let i = 0; i < 20; i++) {
+    const delo = await vVrsti(root, async () => {
+      if (vodjaDela.has(root)) return null;
+      const d = await izberiDeloVodje(root, await preberi(root), o, zdaj);
+      if (d) vodjaDela.add(root);
+      return d;
+    });
+    if (!delo) return;
+    try {
+      let izid: IzidDela;
+      try {
+        izid = { ok: true, v: await delo.izvedi() };
+      } catch (e) {
+        // tocka 7: sporocilo napake ostane (vLastnika ga prevede v kodo opisa za besedilo SL/EN)
+        izid = { ok: false, napaka: e instanceof Error ? e.message : "" };
+      }
+      await vVrsti(root, async () => {
+        const s = await preberi(root);
+        const m = s.naloge.find((n) => n.id === delo.id);
+        if (delo.id && !m?.vodja) return;
+        delo.zapisi(s, m as ZapisNaloge, izid);
+        await zapisi(root, s);
+      });
+    } finally {
+      vodjaDela.delete(root);
+    }
+  }
+}
+
 // ------------------------------------------------------------------ razporejevalnik
 
 const ZAGON_PROCESA = new Date();
@@ -584,6 +1214,7 @@ const ZAGON_PROCESA = new Date();
 export async function korakRazporejevalnika(dir: string | undefined, o: Odvisnosti = {}, zdaj = new Date()): Promise<void> {
   const root = resolveDataDir(dir);
   const koncane: DogodekNalogaKoncana[] = [];
+  const nepopolne: string[] = [];
   await vVrsti(root, async () => {
     const s = await preberi(root);
     const prej = JSON.stringify(s);
@@ -595,9 +1226,11 @@ export async function korakRazporejevalnika(dir: string | undefined, o: Odvisnos
         // A2: konec sele, ko je porocilo IN terminal ne dela (ziv PID ali neznan PID pred rokom). Cas = ko ga je razporejevalnik opazil,
         // nikoli mtime porocila (v rokah agenta: z njim bi premaknil zamujeno/zazeni ali skrcil oceno trajanja in s tem rok). Dogodek enkrat.
         const zeKoncana = z.koncano;
-        z.stanje = "koncano";
+        if (z.tocke?.length) z.izidTock = await preveriTocke(root, z, p.besedilo, o);
+        z.stanje = stanjeKonca(z, z.izidTock);
         z.koncano = zdaj.toISOString();
         if (!zeKoncana) koncane.push(dogodekKoncana(z));
+        if (z.stanje === "nepopolno" && z.predlogTock === undefined) nepopolne.push(z.id);
       } else if (z.opomnik && Date.parse(z.opomnik.cas) <= zdaj.getTime()) {
         z.opomnik = naslednjiOpomnik(z, zdaj, ziv);
       }
@@ -635,6 +1268,8 @@ export async function korakRazporejevalnika(dir: string | undefined, o: Odvisnos
       /* poslusalec ne podre razporejevalnika */
     }
   }
+  // zunaj vVrsti (dodajPredlog ima svojo); enkrat na nalogo (predlogTock)
+  for (const id of nepopolne) await predlagajManjkajoce(root, id, "lina", o, zdaj).catch(() => null);
 }
 
 const KLJUC_RAZPOREDA = Symbol.for("lina.agenti.razporejevalnik");
@@ -643,15 +1278,29 @@ const KORAK_MS = 30_000;
 export function zazeniRazporejevalnik(dir?: string): void {
   const g = globalThis as { [KLJUC_RAZPOREDA]?: ReturnType<typeof setInterval> };
   if (g[KLJUC_RAZPOREDA]) return;
-  const c = setInterval(() => void korakRazporejevalnika(dir).catch(() => undefined), KORAK_MS);
+  const c = setInterval(
+    () =>
+      void korakRazporejevalnika(dir)
+        .catch(() => undefined)
+        .then(() => korakVodje(dir))
+        .catch(() => undefined),
+    KORAK_MS,
+  );
   c.unref?.();
   g[KLJUC_RAZPOREDA] = c;
 }
 
 // ------------------------------------------------------------------ javno stanje in ukazi
 
+/** Predlog za manjkajoce tocke, ki ga lastnik se lahko potrdi ali je ze sprejet; odklonjen, potekel ali izgubljen = »napaka« (gumb za nov predlog). */
+function veljavenPredlog(s: Stanje, z: ZapisNaloge, zdaj: Date): string | null {
+  if (!z.predlogTock) return null;
+  const p = s.naloge.find((n) => n.id === z.predlogTock);
+  return !p || jePotekel(p, zdaj) || ["poteklo", "odklonjeno", "napaka"].includes(p.stanje) ? "napaka" : p.id;
+}
+
 async function javno(root: string, s: Stanje, o: Odvisnosti, zdaj: Date): Promise<JavnoStanjeNalog> {
-  const agenti = await stanjeAgentov(s, o);
+  const agenti = await stanjeAgentov(s, o, false, root);
   const terminal = razlogTerminala(o);
   // izklopljen Claude Code ne pomeni, da Lina nima agentov (A3)
   const claude = agenti.find((a) => a.id === "claude")!.stanje;
@@ -659,17 +1308,34 @@ async function javno(root: string, s: Stanje, o: Odvisnosti, zdaj: Date): Promis
   const casZagona = o.casZagona ?? casZagonaProcesa;
   const naloge: JavnaNaloga[] = [];
   for (const z of [...s.naloge].reverse()) {
-    const p = z.stanje === "tece" || z.stanje === "zaganja" || z.stanje === "koncano" ? await porociloVSpomin(root, z) : null;
+    const zagnana = z.stanje === "tece" || z.stanje === "zaganja" || z.stanje === "koncano" || z.stanje === "nepopolno";
+    const p = zagnana ? await porociloVSpomin(root, z) : null;
+    const nacrt = zagnana && !!z.mapaId && (await preberiDatotekoNaloge(root, z, DATOTEKA_NACRTA, NAJVEC_BAJTOV_NACRTA, "preveri")) !== null;
     // A2: »koncano« samo, ko porocilo obstaja IN terminal ne dela (enako kot razporejevalnik)
     const dela = terminalZaseda(z, zivi(z, casZagona), zdaj);
-    const stanje: StanjeNaloge = (z.stanje === "tece" || z.stanje === "zaganja") && p !== null && !dela ? "koncano" : jePotekel(z, zdaj) ? "poteklo" : z.stanje;
+    const konec = (z.stanje === "tece" || z.stanje === "zaganja") && p !== null && !dela;
+    // vmesnik lahko bere pred korakom razporejevalnika: ista preverba tock (zapise jo sele razporejevalnik)
+    const izidTock = z.izidTock ?? (konec && z.tocke?.length ? await preveriTocke(root, z, p!.besedilo, o) : undefined);
+    const stanje: StanjeNaloge = konec ? stanjeKonca(z, izidTock) : jePotekel(z, zdaj) ? "poteklo" : z.stanje;
+    const koncal = stanje === "koncano" || stanje === "nepopolno";
     naloge.push({
       id: z.id, izvor: z.izvor, agent: z.agent ?? "claude", mapa: z.mapa, besedilo: z.besedilo, zgostitev: z.zgostitev, stanje,
       ustvarjeno: z.ustvarjeno, potrjeno: z.potrjeno, razlog: z.razlog, porocilo: p?.besedilo ?? null, pogoj: z.pogoj ?? null,
-      ocena: z.ocena ?? null, opomnik: z.opomnik ?? null, koncano: z.koncano ?? (stanje === "koncano" && z.stanje !== "koncano" ? zdaj.toISOString() : null),
+      ocena: z.ocena ?? null, opomnik: z.opomnik ?? null, koncano: z.koncano ?? (konec ? zdaj.toISOString() : null), nacrt,
+      kopija: z.kopija ?? null, vloga: z.vloga ?? null, za: z.za ?? null, vodja: z.vodja ?? null,
+      tocke: koncal && z.tocke?.length && izidTock ? povzetekTock(z.tocke, izidTock) : null, predlogTock: veljavenPredlog(s, z, zdaj),
     });
   }
-  return { naVoljo: razlog === null, razlogNiNaVoljo: razlog, geslo: await ownerExists(root), mape: s.mape, naloge, agenti, prepovedane: s.prepovedane ?? [] };
+  const zdruzitve = Object.values(s.zdruzitve ?? {}).map(({ projekt, pot, git, veja, naloge, zgostitev, diff, osvezi, razlog, opis, podrobnost, izvoz }) => ({
+    projekt, pot, git, veja, naloge, zgostitev, diff, osvezi: osvezi === true, razlog: razlog ?? null, opis: opis ?? null, podrobnost: podrobnost ?? null,
+    izvoz: izvoz ?? null,
+  }));
+  const omejeni = agenti.some((a) => a.omejeneMape && a.pot && a.stanje !== "brez-peskovnika");
+  const omrezjeAgentov = !omejeni ? null : (await pastaDeluje(o)) ? "loceno" : "gostitelj";
+  return {
+    naVoljo: razlog === null, razlogNiNaVoljo: razlog, geslo: await ownerExists(root), mape: s.mape, naloge, agenti, prepovedane: s.prepovedane ?? [],
+    pregledovalec: s.pregledovalec ?? "claude", preizkusi: s.preizkusi ?? {}, zdruzitve, omrezjeAgentov,
+  };
 }
 
 /** Zavrnjeno besedilo: nevidni znaki dobijo svoj razlog (A7), da lastnik ve, zakaj (prijazno sporocilo v vmesniku in na telefonu). */
@@ -730,7 +1396,7 @@ async function dodeli(root: string, izvor: IzvorNaloge, u: Record<string, unknow
   if (!(await opozoriloPotrjeno(root))) throw new ClaudeNalogaNapaka("opozorilo");
   const z = await vVrsti(root, async () => {
     const s = await preberi(root);
-    await agentZaNalogo(agent, s, o);
+    await agentZaNalogo(agent, s, o, root);
     pricakuj(preveriMapo(u.mapa, meje(root, s, o)));
     const mapa = await resnicnaMapa(String(u.mapa).trim(), root, s, o);
     await preveriPrepoved(agent, mapa, s);
@@ -762,15 +1428,29 @@ export async function predlagajClaudeNalogo(
   try {
     const pogoj = agent.pogoj === undefined ? undefined : pogojIzOznake(agent.pogoj, zdaj);
     if (pogoj === null) return null;
-    return await dodajPredlog(resolveDataDir(dir), "lina", mapa, besedilo, o, zdaj, agent.agent ?? "claude", pogoj);
+    const root = resolveDataDir(dir);
+    const z = await dodajPredlog(root, "lina", mapa, besedilo, o, zdaj, agent.agent ?? "claude", pogoj);
+    // Lastnik je ze dovolil podobne naloge (isti agent, ista kanonicna mapa; Nastavitve > Dovoljenja): ista pot kot njegova potrditev,
+    // zato veljajo opozorilo, agent, prepovedane mape in meje. Ce potrditev ne uspe, predlog ostane in caka lastnika.
+    // B1 (1750): obseg ne vsebuje besedila naloge, zato tvegano besedilo (brisanje, push, posiljanje, placilo, kljuci, sudo,
+    // namestitev; lahko vbrizgano iz vsebine, ki jo bere model) vedno caka lastnika.
+    if (!jeTveganoDejanje(z.besedilo) && await najdiDovoljenje(root, "naloga-agentu", { agent: z.agent ?? "claude", mapa: z.mapa }, {}, zdaj)) {
+      try {
+        await potrdi(root, z.id, z.zgostitev, o, zdaj);
+      } catch {
+        return z;
+      }
+      return (await preberi(root)).naloge.find((n) => n.id === z.id) ?? z;
+    }
+    return z;
   } catch {
     return null;
   }
 }
 
 /** Potrditev predloga (»caka«) ali zamujene dodeljene naloge (»zamujeno«): zgostitev mora biti ista, kot jo je lastnik videl. */
-async function potrdi(root: string, id: string, zgostitev: unknown, o: Odvisnosti, zdaj: Date): Promise<void> {
-  await vVrsti(root, async () => {
+async function potrdi(root: string, id: string, zgostitev: unknown, o: Odvisnosti, zdaj: Date): Promise<ZapisNaloge> {
+  return vVrsti(root, async () => {
     const s = await preberi(root);
     const z = s.naloge.find((n) => n.id === id);
     if (!z || (z.stanje !== "caka" && z.stanje !== "zamujeno")) throw new ClaudeNalogaNapaka("ni-najdeno");
@@ -782,15 +1462,25 @@ async function potrdi(root: string, id: string, zgostitev: unknown, o: Odvisnost
     }
     // Linin predlog z uro ali »ko konca«: potrditev ga uvrsti v vrsto (dodeljeno), zagon ob pogoju
     if (z.stanje === "caka" && z.pogoj && z.pogoj.vrsta !== "zdaj") {
-      await agentZaNalogo(z.agent ?? "claude", s, o);
+      await agentZaNalogo(z.agent ?? "claude", s, o, root);
       if (!(await opozoriloPotrjeno(root))) throw new ClaudeNalogaNapaka("opozorilo");
       z.stanje = "dodeljeno";
       await zapisi(root, s);
-      return;
+      return z;
     }
     if (z.stanje === "zamujeno") z.sprozeno = zdaj.toISOString();
     await zazeniZapis(root, s, z, o, zdaj);
+    return z;
   });
+}
+
+/**
+ * Izbira »Velja tudi za vse podobne« ob potrditvi ali dodelitvi v seji lastnika (samo strogo `true`): podobno = isti agent in ista
+ * kanonicna mapa. Nikoli iz predloga Line ali besedila naloge (te poti ta funkcija ne doseze).
+ */
+async function dovoliPodobne(root: string, podobne: unknown, z: ZapisNaloge, zdaj: Date): Promise<void> {
+  if (podobne !== true) return;
+  await zapisiDovoljenje(root, "naloga-agentu", { agent: z.agent ?? "claude", mapa: z.mapa }, { kdo: "lastnik" }, zdaj);
 }
 
 function obj(v: unknown): Record<string, unknown> {
@@ -811,7 +1501,7 @@ function absolutnaPot(m: unknown): string {
   return path.resolve(m.trim());
 }
 
-const Z_GESLOM = ["pripravi", "potrdi", "mape", "dodeli", "agenti", "prepovedane"];
+const Z_GESLOM = ["pripravi", "potrdi", "mape", "dodeli", "agenti", "prepovedane", "uveljavi", "pregledovalec", "preizkusi", "vodja-zdruzi", "opusti-zdruzitev", "zdruzitev-znova", "izvozi-zdruzitev", "predlagaj-tocke"];
 
 export async function ukazClaudeNalog(token: string | null, ukaz: unknown, dir?: string, o: Odvisnosti = {}, zdaj = new Date()): Promise<JavnoStanjeNalog> {
   const root = resolveDataDir(dir);
@@ -825,7 +1515,7 @@ export async function ukazClaudeNalog(token: string | null, ukaz: unknown, dir?:
       break;
     case "potrdi":
       if (!jeIdNaloge(u.id)) throw new ClaudeNalogaNapaka("ni-najdeno");
-      await potrdi(root, u.id, u.zgostitev, o, zdaj);
+      await dovoliPodobne(root, u.podobne, await potrdi(root, u.id, u.zgostitev, o, zdaj), zdaj);
       break;
     case "odkloni": {
       const id = u.id;
@@ -840,8 +1530,14 @@ export async function ukazClaudeNalog(token: string | null, ukaz: unknown, dir?:
       break;
     }
     case "dodeli":
-      await dodeli(root, "lastnik", u, o, zdaj);
+      await dovoliPodobne(root, u.podobne, await dodeli(root, "lastnik", u, o, zdaj), zdaj);
       break;
+    case "predlagaj-tocke": {
+      // lastnik ponovi predlog za manjkajoce tocke (prejsnji ni uspel ali je potekel); spet samo predlog, ki caka potrditev
+      if (!jeIdNaloge(u.id)) throw new ClaudeNalogaNapaka("ni-najdeno");
+      if (!(await predlagajManjkajoce(root, u.id, "lastnik", o, zdaj))) throw new ClaudeNalogaNapaka("polno-cakajoce");
+      break;
+    }
     case "preklici":
       await preklici(root, u.id);
       break;
@@ -868,8 +1564,130 @@ export async function ukazClaudeNalog(token: string | null, ukaz: unknown, dir?:
       });
       break;
     }
+    case "pregledovalec": {
+      if (!jeAgent(u.agent)) throw new ClaudeNalogaNapaka("agent");
+      const agent = u.agent;
+      if (!OPIS_AGENTOV[agent].zacetniPoziv) throw new ClaudeNalogaNapaka("agent-brez-poziva");
+      await vVrsti(root, async () => {
+        const s = await preberi(root);
+        s.pregledovalec = agent;
+        await zapisi(root, s);
+      });
+      break;
+    }
+    case "preizkusi": {
+      const projekt = absolutnaPot(u.projekt);
+      if (!Array.isArray(u.ukazi) || u.ukazi.length > NAJVEC_UKAZOV_PREIZKUSOV || !u.ukazi.every(jeArgvPreizkusa)) throw new ClaudeNalogaNapaka("ukaz");
+      const ukazi = u.ukazi as string[][];
+      await vVrsti(root, async () => {
+        const s = await preberi(root);
+        const p = { ...s.preizkusi };
+        // prazen seznam = zaznani ukazi (npm test, tsc)
+        if (ukazi.length) p[projekt] = ukazi;
+        else delete p[projekt];
+        s.preizkusi = p;
+        await zapisi(root, s);
+      });
+      break;
+    }
+    case "vodja-zdruzi": {
+      // lastnik po zadnjem krogu z najdbami odloci, da se delo vseeno zdruzi (zdruzitev s preizkusi; izvirnik sele z »Uveljavi«)
+      const id = u.id;
+      if (!jeIdNaloge(id)) throw new ClaudeNalogaNapaka("ni-najdeno");
+      await vVrsti(root, async () => {
+        const s = await preberi(root);
+        const m = s.naloge.find((n) => n.id === id && n.vodja?.faza === "lastnik" && n.vodja.razlog === "krogi");
+        if (!m) throw new ClaudeNalogaNapaka("ni-najdeno");
+        m.vodja!.faza = "zdruzi";
+        delete m.vodja!.razlog;
+        await zapisi(root, s);
+      });
+      break;
+    }
+    case "uveljavi": {
+      const projekt = absolutnaPot(u.projekt);
+      if (typeof u.zgostitev !== "string" || !/^[a-f0-9]{64}$/.test(u.zgostitev)) throw new ClaudeNalogaNapaka("zgostitev");
+      const zgostitev = u.zgostitev;
+      await vVrsti(root, async () => {
+        if (vodjaDela.has(root)) throw new ClaudeNalogaNapaka("zaposleno");
+        const s = await preberi(root);
+        const zd = s.zdruzitve?.[projekt];
+        if (!zd || !zd.naloge.length) throw new ClaudeNalogaNapaka("ni-zdruzitve");
+        try {
+          await uveljavi(depsVodje(o), root, zd, zgostitev);
+        } catch (e) {
+          const sporocilo = e instanceof Error ? e.message : "";
+          if (sporocilo === "zgostitev") throw new ClaudeNalogaNapaka("zgostitev");
+          // izvirnik je sel naprej: osvezitev; sicer razlog z besedilom in izhodom (tocka 8: nikoli ista zavrnitev brez poti naprej)
+          s.zdruzitve = { ...s.zdruzitve, [projekt]: zdruzitevPoNeuspehu(zd, sporocilo) };
+          await zapisi(root, s);
+          throw new ClaudeNalogaNapaka("izvirnik");
+        }
+        for (const m of s.naloge) if (m.vodja?.faza === "zdruzeno" && zd.naloge.includes(m.id)) m.vodja.faza = "uveljavljeno";
+        const ostale = { ...s.zdruzitve };
+        delete ostale[projekt];
+        s.zdruzitve = ostale;
+        await zapisi(root, s);
+      });
+      break;
+    }
+    case "zdruzitev-znova": {
+      // tocka 8, izhod 1: pregledano delo se znova zdruzi na TRENUTNI izvirnik (nova zdruzitev s preizkusi; spor -> agent -> nov pregled).
+      // Stara zdruzitev ostane na disku (brez brisanja); izvirnik se ne spremeni; lastnik potrdi novo zgostitev.
+      const projekt = absolutnaPot(u.projekt);
+      await vVrsti(root, async () => {
+        if (vodjaDela.has(root)) throw new ClaudeNalogaNapaka("zaposleno");
+        const s = await preberi(root);
+        const zd = s.zdruzitve?.[projekt];
+        if (!zd) throw new ClaudeNalogaNapaka("ni-zdruzitve");
+        for (const m of s.naloge) {
+          if (m.vodja?.faza === "zdruzeno" && zd.naloge.includes(m.id)) {
+            m.vodja.faza = "zdruzi";
+            delete m.vodja.razlog;
+          }
+        }
+        const ostale = { ...s.zdruzitve };
+        delete ostale[projekt];
+        s.zdruzitve = ostale;
+        await zapisi(root, s);
+      });
+      break;
+    }
+    case "izvozi-zdruzitev": {
+      // tocka 8, izhod 2: pregledani diff kot datoteka za rocni pregled in uveljavitev (izvirnik se ne spremeni)
+      const projekt = absolutnaPot(u.projekt);
+      await vVrsti(root, async () => {
+        if (vodjaDela.has(root)) throw new ClaudeNalogaNapaka("zaposleno");
+        const s = await preberi(root);
+        const zd = s.zdruzitve?.[projekt];
+        if (!zd) throw new ClaudeNalogaNapaka("ni-zdruzitve");
+        const pot = await izvoziZdruzitev(root, zd).catch(() => {
+          throw new ClaudeNalogaNapaka("izvirnik");
+        });
+        s.zdruzitve = { ...s.zdruzitve, [projekt]: { ...zd, izvoz: pot } };
+        await zapisi(root, s);
+      });
+      break;
+    }
+    case "opusti-zdruzitev": {
+      // izhod iz zataknjene zdruzitve (izvirnik vrnjen, spor ali padli preizkusi pri posodobitvi): samo zapis stanja; mape, worktree in
+      // veje ostanejo (brez brisanja), izvirnik se ne spremeni; zdruzene naloge gredo k lastniku
+      const projekt = absolutnaPot(u.projekt);
+      await vVrsti(root, async () => {
+        if (vodjaDela.has(root)) throw new ClaudeNalogaNapaka("zaposleno");
+        const s = await preberi(root);
+        const zd = s.zdruzitve?.[projekt];
+        if (!zd) throw new ClaudeNalogaNapaka("ni-zdruzitve");
+        for (const m of s.naloge) if (m.vodja?.faza === "zdruzeno" && zd.naloge.includes(m.id)) vLastnika(m, "zdruzitev");
+        const ostale = { ...s.zdruzitve };
+        delete ostale[projekt];
+        s.zdruzitve = ostale;
+        await zapisi(root, s);
+      });
+      break;
+    }
     case "preveri-agente":
-      await stanjeAgentov(await preberi(root), o, true);
+      await stanjeAgentov(await preberi(root), o, true, root);
       break;
     case "mape": {
       if (!Array.isArray(u.mape) || u.mape.length > NAJVEC_MAP) throw new ClaudeNalogaNapaka("mapa");

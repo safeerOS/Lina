@@ -45,7 +45,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24  # unpdf 2.x: engines node >=24; paket tece na Node 24 (Electron 45)
           cache: npm
 
       - name: Namestitev odvisnosti programa
@@ -94,13 +94,17 @@ jobs:
           cp -r dist package.json node_modules "$GITHUB_WORKSPACE/openline-paket/"
           if [ -d public ]; then cp -r public "$GITHUB_WORKSPACE/openline-paket/"; fi
 
-      - name: Paket jazz (samoucenje)
+      - name: Paket modulov, ki jih streznik nalozi po imenu (jazz za samoucenje, unpdf za otroka razclembe PDF)
         run: |
+          set -euo pipefail
+          # unpdf: otrok razclembe ga nalozi po imenu (import.meta.resolve), zato ga svezenje nima (0.2.10: PDF »poskodovan«).
+          UNPDF=$(node -p "require('./package-lock.json').packages['node_modules/unpdf'].version")
           mkdir -p jazz-paket
           echo '{"name":"jp","private":true}' > jazz-paket/package.json
           cd jazz-paket
-          npm install --omit=dev --no-audit --no-fund jazz-tools@0.8.23 cojson@0.8.23 cojson-transport-ws@0.8.23
+          npm install --omit=dev --no-audit --no-fund jazz-tools@0.8.23 cojson@0.8.23 cojson-transport-ws@0.8.23 "unpdf@${UNPDF}"
           test -d node_modules/jazz-tools
+          test -f node_modules/unpdf/package.json
 
       - name: Namestitev lupine (Electron in electron-builder)
         working-directory: lupina
@@ -123,7 +127,9 @@ jobs:
           # 23. 11. 2026: electron-builder je izpustil openline/node_modules (OpenLine se ni zagnal: »Pot klicev ni pripravljena«)
           grep -q 'resources/lina/openline/node_modules/express/package.json' vsebina-deb.txt
           grep -q 'resources/lina/openline/node_modules/ws/package.json' vsebina-deb.txt
+          grep -q 'resources/lina/openline/node_modules/selfsigned/package.json' vsebina-deb.txt
           grep -q 'resources/lina/node_modules/jazz-tools/package.json' vsebina-deb.txt
+          grep -q 'resources/lina/node_modules/unpdf/package.json' vsebina-deb.txt
           grep -q 'resources/lina/rsdo-streznik.py' vsebina-deb.txt
           grep -E 'resources/lina/posodobi.sh$' vsebina-deb.txt | grep -q '^-rwx'
           sha256sum "$DEB" | tee izid/sha256.txt
@@ -134,6 +140,21 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Preverba paketa z lupino (PDF po pravi poti in moduli po imenu)
+        run: |
+          set -euo pipefail
+          X="$RUNNER_TEMP/deb-x"
+          mkdir -p "$X"
+          dpkg-deb -x "$(ls izid/*.deb)" "$X"
+          L="$X/opt/Lina/lina-lupina"
+          # Najprej sama lupina: manjkajoca knjiznica na streznikih GitHub ni napaka pakiranja.
+          ELECTRON_RUN_AS_NODE=1 "$L" -p 'process.versions.node'
+          python3 scripts/preverba-paketa-pdf.py "$RUNNER_TEMP/vzorec.pdf" "Pozdrav Lina PDF"
+          # Iz mape brez node_modules: otrok razresuje golo ime iz delovne mape, v $GITHUB_WORKSPACE bi nasel unpdf iz npm ci.
+          cd "$X"
+          ELECTRON_RUN_AS_NODE=1 timeout 120 "$L" "$GITHUB_WORKSPACE/scripts/preverba-paketa.mjs" "$X/opt/Lina/resources/lina" "$RUNNER_TEMP/vzorec.pdf" "Pozdrav Lina PDF" 2>&1 | tee "$GITHUB_WORKSPACE/preverba-paketa.log"
+          echo "### Preverba paketa z lupino: OK (PDF in moduli po imenu)" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -142,6 +163,7 @@ jobs:
             izid/*.deb
             izid/sha256.txt
             vsebina-deb.txt
+            preverba-paketa.log
             tsc.log
           retention-days: 14
           if-no-files-found: warn
@@ -158,7 +180,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24  # unpdf 2.x: engines node >=24; paket tece na Node 24 (Electron 45)
           cache: npm
 
       - name: Namestitev odvisnosti

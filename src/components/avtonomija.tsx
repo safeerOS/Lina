@@ -3,6 +3,7 @@ import { zdruziOsnutke } from "./avtonomija-osnutek.ts";
 import { NACINI, VRSTE_OPRAVIL, type Nacin, type VrstaOpravila, type ZapisDnevnika } from "@/lib/lina/avtonomija.ts";
 import type { JavnoStanje } from "@/lib/lina/avtonomija.server.ts";
 import { tA } from "@/lib/lina/besedila-avtonomija.ts";
+import { PodobneIzbira } from "@/components/podobne-izbira.tsx";
 import { dnevnikAvtonomijeFn, stanjeAvtonomijeFn, ukazAvtonomijeFn } from "@/lib/lina/functions.ts";
 
 /**
@@ -32,6 +33,8 @@ export function Avtonomija({ onError }: { onError: (m: string) => void }) {
   const [osnutki, setOsnutki] = useState<Record<string, Osnutek>>({});
   const [ura, setUra] = useState("08:00");
   const [zaposlen, setZaposlen] = useState(false);
+  // »Velja tudi za vse podobne« (isto opravilo, ista povezava = isti prejemnik), privzeto obkljukano
+  const [podobne, setPodobne] = useState(true);
   const [sporocilo, setSporocilo] = useState("");
   const [pIme, setPIme] = useState("");
   const [pStevilka, setPStevilka] = useState("");
@@ -138,9 +141,10 @@ export function Avtonomija({ onError }: { onError: (m: string) => void }) {
                 {c.predloga ? <span className="text-[var(--color-moss)]">»{c.predloga}«</span> : null}
                 <span className="text-xs text-[var(--color-moss)]">{tA("poteceDo")}: {new Date(c.poteceDo).toLocaleTimeString()}</span>
                 <span className="flex gap-2">
-                  <button type="button" className={gumb} disabled={zaposlen} onClick={() => void ukaz({ ukaz: "odobri", id: c.id }, false)}>{tA("odobri")}</button>
+                  <button type="button" className={gumb} disabled={zaposlen} onClick={() => void ukaz({ ukaz: "odobri", id: c.id, podobne }, false)}>{tA("odobri")}</button>
                   <button type="button" className={gumb} disabled={zaposlen} onClick={() => void ukaz({ ukaz: "odkloni", id: c.id }, false)}>{tA("odkloni")}</button>
                 </span>
+                <PodobneIzbira id={`podobne-avt-${c.id}`} izbrano={podobne} onIzbira={setPodobne} onemogoceno={zaposlen} />
               </li>
             ))}
           </ul>

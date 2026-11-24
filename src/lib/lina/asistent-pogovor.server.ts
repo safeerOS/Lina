@@ -9,12 +9,16 @@ import { prikliciSpomin, stevecIzbrisaSpomina, zapisiIzmenjavo } from "./spomin-
 import { jeSamoucenjeVklopljeno } from "./samoucenje-baza.server.ts";
 import { izluciUci, naucSeVOzadju, odsekSamoucenja, prikliciZnanje } from "./samoucenje-pogovor.server.ts";
 import { odsekPravilIzPopravkov, zabeleziPopravek } from "./ucenje-popravkov.server.ts";
+import { naucIzDokumenta, odsekStrokPogovor, zabeleziPogovorLastnika } from "./stroke.server.ts";
 import { besediloDatotek, oznakaPriponk, pripraviPriponke } from "./priponke.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { predlagajClaudeNalogo, type Odvisnosti } from "./claude-naloge.server.ts";
 import { NAVODILO_OZNAKE, imaNevidne, izluciPredloge } from "./claude-naloge.ts";
 import { jeVklopljeno as jeGradnjaVklopljena, obdelajGradnjo } from "./gradnje-github.server.ts";
 import { NAVODILO_OZNAKE_GRADNJE } from "./gradnje-github.ts";
+import { obdelajNeposredniN8n, obdelajOznakeN8n } from "./n8n.server.ts";
+import { NAVODILO_OZNAKE_N8N } from "./n8n.ts";
+import { paketKlepet, zavrziPaketPredlog } from "./paket-klepet.server.ts";
 
 /** Pogovor lastnika z Lino (prva stran programa). Shranjen samo lokalno v podatkovni mapi uporabnika. */
 /** izPriponke: Linin odgovor na priponko (vsebina datoteke je podatek; drugi pregled 0.2.10, S2). */
@@ -254,7 +258,10 @@ export async function obdelajClaudeCode(root: string, odgovor: string, dovoliPre
   const komu = p.agent ? "agenta" : "Claude Code";
   // A7: skriti znaki v besedilu ali mapi - lastnik mora potrditi natanko to, kar vidi, zato predloga ni
   const zakaj = imaNevidne(p.naloga) || imaNevidne(p.mapa) ? "besedilo ali mapa vsebuje skrite (nevidne) znake" : `${p.agent ? "agent, mapa, čas" : "mapa"} ali besedilo ni dovoljeno`;
-  return `${besedilo}\n\n${z ? `(Predlog naloge za ${komu} čaka vašo potrditev v zavihku Računalnik.)` : `(Naloge za ${komu} nisem pripravila: ${zakaj}.)`}`.trim();
+  const izid = !z ? `(Naloge za ${komu} nisem pripravila: ${zakaj}.)`
+    : z.stanje === "caka" ? `(Predlog naloge za ${komu} čaka vašo potrditev v zavihku Računalnik.)`
+    : `(Naloga za ${komu} je potrjena po vašem dovoljenju za podobne naloge; preklic v Nastavitvah > Dovoljenja.)`;
+  return `${besedilo}\n\n${izid}`.trim();
 }
 
 export async function asistentPogovor(
@@ -267,7 +274,11 @@ export async function asistentPogovor(
   await requireOwner(token, root);
   const zgodovina = await asistentZgodovina(token, root);
   const imaPriponke = Array.isArray(priponke) && priponke.length > 0;
-  if (imaPriponke) return pogovorSPriponkami(root, zgodovina, besedilo, priponke);
+  // Priponka je podatek: nikoli ne nastavi navodila za dostavo, cakajoci predlog pa zavrze (»da« potem ne shrani starega).
+  if (imaPriponke) {
+    await zavrziPaketPredlog(root);
+    return pogovorSPriponkami(root, zgodovina, besedilo, priponke);
+  }
   const novo = besedilo.trim().slice(0, MEJA_BESEDILA);
   if (!novo) return { ok: false, sporocilo: "Napišite sporočilo.", zgodovina };
   async function zakljuci(odgovorKode: string) {
@@ -279,6 +290,14 @@ export async function asistentPogovor(
     return { ok: true as const, sporocilo: "", zgodovina: nova };
   }
   const zdaj = new Date();
+  // Navodilo za dostavo (paket-klepet.server.ts): samo iz lastnikovega besedila, pred koledarjem in modelom; shrani sele po »da«.
+  const paket = await paketKlepet(root, token, novo, zdaj);
+  if (paket !== null) return zakljuci(paket);
+  // Neposredni n8n ukazi lastnika (seznam, predlog, potrditev/preklic zadnjega predloga): odloca koda iz BESEDILA LASTNIKA, po paketu
+  // (njegov »da« ima prednost, ce caka njegov predlog). Zagon istega toka brez vprasanja samo z lastnikovim dovoljenjem za podobne.
+  const zadnjiLinin = [...zgodovina].reverse().find((s) => s.vloga === "lina")?.besedilo ?? "";
+  const n8nOdgovor = await obdelajNeposredniN8n(root, novo, zadnjiLinin);
+  if (n8nOdgovor !== null) return zakljuci(n8nOdgovor);
   // Sporedu dneva ne razlaga model: odgovor sestavi koda iz koledarja, zato ne more izmisliti dogodka.
   const dan = vprasanjeDneva(novo);
   if (dan !== null) return zakljuci(odgovorDneva(await koledarBeri(root), zdaj, dan));
@@ -301,16 +320,18 @@ export async function asistentPogovor(
   }
   const pravila = await loadPravila(root);
   // Task Observer (24. 11. 2026): ob popravku lastnika zapise samo kandidata za pregled; brez »Shrani« se trajna pravila ne spremenijo.
-  const zadnjiLinin = [...zgodovina].reverse().find((s) => s.vloga === "lina")?.besedilo ?? "";
   await zabeleziPopravek(root, novo, zadnjiLinin, zdaj).catch(() => null);
   const spomin = await prikliciSpomin(root, novo, zgodovinaVMeji(zgodovina, novo, MEJA_VHODA, MEJA_POVZETKA + 80).map((s) => s.besedilo));
   const uc = await samoucenjeOdsek(root, novo);
   const popravkiPravila = await odsekPravilIzPopravkov(root);
-  const vhod = sestaviAsistenta(zgodovina, novo, pravila.slog, pravila.navodila, SKILI_ASISTENTKE, spomin, `${uc.odsek}${popravkiPravila}`, { povzetek: await preberiPovzetek(root) });
-  const rezultat = await callProvider({ ...brain, text: vhod.text, system: vhod.system + NAVODILO_OZNAKE + ((await jeGradnjaVklopljena(root).catch(() => false)) ? NAVODILO_OZNAKE_GRADNJE : ""), maxTokens: 400, najvecZnakov: 2000, vsebinaKlica: false });
+  // Prilagodljivi kontekst (24. 11. 2026): uci se samo iz lastnikovega sporocila (raba izrazov, stroka), nato kratek odsek relevantnih izrazov.
+  await zabeleziPogovorLastnika(root, novo, zdaj);
+  const stroke = await odsekStrokPogovor(root, novo);
+  const vhod = sestaviAsistenta(zgodovina, novo, pravila.slog, pravila.navodila, SKILI_ASISTENTKE, spomin, `${uc.odsek}${popravkiPravila}${stroke}`, { povzetek: await preberiPovzetek(root) });
+  const rezultat = await callProvider({ ...brain, text: vhod.text, system: vhod.system + NAVODILO_OZNAKE + ((await jeGradnjaVklopljena(root).catch(() => false)) ? NAVODILO_OZNAKE_GRADNJE : "") + (pravila.dodatki?.n8n === true ? NAVODILO_OZNAKE_N8N : ""), maxTokens: 400, najvecZnakov: 2000, vsebinaKlica: false });
   const cas = new Date().toISOString();
   if (!rezultat.ok) return { ok: false, sporocilo: rezultat.sporocilo, zgodovina };
-  const obdelan = await obdelajGradnjo(root, await obdelajClaudeCode(root, await obdelajUci(root, hideSecret(rezultat.text, brain.key).replace(/^Lina:\s*/i, "").trim(), uc.vklopljeno), true), true);
+  const obdelan = await obdelajOznakeN8n(root, await obdelajGradnjo(root, await obdelajClaudeCode(root, await obdelajUci(root, hideSecret(rezultat.text, brain.key).replace(/^Lina:\s*/i, "").trim(), uc.vklopljeno), true), true), true);
   // C6: ce je odgovoril rezervni brezplacni model istega ponudnika, lastnik to izve v odgovoru.
   const odgovor = rezultat.povratek && obdelan ? `${obdelan}\n\n(${rezultat.povratek})` : obdelan;
   const nova = await dodajVPogovor(root, [
@@ -342,7 +363,11 @@ async function pogovorSPriponkami(
   const pravila = await loadPravila(root);
   const spomin = await prikliciSpomin(root, zahteva, zgodovinaVMeji(zgodovina, zaModel, 100_000).map((s) => s.besedilo));
   const uc = await samoucenjeOdsek(root, zahteva);
-  const vhod = sestaviAsistenta(zgodovina, zaModel, pravila.slog, pravila.navodila, SKILI_ASISTENTKE, spomin, uc.odsek, { najvecZnakov: 100_000 });
+  // Prilagodljivi kontekst: besedilne priponke so lastnikovi dokumenti (predlogi izrazov z imenom vira; vsebina se ne shrani).
+  if (besedilo.trim()) await zabeleziPogovorLastnika(root, besedilo.trim().slice(0, MEJA_BESEDILA));
+  for (const b of pripravljeno.besedila) await naucIzDokumenta(root, b.ime, b.besedilo);
+  const stroke = await odsekStrokPogovor(root, `${zahteva}\n${pripravljeno.besedila.map((b) => b.besedilo).join("\n")}`.slice(0, 50_000));
+  const vhod = sestaviAsistenta(zgodovina, zaModel, pravila.slog, pravila.navodila, SKILI_ASISTENTKE, spomin, `${uc.odsek}${stroke}`, { najvecZnakov: 100_000 });
   const rezultat = await callProvider({
     ...brain,
     text: vhod.text,
@@ -355,7 +380,7 @@ async function pogovorSPriponkami(
     vsebinaKlica: false,
   });
   if (!rezultat.ok) return { ok: false, sporocilo: rezultat.sporocilo, zgodovina };
-  const obdelan = (await obdelajGradnjo(root, await obdelajClaudeCode(root, await obdelajUci(root, hideSecret(rezultat.text, brain.key).replace(/^Lina:\s*/i, "").trim(), uc.vklopljeno), false), false)) || "…";
+  const obdelan = (await obdelajOznakeN8n(root, await obdelajGradnjo(root, await obdelajClaudeCode(root, await obdelajUci(root, hideSecret(rezultat.text, brain.key).replace(/^Lina:\s*/i, "").trim(), uc.vklopljeno), false), false), false)) || "…";
   const odgovor = rezultat.povratek ? `${obdelan}\n\n(${rezultat.povratek})` : obdelan;
   const zapisLastnika = `${besedilo.trim().slice(0, MEJA_BESEDILA)}${besedilo.trim() ? "\n" : ""}${oznaka}`;
   const cas = new Date().toISOString();

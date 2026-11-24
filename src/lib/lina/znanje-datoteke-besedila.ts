@@ -1,3 +1,4 @@
+import { jezikVmesnika, type Jezik } from "./besedila.ts";
 /** Besedila za znanje iz datotek podjetja (sl + en). Locena datoteka, da se ne prekriva z besedila.ts (vzporedno delo). */
 const sl = {
   vrsta: "Dokument mora biti PDF, DOCX, ODT, XLSX, CSV, TXT ali MD.",
@@ -78,6 +79,6 @@ const en: Record<keyof typeof sl, string> = {
 export type BesedaDatotek = keyof typeof sl;
 export const besedilaDatotek = { sl, en };
 
-export function besedaDatotek(kljuc: BesedaDatotek, jezik: "sl" | "en" = "sl"): string {
+export function besedaDatotek(kljuc: BesedaDatotek, jezik: Jezik = jezikVmesnika()): string {
   return besedilaDatotek[jezik][kljuc];
 }

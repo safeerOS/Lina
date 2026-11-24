@@ -15,7 +15,7 @@ import { formaCatalog } from "./catalog.ts";
 import { stalniStavki } from "./glas.ts";
 import { pocakajNujne, pravilaZaVmesnik, shraniNujne } from "./nujni.server.ts";
 import { nastaviOgrevanjeZaPreizkus } from "./ogrevanje-klica.server.ts";
-import { aktivnoNavodiloPaketa, jeDostava, normirajPaket, razlogPaketa } from "./paket.ts";
+import { aktivnoNavodiloPaketa, jeDostava, jePredHiso, mestoPaketa, normirajPaket, odgovorDostavljalcu, PRED_HISO, razlogPaketa } from "./paket.ts";
 import { defaultPravila, loadPravila, normalizePravila, savePravila } from "./pravila.server.ts";
 import { preberiKlic, publishLine } from "./service.server.ts";
 import { normirajUrnik, prevezavaIzvenCasa, razberiProsteDneve, razlogUrnika, slovenskiPrazniki, URNIK_PRIVZETO, vDelovnemCasu, velikaNoc } from "./urnik.ts";
@@ -363,12 +363,25 @@ describe("paket: navodilo (preverba, velja do, samo osebna)", () => {
   });
 });
 
+describe("paket: odgovor dostavljalcu (lastnik 24. 11. 2026)", () => {
+  it("»Paket pričakujemo. Prosim, pustite ga <mesto>.« tudi iz starega celega stavka in iz »pred hišo«", () => {
+    assert.equal(odgovorDostavljalcu(NAVODILO), "Paket pričakujemo. Prosim, pustite ga pri sosedu na št. 5.");
+    assert.equal(odgovorDostavljalcu("pred hišo"), "Paket pričakujemo. Prosim, pustite ga pred hišo.");
+    assert.equal(odgovorDostavljalcu(normirajPaket(PRED_HISO)), "Paket pričakujemo. Prosim, pustite ga pred hišo.");
+    assert.equal(odgovorDostavljalcu("Naj ga pustijo v nabiralniku!"), "Paket pričakujemo. Prosim, pustite ga v nabiralniku.");
+    assert.equal(odgovorDostavljalcu("Paket pustite pri sosedu Novaku."), "Paket pričakujemo. Prosim, pustite ga pri sosedu Novaku.");
+    assert.equal(mestoPaketa("Pustite ga pri sosedu na št. 5."), "pri sosedu na št. 5");
+    assert.ok(jePredHiso("pred hišo.") && jePredHiso("Pred hišo") && !jePredHiso("pri sosedu"));
+  });
+});
+
 describe("paket: klic (osebna tajnica)", { concurrency: 1 }, () => {
-  it("dostavljalec: Lina pove, da klicana oseba trenutno ne more odgovoriti (BREZ imena lastnika, pregled 0.2.10 najdba 2), in navodilo; enkrat na klic", async () => {
+  it("dostavljalec: Lina rece »Paket pričakujemo. Prosim, pustite ga <mesto>.« (BREZ imena lastnika, pregled 0.2.10 najdba 2); enkrat na klic (lastnik 24. 11.)", async () => {
     const { dir } = await linija({ nacinKlica: "osebna", imeLastnika: "Ana", paketNavodilo: NAVODILO });
     const sid = "CA-PAK-1";
     const [prvi, drugi] = await osebniKlic(dir, sid, ["Dober dan, tukaj DPD, imam paket za vas.", "Tukaj DPD, kje naj pustim?"]);
-    assert.ok((prvi ?? "").includes(`${t("paketNeMore")} ${t("paketUvod")} ${NAVODILO}`), prvi);
+    assert.ok((prvi ?? "").includes("Paket pričakujemo. Prosim, pustite ga pri sosedu na št. 5."), prvi);
+    assert.doesNotMatch(prvi ?? "", /ne more odgovoriti|Navodilo za dostavo|Pustite ga pri/, "stari odgovor ne ostane");
     assert.doesNotMatch(prvi ?? "", /Ana/, "kdorkoli rece »tukaj DPD«, ne izve imena lastnika");
     assert.doesNotMatch(drugi ?? "", /sosedu/, "najvec enkrat na klic");
     const zapis = await preberiKlic(sid, dir);
@@ -421,11 +434,13 @@ describe("vmesnik: urnik pri prevezavi (podjetje) in navodilo za paket (osebna)"
     // Med zacetkom osebnega bloka in poljem se blok ne zapre (») : null}« na isti globini bi ga koncal pred poljem odsotnosti).
     assert.ok(desk.slice(osebna, i).includes('t("odsotnostNaslov")'), "v istem bloku kot odsotnost");
     assert.ok(osebna > 0 && i > osebna && i < konec, "v osebnem bloku");
-    const blok = desk.slice(i - 400, i + 1500);
+    const blok = desk.slice(i - 1500, i + 1500);
     for (const x of ['aria-describedby="paket-namig"', 'value={pravila.paketNavodilo ?? ""}', "maxLength={160}", 't("paketNamig")', 'type="date"', "paketDo: event.target.value"]) assert.ok(blok.includes(x), x);
+    // Lastnik 24. 11.: izbira »Pred hišo« (ena kljukica) ali »Drugo mesto« (besedilo), isto polje paketNavodilo.
+    for (const x of ['id="paket-pred-hiso"', 'type="checkbox"', 't("paketPredHiso")', 't("paketDrugoMesto")', "jePredHiso("]) assert.ok(blok.includes(x), x);
   });
   it("besedila sl in en: vsi novi kljuci, namig opozori na kode", () => {
-    for (const k of ["prevezavaIzvenCasa", "prevezavaUrnikVklop", "prevezavaUrnikNaslov", "prevezavaUrnikNamig", "prevezavaProstiNaslov", "prevezavaUrnikNeveljaven", "prevezavaProstiNeveljavni", "paketNaslov", "paketNamig", "paketDoNaslov", "paketUvod", "paketDolzina", "paketKoda", "paketDoNeveljaven"] as const) {
+    for (const k of ["prevezavaIzvenCasa", "prevezavaUrnikVklop", "prevezavaUrnikNaslov", "prevezavaUrnikNamig", "prevezavaProstiNaslov", "prevezavaUrnikNeveljaven", "prevezavaProstiNeveljavni", "paketNaslov", "paketNamig", "paketDoNaslov", "paketOdgovor", "paketPredHiso", "paketDrugoMesto", "paketDolzina", "paketKoda", "paketDoNeveljaven"] as const) {
       assert.ok(sl[k]?.trim(), `sl ${k}`);
       assert.ok(en[k]?.trim(), `en ${k}`);
     }
@@ -476,8 +491,8 @@ describe("pregled 0.2.10 (najdba 2): navodilo za dostavo slisi vsak, ki se preds
     assert.match(sl.paketNamig, /vsak, ki se predstavi kot dostava/);
     assert.match(sl.paketNamig, /ključ/);
     assert.match(en.paketNamig, /Anyone who says they are a delivery/);
-    assert.ok(sl.paketNeMore && en.paketNeMore);
-    assert.doesNotMatch(sl.paketNeMore, /\{kdo\}/);
+    assert.ok(sl.paketOdgovor.includes("{mesto}") && en.paketOdgovor.includes("{mesto}"));
+    assert.doesNotMatch(sl.paketOdgovor, /\{kdo\}/);
   });
 });
 

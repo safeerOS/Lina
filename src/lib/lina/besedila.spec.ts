@@ -128,8 +128,11 @@ const POLJA_NASTAVITVE: Record<string, string[]> = {
   podatki: ['id="snemanje-vklop"', 'id="snemanje-zavrnitev"', 'id="snemanje-hramba"', 'id="mapa"', "Shranjevanje"],
   dodatki: ['id="nast-dodatki"', 'id="om-naslov-polje"', 'id="om-kljuc"'],
   strani: ['id="nast-strani"'],
+  narocila: ['id="nast-narocila"'],
+  dovoljenja: ['id="nast-dovoljenja"'],
   posodobitev: ['id="nast-posodobitev"', sl.posGumb, sl.posPojasnilo],
   github: ['id="nast-github"', 'id="ghd-kljuc"', sl.ghdPotKljuc],
+  agenti: ['id="nast-agenti"', 'id="nacrt-diagram-vklop"', sl.nacrtStikalo],
   olini: ['id="nast-o-lini"', sl.opozNaslov, sl.opozT3],
 };
 const POLJA_ZNANJE: Record<string, string[]> = {

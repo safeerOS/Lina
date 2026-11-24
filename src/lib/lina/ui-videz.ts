@@ -2,7 +2,38 @@
  * UI-1 (videz, 16. 11. 2026): ciste funkcije za zaslone (prvi koraki, stanje klica, vstavljanje vrednosti v besedilo).
  * Brez Reacta, da jih preizkusi node:test. Nic ne izmislja: vsak korak in vsaka oznaka izhaja iz podatkov, ki jih program ze ima.
  */
-import type { Beseda } from "./besedila.ts";
+import { jezikVmesnika, lokalizacija, type Beseda, type Jezik } from "./besedila.ts";
+import { datumBesedilo } from "./koledar.ts";
+
+const CAS_PAS = "Europe/Ljubljana";
+/** Glava Lina 2.0 v ljubljanskem casu (ne v pasu sistema): »tor., 24. nov.« / »Tue 24 Nov«. */
+export function datumGlave(d: Date, j: Jezik = jezikVmesnika()): string {
+  return d.toLocaleDateString(lokalizacija(j), { timeZone: CAS_PAS, weekday: "short", day: "numeric", month: "short" });
+}
+export function uraGlave(d: Date, j: Jezik = jezikVmesnika()): string {
+  return d.toLocaleTimeString(lokalizacija(j), { timeZone: CAS_PAS, hour: "2-digit", minute: "2-digit", hour12: false });
+}
+/**
+ * Trenutek -> Date, katerega LOKALNA polja so ljubljanski stenski cas. Za kartico Danes in pregled dneva: koledar hrani stenski cas
+ * brez pasu (razberiCas), zato ga primerjamo z ljubljanskim »zdaj«. Samo za prikaz in primerjavo dneva, ne za racunanje trajanja.
+ */
+export function vLjubljani(d: Date): Date {
+  const deli = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: CAS_PAS, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" })
+      .formatToParts(d)
+      .map((p) => [p.type, Number(p.value)]),
+  );
+  return new Date(deli.year, deli.month - 1, deli.day, deli.hour, deli.minute, deli.second, d.getMilliseconds());
+}
+/** Kartica Danes/Today: slovensko kot doslej (»torek, 24. november«), angleško »Tuesday 24 November«. */
+export function datumDanes(d: Date, j: Jezik = jezikVmesnika(), zLetom = false): string {
+  if (j === "sl") return datumBesedilo(d, zLetom);
+  return d.toLocaleDateString(lokalizacija(j), { weekday: "long", day: "numeric", month: "long", ...(zLetom ? { year: "numeric" } : {}) });
+}
+/** Datum in ura po jeziku vmesnika (opravila, gradnje). */
+export function datumInUra(d: Date, j: Jezik = jezikVmesnika()): string {
+  return d.toLocaleString(lokalizacija(j), { timeZone: CAS_PAS, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
 import type { CallSession, Catalog } from "./types.ts";
 
 /** Vstavi vrednosti v besedilo z oznakami {ime}. Manjkajoca vrednost ostane kot oznaka (napaka je vidna, ne tiha). */
@@ -85,9 +116,9 @@ export function stanjeKlica(call: Pick<CallSession, "status" | "order">): Stanje
 }
 
 /** Cas klica za cloveka: »10. 11. 2026, 14:35« (slog besedil, razdelek 3). Neveljaven cas da prazen niz. */
-export function casKlica(iso: string, jezik: "sl" | "en" = "sl"): string {
+export function casKlica(iso: string, jezik: Jezik = jezikVmesnika()): string {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
   const loc = jezik === "sl" ? "sl-SI" : "en-GB";
-  return `${d.toLocaleDateString(loc, { day: "numeric", month: "numeric", year: "numeric" })}, ${d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })}`;
+  return `${d.toLocaleDateString(loc, { timeZone: CAS_PAS, day: "numeric", month: "numeric", year: "numeric" })}, ${d.toLocaleTimeString(loc, { timeZone: CAS_PAS, hour: "2-digit", minute: "2-digit" })}`;
 }

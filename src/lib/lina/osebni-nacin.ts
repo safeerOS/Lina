@@ -57,7 +57,7 @@ export function veljavenZavihek(tab: ZavihekId, nacin: NacinKlica | string | und
 
 /** »Obvezni del« v nastavitvah pozdrava: kar Lina res izgovori vedno (osebna: razkritje UI v prvem stavku, brez besede o narocilu). */
 export function obveznoBesedilo(nacin: NacinKlica | string | undefined): string {
-  return jeOsebniNacin(nacin) ? `${t("osebnaPredstavitev")} ${t("osebnaZapis")}` : t("obvezniPozdrav");
+  return jeOsebniNacin(nacin) ? `${t("osebnaPredstavitev", "sl")} ${t("osebnaZapis", "sl")}` : t("obvezniPozdrav", "sl");
 }
 
 export function vajaNamigBesedilo(nacin: NacinKlica | string | undefined): string {
@@ -66,5 +66,5 @@ export function vajaNamigBesedilo(nacin: NacinKlica | string | undefined): strin
 
 /** Prazen seznam v zavihku Naročila/Sporočila. */
 export function prazenSeznamBesedilo(nacin: NacinKlica | string | undefined): string {
-  return jeOsebniNacin(nacin) ? t("sporocilaPrazno") : "Potrjenih naročil še ni.";
+  return jeOsebniNacin(nacin) ? t("sporocilaPrazno") : t("narocilaPrazno");
 }

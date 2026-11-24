@@ -8,6 +8,8 @@
  */
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { jeKoncnaFaza, type VlogaNaloge, type VodjaNaloge } from "./claude-naloge-vodja.ts";
+import type { IzidTocke } from "./tocke-naloge.ts";
 
 export const NAJVEC_HKRATNIH = 2;
 export const NAJVEC_CAKAJOCIH = 5;
@@ -33,10 +35,11 @@ export type IzvorNaloge = (typeof IZVORI)[number];
 
 /**
  * »zaganja«: rezervacija, zapisana PRED zagonom terminala (CodeRabbit): ce zapis po zagonu ne uspe, naloga ni vec »caka« in zaseda mesto.
+ * »nepopolno«: agent je koncal (porocilo, terminal ne dela), a vsaka tocka naloge nima preverjenega dokaza (tocke-naloge.ts).
  * »dodeljeno«: vnaprej dodeljena naloga caka svoj pogoj (lastnikova dodelitev je potrditev za EN zagon); »zamujeno«: pogoj je minil, ko
  * Lina ni tekla ali je racunalnik spal - zagon sele po ponovni potrditvi; »preklicano«: lastnik je dodelitev preklical.
  */
-export const STANJA = ["caka", "zaganja", "tece", "koncano", "odklonjeno", "poteklo", "napaka", "dodeljeno", "zamujeno", "preklicano"] as const;
+export const STANJA = ["caka", "zaganja", "tece", "koncano", "nepopolno", "odklonjeno", "poteklo", "napaka", "dodeljeno", "zamujeno", "preklicano"] as const;
 export type StanjeNaloge = (typeof STANJA)[number];
 
 /** Razlogi so stalne kode: v odgovor in zapis gre koda, nikoli besedilo naloge. */
@@ -44,7 +47,9 @@ export const RAZLOGI = [
   "ukaz", "mapa", "mapa-zunaj", "mapa-skrita", "mapa-podatki", "mapa-ni", "besedilo", "ni-najdeno", "zgostitev", "poteklo",
   "polno-cakajoce", "polno-hkratne", "ni-na-voljo", "ni-terminala", "ni-claude", "naloga-obstaja", "zagon", "geslo", "opozorilo",
   "agent", "agent-izklopljen", "agent-ni-pripravljen", "agent-brez-poziva", "mapa-prepovedana", "pogoj",
-  "mapa-zasedena", "mapa-povezava", "besedilo-nevidni",
+  "mapa-zasedena", "mapa-povezava", "besedilo-nevidni", "peskovnik",
+  // Lina kot vodja (claude-naloge-vodja): kopija ni uspela, izvirnik se je spremenil od osnove, zdruzitev tece, ni zdruzitve
+  "kopija", "izvirnik", "zaposleno", "ni-zdruzitve",
 ] as const;
 export type RazlogNaloge = (typeof RAZLOGI)[number];
 
@@ -82,8 +87,22 @@ export type ZapisNaloge = {
   koncano?: string;
   ocena?: { konec: string; groba: boolean };
   opomnik?: Opomnik;
-  /** Delovna kopija mape (git worktree ali kopija), ko jo bo uvedla zdruzitev dela vec agentov; zdaj vedno brez. */
+  /**
+   * Delovna kopija pod <podatki>/delo (git worktree ali kopija mape), ko v istem projektu ze dela drug agent (Lina kot vodja). Agent dela
+   * tam (cwd, NALOGA.md, POROCILO.md); mapa ostane izvirni projekt (preverbe mape in prepovedanih map veljajo zanj).
+   */
   kopija?: string;
+  /** Pregled in zdruzitev dela te naloge (samo naloge s kopijo). */
+  vodja?: VodjaNaloge;
+  /** Naloga, ki jo je Lina sama dodelila za drugo nalogo (za): slepi pregled, popravek najdb ali razresitev spora. */
+  vloga?: VlogaNaloge;
+  za?: string;
+  /** Tocke naloge ob zagonu (tocke-naloge.ts); brez polja = zapis pred preverbo tock ali korak vodje (ne preverja se). */
+  tocke?: string[];
+  /** Izid preverbe dokazov ob koncu (razporejevalnik). */
+  izidTock?: IzidTocke[];
+  /** Predlog nove naloge za manjkajoce tocke: id predloga ali »napaka« (predloga ni bilo mogoce dodati). */
+  predlogTock?: string;
 };
 
 const ID = /^[a-f0-9]{16}$/;
@@ -108,6 +127,22 @@ export function imaNevidne(v: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * N8: nevidne znake (in osamljene nadomestne) zamenja z vidno oznako <U+XXXX>, da besedilo drugega agenta (najdbe s citatom kode) pride do
+ * naloge popravka namesto da se zavrze; dovoljeni ZWJ/VS16 v emoji ostanejo.
+ */
+export function vidniZnaki(v: string): string {
+  const oznaka = (c: string) => `<U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}>`;
+  const dobro = (v as string & { toWellFormed(): string }).toWellFormed();
+  return dobro.replace(NEVIDNI, (c, i: number, cel: string) => {
+    const pred = [...cel.slice(Math.max(0, i - 2), i)].pop();
+    const po = [...cel.slice(i + 1, i + 3)][0];
+    if (c === "\u200d" && piktogram(pred) && piktogram(po)) return c;
+    if (c === "\ufe0f" && piktogram(pred)) return c;
+    return c === "\t" || c === "\n" ? c : oznaka(c);
+  });
 }
 
 /**
@@ -171,11 +206,65 @@ export function pozivZaClaude(id: string): string {
   return `Preberi datoteko ${rel}/${DATOTEKA_NALOGE} in izvedi nalogo po njenih pravilih. Porocilo zapisi v ${rel}/${DATOTEKA_POROCILA}.`;
 }
 
+// ------------------------------------------------------------------ Lina nacrtuje z diagramom (lastnik 24. 11. 2026)
+
+/** Nacrt, ki ga agent zapise v mapo naloge; Lina ga pokaze samo v izoliranem okvirju (ovijNacrt + iframe sandbox=""). */
+export const DATOTEKA_NACRTA = "nacrt.html";
+/** Vecji nacrt se ne prebere (ne reze: odrezan HTML bi bil drug dokument). */
+export const NAJVEC_BAJTOV_NACRTA = 512 * 1024;
+/** Izrecna oznaka na zacetku besedila naloge (lastnik ali Lina); lastnik jo vidi v besedilu, zgostitev jo pokrije. */
+export const OZNAKA_NACRTA = "[nacrt]";
+
+/**
+ * Ali naloga najprej potrebuje nacrt: izrecna oznaka na zacetku ALI vecja/arhitekturna naloga (beseda arhitektura/zasnova/nacrt,
+ * vsaj tri razlicne datoteke ali vsaj trije deli kot seznam). Odloca samo besedilo (deterministicno, pokrito z zgostitvijo).
+ */
+export function jeNacrtovanje(besedilo: string): boolean {
+  const b = besedilo.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  if (b.trimStart().startsWith(OZNAKA_NACRTA)) return true;
+  if (/\b(arhitektur|zasnov|nacrt|architectur)/.test(b)) return true;
+  const datoteke = new Set(b.match(/[\w.-]+\/[\w./-]*\w|\b[\w-]+\.(?:tsx?|m?js|kts?|py|rs|go|java|css|html?|md|json|sh|qml|sql)\b/g) ?? []);
+  if (datoteke.size >= 3) return true;
+  return b.split("\n").filter((v) => /^\s*(?:[-*]|\d+[.)])\s+\S/.test(v)).length >= 3;
+}
+
+/** Politika vsebine okvirja nacrta: brez skript, brez omrezja; slogi v dokumentu in slike data: so dovoljeni. */
+export const CSP_NACRTA = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+/**
+ * Nacrt za prikaz: CSP je prvi del dokumenta (velja pred vsako vsebino nacrta); vsebina ostane nespremenjena. Svetla shema da okvirju
+ * neprosojno belo podlago tudi v temni temi Line (nacrt ima obicajno temno besedilo).
+ */
+export function ovijNacrt(html: string): string {
+  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${CSP_NACRTA}"><meta name="color-scheme" content="light">${html}`;
+}
+
+/** Prvi korak NACRT: claude dobi skil diagram-design (ce ga ima), drugi agenti preprost SVG v HTML po istih pravilih. */
+function korakNacrta(id: string, nacin: "diagram-design" | "svg"): string[] {
+  const rel = `${relativnaMapaNaloge(id)}/${DATOTEKA_NACRTA}`;
+  return [
+    "## Prvi korak: NACRT (pred kodo)",
+    "",
+    "Naloga je vecja ali oznacena za nacrtovanje. Preden spremenis katerokoli datoteko projekta:",
+    "1. Preberi kodo, ki jo naloga zadeva, in narisi diagram: trenutno stanje, 2-3 mozne resitve in priporocilo (zakaj, tveganja).",
+    nacin === "diagram-design"
+      ? "2. Uporabi skil diagram-design, ce ga imas; sicer narisi preprost SVG v HTML."
+      : "2. Narisi preprost SVG v HTML (pravokotniki, puscice, kratki napisi).",
+    `3. En sam HTML z vgrajenim <svg> in <style>: pisave system-ui, brez <script>, brez zunanjih virov (pisave, slike, CSS) in brez omreznih zahtev, najvec ${NAJVEC_BAJTOV_NACRTA / 1024} KB. Shrani ga v ${rel}.`,
+    '4. Ustavi se in vprasaj: ce je naloga prisla po kanalu Line (oznaka channel z chat_id), poslji z orodjem reply vrsta="vprasanje" s kratkim povzetkom moznosti; sicer povzetek in vprasanje napisi v terminal. Cakaj odgovor »nadaljuj po moznosti X«.',
+    `5. ${DATOTEKA_POROCILA} zapisi sele, ko je cela naloga koncana (porocilo pomeni konec naloge).`,
+    "",
+  ];
+}
+
 export type DodatkiNaloge = {
   /** Kratek pregled projekta (jezik, testi, ukazi za preverbo), prilozen ob prvem odprtju v novem projektu. */
   pregledProjekta?: string;
   /** Postopno razkrivanje (claude-mem): samo kazalo prejsnjih nalog v projektu z mejo znakov. */
   spominKazalo?: string;
+  /** Prvi korak NACRT (stikalo vklopljeno in jeNacrtovanje); nacin glede na agenta. */
+  nacrt?: "diagram-design" | "svg";
+  /** Razdelek tock naloge (navodiloTock iz tocke-naloge.ts): vsaka tocka in oblika vrstice porocila z dokazom. */
+  tocke?: string[];
 };
 
 /** Vsebina NALOGA.md: pravila, kazalo spomina, naloga, nato pregled projekta kot nezaupljiv podatek iz repozitorija. */
@@ -197,7 +286,9 @@ export function vsebinaNaloge(z: Pick<ZapisNaloge, "id" | "izvor" | "besedilo">,
   if (kazalo) {
     deli.push("## Spomin prejsnjih nalog v projektu (kazalo)", "", kazalo, "");
   }
+  if (dodatki?.nacrt) deli.push(...korakNacrta(z.id, dodatki.nacrt));
   deli.push("## Naloga", "", z.besedilo, "");
+  if (dodatki?.tocke?.length) deli.push(...dodatki.tocke);
   const pregled = dodatki?.pregledProjekta?.trim();
   if (pregled) {
     deli.push(
@@ -219,7 +310,7 @@ export function ocistiPorocilo(v: string): string {
 
 /**
  * Ali terminal naloge se dela (A1/A2): stanje zaganja/tece IN (proces terminala zivi ALI PID ni znan in rok se ni minil). Rok brez PID-a je
- * ocena konca (najvec ROK_NALOGE_MS od potrditve): porocilo, ki ga agent zapise prej, naloge ne konca. Znan, a mrtev PID = terminal zaprt.
+ * ocena konca (najvec ROK_NALOGE_MS od potrditve; tocka 4). Znan, a mrtev PID = terminal zaprt.
  */
 export function terminalZaseda(z: ZapisNaloge, zivi: boolean, zdaj: Date): boolean {
   if (z.stanje !== "tece" && z.stanje !== "zaganja") return false;
@@ -227,6 +318,9 @@ export function terminalZaseda(z: ZapisNaloge, zivi: boolean, zdaj: Date): boole
   if (Number.isInteger(z.pid) && (z.pid as number) > 0) return false;
   const t = Date.parse(z.potrjeno ?? "");
   if (!Number.isFinite(t)) return true;
+  // Tocka 4 (vodja 24. 11.): neznan PID = rok je ocena konca (kot pred N5). PID je znan pri vseh terminalih s seznama (gnome-terminal --wait,
+  // xfce4-terminal --disable-server, konsole, xterm); neznan je le, ce se terminal v 1,5 s konca s kodo 0 (agent ne tece vec ali preda okno).
+  // shortcut: v tem primeru agent, ki zapise porocilo pred oceno konca, po oceni velja za koncanega (A2 zaprt samo do ocene).
   const ocena = Date.parse(z.ocena?.konec ?? "");
   return zdaj.getTime() < Math.min(t + ROK_NALOGE_MS, Number.isFinite(ocena) ? ocena : Infinity);
 }
@@ -243,6 +337,7 @@ export function stejeMedHkratne(z: ZapisNaloge, imaPorocilo: boolean, zdaj: Date
 
 /** Zapis, ki se ne sme izgubiti iz zgodovine: cakajoc predlog ali naloga, ki se lahko se izvaja (CodeRabbit: dejavne niso del omejitve zgodovine). */
 function jeDejavna(z: ZapisNaloge, zdaj: Date): boolean {
+  if (z.vodja && !jeKoncnaFaza(z.vodja.faza)) return true;
   if (z.stanje === "caka" || z.stanje === "dodeljeno" || z.stanje === "zamujeno") return true;
   if (z.stanje !== "tece" && z.stanje !== "zaganja") return false;
   const t = Date.parse(z.potrjeno ?? "");
@@ -331,6 +426,8 @@ export type OpisAgenta = {
   zacetniPoziv: boolean;
   /** Pravilo lastnika: Gemini/Google agenti ne dobijo map s seznama prepovedanih (Scit, YouTube, Google prijava). */
   omejeneMape: boolean;
+  /** Mape nastavitev agenta glede na dom (samo omejeneMape): v peskovniku edine zapisljive poleg projekta. */
+  nastavitve?: readonly string[];
   /** Dodatna preverba prijave (izpis se bere: »Not signed in« pride z izhodno kodo 0). */
   prijava?: readonly string[];
 };
@@ -343,9 +440,12 @@ export const OPIS_AGENTOV: Readonly<Record<AgentId, OpisAgenta>> = {
   // claude 2.1.331: »Usage: claude [options] [command] [prompt]« - privzeto interaktivno
   claude: { ime: "Claude Code", program: "claude", kanal: true, zacetniPoziv: true, omejeneMape: false },
   // agy 1.5.14: »--prompt-interactive  Run an initial prompt interactively and continue the session«
-  agy: { ime: "Antigravity", program: "agy", kanal: false, zacetniPoziv: true, omejeneMape: true },
+  agy: { ime: "Antigravity", program: "agy", kanal: false, zacetniPoziv: true, omejeneMape: true, nastavitve: [".gemini"] },
   // opencode 1.19.5: »opencode [project]  start opencode tui [default]«, »--prompt  prompt to use«
-  opencode: { ime: "opencode (Gemini)", program: "opencode", kanal: false, zacetniPoziv: true, omejeneMape: true },
+  opencode: {
+    ime: "opencode (Gemini)", program: "opencode", kanal: false, zacetniPoziv: true, omejeneMape: true,
+    nastavitve: [".config/opencode", ".local/share/opencode", ".local/state/opencode", ".cache/opencode"],
+  },
   // kimi 2.2.0: »-p, --prompt  Run one prompt non-interactively«; interaktivnega zacetnega poziva ni
   kimi: { ime: "Kimi", program: "kimi", kanal: false, zacetniPoziv: false, omejeneMape: false },
   // pi 1.4.0: »# Interactive mode with initial prompt: pi "List all .ts files in src/"«
@@ -477,6 +577,8 @@ export function razpored(naloge: readonly ZapisNaloge[], zdaj: Date, zagonLine: 
     }
     const prva = naloge.find((n) => n.id === p.id);
     if (!prva || KONCNA.includes(prva.stanje)) izid.neuspelo.push(z.id);
+    // nepopolna prva (tocka brez dokaza, tocke-naloge.ts): naslednja ne steče sama, lastnik jo potrdi znova
+    else if (prva.stanje === "nepopolno") izid.zamujeno.push(z.id);
     else if (prva.stanje === "koncano" && prva.koncano) {
       const prej = (t: string | null | undefined) => { const v = Date.parse(t ?? ""); return !Number.isFinite(v) || v < zagonLine.getTime(); };
       (prej(prva.koncano) || prej(prva.potrjeno) ? izid.zamujeno : izid.zazeni).push(z.id);

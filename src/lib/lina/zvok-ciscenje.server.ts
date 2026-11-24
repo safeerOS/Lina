@@ -2,7 +2,8 @@
  * Nastavitev cistenja zvoka klicev (zvok-ciscenje.ts): stikalo v zvok.json, PRIVZETO VKLOPLJENO (lastnikov ukaz 21. 11. 2026:
  * "Privzeto naj bo ciscenje zvoka vklopljeno"). Korist za razumevanje na pravih klicih je NEPREVERJENA (sinteticni
  * preizkusi dokazujejo samo, da stalni sum pade in govor ostane); zato je stikalo za izklop vedno na voljo.
- * Stikalo velja za pot SIP (RTP, zvok klicatelja). Branje za klic ne zahteva zetona (notranja pot); manjkajoca ali pokvarjena
+ * Stikalo (v vmesniku »Zmanjsanje hrupa«, 24. 11. 2026) velja za zvok klicatelja (Twilio/SIP, blago ciscenje), za nizjo obcutljivost
+ * zacetka govora v Live (navodilo.ts) in za konec govora asistentke na racunalniku (zvok-mikrofon.ts, pogovor.tsx). Branje za klic ne zahteva zetona (notranja pot); manjkajoca ali pokvarjena
  * datoteka pomeni privzeto (vklopljeno); samo izrecni false izklopi. Spreminjanje samo lastnik. Komentarji so brez sumnikov.
  */
 import { requireOwner } from "./auth.server.ts";

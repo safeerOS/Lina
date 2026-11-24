@@ -36,8 +36,11 @@ export const NASTAVITVE = {
     { id: "podatki", oznaka: "nastPodPodatki", razdelki: ["nast-shranjevanje", "mapa-zapiskov", "pr-snemanje"] },
     { id: "dodatki", oznaka: "uiDodatkiNaslov", razdelki: ["nast-dodatki"] },
     { id: "strani", oznaka: "nastPodStrani", razdelki: ["nast-strani"] },
+    { id: "narocila", oznaka: "nastPodNarocila", razdelki: ["nast-narocila"] },
+    { id: "dovoljenja", oznaka: "nastPodDovoljenja", razdelki: ["nast-dovoljenja"] },
     { id: "posodobitev", oznaka: "posNaslov", razdelki: ["nast-posodobitev"] },
     { id: "github", oznaka: "nastPodGithub", razdelki: ["nast-github"] },
+    { id: "agenti", oznaka: "nastPodAgenti", razdelki: ["nast-agenti"] },
     { id: "olini", oznaka: "nastPodOLini", razdelki: ["nast-o-lini"] },
   ],
 } as const satisfies DefinicijaPodoken;

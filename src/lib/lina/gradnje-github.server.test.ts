@@ -408,19 +408,22 @@ describe("gradnje-github.server: namestitev in telefon", () => {
 });
 
 describe("gradnje-github.server: pomozno in locitev", () => {
-  it("B-4: GH_TOKEN in kljuci ponudnikov: gh dobi samo GH_*, xdg-user-dir, apksigner in xdg-open nic od tega", async () => {
+  it("B-4: GH_TOKEN in kljuci ponudnikov: gh dobi GH_* brez zetonov (najdba B4 1750), xdg-user-dir, apksigner in xdg-open nic od tega", async () => {
     const e = await okolje("okolje-otrok");
     process.env.GH_TOKEN = "gh-preizkus";
+    process.env.GH_CONFIG_DIR = "/tmp/gh-preizkus";
     process.env.OPENAI_API_KEY = "sk-preizkus";
     try {
       const g = await zgradi(e);
       await ukazGradenj(e.token, { ukaz: "odpri", id: g.id }, e.podatki, e.o);
     } finally {
       delete process.env.GH_TOKEN;
+      delete process.env.GH_CONFIG_DIR;
       delete process.env.OPENAI_API_KEY;
     }
     const ghKlic = e.klici.find((k) => k.program === "/opt/gh/bin/gh")!;
-    assert.equal(ghKlic.env.GH_TOKEN, "gh-preizkus");
+    assert.equal(ghKlic.env.GH_TOKEN, undefined);
+    assert.equal(ghKlic.env.GH_CONFIG_DIR, "/tmp/gh-preizkus");
     assert.equal(ghKlic.env.OPENAI_API_KEY, undefined);
     for (const p of ["/usr/bin/xdg-user-dir", "/opt/sdk/build-tools/36.0.0/apksigner", "/usr/bin/xdg-open"]) {
       const k = e.klici.find((x) => x.program === p);

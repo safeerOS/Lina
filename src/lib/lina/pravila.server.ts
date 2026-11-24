@@ -1,4 +1,5 @@
 import { uskladiDodatke } from "./dodatki.server.ts";
+import { pripraviN8nVOzadju } from "./n8n-priprava.server.ts";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -318,6 +319,7 @@ export type UskladitevDodatkov = {
   namestiSlovenskega: (obKoncu: (uspeh: boolean) => void) => void;
   uskladiRsdo: (vklop: boolean) => Promise<unknown>;
   uskladiDodatke: (dodatki: Pravila["dodatki"]) => Promise<unknown>;
+  pripraviN8n?: (root: string) => Promise<unknown>;
 };
 
 /** Isti potek za namizje (savePravila) in telefon (nastaviDodatekIzTelefona); klice se SAMO po zapisu pravila.json. */
@@ -329,6 +331,7 @@ export function poSpremembiDodatkov(prej: Pravila, next: Pravila, root: string, 
     namestiSlovenskega: (obKoncu) => { zazeniNamestitevSlovenskega(undefined, obKoncu); },
     uskladiRsdo: (vklop) => uskladiRsdo(vklop),
     uskladiDodatke: (d) => uskladiDodatke(d),
+    pripraviN8n: (r) => pripraviN8nVOzadju(r),
   };
   // Slovenski pomocnik za razumevanje (RSDO, samo zapisuje, ne govori): namestitev SAMO po izrecnem vklopu (uporabnik je prebral pojasnilo v Dodatkih), enkrat ob preklopu false -> true.
   if (next.dodatki?.slovenski === true && prej.dodatki?.slovenski !== true && !vPreizkusu) {
@@ -341,7 +344,14 @@ export function poSpremembiDodatkov(prej: Pravila, next: Pravila, root: string, 
   }
   // Paperclip, n8n, AFFiNE: vklop zazene dodatek (samo 127.0.0.1, telemetrija izklopljena), izklop ga ustavi; v ozadju, napaka ne podre shranjevanja.
   const spremembaDodatkov = (["paperclip", "n8n", "affine"] as const).some((k) => (next.dodatki?.[k] === true) !== (prej.dodatki?.[k] === true));
-  if (spremembaDodatkov && !vPreizkusu) void x.uskladiDodatke(next.dodatki).catch(() => {});
+  const vklopN8n = next.dodatki?.n8n === true && prej.dodatki?.n8n !== true;
+  if (spremembaDodatkov && !vPreizkusu) {
+    void x.uskladiDodatke(next.dodatki)
+      .then(() => {
+        if (vklopN8n && x.pripraviN8n) return x.pripraviN8n(root);
+      })
+      .catch(() => {});
+  }
 }
 
 /**

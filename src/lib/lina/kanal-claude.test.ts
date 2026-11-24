@@ -37,6 +37,10 @@ import {
 } from "./kanal-claude.server.ts";
 import { sifrirajSkrivnost } from "./keys.server.ts";
 import { writeJson } from "./store.server.ts";
+import { setupOwner } from "./auth.server.ts";
+import { nizDovoljenjaOdobritve } from "./dovoljenja-podobne.ts";
+import { najdiDovoljenje, obsegIzPrikaza, prekliciDovoljenje, zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
+import { ORODJE_DODATKI, opisDodatka, predogledDodatka } from "./kanal-claude.ts";
 
 const KOREN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKRIPTA = path.join(KOREN, "scripts", "kanal-claude.mts");
@@ -1408,4 +1412,185 @@ test("A-6: zavrnjeno nadaljevanje koncane naloge ne podaljsa roka v Lini (kanal 
     reply(k, 951, "naloga-rok-zavr", "Delam dalje.", { vrsta: "vmesno" });
     await caka(() => dog.some((d) => d.vrsta === "izid" && /ni koncana/.test(d.besedilo)), 800);
   } finally { l.zapri(); await k.pospravi(); }
+});
+
+test("tocke naloge v kanalu (24. 11. 2026): naloga z vec tockami dobi T1..Tn; koncano brez dokaza za vsako tocko ni uspeh in pove 1/2", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-tock-01", "Popravi:\n1. dodaj package.json\n2. dodaj ni.ts"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    const o = k.obvestila(KANALSKO)[0].params;
+    assert.match(o.content, /T1: dodaj package\.json/);
+    assert.match(o.content, /T2: dodaj ni\.ts/);
+    assert.match(o.content, /vrsta=koncano/);
+    assert.equal(o.meta.tocke, "2");
+    // cwd kanala je projekt (Claude Code ga zazene v projektni mapi): package.json obstaja, ni.ts ne; commit se v kanalu ne steje
+    k.poslji({ jsonrpc: "2.0", id: 60, method: "tools/call", params: { name: "reply", arguments: {
+      chat_id: "naloga-tock-01", text: "T1: narejeno - dokaz: package.json\nT2: narejeno - dokaz: ni.ts; commit: 0123abcd", vrsta: "koncano" } } });
+    await caka(() => k.izhod.some((x) => x.id === 60) && dogodki.length === 1);
+    assert.match(k.izhod.find((x) => x.id === 60)!.result.content[0].text, /1\/2/);
+    const d = dogodki[0] as { vrsta: string; ok: boolean; besedilo: string };
+    assert.equal(d.vrsta, "izid");
+    assert.equal(d.ok, false);
+    assert.match(d.besedilo, /Tocke: 1\/2 narejeno/);
+    assert.match(d.besedilo, /T2 dodaj ni\.ts \(dokaza ni v projektu\)/);
+
+    const dogodki2: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-tock-02", "- prvo\n- drugo"), (x) => dogodki2.push(x));
+    await caka(() => k.obvestila(KANALSKO).length === 2);
+    k.poslji({ jsonrpc: "2.0", id: 61, method: "tools/call", params: { name: "reply", arguments: {
+      chat_id: "naloga-tock-02", text: "T1: narejeno - dokaz: package.json\nT2: ni narejeno - razlog: ni potrebno", vrsta: "koncano" } } });
+    await caka(() => dogodki2.length === 1);
+    assert.equal((dogodki2[0] as { ok: boolean }).ok, false);
+    // enovrsticna naloga ostane kot prej (brez tock v vsebini in brez meta tocke)
+    await l.zacni(naloga(ANA, "naloga-tock-03", "izpisi git status"), () => {});
+    await caka(() => k.obvestila(KANALSKO).length === 3);
+    assert.deepEqual(k.obvestila(KANALSKO)[2].params, { content: "izpisi git status", meta: { chat_id: "naloga-tock-03", naprava: ANA.id } });
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("tocke naloge v kanalu: nadaljevanje po nepopolnem koncu steje ze preverjene tocke (dovolj je vrstica manjkajoce)", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-tock-04", "1. dodaj package.json\n2. dodaj tsconfig.json"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    reply(k, 70, "naloga-tock-04", "T1: narejeno - dokaz: package.json\nT2: ni narejeno - razlog: zmanjkalo casa", { vrsta: "koncano" });
+    await caka(() => dogodki.length === 1);
+    assert.equal((dogodki[0] as { ok: boolean }).ok, false);
+    const odgovor = "Dokoncaj T2.";
+    await l.nadaljuj!("naloga-tock-04", odgovor, ANA.id, dokazNadaljevanja(ANA, "naloga-tock-04", odgovor));
+    await caka(() => k.obvestila(KANALSKO).length === 2);
+    reply(k, 71, "naloga-tock-04", "T2: narejeno - dokaz: tsconfig.json", { vrsta: "koncano" });
+    await caka(() => dogodki.length === 2);
+    const d = dogodki[1] as { vrsta: string; ok: boolean; besedilo: string };
+    assert.equal(d.vrsta, "izid");
+    assert.equal(d.ok, true);
+    assert.match(d.besedilo, /Tocke: 2\/2 narejeno/);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+/** Dovoljenje za podobne, kot ga zapise asistent-streznik po podpisani izbiri naprave (prikaz + locen podpis). */
+async function podobneNaprave(dir: string, d: Naprava, chatId: string, orodje: string, predogled: string, opis: string) {
+  const zahtevaId = "vwxyz";
+  const zg = zgostitevPrikaza(orodje, predogled, opis);
+  const p = dokaz(d, (c, e) => nizDovoljenjaOdobritve(d.id, zahtevaId, chatId, zg, c, e));
+  const izp = obsegIzPrikaza(orodje, predogled)!;
+  return zapisiDovoljenje(dir, izp.vrsta, izp.obseg, { kdo: "naprava", naprava: d.id, dokaz: p, prikaz: { zahtevaId, chatId, orodje, predogled, opis } });
+}
+
+test("dovoljenja za podobne (02f): program z dovoljenjem TE naprave brez vprasanja; druga naprava, drug program in preklic vprasajo", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    const chatId = "naloga-prog-0001";
+    await l.zacni(naloga(ANA, chatId, "uredi sliko"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    const odobritve = () => dogodki.filter((d) => d.vrsta === "odobritev").length;
+    // brez dovoljenja: vprasa (in opis pove, kaj pomeni izbira »podobne«)
+    zahteva(k, "abcde", "Pomoc", "Bash", '{"command":"cli-anything-gimp --help"}');
+    await caka(() => odobritve() === 1);
+    assert.match((dogodki.find((d) => d.vrsta === "odobritev") as { opis: string }).opis, /Velja tudi za vse podobne/);
+    // seja ne hrani vec dovoljenja v pomnilniku: podpisan »Dovoli« brez izbire velja samo za ta ukaz
+    await l.odobri(chatId, "abcde", true, ANA.id, dokazOdobritve(ANA, "abcde", true, chatId, zgostitevIz(dogodki, "abcde")));
+    await caka(() => k.obvestila(DOVOLJENJE).length === 1);
+    zahteva(k, "abcdf", "Pomoc", "Bash", '{"command":"cli-anything-gimp --help"}');
+    await caka(() => odobritve() === 2);
+    // BOR-ovo dovoljenje ne velja za Anino nalogo
+    await podobneNaprave(k.dir, BOR, chatId, "Bash", '{"command":"cli-anything-gimp --help"}', "x");
+    zahteva(k, "abcdg", "Pomoc", "Bash", '{"command":"cli-anything-gimp --help"}');
+    await caka(() => odobritve() === 3);
+    // Anino podpisano dovoljenje: isti program brez vprasanja, drug program in sestavljen ukaz vprasata
+    const d = await podobneNaprave(k.dir, ANA, chatId, "Bash", '{"command":"cli-anything-gimp --help"}', "x");
+    zahteva(k, "abcdh", "Pomoc", "Bash", '{"command":"cli-anything-gimp --help"}');
+    await caka(() => k.obvestila(DOVOLJENJE).length === 2);
+    assert.deepEqual(k.obvestila(DOVOLJENJE)[1].params, { request_id: "abcdh", behavior: "allow" });
+    zahteva(k, "abcdj", "Pomoc", "Bash", '{"command":"cli-anything-blender --help"}');
+    zahteva(k, "abcdk", "Pomoc", "Bash", '{"command":"cli-anything-gimp --help; rm -rf ~"}');
+    zahteva(k, "abcdn", "Pomoc", "Bash", '{"command":"cli-anything-gimp --version"}'); // R1: druga zastavica = drug obseg
+    await caka(() => odobritve() === 6);
+    // preklic v Nastavitvah velja takoj (shramba se bere ob vsaki zahtevi)
+    const token = await setupOwner("geslo-test-1234", k.dir);
+    assert.equal(await prekliciDovoljenje(token, d.id, k.dir), true);
+    zahteva(k, "abcdm", "Pomoc", "Bash", '{"command":"cli-anything-gimp --help"}');
+    await caka(() => odobritve() === 7);
+    assert.equal(k.obvestila(DOVOLJENJE).length, 2);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("dovoljenja za podobne (02f): dodatek z dovoljenjem naprave brez vprasanja; Lina ga preveri sama (kanal sam ne preklopi)", async () => {
+  const k = await zazeniKanal();
+  const preklopi: Array<[string, boolean]> = [];
+  let linaPreveri = true;
+  const l = new IzvajalecClaudeCode({
+    pot: k.pot, zeton: async () => (await preberiKanal(k.dir)).zeton, ozjiKrog: () => new Set([ANA.id, BOR.id]),
+    dodatki: { stanje: async () => "", nastavi: async (d, v) => { preklopi.push([d, v]); return "preklopljeno"; } },
+    dovoljenoPodobno: async (dodatek, smer, naprava) => linaPreveri
+      && !!(await najdiDovoljenje(k.dir, "dodatek", { dodatek, smer }, { naprava, kljuci: (await preberiKanal(k.dir)).dovoljene })),
+  });
+  const klic = (id: number, args: Record<string, unknown>) =>
+    k.poslji({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "dodatki", arguments: args } });
+  const izid = (id: number) => k.izhod.find((x) => x.id === id)?.result;
+  try {
+    const dogodki: Dogodek[] = [];
+    const chatId = "naloga-dodatki-0002";
+    await l.zacni(naloga(ANA, chatId, "vklopi n8n"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    await podobneNaprave(k.dir, ANA, chatId, ORODJE_DODATKI, predogledDodatka("n8n", true), opisDodatka("n8n", true));
+    klic(40, { chat_id: chatId, dejanje: "vklopi", dodatek: "n8n" });
+    await caka(() => !!izid(40));
+    assert.deepEqual(izid(40), { content: [{ type: "text", text: "preklopljeno" }], isError: false });
+    assert.deepEqual(preklopi, [["n8n", true]]);
+    assert.equal(dogodki.filter((d) => d.vrsta === "odobritev").length, 0);
+    // druga smer je drug obseg: vprasa
+    klic(41, { chat_id: chatId, dejanje: "izklopi", dodatek: "n8n" });
+    await caka(() => dogodki.some((d) => d.vrsta === "odobritev"));
+    // Lina ne potrdi (npr. naprava umaknjena ali podpis ne velja): kanal sam preklopa ne sprozi
+    linaPreveri = false;
+    klic(42, { chat_id: chatId, dejanje: "vklopi", dodatek: "n8n" });
+    await caka(() => !!izid(42));
+    assert.equal(izid(42).isError, true);
+    assert.match(izid(42).content[0].text, /Ni podpisane odobritve/);
+    assert.deepEqual(preklopi, [["n8n", true]]);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("B2 (najdba 1750): dovoljenje programa velja samo za isti podukaz; tvegan podukaz vedno vprasa", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    const chatId = "naloga-prog-b2-01";
+    await l.zacni(naloga(ANA, chatId, "izvozi sliko"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    const odobritve = () => dogodki.filter((d) => d.vrsta === "odobritev").length;
+    await podobneNaprave(k.dir, ANA, chatId, "Bash", '{"command":"cli-anything-gimp export a.png --json"}', "x");
+    zahteva(k, "bbbba", "Izvoz", "Bash", '{"command":"cli-anything-gimp export b.png --json"}');
+    await caka(() => k.obvestila(DOVOLJENJE).length === 1);
+    assert.deepEqual(k.obvestila(DOVOLJENJE)[0].params, { request_id: "bbbba", behavior: "allow" });
+    zahteva(k, "bbbbb", "Brisi", "Bash", '{"command":"cli-anything-gimp delete --all"}');
+    zahteva(k, "bbbbc", "Uvoz", "Bash", '{"command":"cli-anything-gimp import c.png"}');
+    zahteva(k, "bbbbd", "Izvoz", "Bash", '{"command":"cli-anything-gimp export --output=/home/oseba/.bashrc"}');
+    await caka(() => odobritve() === 3);
+    assert.equal(k.obvestila(DOVOLJENJE).length, 1);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
 });

@@ -1,7 +1,7 @@
 /**
  * Osebna tajnica: dostava paketa (lastnik 23. 11. 2026). Uporabnik vpise navodilo (»Pustite ga pri sosedu na št. 5.«), neobvezno do datuma;
  * ko se klicatelj predstavi kot dostava (Pošta Slovenije, DPD, GLS, DHL, UPS, Express One, InPost, kurir, dostavljalec, »imam paket za vas«),
- * Lina pove, da klicana oseba trenutno ne more odgovoriti (BREZ imena lastnika: to slisi vsak, ki rece »tukaj DPD«), in navodilo. Navodilo dobi SAMO tak klicatelj, najvec enkrat na klic; nikoli v pozdrav,
+ * Lina rece »Paket pričakujemo. Prosim, pustite ga <mesto>.« (lastnik 24. 11.; BREZ imena lastnika: to slisi vsak, ki rece »tukaj DPD«). Navodilo dobi SAMO tak klicatelj, najvec enkrat na klic; nikoli v pozdrav,
  * stalne stavke ali dejstva modela. Prazno navodilo = izklopljeno.
  * Cista koda (brez omrezja in datotek).
  */
@@ -80,6 +80,28 @@ export function razlogPaketa(surovo: unknown): string | null {
   if (/\d{4,}/.test(brezPostne.replace(/[\s-]/g, "")) || najvecStevk(f) >= 4 || BESEDA_DOSTOPA.test(f)) return t("paketKoda");
   // Denarni signal brez postne stevilke (»2000 Maribor« ni znesek).
   return razlogPolja("paket", brezPostne.replace(/#{4}/g, ""));
+}
+
+/** Izbira »Pred hišo« v vmesniku (ena kljukica) shrani to besedilo v paketNavodilo; »Drugo mesto« je lastno besedilo. */
+export const PRED_HISO = "pred hišo";
+
+/**
+ * Mesto iz navodila (lastnik 24. 11. 2026): brez uvodnega »Pustite ga« / »Naj ga pustijo« / »Paket pustite« in brez koncnega locila, ker
+ * odgovor sam rece »pustite ga ...«. Prej shranjeni celi stavki (»Pustite ga pri sosedu na št. 5.«) tako dajo isti odgovor.
+ */
+export function mestoPaketa(navodilo: string): string {
+  return nfkcVrstica(navodilo)
+    .replace(/^(?:prosim,?\s+)?(?:(?:naj\s+)?(?:ga|paket)\s+(?:naj\s+)?pust(?:ite|ijo|i)|pust(?:ite|ijo|i)\s+(?:ga|paket))\s+/iu, "")
+    .replace(/[\s.!?]+$/u, "");
+}
+
+export function jePredHiso(navodilo: unknown): boolean {
+  return typeof navodilo === "string" && fold(mestoPaketa(navodilo)) === fold(PRED_HISO);
+}
+
+/** Odgovor dostavljalcu (lastnik 24. 11. 2026): »Paket pričakujemo. Prosim, pustite ga <mesto>.« - brez imena lastnika. */
+export function odgovorDostavljalcu(navodilo: string): string {
+  return t("paketOdgovor").replace("{mesto}", () => mestoPaketa(navodilo));
 }
 
 /** Danasnji datum v Ljubljani (LLLL-MM-DD). */

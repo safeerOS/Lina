@@ -35,8 +35,13 @@ import {
   nizOdobritve,
   nizSeznanitve,
   nizSinhron,
+  nizSlikeKontrole,
   nizStanja,
   nizStanjaDodatkov,
+  nizN8nStanja,
+  nizN8nPredloga,
+  nizN8nPotrditve,
+  zgostitevN8nPredlogaVnos,
   nizApkGradnje,
   nizPotrditveGradnje,
   nizPredlogaGradnje,
@@ -51,11 +56,14 @@ import {
   praviUnicode,
   veljavenKljucNaprave,
   preveriPodpisNaprave,
+  zgostitevPrikaza,
   jeDodatekTelefona,
   type DodatekTelefona,
   type Dokaz,
 } from "./kanal-claude.ts";
 import { preberiKanal, preveriKoren } from "./kanal-claude.server.ts";
+import { nizDovoljenjaOdobritve } from "./dovoljenja-podobne.ts";
+import { obsegIzPrikaza, zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { NapakaKode, PAIR_ID, type SeznanitevSKodo } from "./koda-seznanitev.ts";
 import { NapakaSinhron, izmenjajSinhron, preveriZahtevo } from "./sinhron-telefon.server.ts";
 
@@ -198,6 +206,13 @@ export const ID_NALOGE_TELEFONA = /^[A-Za-z0-9_-]{22,64}$/;
 export const NAJVEC_TELO = 16 * 1024;
 /** Sinhronizacija: telefon poslje do 400 000 B zapisov klicev (SinhronLine.NAJVEC_BAJTOV_KLICEV) + pogovor + navodila, JSON-niz v JSON-u. */
 export const NAJVEC_TELO_SINHRON = 768 * 1024;
+/**
+ * Fotografija za kontrolo tiska: telo so SUROVI bajti slike (image/jpeg ali image/png) do 16 MiB; podpis je v glavah in se
+ * preveri PRED branjem telesa (neodvisni pregled 24. 11. 2026, N1), zgostitev telesa se primerja po branju.
+ * Glave: x-lina-posiljatelj, x-lina-cas, x-lina-enkratni, x-lina-podpis, x-lina-zgostitev (sha256 hex surovih bajtov).
+ */
+export const NAJVEC_TELO_SLIKA = 16 * 1024 * 1024;
+export const POT_SLIKA_KONTROLE = "/api/asistent/v1/kontrola-tiska/slika";
 export const NAJVEC_NALOG = 200;
 export const NAJVEC_DOGODKOV = 200;
 /** SR-8: telefon zavrne odgovor nad 64 KiB, zato Lina dogodke razdeli (z rezervo za ovojnico). */
@@ -239,8 +254,9 @@ export const NAJVEC_POVEZAV_PREHOD = 32;
 /** Poti, ki jih sme poklicati OSEBA ZUNAJ DOMA (beli seznam); seznanjanje (/seznani, /koda/*) nikoli. */
 export const POTI_ODDALJENO: ReadonlyMap<string, string> = new Map([
   [`${POT}/naloga`, "POST"], [`${POT}/odobritev`, "POST"], [`${POT}/ustavi`, "POST"], [`${POT}/nadaljuj`, "POST"], [`${POT}/dogodki`, "GET"], [`${POT}/stanje`, "GET"],
-  // Dodatki na racunalniku (23. 11. 2026): ista naprava ozjega kroga s podpisom kot za nalogo; od zunaj sicer 403 kot »zavrnjeno«.
+  // Dodatki na racunalniku (23. 11. 2026) in n8n tokovi (24. 11. 2026): ista naprava ozjega kroga s podpisom kot za nalogo.
   [`${POT}/dodatki`, "GET"], [`${POT}/dodatek`, "POST"],
+  [`${POT}/dodatki/n8n`, "GET"], [`${POT}/dodatki/n8n/predlog`, "POST"], [`${POT}/dodatki/n8n/potrdi`, "POST"],
 ]);
 
 type DogodekTelefona = Dogodek & { st: number };
@@ -290,10 +306,15 @@ export type MoznostiStreznika = {
   rokRokovanja?: number;
   /** F5: omogoci vhod za oddaljeni prehod (privzeto izklopljeno; streznik se vseeno veze samo na zasebni naslov). */
   omogociPrehod?: boolean;
-  /** Dodatki na racunalniku (dodatki-telefon.server.ts); brez njih poti /dodatki in /dodatek odgovorita 404. */
+  /** Dodatki na racunalniku (dodatki-telefon.server.ts + n8n.server.ts); brez njih poti /dodatki, /dodatek in /dodatki/n8n* odgovorijo 404. */
   dodatki?: {
     stanje(): Promise<unknown>;
     nastavi(dodatek: DodatekTelefona, vklop: boolean): Promise<unknown>;
+    n8n?: {
+      stanje(): Promise<unknown>;
+      predlog(vrsta: unknown, cilj: unknown, ime?: unknown): Promise<{ id: string; vrsta: string; zgostitev: string; povzetek: string }>;
+      potrdi(id: unknown, zgostitev: unknown, dovoli: unknown): Promise<unknown>;
+    };
   };
   /**
    * Gradnje na GitHubu (24. 11. 2026, gradnje-github.server.ts); brez njih poti /gradnje in /gradnja/* odgovorijo 404. Napaka z
@@ -301,8 +322,10 @@ export type MoznostiStreznika = {
    */
   gradnje?: {
     stanje(): Promise<unknown>;
-    predlog(tok: unknown, veja: unknown): Promise<{ id: string; zgostitev: string }>;
-    potrdi(id: unknown, zgostitev: unknown): Promise<void>;
+    /** `naprava`: dovoljenje za podobne gradnje, ki ga je dala TA naprava (podpis se preveri s kljucem iz `kljuci`). */
+    predlog(tok: unknown, veja: unknown, naprava?: { naprava: string; kljuci: ReadonlyMap<string, string> }): Promise<{ id: string; zgostitev: string; stanje?: string }>;
+    /** `podobne`: podpis naprave za »Velja tudi za vse podobne« (nizDovoljenja), preveri ga gradnje-github ob zapisu. */
+    potrdi(id: unknown, zgostitev: unknown, podobne?: { naprava: string; kljuc: string; cas: number; enkratni: string; podpis: string }): Promise<void>;
     /** SAMO zadnja koncana gradnja APK s preverjenim podpisom (nikoli poljubna pot). */
     apk(): Promise<{ id: string; pot: string; sha256: string; velikost: number; paket: string } | null>;
   };
@@ -458,10 +481,12 @@ export class AsistentStreznik {
       if (req.method === "GET" && url.pathname === `${POT}/seznani`) return this.poslji(res, 200, this.stanjeSeznanitve(req, url));
       if (req.method === "GET" && url.pathname === `${POT}/stanje`) return this.poslji(res, 200, await this.stanjeSeje(url));
       if (req.method === "GET" && url.pathname === `${POT}/dodatki`) return this.poslji(res, 200, await this.stanjeDodatkov(url));
+      if (req.method === "GET" && url.pathname === `${POT}/dodatki/n8n`) return this.poslji(res, 200, await this.stanjeN8n(url));
       if (req.method === "GET" && url.pathname === `${POT}/gradnje`) return this.poslji(res, 200, await this.stanjeGradenj(url));
       if (req.method === "GET" && url.pathname === `${POT}/gradnja/apk`) return await this.apkGradnje(url, res);
       if (req.method === "GET" && url.pathname === `${POT}/agent-naloge`) return this.poslji(res, 200, await this.stanjeAgentNalog(url));
       if (req.method !== "POST") throw new Napaka(url.pathname.startsWith(POT) ? 405 : 404, "ni", "Ni take poti.");
+      if (url.pathname === POT_SLIKA_KONTROLE) return this.poslji(res, 200, await this.slikaKontrole(req));
       const telo = await this.telo(req, url.pathname === `${POT}/sinhron` ? NAJVEC_TELO_SINHRON : NAJVEC_TELO);
       const izid = url.pathname === `${POT}/naloga` ? await this.naloga(telo)
         : url.pathname === `${POT}/odobritev` ? await this.odobritev(telo)
@@ -475,7 +500,9 @@ export class AsistentStreznik {
                       : url.pathname === `${POT}/seznani/klici` ? await this.klici(telo)
                         : url.pathname === `${POT}/sinhron` ? await this.sinhron(telo)
                           : url.pathname === `${POT}/dodatek` ? await this.dodatek(telo)
-                            : url.pathname === `${POT}/gradnja/predlog` ? await this.predlogGradnje(telo)
+                            : url.pathname === `${POT}/dodatki/n8n/predlog` ? await this.predlogN8n(telo)
+                              : url.pathname === `${POT}/dodatki/n8n/potrdi` ? await this.potrdiN8n(telo)
+                                : url.pathname === `${POT}/gradnja/predlog` ? await this.predlogGradnje(telo)
                               : url.pathname === `${POT}/gradnja/potrdi` ? await this.potrdiGradnjo(telo)
                                 : url.pathname === `${POT}/agent-naloga/dodeli` ? await this.dodeliAgentNalogo(telo)
                                   : url.pathname === `${POT}/agent-naloga/preklici` ? await this.prekliciAgentNalogo(telo)
@@ -622,8 +649,27 @@ export class AsistentStreznik {
     if (!n || !zg || n.posiljatelj !== posiljatelj) throw zavrnjeno();
     const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizOdobritve(zahtevaId, dovoli, posiljatelj as string, c, e, nalogaId, zg));
     n.odprte.delete(zahtevaId);
+    if (dovoli && typeof t.podobnePodpis === "string") await this.dovoliPodobne(n, nalogaId, zahtevaId, zg, posiljatelj as string, dokaz, t.podobnePodpis);
     await this.m.izvajalec.odobri(nalogaId, zahtevaId, dovoli, posiljatelj as string, dokaz, zg);
     return { status: 202, telo: { zahtevaId } };
+  }
+
+  /**
+   * »Velja tudi za vse podobne« pri odobritvi zahteve Claude Code (lastnik 24. 11. 2026): samo za program (en preprost ukaz
+   * cli-anything-<ime>) ali dodatek, samo z LOCENIM podpisom naprave (nizDovoljenjaOdobritve: isti cas, enkratni niz in zgostitev prikaza),
+   * ki ga je glavni podpis ze omejil na to napravo in to nalogo. Shrani se s prikazom, da ga kanal in Lina ob vsaki uporabi preverita znova.
+   */
+  private async dovoliPodobne(n: NalogaTelefona, nalogaId: string, zahtevaId: string, zg: string, posiljatelj: string, dokaz: Dokaz, podpis: string): Promise<void> {
+    if (podpis.length > 200) return;
+    const d = [...n.dogodki].reverse().find((x) => x.vrsta === "odobritev" && x.zahtevaId === zahtevaId);
+    if (!d || d.vrsta !== "odobritev" || zgostitevPrikaza(d.orodje, d.predogled, d.opis) !== zg) return;
+    const obseg = obsegIzPrikaza(d.orodje, d.predogled);
+    const kljuc = (await this.kanal()).dovoljene.get(posiljatelj);
+    if (!obseg || !kljuc || !preveriPodpisNaprave(kljuc, nizDovoljenjaOdobritve(posiljatelj, zahtevaId, nalogaId, zg, dokaz.cas, dokaz.enkratni), podpis)) return;
+    await zapisiDovoljenje(this.m.root, obseg.vrsta, obseg.obseg, {
+      kdo: "naprava", naprava: posiljatelj, dokaz: { cas: dokaz.cas, enkratni: dokaz.enkratni, podpis },
+      prikaz: { zahtevaId, chatId: nalogaId, orodje: d.orodje, predogled: d.predogled, opis: d.opis },
+    }).catch(() => undefined);
   }
 
   private async ustavitev(t: Record<string, unknown>) {
@@ -799,6 +845,53 @@ export class AsistentStreznik {
     return { status: 200, telo: await izmenjajSinhron(zahteva, this.m.root) };
   }
 
+  private sprejemSlike = false;
+
+  /**
+   * Fotografija za kontrolo tiska s telefona s seznama (podpis kot sinhron): samo SHRANI v mapo prejetih; nic se ne izmeri in ne
+   * poslje samo - lastnik jo izbere v Lini. Ni na seznamu oddaljenih poti (POTI_ODDALJENO), samo domace omrezje.
+   */
+  private async slikaKontrole(req: IncomingMessage) {
+    const glava = (ime: string) => {
+      const v = req.headers[ime];
+      return typeof v === "string" ? v : "";
+    };
+    const tip = glava("content-type").split(";")[0].trim().toLowerCase();
+    if (tip !== "image/jpeg" && tip !== "image/png") throw new Napaka(415, "tip", "Telo mora biti image/jpeg ali image/png.");
+    const dolzina = Number(glava("content-length") || "0");
+    if (dolzina > NAJVEC_TELO_SLIKA) throw new Napaka(413, "prevelik", "Telo je preveliko.");
+    const zgostitev = glava("x-lina-zgostitev");
+    if (!/^[a-f0-9]{64}$/.test(zgostitev)) throw new Napaka(400, "oblika", "Manjka zgostitev slike.");
+    const posiljatelj = glava("x-lina-posiljatelj");
+    const t = { cas: Number(glava("x-lina-cas")), enkratni: glava("x-lina-enkratni"), podpis: glava("x-lina-podpis") };
+    // podpis (naprava s seznama, okno, enkratni niz) PRED branjem telesa: tujec ne zasede sprejema in ne porabi pomnilnika
+    await this.preveri(posiljatelj, t, (c, e) => nizSlikeKontrole(posiljatelj, c, e, zgostitev));
+    if (this.sprejemSlike) throw new Napaka(429, "prevec", "Sprejem slike ze tece.");
+    this.sprejemSlike = true;
+    try {
+      const kosi: Buffer[] = [];
+      const h = createHash("sha256");
+      let n = 0;
+      for await (const k of req) {
+        n += (k as Buffer).length;
+        if (n > NAJVEC_TELO_SLIKA) throw new Napaka(413, "prevelik", "Telo je preveliko.");
+        h.update(k as Buffer);
+        kosi.push(k as Buffer);
+      }
+      if (h.digest("hex") !== zgostitev) throw new Napaka(403, "zavrnjeno", "Slika se ne ujema s podpisom.");
+      const { shraniPrejetoSliko } = await import("./kontrola-tiska.server.ts");
+      const izid = await shraniPrejetoSliko(this.m.root, Buffer.concat(kosi));
+      if (!izid.ok) {
+        if (izid.razlog === "polno") throw new Napaka(507, izid.razlog, "Mapa prejetih slik je polna; lastnik jo izprazni v Kontroli tiska.");
+        if (izid.razlog === "prevelika") throw new Napaka(413, izid.razlog, "Slika ima več kot 60 milijonov točk.");
+        throw new Napaka(415, izid.razlog, "Samo JPEG ali PNG.");
+      }
+      return { sprejeto: true, id: izid.id };
+    } finally {
+      this.sprejemSlike = false;
+    }
+  }
+
   private stanjeSeznanitve(req: IncomingMessage, url: URL) {
     const koda = url.searchParams.get("koda") ?? "";
     const st = KODA_SEZNANITVE.test(koda) ? this.m.seznanitve?.stanje(koda) ?? null : null;
@@ -841,6 +934,47 @@ export class AsistentStreznik {
     if (!jeDodatekTelefona(dodatek) || typeof vklop !== "boolean") throw new Napaka(400, "oblika", "Neznan dodatek ali vklop ni true/false.");
     await this.preveri(posiljatelj, t, (c, e) => nizDodatka(posiljatelj as string, dodatek, vklop, c, e));
     return { status: 200, telo: await d.nastavi(dodatek, vklop) };
+  }
+
+  private n8nStreznika() {
+    if (!this.m.dodatki?.n8n) throw new Napaka(404, "ni", "Ni take poti.");
+    return this.m.dodatki.n8n;
+  }
+
+  /** Stanje in seznam n8n tokov za napravo ozjega kroga (samo branje, podpisana poizvedba). */
+  private async stanjeN8n(url: URL) {
+    const n = this.n8nStreznika();
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    await this.preveri(posiljatelj, t, (c, e) => nizN8nStanja(posiljatelj as string, c, e));
+    return await this.zaledjeGradenj(() => n.stanje());
+  }
+
+  /** Predlog ustvarjanja ali zagona n8n toka s telefona: nic se ne izvede pred potrditvijo. */
+  private async predlogN8n(t: Record<string, unknown>) {
+    const n = this.n8nStreznika();
+    const { posiljatelj, vrsta, cilj, ime } = t;
+    if ((vrsta !== "ustvari" && vrsta !== "zazeni") || typeof cilj !== "string" || !cilj.trim() || cilj.length > 400
+      || (ime !== undefined && (typeof ime !== "string" || ime.length > 80))) {
+      throw new Napaka(400, "oblika", "Manjka vrsta (ustvari/zazeni) ali cilj/opis.");
+    }
+    const imeStr = typeof ime === "string" ? ime : "";
+    const zg = zgostitevN8nPredlogaVnos(vrsta, cilj, imeStr);
+    await this.preveri(posiljatelj, t, (c, e) => nizN8nPredloga(posiljatelj as string, vrsta, zg, c, e));
+    const p = await this.zaledjeGradenj(() => n.predlog(vrsta, cilj, imeStr || undefined));
+    return { status: 202, telo: p };
+  }
+
+  /** Potrditev ali preklic predloga n8n s telefona: podpis veze id, dovoli in zgostitev predloga. */
+  private async potrdiN8n(t: Record<string, unknown>) {
+    const n = this.n8nStreznika();
+    const { posiljatelj, id, zgostitev, dovoli } = t;
+    if (typeof id !== "string" || !/^[a-f0-9]{16}$/.test(id)
+      || typeof zgostitev !== "string" || !/^[a-f0-9]{64}$/.test(zgostitev)
+      || typeof dovoli !== "boolean") {
+      throw new Napaka(400, "oblika", "Neveljaven id, zgostitev ali dovoli.");
+    }
+    await this.preveri(posiljatelj, t, (c, e) => nizN8nPotrditve(posiljatelj as string, id, dovoli, zgostitev, c, e));
+    return { status: 200, telo: await this.zaledjeGradenj(() => n.potrdi(id, zgostitev, dovoli)) };
   }
 
   private gradnjeStreznika() {
@@ -912,8 +1046,11 @@ export class AsistentStreznik {
     const { posiljatelj, tok, veja } = t;
     if (typeof tok !== "string" || typeof veja !== "string" || tok.length > 40 || veja.length > 120) throw new Napaka(400, "oblika", "Manjka tok ali veja.");
     await this.preveri(posiljatelj, t, (c, e) => nizPredlogaGradnje(posiljatelj as string, tok, veja, c, e));
-    const p = await this.zaledjeGradenj(() => g.predlog(tok, veja));
-    return { status: 202, telo: { id: p.id, zgostitev: p.zgostitev } };
+    // dovoljenje za podobne velja samo za napravo, ki ga je dala, in dokler je v ozjem krogu (kljuci iz kanal-claude.json)
+    const kljuci = (await this.kanal()).dovoljene;
+    const p = await this.zaledjeGradenj(() => g.predlog(tok, veja, { naprava: posiljatelj as string, kljuci }));
+    // stanje: »caka« = telefon pokaze potrditev; drugo = zagnano po dovoljenju za podobne (druga potrditev ni potrebna)
+    return { status: 202, telo: { id: p.id, zgostitev: p.zgostitev, stanje: p.stanje ?? "caka" } };
   }
 
   /** Potrditev zagona s telefona: podpis veze id predloga in zgostitev (repozitorij, tok, veja). */
@@ -922,7 +1059,12 @@ export class AsistentStreznik {
     const { posiljatelj, id, zgostitev } = t;
     if (typeof id !== "string" || !/^[a-f0-9]{16}$/.test(id) || typeof zgostitev !== "string" || !/^[a-f0-9]{64}$/.test(zgostitev)) throw new Napaka(400, "oblika", "Neveljaven id ali zgostitev.");
     await this.preveri(posiljatelj, t, (c, e) => nizPotrditveGradnje(posiljatelj as string, id, zgostitev, c, e));
-    await this.zaledjeGradenj(() => g.potrdi(id, zgostitev));
+    // »Velja tudi za vse podobne« (privzeto obkljukano na telefonu): LOCEN podpis nad tokom in vejo z istim casom in enkratnim nizom;
+    // brez njega (ali z neveljavnim) je potrditev enkratna kot prej. Neoznaceno polje v telesu brez podpisa ne pomeni nicesar.
+    const pp = t.podobnePodpis;
+    const kljuc = typeof pp === "string" && pp.length <= 200 ? (await this.kanal()).dovoljene.get(posiljatelj as string) : undefined;
+    const podobne = kljuc ? { naprava: posiljatelj as string, kljuc, cas: t.cas as number, enkratni: t.enkratni as string, podpis: pp as string } : undefined;
+    await this.zaledjeGradenj(() => g.potrdi(id, zgostitev, podobne));
     return { status: 202, telo: { id } };
   }
 

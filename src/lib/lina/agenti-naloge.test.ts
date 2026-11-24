@@ -47,7 +47,10 @@ type Klic = { program: string; args: readonly string[]; cwd: string };
 /** Preverba zagona: vsi agenti odgovorijo na --version; grok na »models« pove prijavo (ali »Not signed in«). */
 function preverba(o: { neprijavljen?: boolean; pokvarjen?: string[] } = {}): { fn: PreverbaZagona; klici: string[] } {
   const klici: string[] = [];
-  const fn: PreverbaZagona = async (program, args) => {
+  const fn: PreverbaZagona = async (program0, args0) => {
+    // N10: --version agenta z omejenimi mapami tece v bwrap - nadomestek vidi program agenta za »--« (preverba peskovnika /bin/sh ostane bwrap)
+    const i = path.basename(program0) === "bwrap" ? args0.lastIndexOf("--") : -1;
+    const [program, args] = i >= 0 && args0[i + 1] !== "/bin/sh" ? [args0[i + 1]!, args0.slice(i + 2)] : [program0, args0];
     klici.push(`${path.basename(program)} ${args.join(" ")}`);
     if (o.pokvarjen?.includes(path.basename(program))) return { koda: 1, izpis: "napaka", potekel: false };
     if (args[0] === "models") return { koda: 0, izpis: o.neprijavljen ? "Not signed in. Run grok login." : "You are logged in with grok.com.", potekel: false };
@@ -70,7 +73,7 @@ async function okolje(ime: string, p = preverba()) {
     dom,
     platforma: "linux",
     zagonLine: ZAGON,
-    najdi: (x) => (["xterm", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null),
+    najdi: (x) => (["xterm", "bwrap", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null),
     preveriZagon: p.fn,
     zazeni: async (program, args, cwd) => {
       klici.push({ program, args, cwd });
@@ -81,9 +84,11 @@ async function okolje(ime: string, p = preverba()) {
   return { osnova, dom, podatki, projekt, token, klici, o, ukaz, preverba: p };
 }
 
+/** Porocilo s tocko in dokazom (tocke-naloge.ts: brez dokaza je naloga »nepopolno«, ne »koncano«). */
 function porocilo(mapa: string, id: string, mtime: Date) {
   const p = path.join(mapa, ".lina-naloge", id, "POROCILO.md");
-  writeFileSync(p, "Narejeno.");
+  writeFileSync(path.join(mapa, "dokaz.txt"), "dokaz");
+  writeFileSync(p, "Narejeno.\nT1: narejeno - dokaz: dokaz.txt");
   utimesSync(p, mtime, mtime);
 }
 
@@ -111,11 +116,12 @@ describe("agenti: seznam in argv (preverjeno z --help 24. 11. 2026)", () => {
   it("stanje agentov: zaznan in preverjen, ni najden, ne deluje, grok brez prijave; preverba samo --version (in grok models)", async () => {
     const p = preverba({ neprijavljen: true, pokvarjen: ["pi"] });
     const e = await okolje("stanje-agentov", p);
-    e.o.najdi = (x) => (x === "opencode" ? null : ["xterm", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null);
+    e.o.najdi = (x) => (x === "opencode" ? null : ["xterm", "bwrap", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null);
     const s = await stanjeClaudeNalog(e.token, e.podatki, e.o, T0);
     const po = Object.fromEntries(s.agenti.map((a) => [a.id, a.stanje]));
     assert.deepEqual(po, { claude: "pripravljen", agy: "pripravljen", opencode: "ni-najden", kimi: "pripravljen", pi: "ne-deluje", grok: "prijava" });
-    assert.ok(p.klici.every((k) => / --version$/.test(k) || k === "grok models"), p.klici.join(";"));
+    // A4: pred --version agenta z omejenimi mapami se preveri peskovnik (bwrap ... -- /bin/sh -c :)
+    assert.ok(p.klici.every((k) => / --version$/.test(k) || k === "grok models" || (k.startsWith("bwrap ") && k.endsWith(" -- /bin/sh -c :"))), p.klici.join(";"));
     assert.ok(p.klici.includes("grok models"));
   });
 });
@@ -223,7 +229,10 @@ describe("vrsta vnaprej dodeljenih nalog", { concurrency: 1 }, () => {
     const z = s.naloge[0]!;
     assert.equal(z.stanje, "tece");
     assert.equal(z.agent, "agy");
-    assert.deepEqual(e.klici[0]!.args, ["-e", "/usr/bin/agy", "--prompt-interactive", pozivZaClaude(z.id)]);
+    // A4: agy (omejene mape) tece v bwrap; konec ukaza je nespremenjen argv agenta
+    const args = e.klici[0]!.args;
+    assert.deepEqual(args.slice(0, 2), ["-e", "/usr/bin/bwrap"]);
+    assert.deepEqual(args.slice(args.indexOf("--") + 1), ["/usr/bin/agy", "--prompt-interactive", pozivZaClaude(z.id)]);
     assert.equal(e.klici[0]!.cwd, e.projekt);
     assert.ok(!e.klici[0]!.args.some((a) => /dangerously|yolo|--auto|always-approve/.test(a)));
     assert.equal(statSync(path.join(e.podatki, DATOTEKA_STANJA)).mode & 0o777, 0o600);

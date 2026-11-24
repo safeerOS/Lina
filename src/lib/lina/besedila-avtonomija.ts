@@ -3,6 +3,7 @@
  * jezike) ne zaplete. sl je slovenscina, en je anglescina; de, es, fr, it pridejo z zdruzitvijo vej jezikov (v tej osnovi jih
  * besedila.ts nima). Besedila so FIKSNA: v odgovore in dnevnik ne gre nikoli vsebina klica, predloge ali stevilka.
  */
+import { jezikVmesnika } from "./besedila.ts";
 import { deA } from "./besedila-avtonomija.de.ts";
 import { esA } from "./besedila-avtonomija.es.ts";
 import { frA } from "./besedila-avtonomija.fr.ts";
@@ -290,7 +291,7 @@ export const besedilaA: Record<JezikA, { [K in BesedaA]: string }> = {
 };
 
 /** Besedilo po kljucu; privzeto slovenscina. Neznan kljuc vrne prazen niz (preizkus preveri, da je vsaka koda pokrita v obeh jezikih). */
-export function tA(kljuc: string, jezik: JezikA = "sl"): string {
+export function tA(kljuc: string, jezik: JezikA = jezikVmesnika()): string {
   const tabela = besedilaA[jezik] as Record<string, string>;
   return tabela[kljuc] ?? (slA as Record<string, string>)[kljuc] ?? "";
 }

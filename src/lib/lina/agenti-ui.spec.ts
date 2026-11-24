@@ -5,7 +5,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AgentiKartica, NalogaVrstica } from "../../components/lina2/racunalnik.tsx";
+import { AgentiKartica, NalogaVrstica, VodjaKartica, ukazUveljavi } from "../../components/lina2/racunalnik.tsx";
 import { en, sl } from "./besedila.ts";
 import type { JavnaNaloga, JavnoStanjeNalog, StanjeAgenta } from "./claude-naloge.server.ts";
 
@@ -14,7 +14,7 @@ const agent = (id: StanjeAgenta["id"], x: Partial<StanjeAgenta> = {}): StanjeAge
 });
 
 const STANJE: JavnoStanjeNalog = {
-  naVoljo: true, razlogNiNaVoljo: null, geslo: true, mape: [], prepovedane: ["/home/a/scit"], naloge: [],
+  naVoljo: true, razlogNiNaVoljo: null, geslo: true, mape: [], prepovedane: ["/home/a/scit"], naloge: [], pregledovalec: "claude", preizkusi: {}, zdruzitve: [], omrezjeAgentov: null,
   agenti: [agent("claude"), agent("agy", { vklopljen: false }), agent("opencode", { stanje: "ni-najden", pot: null }), agent("kimi"), agent("pi"), agent("grok", { stanje: "prijava" })],
 };
 
@@ -55,7 +55,8 @@ describe("NalogaVrstica: stanje, agent, ura, ocena in opomnik", () => {
   const n: JavnaNaloga = {
     id: "0123456789abcdef", izvor: "telefon", agent: "pi", mapa: "/home/a/p", besedilo: "Naloga.", zgostitev: "a".repeat(64), stanje: "tece",
     ustvarjeno: "2026-11-24T08:00:00.000Z", potrjeno: "2026-11-24T08:00:00.000Z", razlog: null, porocilo: null, pogoj: { vrsta: "zdaj" },
-    ocena: { konec: "2026-11-24T08:30:00.000Z", groba: true }, opomnik: { cas: "2026-11-24T08:45:00.000Z", razlog: "terminal-zaprt", krog: 1 }, koncano: null,
+    ocena: { konec: "2026-11-24T08:30:00.000Z", groba: true }, opomnik: { cas: "2026-11-24T08:45:00.000Z", razlog: "terminal-zaprt", krog: 1 }, koncano: null, nacrt: false,
+    kopija: null, vloga: null, za: null, vodja: null, tocke: null, predlogTock: null,
   };
   it("pokaze agenta, oceno konca (groba), opomnik z razlogom v ljubljanskem casu", () => {
     const html = renderToStaticMarkup(createElement("ul", null, createElement(NalogaVrstica, { n, zaposlen: false, onUkaz: ni })));
@@ -76,6 +77,22 @@ describe("NalogaVrstica: stanje, agent, ura, ocena in opomnik", () => {
     expect(b).not.toContain(sl.agROpTerminal);
   });
 
+  it("tocke naloge (24. 11. 2026): nepopolna pokaze »1/3 narejeno«, manjkajoce z razlogom in gumb za nov predlog; s predlogom samo obvestilo", () => {
+    const tocke = { skupaj: 3, narejeno: 1, popolno: false, manjkajoce: [{ st: 2, besedilo: "dodaj b.ts", razlog: "dokaz-ni-najden" as const }, { st: 3, besedilo: "README", razlog: "manjka" as const }] };
+    const h = renderToStaticMarkup(createElement(NalogaVrstica, { n: { ...n, stanje: "nepopolno", tocke, predlogTock: "napaka" }, zaposlen: false, onUkaz: ni }));
+    expect(h).toContain(sl.rcNepopolno);
+    expect(h).toContain(`1/3 ${sl.rcTockeNarejeno}`);
+    expect(h).toContain("T2");
+    expect(h).toContain("dodaj b.ts");
+    expect(h).toContain(sl.rcTRDokazNiNajden);
+    expect(h).toContain(sl.rcTRManjka);
+    expect(h).toContain(sl.rcTockePredlagaj);
+    expect(h).toContain(sl.rcPorocilo);
+    const p = renderToStaticMarkup(createElement(NalogaVrstica, { n: { ...n, stanje: "nepopolno", tocke, predlogTock: "fedcba9876543210" }, zaposlen: false, onUkaz: ni }));
+    expect(p).toContain(sl.rcTockePredlog);
+    expect(p).not.toContain(sl.rcTockePredlagaj);
+  });
+
   it("dodeljena ima Preklici; zamujena ima Potrdi in Preklici", () => {
     const d = renderToStaticMarkup(createElement(NalogaVrstica, { n: { ...n, stanje: "dodeljeno", pogoj: { vrsta: "ura", cas: "2026-11-24T10:00:00.000Z" } }, zaposlen: false, onUkaz: ni }));
     expect(d).toContain(sl.agPreklici);
@@ -83,6 +100,89 @@ describe("NalogaVrstica: stanje, agent, ura, ocena in opomnik", () => {
     const z = renderToStaticMarkup(createElement(NalogaVrstica, { n: { ...n, stanje: "zamujeno" }, zaposlen: false, onUkaz: ni }));
     expect(z).toContain(sl.agZamujenoPotrdi);
     expect(z).toContain(sl.agPreklici);
+  });
+});
+
+describe("Lina kot vodja: vrsta agentov po projektu, pregled, zdruzitev in »Uveljavi«", () => {
+  const vodja = { projekt: "/home/a/p", git: true, osnova: "abc", pregledovalec: "claude" as const };
+  const glavna: JavnaNaloga = {
+    id: "1111111111111111", izvor: "lastnik", agent: "pi", mapa: "/home/a/p", besedilo: "A.", zgostitev: "b".repeat(64), stanje: "koncano",
+    ustvarjeno: "2026-11-24T08:00:00.000Z", potrjeno: "2026-11-24T08:00:00.000Z", razlog: null, porocilo: null, pogoj: null, ocena: null,
+    opomnik: null, koncano: "2026-11-24T08:20:00.000Z", nacrt: false, kopija: "/home/a/.local/share/lina/delo/1111111111111111/delo", vloga: null, za: null,
+    vodja: { ...vodja, faza: "pregled", krog: 2, najdbe: 3 }, tocke: null, predlogTock: null,
+  };
+  const pregled: JavnaNaloga = {
+    ...glavna, id: "2222222222222222", agent: "claude", stanje: "tece", kopija: "/home/a/.local/share/lina/delo/1111111111111111/pregled-2",
+    vloga: "pregled", za: glavna.id, vodja: null,
+  };
+  const zdruzena: JavnaNaloga = { ...glavna, id: "3333333333333333", agent: "grok", vodja: { ...vodja, faza: "lastnik", krog: 3, najdbe: 1, razlog: "krogi" } };
+  const stanje: JavnoStanjeNalog = {
+    ...STANJE, naloge: [pregled, glavna, zdruzena],
+    zdruzitve: [{ projekt: "/home/a/p", pot: "/home/a/.local/share/lina/delo/zdruzitev-x/delo", git: true, veja: "lina/zdruzitev-x", naloge: ["4444444444444444"], zgostitev: "c".repeat(64), diff: "/home/a/.local/share/lina/delo/zdruzitev-x/zdruzitev.diff", osvezi: false, razlog: null, opis: null, podrobnost: null, izvoz: null }],
+  };
+  const html = renderToStaticMarkup(createElement(VodjaKartica, { stanje, zaposlen: false, onUkaz: ni }));
+
+  it("pokaze projekt, vrsto agentov s fazo, krogom N/3 in najdbami ter polne poti kopij in zdruzitve", () => {
+    expect(html).toContain(sl.vdNaslov);
+    expect(html).toContain("/home/a/p");
+    expect(html).toContain(`${sl.vdKrog} 2/3`);
+    expect(html).toContain(`${sl.vdNajdbe}: 3`);
+    expect(html).toContain(sl.vdFazaPregled);
+    expect(html).toContain(glavna.kopija!);
+    // vrsta agentov pri projektu: tudi naloge brez lastne faze (slepi pregled)
+    expect(html).toContain(pregled.kopija!);
+    expect(html).toContain("/home/a/.local/share/lina/delo/zdruzitev-x/delo");
+    expect(html).toContain("lina/zdruzitev-x");
+    expect(html).toContain("zdruzitev.diff");
+    expect(html).toContain(sl.vdRKrogi);
+  });
+
+  it("»Uveljavi« je samo ob zdruzenem delu in pokaze zgostitev, ki jo potrdi; pregledovalec je izbira", () => {
+    expect(html).toContain(sl.vdUveljavi);
+    expect(html).toContain(sl.vdOpusti);
+    expect(html).toContain("c".repeat(64));
+    expect(html).toContain(sl.vdPregledovalec);
+    const brez = renderToStaticMarkup(createElement(VodjaKartica, { stanje: { ...stanje, zdruzitve: [] }, zaposlen: false, onUkaz: ni }));
+    expect(brez).not.toContain(sl.vdUveljavi);
+    // med posodabljanjem z izvirnikom ni gumba (zgostitev se bo spremenila); razlog posodobitve je viden
+    const osvezuje = renderToStaticMarkup(createElement(VodjaKartica, { stanje: { ...stanje, zdruzitve: [{ ...stanje.zdruzitve[0]!, osvezi: true }] }, zaposlen: false, onUkaz: ni }));
+    expect(osvezuje).toContain(sl.vdOsvezuje);
+    expect(osvezuje).not.toContain(sl.vdUveljavi);
+    const vrnjen = renderToStaticMarkup(createElement(VodjaKartica, { stanje: { ...stanje, zdruzitve: [{ ...stanje.zdruzitve[0]!, razlog: "vrnjen" }] }, zaposlen: false, onUkaz: ni }));
+    expect(vrnjen).toContain(sl.vdRVrnjen);
+    // tocki 7/8 (popravki-1605): besedilo razloga (ne koda) in dve poti naprej
+    const veja = renderToStaticMarkup(createElement(VodjaKartica, { stanje: { ...stanje, zdruzitve: [{ ...stanje.zdruzitve[0]!, razlog: "uveljavi", opis: "git-nastavitve", podrobnost: "core.editor" }] }, zaposlen: false, onUkaz: ni }));
+    expect(veja).toContain(sl.vdRUveljavi);
+    expect(veja).toContain(sl.vdOpisGitNastavitve.split(" (")[0]);
+    expect(veja).toContain("core.editor");
+    expect(veja).not.toContain(sl.vdZnova); // ista zavrnitev bi se ponovila: samo izvoz
+    expect(veja).toContain(sl.vdIzvozi);
+    const premaknjena = renderToStaticMarkup(createElement(VodjaKartica, { stanje: { ...stanje, zdruzitve: [{ ...stanje.zdruzitve[0]!, razlog: "uveljavi", opis: "veja" }] }, zaposlen: false, onUkaz: ni }));
+    expect(premaknjena).toContain(sl.vdOpisVeja);
+    expect(premaknjena).toContain(sl.vdZnova);
+    const agenti = renderToStaticMarkup(createElement(AgentiKartica, { stanje: { ...stanje, omrezjeAgentov: "gostitelj" }, zaposlen: false, onUkaz: ni }));
+    expect(agenti).toContain("sudo apt install passt");
+    expect(ukazUveljavi(stanje.zdruzitve[0]!)).toEqual({ ukaz: "uveljavi", projekt: "/home/a/p", zgostitev: "c".repeat(64) });
+  });
+
+  it("vrstica naloge pokaze vlogo (slepi pregled za nalogo) in po 3 krogih gumb »Vseeno zdruzi«", () => {
+    const r = renderToStaticMarkup(createElement(NalogaVrstica, { n: pregled, zaposlen: false, onUkaz: ni }));
+    expect(r).toContain(sl.vdVlogaPregled);
+    expect(r).toContain(glavna.id);
+    expect(r).toContain(pregled.kopija!);
+    const z = renderToStaticMarkup(createElement(NalogaVrstica, { n: zdruzena, zaposlen: false, onUkaz: ni }));
+    expect(z).toContain(sl.vdZdruziKljub);
+    expect(renderToStaticMarkup(createElement(NalogaVrstica, { n: glavna, zaposlen: false, onUkaz: ni }))).not.toContain(sl.vdZdruziKljub);
+  });
+
+  it("vsak kljuc vd* ima neprazen prevod v sl IN en", () => {
+    const kljuci = Object.keys(sl).filter((k) => /^vd[A-Z]/.test(k)) as Array<keyof typeof sl>;
+    expect(kljuci.length).toBeGreaterThan(30);
+    for (const k of kljuci) {
+      expect(sl[k].trim(), k).not.toBe("");
+      expect(en[k].trim(), k).not.toBe("");
+    }
+    expect(en.vdUveljavi).not.toBe(sl.vdUveljavi);
   });
 });
 

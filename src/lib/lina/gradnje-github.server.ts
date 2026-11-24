@@ -59,9 +59,14 @@ import {
   type Tok,
 } from "./gradnje-github.ts";
 import type { IzidZagona } from "./posodobitev.server.ts";
+import { kljucObsega, nizDovoljenja } from "./dovoljenja-podobne.ts";
+import { najdiDovoljenje, zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
+import { preveriPodpisNaprave } from "./kanal-claude.ts";
 import { resolveDataDir } from "./store.server.ts";
 
 export const DATOTEKA_STANJA = "gradnje-github.json";
+/** Podpis naprave za »Velja tudi za vse podobne« ob potrditvi s telefona (isti cas in enkratni niz kot potrditev). */
+export type PodobneNaprave = { naprava: string; kljuc: string; cas: number; enkratni: string; podpis: string };
 export const DATOTEKA_NASTAVITEV = "gradnje-github-nastavitve.json";
 export const MAPA_GRADENJ = "Lina gradnje";
 const SPREMLJANJE_MS = 45_000;
@@ -151,7 +156,8 @@ export function okoljeZaGh(okolje: NodeJS.ProcessEnv = process.env, zGh = true):
     /^(PATH|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|TMPDIR|TZ|DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|JAVA_HOME|SSL_CERT_FILE|SSL_CERT_DIR)$/.test(k) ||
     /^(XDG|LC)_[A-Z_]+$/.test(k) ||
     /^(HTTPS?_PROXY|NO_PROXY|https?_proxy|no_proxy)$/.test(k) ||
-    (zGh && /^(GH|GITHUB)_[A-Z_]+$/.test(k));
+    // B4 (1750): isto pravilo kot github-dostop - zeton okolja ne prevlada nad prijavo, ki jo je lastnik izbral v Nastavitvah > GitHub
+    (zGh && /^(GH|GITHUB)_[A-Z_]+$/.test(k) && !/^(GH|GITHUB)_(ENTERPRISE_)?TOKEN$/.test(k));
   return {
     ...Object.fromEntries(Object.entries(okolje).filter(([k, v]) => typeof v === "string" && dovoljeno(k))),
     GH_PROMPT_DISABLED: "1",
@@ -466,10 +472,10 @@ async function dodajPredlog(root: string, izvor: IzvorGradnje, tok: unknown, vej
  */
 const zasedeni = new Set<string>();
 
-async function potrdi(root: string, id: unknown, zgostitev: unknown, o: Odv): Promise<void> {
+async function potrdi(root: string, id: unknown, zgostitev: unknown, o: Odv): Promise<{ tok: Tok; veja: string }> {
   if (typeof id !== "string" || !ID.test(id)) throw new GradnjaNapaka("ni-najdeno");
   await predpogoj(root);
-  await vVrsti(root, async () => {
+  const izid = await vVrsti(root, async () => {
     const s = await preberi(root);
     const g = s.gradnje.find((x) => x.id === id);
     if (!g || g.stanje !== "caka") throw new GradnjaNapaka("ni-najdeno");
@@ -510,17 +516,62 @@ async function potrdi(root: string, id: unknown, zgostitev: unknown, o: Odv): Pr
         g.razlog = "zagon";
         g.potrjeno = zdaj.toISOString();
         await zapisi(root, s);
-        return;
+        return { tok: g.tok, veja: g.veja };
       }
       g.prejsnjiTek = Math.max(0, ...prej);
       g.potrjeno = zdaj.toISOString();
       g.stanje = "zaganja";
       await zapisi(root, s);
+      return { tok: g.tok, veja: g.veja };
     } finally {
       zasedeni.delete(kljuc);
     }
   });
   if (o.spremljaj) zazeniSpremljanje(root, o.surovo);
+  return izid;
+}
+
+/** Tokovi in skripte gradnje (B3 1750): workflow se pri `gh workflow run --ref` vzame z veje, skripte iz istega drevesa. */
+// R3 (24. 11. 2026): tudi koda, ki jo orodja izvedejo med gradnjo: *.config.* (vite, vitest, eslint, postcss ...), buildSrc, build-logic,
+// .npmrc, tsconfig*, scripts/ na vsaki globini. Preizkusi v src/ niso zajeti (repozitorij tokov ni lokalen - ali tok poganja preizkuse, NEPREVERJENO).
+const POT_GRADNJE =
+  /^\.github\/|(^|\/)(scripts\/|gradle\/|buildSrc\/|build-logic\/|package(-lock)?\.json$|gradlew(\.bat)?$|[^/]*\.gradle(\.kts)?$|gradle\.properties$|electron-builder[^/]*$|[^/]*\.sh$|[^/]*\.config\.[^/]+$|\.npmrc$|tsconfig[^/]*\.json$)/;
+const NAJVEC_DATOTEK_PRIMERJAVE = 300; // GitHub compare vrne najvec 300 datotek: poln seznam = morda odrezan
+
+/**
+ * B3 (1750): dovoljenje za podobne gradnje velja samo, ce je commit enak zadnjemu potrjenemu za isti tok in vejo ali ce spremembe od
+ * njega (samo naprej, brez prepisa zgodovine) ne posegajo v tokove ali skripte gradnje. Brez osnove, ob napaki gh, razhajanju ali
+ * odrezanem seznamu predlog caka lastnika (fail-closed).
+ */
+async function brezSpremembGradnje(root: string, g: ZapisGradnje, o: Odv): Promise<boolean> {
+  const osnova = (await preberi(root)).gradnje
+    .filter((x) => x.id !== g.id && x.tok === g.tok && x.veja === g.veja && x.potrjeno && oblikaCommita(x.commit))
+    .sort((a, b) => Date.parse(a.potrjeno!) - Date.parse(b.potrjeno!))
+    .at(-1)?.commit;
+  if (!osnova || !g.commit) return false;
+  if (osnova === g.commit) return true;
+  try {
+    const r = JSON.parse(await gh(o, root, ["api", `repos/${REPOZITORIJ}/compare/${osnova}...${g.commit}`, "--jq", "{status: .status, files: [.files[].filename]}"])) as { status?: unknown; files?: unknown };
+    if (r?.status !== "ahead" || !Array.isArray(r.files) || r.files.length >= NAJVEC_DATOTEK_PRIMERJAVE) return false;
+    return r.files.every((f) => typeof f === "string" && !POT_GRADNJE.test(f));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Dovoljenje za podobne gradnje (isti tok in ista veja) je uporabljeno: predlog gre po ISTI poti kot lastnikova potrditev (stikalo,
+ * geslo, veja, commit, zaseden tok). Samo ZAGON gradnje; namestitev deb/APK se vedno vprasa posebej. Neuspeh pusti predlog cakati.
+ */
+async function potrdiPoDovoljenju(root: string, g: ZapisGradnje, o: Odv, naprava?: { naprava: string; kljuci: ReadonlyMap<string, string> }): Promise<ZapisGradnje> {
+  if (!(await najdiDovoljenje(root, "gradnja", { tok: g.tok, veja: g.veja }, naprava ?? {}, o.zdaj()))) return g;
+  if (!(await brezSpremembGradnje(root, g, o))) return g;
+  try {
+    await potrdi(root, g.id, g.zgostitev, o);
+  } catch {
+    return g;
+  }
+  return (await preberi(root)).gradnje.find((x) => x.id === g.id) ?? g;
 }
 
 // --- Spremljanje
@@ -945,9 +996,12 @@ export async function ukazGradenj(token: string | null, ukaz: unknown, dir?: str
     case "pripravi":
       await dodajPredlog(root, "lastnik", u.tok, u.veja, o);
       break;
-    case "potrdi":
-      await potrdi(root, u.id, u.zgostitev, o);
+    case "potrdi": {
+      const g = await potrdi(root, u.id, u.zgostitev, o);
+      // »Velja tudi za vse podobne« (samo strogo true iz seje lastnika): isti tok in ista veja; namestitev ostane vsakic
+      if (u.podobne === true) await zapisiDovoljenje(root, "gradnja", { tok: g.tok, veja: g.veja }, { kdo: "lastnik" });
       break;
+    }
     case "odkloni":
       await vVrsti(root, async () => {
         const s = await preberi(root);
@@ -1019,7 +1073,9 @@ export async function ukazGradenj(token: string | null, ukaz: unknown, dir?: str
 /** Lina (asistentka) predlaga gradnjo iz oznake v odgovoru; izid je samo predlog. Napaka nikoli ne podre pogovora (null). */
 export async function predlagajGradnjo(dir: string | undefined, tok: unknown, veja: unknown, odvisnosti: Odvisnosti = {}, izvor: IzvorGradnje = "lina"): Promise<ZapisGradnje | null> {
   try {
-    return await dodajPredlog(resolveDataDir(dir), izvor, tok, veja, odv(odvisnosti));
+    const root = resolveDataDir(dir);
+    const o = odv(odvisnosti);
+    return await potrdiPoDovoljenju(root, await dodajPredlog(root, izvor, tok, veja, o), o);
   } catch {
     return null;
   }
@@ -1036,7 +1092,10 @@ export async function obdelajGradnjo(root: string, odgovor: string, dovoliPredlo
   if (!(await jeVklopljeno(root).catch(() => false))) return `${besedilo}\n\n(Gradnje na GitHubu so izklopljene v Nastavitvah.)`.trim();
   const p = predlogi[0]!;
   const z = await predlagajGradnjo(root, p.tok, p.veja, odvisnosti);
-  return `${besedilo}\n\n${z ? `(Predlog gradnje ${z.tok}, veja ${z.veja}, čaka vašo potrditev v zavihku Računalnik ali na telefonu.)` : "(Gradnje nisem pripravila: tok ali veja ni dovoljen.)"}`.trim();
+  const izid = !z ? "(Gradnje nisem pripravila: tok ali veja ni dovoljen.)"
+    : z.stanje === "caka" ? `(Predlog gradnje ${z.tok}, veja ${z.veja}, čaka vašo potrditev v zavihku Računalnik ali na telefonu.)`
+    : `(Gradnja ${z.tok}, veja ${z.veja}, je zagnana po vašem dovoljenju za podobne gradnje; namestitev boste potrdili posebej. Preklic v Nastavitvah > Dovoljenja.)`;
+  return `${besedilo}\n\n${izid}`.trim();
 }
 
 // --- Telefon (asistent-streznik.server.ts preveri podpis naprave ozjega kroga PRED klicem teh funkcij)
@@ -1061,12 +1120,29 @@ export async function telefonStanje(dir: string, odvisnosti: Odvisnosti = {}): P
   return javno(root, s, o, n, geslo);
 }
 
-export async function telefonPredlog(dir: string, tok: unknown, veja: unknown, odvisnosti: Odvisnosti = {}): Promise<ZapisGradnje> {
-  return dodajPredlog(resolveDataDir(dir), "telefon", tok, veja, odv(odvisnosti));
+/** Predlog s telefona; ce je TA naprava (s podpisom) ze dovolila podobne gradnje, se zazene brez druge potrditve. */
+export async function telefonPredlog(
+  dir: string, tok: unknown, veja: unknown, odvisnosti: Odvisnosti = {}, naprava?: { naprava: string; kljuci: ReadonlyMap<string, string> },
+): Promise<ZapisGradnje> {
+  const root = resolveDataDir(dir);
+  const o = odv(odvisnosti);
+  const g = await dodajPredlog(root, "telefon", tok, veja, o);
+  return naprava ? potrdiPoDovoljenju(root, g, o, naprava) : g;
 }
 
-export async function telefonPotrdi(dir: string, id: unknown, zgostitev: unknown, odvisnosti: Odvisnosti = {}): Promise<void> {
-  await potrdi(resolveDataDir(dir), id, zgostitev, odv(odvisnosti));
+/**
+ * Potrditev s telefona. `podobne`: podpis naprave nad nizDovoljenja za tok in vejo TE gradnje (asistent-streznik je glavni podpis ze
+ * preveril); dovoljenje se zapise samo, ce ta podpis velja, in velja samo za to napravo.
+ */
+export async function telefonPotrdi(dir: string, id: unknown, zgostitev: unknown, odvisnosti: Odvisnosti = {}, podobne?: PodobneNaprave): Promise<void> {
+  const root = resolveDataDir(dir);
+  const g = await potrdi(root, id, zgostitev, odv(odvisnosti));
+  if (!podobne) return;
+  const kljuc = kljucObsega("gradnja", { tok: g.tok, veja: g.veja });
+  if (!kljuc || !preveriPodpisNaprave(podobne.kljuc, nizDovoljenja(podobne.naprava, kljuc, podobne.cas, podobne.enkratni), podobne.podpis)) return;
+  await zapisiDovoljenje(root, "gradnja", { tok: g.tok, veja: g.veja }, {
+    kdo: "naprava", naprava: podobne.naprava, dokaz: { cas: podobne.cas, enkratni: podobne.enkratni, podpis: podobne.podpis },
+  });
 }
 
 export type ApkZaTelefon = { id: string; pot: string; sha256: string; velikost: number; paket: string };

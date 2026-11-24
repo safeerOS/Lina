@@ -408,6 +408,37 @@ describe("izvedba: SMS iz predloge prejemniku s seznama", { concurrency: 1 }, ()
     assert.equal((await stanjeAvtonomije(token, dir)).cakajoca.length, 0);
   });
 
+  it("dovoljenja za podobne (02f): z izbiro lastnika gre naslednji SMS na isti povezavi brez vprasanja; nova povezava (prejemnik) vprasa", async () => {
+    const { dir, token } = await pripravi();
+    await nastaviSms(dir, token, "potrditev");
+    await dodajKlic(dir, "CA-1");
+    await tikAvtonomije(dir);
+    const id = (await stanjeAvtonomije(token, dir)).cakajoca[0].id;
+    // niz »true« ni izbira lastnika
+    await ukazAvtonomije(token, { ukaz: "odobri", id, podobne: "true" }, dir);
+    assert.equal(sms().length, 1);
+    await dodajKlic(dir, "CA-2");
+    await tikAvtonomije(dir);
+    const drugi = (await stanjeAvtonomije(token, dir)).cakajoca;
+    assert.equal(drugi.length, 1, "brez dovoljenja caka kot prej");
+    await ukazAvtonomije(token, { ukaz: "odobri", id: drugi[0].id, podobne: true }, dir);
+    assert.equal(sms().length, 2);
+    await dodajKlic(dir, "CA-3");
+    await tikAvtonomije(dir);
+    assert.equal((await stanjeAvtonomije(token, dir)).cakajoca.length, 0, "podobno: brez vprasanja");
+    assert.equal(sms().length, 3);
+    // nov prejemnik = nova povezava = nov obseg: vprasa znova (prva povezava se odstrani, da sprozi samo nova)
+    const s0 = await stanjeAvtonomije(token, dir);
+    await ukazAvtonomije(token, { ukaz: "povezava-odstrani", id: s0.povezave[0].id }, dir);
+    await ukazAvtonomije(token, { ukaz: "prejemnik-dodaj", ime: "Bor", stevilka: PREJEMNIK.slice(0, -1) + "9" }, dir);
+    const s1 = await stanjeAvtonomije(token, dir);
+    await ukazAvtonomije(token, { ukaz: "povezava-dodaj", predlogaId: s1.predloge[0].id, prejemnikId: s1.prejemniki.at(-1)!.id }, dir);
+    await dodajKlic(dir, "CA-4");
+    await tikAvtonomije(dir);
+    assert.equal((await stanjeAvtonomije(token, dir)).cakajoca.length, 1, "nov prejemnik se vprasa");
+    assert.equal(sms().length, 3);
+  });
+
   it("odobritev se ZNOVA preveri: izklop pravila ali potek med cakanjem prepreci posiljanje", async () => {
     const { dir, token } = await pripravi();
     const ids = await nastaviSms(dir, token, "potrditev");

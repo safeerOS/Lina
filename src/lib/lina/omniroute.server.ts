@@ -46,7 +46,7 @@ export async function shraniOmniroute(token: string | null, vnos: VnosOmniroute,
   let naslov = prej.naslov;
   if (vnos.naslov !== undefined) {
     if (typeof vnos.naslov !== "string" || !veljavenNaslovPrehoda(vnos.naslov)) {
-      throw new Error("Naslov prehoda ni veljaven: http samo za ta racunalnik ali domace omrezje, sicer https, brez gesla in parametrov.");
+      throw new Error("Naslov prehoda ni veljaven: http samo za ta racunalnik, sicer https (tudi domace omrezje), brez gesla in parametrov.");
     }
     naslov = vnos.naslov.trim();
   }

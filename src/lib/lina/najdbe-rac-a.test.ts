@@ -1,6 +1,6 @@
 /** Najdbe slepega pregleda RAC-A (agenti in naloge): preizkusi preneseni iz kopija-a in obrnjeni v PRAVILNO vedenje (padejo brez popravka). */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { it } from "node:test";
@@ -33,7 +33,7 @@ async function okolje(ime: string, ziv: boolean) {
   let cas = "123";
   const o: Odvisnosti = {
     dom, platforma: "linux", zagonLine: ZAGON,
-    najdi: (x) => (["xterm", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null),
+    najdi: (x) => (["xterm", "bwrap", ...AGENTI].includes(x as never) ? `/usr/bin/${x}` : null),
     preveriZagon: preverba,
     // ziv: terminal naloge se tece (PID tega procesa, enak cas zagona); sicer PID, ki ne obstaja (terminal zaprt)
     zazeni: async (_p, args, cwd) => { klici.push({ cwd, args }); return ziv ? process.pid : 4_000_000 + klici.length; },
@@ -64,10 +64,32 @@ it("A1: neznan PID (gnome-terminal) zaseda mapo do roka", async () => {
   const e = await okolje("a1-brez-pid", false);
   e.o.zazeni = async (_p, args, cwd) => { e.klici.push({ cwd, args }); };
   await e.ukaz({ ukaz: "dodeli", agent: "claude", mapa: e.projekt, besedilo: "prva", pogoj: "zdaj" });
-  await e.ukaz({ ukaz: "dodeli", agent: "pi", mapa: e.projekt, besedilo: "druga", pogoj: "zdaj" }, cez(1000));
+  // podmapa: naloga brez kopije (Lina kot vodja da kopijo samo isti mapi projekta), zato velja A1
+  await e.ukaz({ ukaz: "dodeli", agent: "pi", mapa: path.join(e.projekt, "pod"), besedilo: "druga", pogoj: "zdaj" }, cez(1000));
   assert.equal(e.klici.length, 1);
   await korakRazporejevalnika(e.podatki, e.o, cez(ROK_NALOGE_MS + 1000));
   assert.equal(e.klici.length, 2, "po roku je mapa prosta");
+});
+
+it("A1 + Lina kot vodja: druga naloga v ISTI mapi dobi svojo kopijo in se zazene (ne mapa-zasedena); izvirnik ostane nedotaknjen", async () => {
+  for (const [ime, ziv] of [["a1-kopija-ziv", true], ["a1-kopija-brez-pid", false]] as const) {
+    const e = await okolje(ime, ziv);
+    if (!ziv) e.o.zazeni = async (_p, args, cwd) => { e.klici.push({ cwd, args }); }; // gnome-terminal: PID ni znan, zaseda do roka
+    await e.ukaz({ ukaz: "dodeli", agent: "claude", mapa: e.projekt, besedilo: "prva v izvirniku", pogoj: "zdaj" });
+    const s = await e.ukaz({ ukaz: "dodeli", agent: "pi", mapa: e.projekt, besedilo: "druga v kopiji", pogoj: "zdaj" }, cez(1000));
+    assert.equal(e.klici.length, 2, `${ime}: druga naloga s kopijo se mora zagnati`);
+    const druga = s.naloge.find((n) => n.besedilo === "druga v kopiji")!;
+    assert.equal(druga.stanje, "tece", ime);
+    assert.equal(druga.razlog, null, ime);
+    const delo = path.join(e.podatki, "delo") + path.sep;
+    assert.ok(druga.kopija?.startsWith(delo), `${ime}: kopija pod <podatki>/delo, ne ${druga.kopija}`);
+    assert.equal(druga.mapa, e.projekt, "z.mapa ostane izvirni projekt (preverbe mape)");
+    assert.equal(e.klici[1]!.cwd, druga.kopija, "agent dela v kopiji");
+    assert.ok(existsSync(path.join(druga.kopija!, ".lina-naloge", druga.id, "NALOGA.md")), "NALOGA.md v kopiji");
+    assert.ok(!existsSync(path.join(e.projekt, ".lina-naloge", druga.id)), "v izvirniku ni mape druge naloge");
+    // prva (brez kopije) ostane v izvirniku; naloga brez kopije (podmapa) se vedno caka: preizkus »A1: druga naloga v isti mapi ali podmapi«
+    assert.equal(e.klici[0]!.cwd, e.projekt);
+  }
 });
 
 it("A2: »po <id>« pocaka, da je prva naloga res koncana (porocilo IN terminal ne zivi); koncano = cas opazanja", async () => {
@@ -77,7 +99,8 @@ it("A2: »po <id>« pocaka, da je prva naloga res koncana (porocilo IN terminal 
   await e.ukaz({ ukaz: "dodeli", agent: "pi", mapa: e.projekt, besedilo: "po prvi", pogoj: `po:${prva.id}` });
   assert.equal(e.klici.length, 1);
   const por = path.join(e.projekt, ".lina-naloge", prva.id, "POROCILO.md");
-  writeFileSync(por, "koncano (ni res)");
+  writeFileSync(path.join(e.projekt, "dokaz.txt"), "dokaz");
+  writeFileSync(por, "koncano (ni res)\nT1: narejeno - dokaz: dokaz.txt");
   // mtime porocila v prihodnosti (touch): ne sme vplivati na cas konca
   const t = cez(10 * 60 * 60_000);
   utimesSync(por, t, t);
@@ -103,24 +126,30 @@ it("A2: brez znanega PID-a porocilo pred rokom ne sprosti mesta in ne pomeni »k
   const prva = s1.naloge[0]!;
   await e.ukaz({ ukaz: "dodeli", agent: "pi", mapa: path.join(e.projekt, "pod"), besedilo: "druga", pogoj: `po:${prva.id}` });
   const por = path.join(e.projekt, ".lina-naloge", prva.id, "POROCILO.md");
-  writeFileSync(por, "koncano");
+  writeFileSync(path.join(e.projekt, "dokaz.txt"), "dokaz");
+  writeFileSync(por, "koncano\nT1: narejeno - dokaz: dokaz.txt");
   // agent postavi mtime na sekundo po potrditvi (skrajsana ocena trajanja bi skrcila rok naslednjih nalog)
   utimesSync(por, cez(1000), cez(1000));
   await korakRazporejevalnika(e.podatki, e.o, cez(60_000));
   let s = await stanjeClaudeNalog(e.token, e.podatki, e.o, cez(61_000));
   assert.equal(s.naloge.find((n) => n.id === prva.id)!.stanje, "tece");
   assert.equal(e.klici.length, 1);
-  // po roku (ocena konca; brez zgodovine 30 min) je porocilo veljavno
-  await korakRazporejevalnika(e.podatki, e.o, cez(31 * 60_000));
-  s = await stanjeClaudeNalog(e.token, e.podatki, e.o, cez(31 * 60_000 + 1000));
+  // tocka 4 (vodja 24. 11., popravki-1605): brez PID-a je rok ocena konca (30 min), kot pred N5 - prej ostane »tece«
+  await korakRazporejevalnika(e.podatki, e.o, cez(29 * 60_000));
+  s = await stanjeClaudeNalog(e.token, e.podatki, e.o, cez(29 * 60_000 + 1000));
+  assert.equal(s.naloge.find((n) => n.id === prva.id)!.stanje, "tece");
+  // po oceni konca je porocilo veljavno
+  const KON = 31 * 60_000;
+  await korakRazporejevalnika(e.podatki, e.o, cez(KON));
+  s = await stanjeClaudeNalog(e.token, e.podatki, e.o, cez(KON + 1000));
   const a = s.naloge.find((n) => n.id === prva.id)!;
   assert.equal(a.stanje, "koncano");
-  assert.equal(a.koncano, cez(31 * 60_000).toISOString(), "cas opazanja, ne mtime");
+  assert.equal(a.koncano, cez(KON).toISOString(), "cas opazanja, ne mtime");
   assert.equal(e.klici.length, 2);
   // ocena naslednje naloge istega agenta se ne skrci na 1 s
-  const t = await e.ukaz({ ukaz: "dodeli", agent: "claude", mapa: svezaMapa(e.dom), besedilo: "tretja", pogoj: "zdaj" }, cez(32 * 60_000));
+  const t = await e.ukaz({ ukaz: "dodeli", agent: "claude", mapa: svezaMapa(e.dom), besedilo: "tretja", pogoj: "zdaj" }, cez(KON + 60_000));
   const tretja = t.naloge.find((n) => n.besedilo === "tretja")!;
-  assert.ok(Date.parse(tretja.ocena!.konec) - cez(32 * 60_000).getTime() >= 30 * 60_000, "ocena iz casa opazanja (31 min), ne iz mtime (1 s)");
+  assert.ok(Date.parse(tretja.ocena!.konec) - cez(KON + 60_000).getTime() >= 30 * 60_000, "ocena iz casa opazanja, ne iz mtime (1 s)");
 });
 
 function svezaMapa(dom: string): string {
@@ -137,7 +166,8 @@ it("A3: izklopljen agent se ne zaganja (ne --version ne prijava); stanje »izklo
   klici.length = 0;
   const s = await e.ukaz({ ukaz: "preveri-agente" });
   assert.ok(!klici.some((k) => k.startsWith("grok ") || k.startsWith("pi ") || k.startsWith("claude ")), klici.join(","));
-  assert.ok(klici.includes("agy --version"), "vklopljeni se preverijo");
+  // N10: agy (omejene mape) se preveri v bwrap
+  assert.ok(klici.some((k) => k.startsWith("bwrap ") && k.endsWith("/agy --version")), "vklopljeni se preverijo");
   assert.equal(s.agenti.find((a) => a.id === "grok")!.stanje, "izklopljen");
   assert.equal(s.agenti.find((a) => a.id === "pi")!.vklopljen, false);
   // izklop Claude Code ne pomeni, da Lina nima agentov

@@ -9,6 +9,7 @@ import { izberiOdseke } from "./znanje-odseki.ts";
 import { PRAVILA_RAZUMEVANJA_PODJETJA } from "./skil-lina.ts";
 import { blokZaModel, jeIzvlekanjeSpomina, tujeBesede, uhajaDejstvo, type Dejstvo } from "./spomin.ts";
 import { dejstvaZaModel } from "./spomin.server.ts";
+import { odsekStrokKlic } from "./stroke.server.ts";
 import { zabeleziVbrizg, zaznajVbrizg } from "./vbrizg.ts";
 
 /**
@@ -61,7 +62,7 @@ export function oznaciZnanje(katalog: Catalog, izrek = ""): string {
   );
 }
 
-export function navodiloRazumevanja(katalog: Catalog, izrek = "", spomin: readonly Pick<Dejstvo, "besedilo" | "klicatelju">[] = []): string {
+export function navodiloRazumevanja(katalog: Catalog, izrek = "", spomin: readonly Pick<Dejstvo, "besedilo" | "klicatelju">[] = [], stroke = ""): string {
   const materiali = katalog.materials.map((m) => m.name).join(", ");
   return (
     "Si razumevalec izrekov klicatelja pri telefonski tajnici. " +
@@ -81,6 +82,8 @@ export function navodiloRazumevanja(katalog: Catalog, izrek = "", spomin: readon
     // RAZUMEVANJE: ZAPIS (kako zapisati sporocilo in ime) tu nima ucinka, ker poslovni JSON teh polj nima.
     `${PRAVILA_RAZUMEVANJA_PODJETJA}\n\n` +
     oznaciZnanje(katalog, izrek) +
+    // Prilagodljivi kontekst (24. 11. 2026): strokovni izrazi in znane napake prepoznave stroke; podatek za razumevanje, samo branje.
+    (stroke.trim() ? `\n\n${stroke.trim()}` : "") +
     // Spomin lastnika (faza 1): samo ce je stikalo vklopljeno; locen razdelek, zaupen podatek, ne navodilo.
     (blokZaModel(spomin) ? `\n\n${blokZaModel(spomin)}` : "")
   );
@@ -124,7 +127,7 @@ export async function razumiIzrek(
   izrek: string,
   zadnjaLina: string,
   katalog: Catalog,
-  moznosti: { dir?: string; model?: ModelRazumevanja; spomin?: readonly Pick<Dejstvo, "besedilo" | "klicatelju">[] } = {},
+  moznosti: { dir?: string; model?: ModelRazumevanja; spomin?: readonly Pick<Dejstvo, "besedilo" | "klicatelju">[]; stroke?: string } = {},
 ): Promise<Razumevanje | null> {
   // Izrek z vzorcem vbrizga navodil je podatek brez zaupanja (Mercury F): modela ne klicemo, izrek gre po poti kode kot navadno
   // sporocilo (»drugo«). Klic ni zavrnjen; v dnevnik gre samo ime vzorca.
@@ -147,10 +150,12 @@ export async function razumiIzrek(
   // Besedilo klicatelja je ENA vrstica: izrek z novimi vrsticami ne sme narediti svojega bloka »Lina je rekla:« (neodvisni pregled 14. 11. 2026).
   const vrstica = (besedilo: string) => besedilo.replace(/\s+/g, " ").trim().slice(0, 300);
   const vhod = `Lina je rekla: ${vrstica(zadnjaLina)}\nKlicatelj: ${vrstica(izrek)}`;
+  // Slovar strok klic samo bere (izrazi klicatelja se ne ucijo); napaka slovarja = brez odseka.
+  const stroke = moznosti.stroke ?? (await odsekStrokKlic(moznosti.dir, izrek));
   try {
     const surovo = await (moznosti.model
-      ? moznosti.model(navodiloRazumevanja(katalog, izrek, spomin), vhod)
-      : modelPrekoPonudnika(navodiloRazumevanja(katalog, izrek, spomin), vhod, moznosti.dir, rokRazumevanja(izrek)));
+      ? moznosti.model(navodiloRazumevanja(katalog, izrek, spomin, stroke), vhod)
+      : modelPrekoPonudnika(navodiloRazumevanja(katalog, izrek, spomin, stroke), vhod, moznosti.dir, rokRazumevanja(izrek)));
     const r = razberiRazumevanje(surovo, katalog);
     // Varovalo kode: odgovor, ki ponavlja dejstvo brez dovoljenja »klicatelju«, se zavrne (odgovor je prazen, kot da modela ni).
     if (r?.odgovor && uhajaDejstvo(r.odgovor, spomin)) {

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { t } from "@/lib/lina/besedila.ts";
+import { sporociloNapake, sporociloStreznika, t } from "@/lib/lina/besedila.ts";
 import { koledarDodajFn, koledarIzbrisiFn, koledarSeznamFn, koledarSpremeniFn } from "@/lib/lina/functions.ts";
-import { datumBesedilo, lokalniCas, razberiCas, uraBesedilo, type VrstaKoledar, type ZapisKoledar } from "@/lib/lina/koledar.ts";
+import { MEJA_ZAPISOV, lokalniCas, razberiCas, uraBesedilo, type VrstaKoledar, type ZapisKoledar } from "@/lib/lina/koledar.ts";
+import { datumDanes, vstavi } from "@/lib/lina/ui-videz.ts";
 import { DOGODEK_KOLEDAR } from "@/components/lina2/pogovor.tsx";
 
 function naslednjaUra(): string {
@@ -45,14 +46,14 @@ export function KoledarPanel() {
     try {
       const izid = await koledarDodajFn({ data: { vrsta, naslov, cas: cas || null } });
       if (!izid.ok) {
-        setNapaka(izid.sporocilo);
+        setNapaka(izid.razlog ? vstavi(t(izid.razlog), { n: MEJA_ZAPISOV }) : sporociloStreznika(izid.sporocilo));
         return;
       }
       setZapisi(izid.zapisi);
       setNaslov("");
       window.dispatchEvent(new Event(DOGODEK_KOLEDAR));
     } catch (e) {
-      setNapaka(e instanceof Error ? e.message : "Nekaj je šlo narobe.");
+      setNapaka(sporociloNapake(e));
     } finally {
       setZasedeno(false);
     }
@@ -72,7 +73,7 @@ export function KoledarPanel() {
   const skupine: Array<{ dan: string; zapisi: ZapisKoledar[] }> = [];
   for (const z of odprti) {
     const d = razberiCas(z.cas);
-    const dan = d ? datumBesedilo(d, true) : t("vrstaZapisek");
+    const dan = d ? datumDanes(d, undefined, true) : t("vrstaZapisek");
     const zadnja = skupine[skupine.length - 1];
     if (zadnja?.dan === dan) zadnja.zapisi.push(z);
     else skupine.push({ dan, zapisi: [z] });

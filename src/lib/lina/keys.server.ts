@@ -5,6 +5,7 @@ import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
 import { callProvider, gcpLocation, gcpProject, hideSecret, razlogVzroka } from "./providers.ts";
 import { normirajNaslov } from "./lastni-streznik.ts";
+import { OMNIROUTE_PRIVZETI_NASLOV, veljavenNaslovOmniroute } from "./omniroute.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import {
   BREZPLACNI_SAMO_ASISTENTKA,
@@ -17,7 +18,7 @@ import {
   type ShranjenPonudnik,
 } from "./types.ts";
 
-const PROVIDERS = new Set<BrainProvider>(["gemini", "openai", "claude", "grok", "vertex", "openrouter", "custom"]);
+const PROVIDERS = new Set<BrainProvider>(["gemini", "openai", "claude", "grok", "vertex", "openrouter", "omniroute", "custom"]);
 
 type KeyFile = {
   provider: BrainProvider;
@@ -27,10 +28,30 @@ type KeyFile = {
   ciphertext?: string;
   project?: string;
   location?: string;
+  /** Naslov prehoda (samo »omniroute«). */
+  naslov?: string;
+  /** OmniRoute je za klice izbran IZRECNO (AGENTS.md »OmniRoute kot ponudnik mozganov«); brez tega klici nimajo mozganov. */
+  klici?: boolean;
 };
 
 function isProvider(value: string): value is BrainProvider {
   return PROVIDERS.has(value as BrainProvider);
+}
+
+/**
+ * M4 (slepi pregled mozganov): branje-sprememba-zapis kljuci.json in ponudniki.json v tem procesu zaporedno, da zamenjava modela
+ * med klicem ne prepise hkratnega lastnikovega shranjevanja (in obratno). Omrezni preizkusi so zunaj zaporedja.
+ * shortcut: samo en proces (streznik Line); ce bi datoteki pisal se drug proces, potrebna zaklepna datoteka.
+ */
+const zaporedja = new Map<string, Promise<unknown>>();
+function zaporedno<T>(root: string, delo: () => Promise<T>): Promise<T> {
+  const izid = (zaporedja.get(root) ?? Promise.resolve()).then(delo, delo);
+  const rep = izid.catch(() => undefined);
+  zaporedja.set(root, rep);
+  void rep.then(() => {
+    if (zaporedja.get(root) === rep) zaporedja.delete(root);
+  });
+  return izid;
 }
 
 async function lock(file: string): Promise<void> {
@@ -164,7 +185,7 @@ type PonudnikZapis = {
   ciphertext?: string;
   project?: string;
   location?: string;
-  /** Naslov lastnega streznika (samo ponudnik »custom«). */
+  /** Naslov lastnega streznika (»custom«) ali prehoda OmniRoute (»omniroute«). */
   naslov?: string;
   /** Kljuc za asistentko (lastnik 24. 11. 2026, C1): samo v ponudniki.json, klici ga nikoli ne dobijo (ne prek saveBrain). */
   samoAsistentka?: boolean;
@@ -185,7 +206,7 @@ type PonudnikiFile = {
 const PONUDNIKI_DATOTEKA = "ponudniki.json";
 const NAJVEC_MODELOV = 12;
 const VELJAVEN_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,79}$/;
-const RED_PONUDNIKOV: BrainProvider[] = ["gemini", "vertex", "openai", "claude", "grok", "openrouter", "custom"];
+const RED_PONUDNIKOV: BrainProvider[] = ["gemini", "vertex", "openai", "claude", "grok", "openrouter", "omniroute", "custom"];
 
 function skrivnostZapisa(provider: BrainProvider, zapis: PonudnikZapis, kljuc: Buffer): string | null {
   return decrypt({ provider, model: zapis.model, iv: zapis.iv, tag: zapis.tag, ciphertext: zapis.ciphertext }, kljuc);
@@ -227,7 +248,7 @@ async function zapisiPonudnike(root: string, datoteka: PonudnikiFile): Promise<v
 async function vpisiPonudnika(root: string, provider: BrainProvider, zapis: PonudnikZapis): Promise<void> {
   const trenutno = await preberiPonudnike(root);
   const prej = trenutno.ponudniki[provider];
-  const modeli = [zapis.model, ...(prej ? modeliZapisa(provider, prej) : [])].filter((m) => VELJAVEN_MODEL.test(m));
+  const modeli = [zapis.model, ...(zapis.modeli ?? []), ...(prej ? modeliZapisa(provider, prej) : [])].filter((m) => VELJAVEN_MODEL.test(m));
   const edinstveni = [...new Set(modeli)].slice(0, NAJVEC_MODELOV);
   await zapisiPonudnike(root, {
     ponudniki: { ...trenutno.ponudniki, [provider]: { ...zapis, modeli: edinstveni } },
@@ -254,6 +275,12 @@ async function pogledPonudnikov(root: string): Promise<{
       // Kljuc je neobvezen; ponudnik je viden samo z veljavnim naslovom.
       const n = normirajNaslov(zapis.naslov);
       if (n.ok) shranjeni.push({ provider, namig: hint(skrivnostZapisa(provider, zapis, kljuc)), model, modeli, naslov: n.naslov });
+      continue;
+    }
+    if (provider === "omniroute") {
+      const naslov = veljavenNaslovOmniroute(zapis.naslov);
+      const skrivnost = skrivnostZapisa(provider, zapis, kljuc);
+      if (naslov && skrivnost) shranjeni.push({ provider, namig: hint(skrivnost), model, modeli, naslov, ...(zapis.samoAsistentka ? { samoAsistentka: true } : {}) });
       continue;
     }
     if (provider === "vertex") {
@@ -283,12 +310,36 @@ export async function jeShranjenModel(provider: BrainProvider, model: string, di
   return t.pogovor?.provider === provider && t.pogovor.model === model;
 }
 
-export async function zamenjajModel(provider: BrainProvider, staro: string, novo: string, obvestilo: string, dir?: string): Promise<boolean> {
+export async function zamenjajModel(
+  provider: BrainProvider,
+  staro: string,
+  novo: string,
+  obvestilo: string,
+  dir?: string,
+  /**
+   * Slepi pregled M2/M3: zaKlice false = zamenjava iz pogovora z asistentko; kljuc = kljuc racuna, s katerim je zamenjava izbrana.
+   * Mozgani za klice (kljuci.json) se zamenjajo samo za isti racun (isti kljuc) in nikoli iz asistentke pri OmniRoute.
+   */
+  o: { zaKlice?: boolean; kljuc?: string } = {},
+): Promise<boolean> {
   if (provider === "custom" || !VELJAVEN_MODEL.test(novo) || staro === novo) return false;
   const root = resolveDataDir(dir);
+  return zaporedno(root, () => zamenjajModelZdaj(root, provider, staro, novo, obvestilo, o));
+}
+
+async function zamenjajModelZdaj(
+  root: string,
+  provider: BrainProvider,
+  staro: string,
+  novo: string,
+  obvestilo: string,
+  o: { zaKlice?: boolean; kljuc?: string },
+): Promise<boolean> {
   const saved = await readFileState(root);
   let spremenjeno = false;
-  if (saved && saved.provider === provider && (saved.model || DEFAULT_BRAIN_MODELS[provider]) === staro && !jeBrezplacenModel(novo)) {
+  const vlogaDovoli = o.zaKlice !== false || provider !== "omniroute";
+  const istiRacun = o.kljuc === undefined || !saved?.ciphertext || decrypt(saved, await masterKey(root)) === o.kljuc;
+  if (vlogaDovoli && istiRacun && saved && saved.provider === provider && (saved.model || DEFAULT_BRAIN_MODELS[provider]) === staro && !jeBrezplacenModel(novo)) {
     await writeJson(root, "kljuci.json", { ...saved, model: novo });
     await lock(path.join(root, "kljuci.json"));
     spremenjeno = true;
@@ -317,6 +368,7 @@ export async function kljucLastnika(
   const root = resolveDataDir(dir);
   const saved = await readFileState(root);
   if (!saved || !isProvider(saved.provider) || saved.provider === "vertex" || saved.provider === "custom") return null;
+  if (saved.provider === "omniroute" && saved.klici !== true) return null;
   const key = decrypt(saved, await masterKey(root));
   if (!key) return null;
   return { provider: saved.provider, model: saved.model || DEFAULT_BRAIN_MODELS[saved.provider], key };
@@ -353,6 +405,7 @@ export async function readBrain(token: string | null, dir?: string): Promise<Bra
 async function readBrainOsnova(root: string): Promise<BrainPublic> {
   const saved = await readFileState(root);
   if (!saved || !isProvider(saved.provider) || saved.provider === "custom") return emptyBrain();
+  if (saved.provider === "omniroute" && saved.klici !== true) return emptyBrain();
   if (saved.provider === "vertex") return publicVertex(saved);
   const secret = decrypt(saved, await masterKey(root));
   return {
@@ -375,7 +428,7 @@ function parseProvider(value: unknown): BrainProvider {
  * noben model), se NE shrani - prejsnja delujoca nastavitev klicev ostane, uporabnik vidi pravi vzrok. Ce ponudnik ni dosegljiv
  * (omrezje), se shrani privzeti model z opozorilom; med delovanjem ga Lina po potrebi zamenja sama (callProvider).
  */
-async function samodejniModel(o: { provider: BrainProvider; key: string; project?: string; location?: string }): Promise<{ model: string; sporocilo: string } | null> {
+async function samodejniModel(o: { provider: BrainProvider; key: string; project?: string; location?: string; naslov?: string }): Promise<{ model: string; sporocilo: string } | null> {
   const { izberiDelujocModel } = await import("./samodejni-model.server.ts");
   const izid = await izberiDelujocModel({ ...o, zaKlice: true });
   if (izid.ok) return { model: izid.model, sporocilo: `Lina je izbrala model ${izid.model} (preizkusni klic je uspel).` };
@@ -384,7 +437,7 @@ async function samodejniModel(o: { provider: BrainProvider; key: string; project
 }
 
 export async function saveBrain(
-  input: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown; samodejno?: unknown },
+  input: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown; samodejno?: unknown; naslov?: unknown; zaKlice?: unknown },
   token: string | null,
   dir?: string,
 ): Promise<BrainPublic> {
@@ -403,15 +456,18 @@ export async function saveBrain(
   // B3 (lastnik 24. 11. 2026): kljuci.json doloca mozgane za KLICE; brezplacen model (lahko uci na pozivih) tja ne sme.
   if (jeBrezplacenModel(model)) throw new Error(BREZPLACNI_SAMO_ASISTENTKA);
   let sporociloModela: string | undefined;
+  if (provider === "omniroute") return shraniOmniroute(root, { ...input, model: rocni, samodejno });
   if (provider === "vertex") {
     const project = gcpProject(input.project);
     if (!project) throw new Error("Vpišite ID projekta Google Cloud.");
     const location = gcpLocation(input.location);
     // Vertex: samodejne izbire ob shranjevanju NI (prijava Google shrani projekt tudi, ce API se ni vklopljen); med delovanjem velja zamenjava.
     const next: KeyFile = { provider, model, project, location };
-    await writeJson(root, "kljuci.json", next);
-    await lock(path.join(root, "kljuci.json"));
-    await vpisiPonudnika(root, provider, { model, project, location });
+    await zaporedno(root, async () => {
+      await writeJson(root, "kljuci.json", next);
+      await lock(path.join(root, "kljuci.json"));
+      await vpisiPonudnika(root, provider, { model, project, location });
+    });
     return { ...publicVertex(next), ...(await pogledPonudnikov(root)), ...(sporociloModela ? { sporociloModela } : {}) };
   }
   // Kljuc velja samo za ponudnika, ki mu pripada: stari kljuc drugega ponudnika se NE prenese (xAI kljuc ne sme k OpenAI).
@@ -438,10 +494,12 @@ export async function saveBrain(
     model,
     ...(secret ? encrypt(secret, await masterKey(root)) : {}),
   };
-  await writeJson(root, "kljuci.json", next);
-  await lock(path.join(root, "kljuci.json"));
-  // Zapis asistentke ostane nedotaknjen (svoj kljuc); kljuc klicev je v kljuci.json.
-  if (next.ciphertext && !prejsnji?.samoAsistentka) await vpisiPonudnika(root, provider, { model, iv: next.iv, tag: next.tag, ciphertext: next.ciphertext });
+  await zaporedno(root, async () => {
+    await writeJson(root, "kljuci.json", next);
+    await lock(path.join(root, "kljuci.json"));
+    // Zapis asistentke ostane nedotaknjen (svoj kljuc); kljuc klicev je v kljuci.json.
+    if (next.ciphertext && !prejsnji?.samoAsistentka) await vpisiPonudnika(root, provider, { model, iv: next.iv, tag: next.tag, ciphertext: next.ciphertext });
+  });
   return {
     provider,
     model,
@@ -454,9 +512,69 @@ export async function saveBrain(
   };
 }
 
+/**
+ * OmniRoute v Mozganih (AGENTS.md »OmniRoute kot ponudnik mozganov«, B9). Kljuc velja samo za naslov, ki mu pripada (ob novem
+ * naslovu se ne prenese). Za KLICE (kljuci.json) samo z izrecno izbiro (zaKlice: true); sicer samo za asistentko (samoAsistentka).
+ * Seznam modelov iz <naslov>/models gre v izbiro modelov; model privzeto »auto« ali samodejno izbran delujoc model.
+ */
+async function shraniOmniroute(
+  root: string,
+  input: { key?: unknown; naslov?: unknown; zaKlice?: unknown; model: string; samodejno: boolean },
+): Promise<BrainPublic> {
+  const naslov = veljavenNaslovOmniroute(typeof input.naslov === "string" && input.naslov.trim() ? input.naslov.trim() : OMNIROUTE_PRIVZETI_NASLOV);
+  if (!naslov) throw new Error("Naslov OmniRoute ni veljaven: http samo za 127.0.0.1 ali localhost, sicer https (brez gesla in parametrov).");
+  const typed = typeof input.key === "string" ? input.key.trim() : "";
+  if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
+  const glavni = await masterKey(root);
+  const prejsnji = (await preberiPonudnike(root)).ponudniki.omniroute;
+  const zaKliceZapis = await readFileState(root);
+  const previous =
+    (prejsnji && veljavenNaslovOmniroute(prejsnji.naslov) === naslov ? skrivnostZapisa("omniroute", prejsnji, glavni) : null) ??
+    (zaKliceZapis?.provider === "omniroute" && veljavenNaslovOmniroute(zaKliceZapis.naslov) === naslov ? decrypt(zaKliceZapis, glavni) : null);
+  const secret = typed || previous;
+  if (!secret) throw new Error("Vpišite ključ OmniRoute (nadzorna plošča OmniRoute → Endpoints).");
+  let model = input.model || DEFAULT_BRAIN_MODELS.omniroute;
+  if (jeBrezplacenModel(model)) throw new Error(BREZPLACNI_SAMO_ASISTENTKA);
+  let sporociloModela: string | undefined;
+  if (input.samodejno) {
+    const izbira = await samodejniModel({ provider: "omniroute", key: secret, naslov });
+    if (izbira) ({ model, sporocilo: sporociloModela } = izbira);
+  }
+  const { seznamModelov, NI_ZA_POGOVOR } = await import("./samodejni-model.server.ts");
+  // Za izbiro samo modeli za pogovor; brezplacni (:free) ne (za klice prepovedani, B3).
+  const modeli = ((await seznamModelov("omniroute", secret, undefined, naslov)) ?? [])
+    .filter((m) => !jeBrezplacenModel(m) && !NI_ZA_POGOVOR.test(m))
+    .slice(0, NAJVEC_MODELOV - 1);
+  const zaKlice = input.zaKlice === true;
+  const sifra = encrypt(secret, glavni);
+  // kljuci.json (mozgani za klice) samo ob izrecni izbiri; ce je bil OmniRoute ze za klice, se posodobi (brez izbire: klici izklopljeni).
+  await zaporedno(root, async () => {
+    if (zaKlice || zaKliceZapis?.provider === "omniroute") {
+      await writeJson(root, "kljuci.json", { provider: "omniroute", model, naslov, klici: zaKlice, ...sifra } satisfies KeyFile);
+      await lock(path.join(root, "kljuci.json"));
+    }
+    await vpisiPonudnika(root, "omniroute", { model, modeli, naslov, ...(zaKlice ? {} : { samoAsistentka: true }), ...sifra });
+    // Brez izbire za klice: asistentka dobi OmniRoute, ce zanjo se ni izbran noben model (izbirnik je ob enem ponudniku zaklenjen).
+    const po = await preberiPonudnike(root);
+    if (!zaKlice && !po.pogovor) await zapisiPonudnike(root, { ponudniki: po.ponudniki, pogovor: { provider: "omniroute", model } });
+  });
+  const opomba = zaKlice ? "" : "OmniRoute je shranjen samo za asistentko; za klice ga izrecno izberite.";
+  const skupaj = [sporociloModela, opomba].filter(Boolean).join(" ");
+  return { ...(await readBrainOsnova(root)), ...(await pogledPonudnikov(root)), ...(skupaj ? { sporociloModela: skupaj } : {}) };
+}
+
+/** Shranjen naslov OmniRoute (najprej mozgani za klice, nato zapis ponudnika); null = ni nastavljen. */
+export async function naslovOmniroute(dir?: string): Promise<string | null> {
+  const root = resolveDataDir(dir);
+  const saved = await readFileState(root);
+  if (saved?.provider === "omniroute" && saved.klici === true) return veljavenNaslovOmniroute(saved.naslov);
+  return veljavenNaslovOmniroute((await preberiPonudnike(root)).ponudniki.omniroute?.naslov);
+}
+
 /** Rezerva, če lastnik ključa ni vpisal. Vrednosti ne zapisuje. Vertex nima ključa v okolju. */
 export function envKey(provider: BrainProvider): string | null {
-  if (provider === "vertex" || provider === "custom") return null;
+  // OmniRoute nikoli iz okolja (B9: samo izrecna izbira lastnika).
+  if (provider === "vertex" || provider === "custom" || provider === "omniroute") return null;
   const value =
     provider === "gemini"
       ? process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
@@ -473,11 +591,19 @@ export function envKey(provider: BrainProvider): string | null {
 
 export async function activeBrain(
   dir?: string,
-): Promise<{ provider: BrainProvider; model: string; key: string; project?: string; location?: string } | null> {
+): Promise<{ provider: BrainProvider; model: string; key: string; project?: string; location?: string; naslov?: string } | null> {
   const root = resolveDataDir(dir);
   const saved = await readFileState(root);
   // B9: custom (lasten streznik) je samo za asistentko; izbran v kljuci.json (rocno) = brez mozganov za klice, ne ponudnik iz okolja.
   if (saved && isProvider(saved.provider) && saved.provider === "custom") return null;
+  // OmniRoute za klice samo z izrecno izbiro (klici: true) in veljavnim naslovom; sicer brez mozganov (ne drug ponudnik).
+  if (saved && saved.provider === "omniroute") {
+    const naslov = veljavenNaslovOmniroute(saved.naslov);
+    const key = saved.klici === true && naslov ? decrypt(saved, await masterKey(root)) : null;
+    if (!key || !naslov) return null;
+    const model = saved.model && !jeBrezplacenModel(saved.model) ? saved.model : DEFAULT_BRAIN_MODELS.omniroute;
+    return { provider: "omniroute", model, key, naslov };
+  }
   if (saved && isProvider(saved.provider)) {
     // Brezplacen zapis: samo kljuc istega ponudnika in placljivi privzeti model. Tuj kljuc iz okolja ne pride v postev.
     if (jeBrezplacenModel(saved.model || "")) {
@@ -523,7 +649,7 @@ export async function activeBrain(
 }
 
 export async function checkBrain(
-  input: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown },
+  input: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown; naslov?: unknown },
   token: string | null,
   dir?: string,
 ): Promise<{ ok: boolean; sporocilo: string }> {
@@ -553,6 +679,17 @@ export async function checkBrain(
     return { ok: true, sporocilo: "Prijava Google Cloud deluje." };
   }
   const typed = typeof input.key === "string" ? input.key.trim() : "";
+  if (provider === "omniroute") {
+    const naslov = veljavenNaslovOmniroute(typeof input.naslov === "string" && input.naslov.trim() ? input.naslov.trim() : ((await naslovOmniroute(root)) ?? OMNIROUTE_PRIVZETI_NASLOV));
+    if (!naslov) return { ok: false, sporocilo: "Naslov OmniRoute ni veljaven: http samo za 127.0.0.1 ali localhost, sicer https." };
+    const zapis = (await preberiPonudnike(root)).ponudniki.omniroute;
+    const shranjen = zapis && veljavenNaslovOmniroute(zapis.naslov) === naslov ? skrivnostZapisa("omniroute", zapis, await masterKey(root)) : null;
+    const kljuc = typed || shranjen;
+    if (!kljuc) return { ok: false, sporocilo: "Ključ ni nastavljen." };
+    const r = await callProvider({ provider, model, key: kljuc, naslov, text: "Odgovori samo z besedo: da.", maxTokens: 8, brezZamenjave: true, vsebinaKlica: false });
+    if (!r.ok) return { ok: false, sporocilo: r.vzrok === "model" ? razlogVzroka(provider, "model") : r.sporocilo };
+    return { ok: true, sporocilo: "OmniRoute deluje." };
+  }
   const stored = saved && saved.provider === provider ? decrypt(saved, await masterKey(root)) : null;
   const key = typed || stored || envKey(provider);
   if (!key) return { ok: false, sporocilo: "Ključ ni nastavljen." };
@@ -581,19 +718,21 @@ export async function izberiModelPogovora(
 ): Promise<BrainPublic> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  const trenutno = await preberiPonudnike(root);
-  let pogovor: { provider: BrainProvider; model: string } | null = null;
-  const zeljen = typeof input.provider === "string" ? input.provider.trim() : "";
-  if (zeljen) {
-    const provider = parseProvider(zeljen);
-    const model = typeof input.model === "string" ? input.model.trim() : "";
-    const pogled = (await pogledPonudnikov(root)).shranjeni.find((p) => p.provider === provider);
-    if (!pogled) throw new Error("Za tega ponudnika še ni shranjenega ključa.");
-    if (!pogled.modeli.includes(model)) throw new Error("Izberite model s seznama shranjenih modelov.");
-    pogovor = { provider, model };
-  }
-  await zapisiPonudnike(root, { ponudniki: trenutno.ponudniki, pogovor });
-  return readBrain(token, dir);
+  return zaporedno(root, async () => {
+    const trenutno = await preberiPonudnike(root);
+    let pogovor: { provider: BrainProvider; model: string } | null = null;
+    const zeljen = typeof input.provider === "string" ? input.provider.trim() : "";
+    if (zeljen) {
+      const provider = parseProvider(zeljen);
+      const model = typeof input.model === "string" ? input.model.trim() : "";
+      const pogled = (await pogledPonudnikov(root)).shranjeni.find((p) => p.provider === provider);
+      if (!pogled) throw new Error("Za tega ponudnika še ni shranjenega ključa.");
+      if (!pogled.modeli.includes(model)) throw new Error("Izberite model s seznama shranjenih modelov.");
+      pogovor = { provider, model };
+    }
+    await zapisiPonudnike(root, { ponudniki: trenutno.ponudniki, pogovor });
+    return readBrain(token, dir);
+  });
 }
 
 /**
@@ -636,6 +775,11 @@ export async function pogovorBrain(
     if (pogovor.provider === "vertex") {
       const project = zapis.project ? gcpProject(zapis.project) : "";
       return project ? { provider: "vertex", model, key: "", project, location: gcpLocation(zapis.location) } : null;
+    }
+    if (pogovor.provider === "omniroute") {
+      const naslov = veljavenNaslovOmniroute(zapis.naslov);
+      const kljuc = naslov ? skrivnostZapisa("omniroute", zapis, await masterKey(root)) : null;
+      return naslov && kljuc ? { provider: "omniroute", model, key: kljuc, naslov } : null;
     }
     if (pogovor.provider === "custom") {
       const n = normirajNaslov(zapis.naslov);
@@ -680,26 +824,28 @@ export async function shraniLastniStreznik(
 ): Promise<BrainPublic> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  const n = normirajNaslov(input.naslov);
-  if (!n.ok) throw new Error(n.razlog);
-  const model = modelLastnega(input.model);
-  const typed = typeof input.key === "string" ? input.key.trim() : "";
-  if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
-  const trenutno = await preberiPonudnike(root);
-  const prejsnji = trenutno.ponudniki.custom;
-  const istiStreznik = Boolean(prejsnji) && prejsnji?.naslov === n.naslov;
-  const previous = prejsnji && istiStreznik ? skrivnostZapisa("custom", prejsnji, await masterKey(root)) : null;
-  const secret = typed || previous;
-  if (prejsnji && !istiStreznik) {
-    const { custom: _stari, ...drugi } = trenutno.ponudniki;
-    await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "custom" ? null : trenutno.pogovor });
-  }
-  await vpisiPonudnika(root, "custom", { model, naslov: n.naslov, ...(secret ? encrypt(secret, await masterKey(root)) : {}) });
-  if (input.uporabiZaPogovor === true) {
-    const po = await preberiPonudnike(root);
-    await zapisiPonudnike(root, { ponudniki: po.ponudniki, pogovor: { provider: "custom", model } });
-  }
-  return readBrain(token, dir);
+  return zaporedno(root, async () => {
+    const n = normirajNaslov(input.naslov);
+    if (!n.ok) throw new Error(n.razlog);
+    const model = modelLastnega(input.model);
+    const typed = typeof input.key === "string" ? input.key.trim() : "";
+    if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
+    const trenutno = await preberiPonudnike(root);
+    const prejsnji = trenutno.ponudniki.custom;
+    const istiStreznik = Boolean(prejsnji) && prejsnji?.naslov === n.naslov;
+    const previous = prejsnji && istiStreznik ? skrivnostZapisa("custom", prejsnji, await masterKey(root)) : null;
+    const secret = typed || previous;
+    if (prejsnji && !istiStreznik) {
+      const { custom: _stari, ...drugi } = trenutno.ponudniki;
+      await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "custom" ? null : trenutno.pogovor });
+    }
+    await vpisiPonudnika(root, "custom", { model, naslov: n.naslov, ...(secret ? encrypt(secret, await masterKey(root)) : {}) });
+    if (input.uporabiZaPogovor === true) {
+      const po = await preberiPonudnike(root);
+      await zapisiPonudnike(root, { ponudniki: po.ponudniki, pogovor: { provider: "custom", model } });
+    }
+    return readBrain(token, dir);
+  });
 }
 
 /** Preveri lasten streznik z enim kratkim pogovorom (ne za klice). */
@@ -734,10 +880,12 @@ export async function preveriLastniStreznik(
 export async function odstraniLastniStreznik(token: string | null, dir?: string): Promise<BrainPublic> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  const trenutno = await preberiPonudnike(root);
-  const { custom: _stari, ...drugi } = trenutno.ponudniki;
-  await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "custom" ? null : trenutno.pogovor });
-  return readBrain(token, dir);
+  return zaporedno(root, async () => {
+    const trenutno = await preberiPonudnike(root);
+    const { custom: _stari, ...drugi } = trenutno.ponudniki;
+    await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "custom" ? null : trenutno.pogovor });
+    return readBrain(token, dir);
+  });
 }
 
 // ---- Kljuc OpenRouter SAMO za asistentko (lastnik 24. 11. 2026, naloga C) ---------------------------------------------------------
@@ -757,42 +905,46 @@ export async function shraniKljucAsistentke(
 ): Promise<BrainPublic> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  const model = typeof input.model === "string" && input.model.trim() ? input.model.trim().slice(0, 80) : PRIVZETI_BREZPLACNI;
-  if (!VELJAVEN_MODEL.test(model)) throw new Error("Ime modela ni veljavno.");
-  const trenutno = await preberiPonudnike(root);
-  const prejsnji = trenutno.ponudniki.openrouter;
-  const typed = typeof input.key === "string" ? input.key.trim() : "";
-  if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
-  // Prazno polje: ze shranjen kljuc OpenRouter (asistentke ali, ce ga ni, klicev) - uporabnik z obstojecim kljucem ga ne vpisuje znova.
-  // kljuci.json se ne spremeni; zapis za asistentko dobi svojo kopijo (samoAsistentka), klici ostanejo na svojem.
-  const zaKlice = await readFileState(root);
-  const previous =
-    (prejsnji ? skrivnostZapisa("openrouter", prejsnji, await masterKey(root)) : null) ??
-    (zaKlice?.provider === "openrouter" ? decrypt(zaKlice, await masterKey(root)) : null);
-  const secret = typed || previous;
-  if (!secret) throw new Error("Vpišite ključ OpenRouter.");
-  const soglasje = input.soglasje === true;
-  if (jeBrezplacenModel(model) && !soglasje && !trenutno.brezplacniModeli) throw new Error(SOGLASJE_BREZPLACNI);
-  await vpisiPonudnika(root, "openrouter", { model, samoAsistentka: true, ...encrypt(secret, await masterKey(root)) });
-  const po = await preberiPonudnike(root);
-  await zapisiPonudnike(root, {
-    ponudniki: po.ponudniki,
-    pogovor: { provider: "openrouter", model },
-    brezplacniModeli: soglasje || po.brezplacniModeli,
+  return zaporedno(root, async () => {
+    const model = typeof input.model === "string" && input.model.trim() ? input.model.trim().slice(0, 80) : PRIVZETI_BREZPLACNI;
+    if (!VELJAVEN_MODEL.test(model)) throw new Error("Ime modela ni veljavno.");
+    const trenutno = await preberiPonudnike(root);
+    const prejsnji = trenutno.ponudniki.openrouter;
+    const typed = typeof input.key === "string" ? input.key.trim() : "";
+    if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
+    // Prazno polje: ze shranjen kljuc OpenRouter (asistentke ali, ce ga ni, klicev) - uporabnik z obstojecim kljucem ga ne vpisuje znova.
+    // kljuci.json se ne spremeni; zapis za asistentko dobi svojo kopijo (samoAsistentka), klici ostanejo na svojem.
+    const zaKlice = await readFileState(root);
+    const previous =
+      (prejsnji ? skrivnostZapisa("openrouter", prejsnji, await masterKey(root)) : null) ??
+      (zaKlice?.provider === "openrouter" ? decrypt(zaKlice, await masterKey(root)) : null);
+    const secret = typed || previous;
+    if (!secret) throw new Error("Vpišite ključ OpenRouter.");
+    const soglasje = input.soglasje === true;
+    if (jeBrezplacenModel(model) && !soglasje && !trenutno.brezplacniModeli) throw new Error(SOGLASJE_BREZPLACNI);
+    await vpisiPonudnika(root, "openrouter", { model, samoAsistentka: true, ...encrypt(secret, await masterKey(root)) });
+    const po = await preberiPonudnike(root);
+    await zapisiPonudnike(root, {
+      ponudniki: po.ponudniki,
+      pogovor: { provider: "openrouter", model },
+      brezplacniModeli: soglasje || po.brezplacniModeli,
+    });
+    return readBrain(token, dir);
   });
-  return readBrain(token, dir);
 }
 
 /** A3, C2: odstranitev kljuca za asistentko vrne asistentko na privzeto (isti kot klici). Klicev ne spremeni. */
 export async function odstraniKljucAsistentke(token: string | null, dir?: string): Promise<BrainPublic> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  const trenutno = await preberiPonudnike(root);
-  if (trenutno.ponudniki.openrouter?.samoAsistentka) {
-    const { openrouter: _asistentka, ...drugi } = trenutno.ponudniki;
-    await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "openrouter" ? null : trenutno.pogovor });
-  }
-  return readBrain(token, dir);
+  return zaporedno(root, async () => {
+    const trenutno = await preberiPonudnike(root);
+    if (trenutno.ponudniki.openrouter?.samoAsistentka) {
+      const { openrouter: _asistentka, ...drugi } = trenutno.ponudniki;
+      await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "openrouter" ? null : trenutno.pogovor });
+    }
+    return readBrain(token, dir);
+  });
 }
 
 /** B1, B5: stikalo »Dovoli brezplacne modele (samo asistentka)«. Hrani se v ponudniki.json, nikoli v kljuci.json. */
@@ -800,9 +952,11 @@ export async function nastaviBrezplacneModele(vklop: unknown, token: string | nu
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
   if (typeof vklop !== "boolean") throw new Error("Neveljavna nastavitev.");
-  const trenutno = await preberiPonudnike(root);
-  await zapisiPonudnike(root, { ponudniki: trenutno.ponudniki, pogovor: trenutno.pogovor, brezplacniModeli: vklop });
-  return readBrain(token, dir);
+  return zaporedno(root, async () => {
+    const trenutno = await preberiPonudnike(root);
+    await zapisiPonudnike(root, { ponudniki: trenutno.ponudniki, pogovor: trenutno.pogovor, brezplacniModeli: vklop });
+    return readBrain(token, dir);
+  });
 }
 
 /** Preverba asistentke (pot pogovora, vsebinaKlica false): kot checkBrain, a z modelom in kljucem asistentke. */

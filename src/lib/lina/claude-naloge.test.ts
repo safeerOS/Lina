@@ -125,7 +125,7 @@ describe("claude-naloge: cista logika", () => {
     const vse = (p: string) => `/bin/${p}`;
     assert.deepEqual(ukazTerminala(vse, "win32"), { razlog: "ni-na-voljo" });
     assert.deepEqual(ukazTerminala(vse, "linux", () => "/usr/bin/xterm"), { program: "/bin/x-terminal-emulator", predpona: ["-e"] });
-    assert.deepEqual(ukazTerminala((p) => (p === "gnome-terminal" ? "/g" : null), "linux"), { program: "/g", predpona: ["--"] });
+    assert.deepEqual(ukazTerminala((p) => (p === "gnome-terminal" ? "/g" : null), "linux"), { program: "/g", predpona: ["--wait", "--"] });
     assert.deepEqual(ukazTerminala(() => null, "linux"), { razlog: "ni-terminala" });
   });
 
@@ -213,12 +213,14 @@ describe("claude-naloge: streznik", { concurrency: 1 }, () => {
     const prevec = await pripravi(e, svezaMapa(e));
     await assert.rejects(ukazClaudeNalog(e.token, { ukaz: "potrdi", id: prevec.id, zgostitev: prevec.zgostitev }, e.podatki, e.o), { razlog: "polno-hkratne" });
     assert.equal(e.klici.length, NAJVEC_HKRATNIH);
-    writeFileSync(path.join(potrjene[0]!.mapa, MAPA_NALOG, potrjene[0]!.id, DATOTEKA_POROCILA), "Narejeno.\u202e\u0007 Preizkusi zeleni.");
+    // tocka z dokazom (tocke-naloge.ts): brez nje je naloga »nepopolno«
+    writeFileSync(path.join(potrjene[0]!.mapa, "dokaz.txt"), "dokaz");
+    writeFileSync(path.join(potrjene[0]!.mapa, MAPA_NALOG, potrjene[0]!.id, DATOTEKA_POROCILA), "Narejeno.\u202e\u0007 Preizkusi zeleni.\nT1: narejeno - dokaz: dokaz.txt");
     const s = await ukazClaudeNalog(e.token, { ukaz: "potrdi", id: prevec.id, zgostitev: prevec.zgostitev }, e.podatki, e.o);
     assert.equal(e.klici.length, NAJVEC_HKRATNIH + 1);
     const koncana = s.naloge.find((n) => n.id === potrjene[0]!.id);
     assert.equal(koncana?.stanje, "koncano");
-    assert.equal(koncana?.porocilo, "Narejeno. Preizkusi zeleni.");
+    assert.equal(koncana?.porocilo, "Narejeno. Preizkusi zeleni.\nT1: narejeno - dokaz: dokaz.txt");
   });
 
   it("porocilo, ki je simbolna povezava, se ne prebere", async () => {
@@ -354,7 +356,17 @@ describe("claude-naloge: locitev", () => {
       .sort();
     // 24. 11. 2026 (Lina vodi vse agente): poti telefona (asistent-telefon) in razporejevalnik ob zagonu (zagon.server) - oba sta za pot klica
     // prepovedana (kanal-claude.test.ts PREPOVEDANO_ZA_KLIC vsebuje claude-naloge)
-    assert.deepEqual(uvozniki, ["components/lina2/racunalnik.tsx", "lib/lina/asistent-pogovor.server.ts", "lib/lina/asistent-telefon.server.ts", "lib/lina/functions.ts", "lib/lina/zagon.server.ts"]);
+    // 24. 11. 2026 (Lina kot vodja): pregled in zdruzitev dela vec agentov sta v claude-naloge-vodja(.server).ts (isti prefiks, prav tako
+    // prepovedan za pot klica)
+    assert.deepEqual(uvozniki, [
+      "components/lina2/racunalnik.tsx",
+      "lib/lina/asistent-pogovor.server.ts",
+      "lib/lina/asistent-telefon.server.ts",
+      "lib/lina/claude-naloge-vodja.server.ts",
+      "lib/lina/claude-naloge-vodja.ts",
+      "lib/lina/functions.ts",
+      "lib/lina/zagon.server.ts",
+    ]);
   });
 
   it("zavihek Racunalnik uvozi streznisko kodo samo kot tip", () => {
@@ -541,7 +553,7 @@ describe("drugi pregled 0.2.10: naloge Claude Code", { concurrency: 1 }, () => {
   it("N7: x-terminal-emulator se uporabi samo, ce kaze na terminal z znanim pomenom -e; sicer naslednji terminal", () => {
     const vse = (p: string) => `/bin/${p}`;
     assert.deepEqual(ukazTerminala(vse, "linux", () => "/usr/bin/xterm"), { program: "/bin/x-terminal-emulator", predpona: ["-e"] });
-    assert.deepEqual(ukazTerminala(vse, "linux", () => "/usr/bin/terminator"), { program: "/bin/gnome-terminal", predpona: ["--"] });
+    assert.deepEqual(ukazTerminala(vse, "linux", () => "/usr/bin/terminator"), { program: "/bin/gnome-terminal", predpona: ["--wait", "--"] });
     assert.deepEqual(ukazTerminala((p) => (p === "x-terminal-emulator" ? "/x" : null), "linux", () => "/usr/bin/lxterminal"), { razlog: "ni-terminala" });
   });
 

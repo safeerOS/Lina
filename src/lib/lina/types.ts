@@ -465,7 +465,7 @@ export type AuthView = {
   llm: boolean;
 };
 
-export type BrainProvider = "gemini" | "vertex" | "openai" | "claude" | "grok" | "openrouter" | "custom";
+export type BrainProvider = "gemini" | "vertex" | "openai" | "claude" | "grok" | "openrouter" | "omniroute" | "custom";
 
 /**
  * Privzeti modeli, preverjeni proti javni dokumentaciji ponudnikov 24. 11. 2026: gemini-2.0-flash ugasnjen (1. 6. 2026),
@@ -480,6 +480,8 @@ export const DEFAULT_BRAIN_MODELS: Record<BrainProvider, string> = {
   grok: "grok-4.5",
   /** ID modela ima predpono ponudnika, kot v dokumentaciji OpenRouter (npr. openai/gpt-4o). */
   openrouter: "openai/gpt-4o",
+  /** Lokalni prehod OmniRoute: »auto« prepusti izbiro prehodu (seznam iz /v1/models). */
+  omniroute: "auto",
   /** Lasten OpenAI-zdruzljiv streznik (freellmapi, LM Studio, Ollama): »auto« prepusti izbiro strezniku. Samo za pogovor. */
   custom: "auto",
 };
@@ -496,6 +498,8 @@ export const PRIPOROCENI_MODELI: Record<Exclude<BrainProvider, "custom">, readon
   grok: [DEFAULT_BRAIN_MODELS.grok, "grok-4.7", "grok-4.6"],
   // Imena OpenRouter niso preverjena v dokumentaciji: drugi kandidati pridejo samo iz seznama modelov (samodejni-model.server.ts).
   openrouter: [DEFAULT_BRAIN_MODELS.openrouter],
+  // OmniRoute: »auto« je vedno prvi kandidat, ostali pridejo samo s seznama prehoda (samodejni-model.server.ts).
+  omniroute: [DEFAULT_BRAIN_MODELS.omniroute],
 };
 
 /**
@@ -535,7 +539,7 @@ export type ShranjenPonudnik = {
   model: string;
   modeli: string[];
   projekt?: string | null;
-  /** Naslov lastnega streznika (samo ponudnik »custom«). */
+  /** Naslov lastnega streznika (»custom«) ali prehoda OmniRoute (»omniroute«). */
   naslov?: string | null;
   /** Kljuc velja samo za asistentko (Kljuc za asistentko); klici ga nikoli ne dobijo. */
   samoAsistentka?: boolean;
@@ -549,6 +553,7 @@ export const IME_PONUDNIKA: Record<BrainProvider, string> = {
   claude: "Claude",
   grok: "Grok",
   openrouter: "OpenRouter",
+  omniroute: "OmniRoute",
   custom: "Lasten strežnik",
 };
 

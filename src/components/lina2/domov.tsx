@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { t } from "@/lib/lina/besedila.ts";
+import { sporociloStreznika, t } from "@/lib/lina/besedila.ts";
 import { imenikIzbrisiFn, imenikSeznamFn, imenikShraniFn } from "@/lib/lina/functions.ts";
 import { kliciZaPrikaz, normalizirajTelefon, steviloNovih, type StikImenik } from "@/lib/lina/imenik.ts";
-import { datumBesedilo, lokalniCas, uraBesedilo } from "@/lib/lina/koledar.ts";
+import { lokalniCas, uraBesedilo } from "@/lib/lina/koledar.ts";
+import { datumDanes, vLjubljani } from "@/lib/lina/ui-videz.ts";
 import type { BrainPublic, CallSession } from "@/lib/lina/types.ts";
 import { AsistentPanel, DanesKartica } from "@/components/lina2/pogovor.tsx";
 import { MotivacijaBesedilo } from "./mediji.tsx";
@@ -29,6 +30,7 @@ export const IKONE: Record<string, ReactNode> = {
   nastavitve: <path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 12l2-.6.6-1.6-1-1.8 1.8-1.8 1.8 1 1.6-.6L12 4l.2 2.6 1.6.6 1.8-1 1.8 1.8-1 1.8.6 1.6L20 12l-2.6.2-.6 1.6 1 1.8-1.8 1.8-1.8-1-1.6.6L12 20l-.2-2.6-1.6-.6-1.8 1-1.8-1.8 1-1.8-.6-1.6z" />,
   mediji: <path d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01" />,
   racunalnik: <path d="M3 5h18v11H3zM8 20h8M12 16v4" />,
+  kontrola: <path d="M4 4h11v11H4zM7 8h5M7 11h3M14 14l6 6M3 20h6" />,
   mik: <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v4" />,
 };
 
@@ -158,11 +160,13 @@ function pozdrav(h: number): string {
 }
 
 function kdajBesedilo(iso: string, zdaj: Date): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  const t0 = new Date(iso);
+  if (Number.isNaN(t0.getTime())) return "";
+  // trenutek klica in »zdaj« v ljubljanskem stenskem casu, ne v pasu sistema
+  const d = vLjubljani(t0);
   const cas = uraBesedilo(lokalniCas(d));
-  const isti = d.toDateString() === zdaj.toDateString();
-  return isti ? `${t("d2Danes")}, ${cas}` : `${datumBesedilo(d)}, ${cas}`;
+  const isti = d.toDateString() === vLjubljani(zdaj).toDateString();
+  return isti ? `${t("d2Danes")}, ${cas}` : `${datumDanes(d)}, ${cas}`;
 }
 
 function oblikujTelefon(tel: string): string {
@@ -277,7 +281,7 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
       setImenik(r.stiki);
       setShranjujem(null);
       setIme("");
-    } else setNapaka(r.sporocilo);
+    } else setNapaka(sporociloStreznika(r.sporocilo));
   }
 
   return (
@@ -503,7 +507,7 @@ export function ImenikPanel({ calls }: { calls: CallSession[] }) {
       setIme("");
       setTelefon("");
       setOpomba("");
-    } else setNapaka(r.sporocilo);
+    } else setNapaka(sporociloStreznika(r.sporocilo));
   }
 
   const polje = "rounded-xl border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--aurora-1)]";

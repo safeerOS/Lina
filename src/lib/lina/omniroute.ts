@@ -1,8 +1,12 @@
 // @ts-nocheck
 // Rekonstruirano iz prevoda nameščene Line (20. 11. 2026): izvirni .ts je bil izbrisan; tipi niso ohranjeni.
-/** Zanka in zasebni naslovi IPv4 (RFC 1918) v CELOTI, da ime gostitelja kot 10.evil.example ne velja za domace omrezje. */
-var ZASEBNI_IPV4 = /^(127(\.\d{1,3}){3}|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})$/;
-/** http je dovoljen samo za zanko in zasebni naslov domacega omrezja; vse drugo samo https; brez gesla v naslovu. */
+/** Zanka IPv4 v CELOTI, da ime gostitelja kot 127.evil.example ne velja za ta racunalnik. */
+var ZANKA_IPV4 = /^127(\.\d{1,3}){3}$/;
+/**
+ * http je dovoljen samo za zanko (ta racunalnik); vse drugo, tudi domace omrezje, samo https; brez gesla v naslovu.
+ * Slepi pregled mozganov M8 (24. 11. 2026): po golem http v domacem omrezju bi kljuc prehoda (Bearer) in vsebina klicev potovala
+ * nesifrirano (prisluskovanje, ARP); enako pravilo kot ponudnik OmniRoute (http samo zanka).
+ */
 function veljavenNaslovPrehoda(vnos) {
 	if (typeof vnos !== "string" || vnos.length === 0 || vnos.length > 300) return null;
 	let url;
@@ -13,7 +17,7 @@ function veljavenNaslovPrehoda(vnos) {
 	}
 	if (url.username || url.password || url.search || url.hash) return null;
 	const gostitelj = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-	const lokalno = gostitelj === "localhost" || gostitelj === "::1" || ZASEBNI_IPV4.test(gostitelj) || /^f[cd][0-9a-f]{2}:/.test(gostitelj);
+	const lokalno = gostitelj === "localhost" || gostitelj === "::1" || ZANKA_IPV4.test(gostitelj);
 	if (url.protocol === "https:") return url;
 	if (url.protocol === "http:" && lokalno) return url;
 	return null;
@@ -31,5 +35,16 @@ function naslovKlica(n) {
 	if (!url) return null;
 	return `${url.origin}${url.pathname.replace(/\/+$/, "")}/chat/completions`;
 }
-export { veljavenNaslovPrehoda, smePrekPrehoda, naslovKlica };
+/**
+ * Naslov ponudnika OmniRoute v Mozganih (AGENTS.md »OmniRoute kot ponudnik mozganov«): strozje od prehoda - http SAMO za
+ * 127.0.0.1 in localhost, vse drugo samo https. Vrne osnovo brez koncne poševnice (npr. http://127.0.0.1:20128/v1) ali null.
+ */
+function veljavenNaslovOmniroute(vnos) {
+	const url = veljavenNaslovPrehoda(vnos);
+	if (!url) return null;
+	if (url.protocol === "http:" && url.hostname !== "127.0.0.1" && url.hostname !== "localhost") return null;
+	return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+export { veljavenNaslovPrehoda, smePrekPrehoda, naslovKlica, veljavenNaslovOmniroute };
 export type PrehodNastavitve = any;
+export const OMNIROUTE_PRIVZETI_NASLOV = "http://127.0.0.1:20128/v1";

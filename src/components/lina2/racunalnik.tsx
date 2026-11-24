@@ -1,21 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t, type Beseda } from "@/lib/lina/besedila.ts";
+import { PodobneIzbira } from "@/components/podobne-izbira.tsx";
 import {
+  nacrtClaudeNalogeFn,
   nastaviPregledProjektaFn,
   nastaviSpominNalogFn,
   stanjeAgentPomociFn,
   stanjeClaudeNalogFn,
   stanjeGradenjFn,
+  stanjeN8nFn,
   ukazClaudeNalogFn,
   ukazGradenjFn,
+  ukazN8nFn,
 } from "@/lib/lina/functions.ts";
 import { t2 } from "./besedila.ts";
-import type { JavnaNaloga, JavnoStanjeNalog, StanjeAgenta } from "@/lib/lina/claude-naloge.server.ts";
-import type { AgentId, RazlogNaloge, StanjeNaloge } from "@/lib/lina/claude-naloge.ts";
+import type { JavnaNaloga, JavnaZdruzitev, JavnoStanjeNalog, StanjeAgenta } from "@/lib/lina/claude-naloge.server.ts";
+import { OZNAKA_NACRTA, type AgentId, type RazlogNaloge, type StanjeNaloge } from "@/lib/lina/claude-naloge.ts";
+import type { PovzetekTock, RazlogTocke } from "@/lib/lina/tocke-naloge.ts";
+import type { FazaVodje, OpisNapake, RazlogVodje, VlogaNaloge, VodjaNaloge } from "@/lib/lina/claude-naloge-vodja.ts";
 import type { JavnaGradnja, JavnoStanjeGradenj } from "@/lib/lina/gradnje-github.server.ts";
 import type { RazlogGradnje, StanjeGradnje, Tok } from "@/lib/lina/gradnje-github.ts";
+import type { JavnoStanjeN8n } from "@/lib/lina/n8n.server.ts";
+import { opisRazlogaN8n, type RazlogN8n } from "@/lib/lina/n8n.ts";
+import { jezikVmesnika } from "@/lib/lina/besedila.ts";
 import { Ikona } from "./domov.tsx";
 import { StanjeNapaka } from "./ui-lina.tsx";
+import { datumInUra, uraGlave } from "@/lib/lina/ui-videz.ts";
 
 /**
  * Zavihek Racunalnik (lastnik 23. 11. 2026): naloge za Claude Code. Lastnik vidi mapo in CELO besedilo naloge, preden jo potrdi;
@@ -26,6 +36,7 @@ const STANJE: Record<StanjeNaloge, Beseda> = {
   zaganja: "rcZaganja",
   tece: "rcTece",
   koncano: "rcKoncano",
+  nepopolno: "rcNepopolno",
   odklonjeno: "rcOdklonjeno",
   poteklo: "rcPoteklo",
   napaka: "rcNapaka",
@@ -40,6 +51,8 @@ function opisRazloga(r: RazlogNaloge): string {
       return t("agRPrepovedana");
     case "mapa-povezava":
       return t("agRPovezava");
+    case "peskovnik":
+      return t("agRPeskovnik");
     case "mapa-zasedena":
       return t("agRMapaZasedena");
     case "besedilo-nevidni":
@@ -78,6 +91,14 @@ function opisRazloga(r: RazlogNaloge): string {
       return t("rcNiClaude");
     case "opozorilo":
       return t("rcROpozorilo");
+    case "kopija":
+      return t("vdRKopija");
+    case "izvirnik":
+      return t("vdRIzvirnik");
+    case "zaposleno":
+      return t("vdRZaposleno");
+    case "ni-zdruzitve":
+      return t("vdRNiZdruzitve");
     default:
       return `${t("rcRSplosno")} (${r})`;
   }
@@ -89,6 +110,7 @@ export function RacunalnikPanel() {
   const [stanje, setStanje] = useState<JavnoStanjeNalog | null>(null);
   const [mapa, setMapa] = useState("");
   const [besedilo, setBesedilo] = useState("");
+  const [najprejNacrt, setNajprejNacrt] = useState(false);
   const [mape, setMape] = useState("");
   const [napaka, setNapaka] = useState("");
   const [zaposlen, setZaposlen] = useState(false);
@@ -103,7 +125,7 @@ export function RacunalnikPanel() {
   }, []);
   useEffect(osvezi, [osvezi]);
   // vrsta se med tekom in cakanjem na pogoj osvezuje sama (stanje, opomnik, zagon ob uri)
-  const dejavna = !!stanje?.naloge.some((n) => ["dodeljeno", "zaganja", "tece"].includes(n.stanje));
+  const dejavna = !!stanje?.naloge.some((n) => ["dodeljeno", "zaganja", "tece"].includes(n.stanje) || (n.vodja && !KONCNE.includes(n.vodja.faza)));
   useEffect(() => {
     if (!dejavna) return;
     const c = setInterval(osvezi, 30_000);
@@ -139,7 +161,9 @@ export function RacunalnikPanel() {
           className="lina-kartica flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void ukaz({ ukaz: "pripravi", mapa, besedilo }).then((ok) => {
+            // oznaka gre v besedilo: lastnik jo vidi v predlogu, zgostitev jo pokrije
+            const b = najprejNacrt && !besedilo.trimStart().startsWith(OZNAKA_NACRTA) ? `${OZNAKA_NACRTA} ${besedilo.trimStart()}` : besedilo;
+            void ukaz({ ukaz: "pripravi", mapa, besedilo: b }).then((ok) => {
               if (ok) setBesedilo("");
             });
           }}
@@ -155,6 +179,10 @@ export function RacunalnikPanel() {
           <label className="grid gap-1 text-sm">
             {t("rcBesedilo")}
             <textarea value={besedilo} onChange={(e) => setBesedilo(e.target.value)} maxLength={8000} rows={6} className={POLJE} />
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={najprejNacrt} onChange={(e) => setNajprejNacrt(e.target.checked)} />
+            {t("rcNajprejNacrt")}
           </label>
           {napaka ? <p role="alert" className="text-sm text-[var(--color-signal)]">{napaka}</p> : null}
           <button type="submit" disabled={zaposlen || !mapa.trim() || !besedilo.trim()} className="self-start rounded-full bg-[var(--color-signal)] px-5 py-2 text-sm text-[var(--color-on-ink)] disabled:opacity-50">
@@ -175,7 +203,9 @@ export function RacunalnikPanel() {
           <button type="submit" disabled={zaposlen} className="lina-gumb-majhen self-start">{t("rcShraniMape")}</button>
         </form>
         {stanje ? <AgentiKartica stanje={stanje} zaposlen={zaposlen} onUkaz={ukaz} /> : null}
+        {stanje ? <VodjaKartica stanje={stanje} zaposlen={zaposlen} onUkaz={ukaz} /> : null}
         <AgentPomocStikala />
+        <N8nKartica />
         <GradnjeKartica />
       </div>
 
@@ -195,14 +225,15 @@ export function RacunalnikPanel() {
   );
 }
 
-/** Ura v ljubljanskem casu (lastnik je v Sloveniji; tudi ce brskalnik ali streznik tece v drugem pasu). */
-const URA = new Intl.DateTimeFormat("sl-SI", { timeZone: "Europe/Ljubljana", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+/** Ura v ljubljanskem casu (lastnik je v Sloveniji; tudi ce brskalnik ali streznik tece v drugem pasu), v jeziku vmesnika. */
 function ura(iso: string): string {
   const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? URA.format(d) : "";
+  return Number.isFinite(d.getTime()) ? datumInUra(d) : "";
 }
 
 export function NalogaVrstica({ n, zaposlen, onUkaz }: { n: JavnaNaloga; zaposlen: boolean; onUkaz: (u: Record<string, unknown>) => Promise<boolean> }) {
+  // »Velja tudi za vse podobne« (isti agent, ista mapa), privzeto obkljukano; preklic v Nastavitvah > Dovoljenja
+  const [podobne, setPodobne] = useState(true);
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -212,6 +243,22 @@ export function NalogaVrstica({ n, zaposlen, onUkaz }: { n: JavnaNaloga; zaposle
         <span className="ml-auto text-xs tabular-nums text-[var(--color-brass)]">{ura(n.ustvarjeno)}</span>
       </div>
       <p className="mt-1 break-all font-mono text-xs">{n.mapa}</p>
+      {n.vloga ? (
+        <p className="mt-1 text-xs">
+          {t(VLOGA[n.vloga])} · {t("vdZa")} <span className="font-mono">{n.za}</span>
+        </p>
+      ) : null}
+      {n.kopija ? (
+        <p className="mt-1 break-all text-xs">
+          {t("vdKopija")}: <span className="font-mono">{n.kopija}</span>
+        </p>
+      ) : null}
+      {n.vodja ? <VodjaStanje v={n.vodja} /> : null}
+      {n.vodja?.faza === "lastnik" && n.vodja.razlog === "krogi" ? (
+        <button type="button" className="lina-gumb-majhen mt-2" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "vodja-zdruzi", id: n.id })}>
+          {t("vdZdruziKljub")}
+        </button>
+      ) : null}
       {n.pogoj && n.pogoj.vrsta !== "zdaj" ? (
         <p className="mt-1 text-xs">
           {t("agKdaj")}: {n.pogoj.vrsta === "ura" ? ura(n.pogoj.cas) : `${t("agKdajPo")} ${n.pogoj.id}`}
@@ -246,15 +293,18 @@ export function NalogaVrstica({ n, zaposlen, onUkaz }: { n: JavnaNaloga; zaposle
       <pre className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-[var(--color-surface)] p-2 text-sm">{n.besedilo}</pre>
       {n.stanje === "caka" ? (
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" className="lina-gumb-majhen" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "potrdi", id: n.id, zgostitev: n.zgostitev })}>
+          <button type="button" className="lina-gumb-majhen" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "potrdi", id: n.id, zgostitev: n.zgostitev, podobne })}>
             {n.agent === "claude" ? t("rcPotrdi") : `${t("agPotrdiAgent")} ${n.agent}`}
           </button>
+          <PodobneIzbira id={`podobne-naloga-${n.id}`} izbrano={podobne} onIzbira={setPodobne} onemogoceno={zaposlen} />
           <button type="button" className="lina-gumb-majhen" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "odkloni", id: n.id })}>
             {t("rcOdkloni")}
           </button>
         </div>
       ) : null}
-      {n.stanje === "tece" || n.stanje === "zaganja" || n.stanje === "koncano" ? (
+      {n.nacrt ? <NacrtOgled id={n.id} cakaOdgovor={n.stanje === "tece" || n.stanje === "zaganja"} /> : null}
+      {n.tocke ? <TockeNaloge tocke={n.tocke} predlog={n.predlogTock} zaposlen={zaposlen} onPredlagaj={() => void onUkaz({ ukaz: "predlagaj-tocke", id: n.id })} /> : null}
+      {n.stanje === "tece" || n.stanje === "zaganja" || n.stanje === "koncano" || n.stanje === "nepopolno" ? (
         <details className="mt-2" open={n.porocilo !== null}>
           <summary className="cursor-pointer text-sm">{t("rcPorocilo")}</summary>
           {n.porocilo !== null ? (
@@ -268,12 +318,284 @@ export function NalogaVrstica({ n, zaposlen, onUkaz }: { n: JavnaNaloga; zaposle
   );
 }
 
+const RAZLOG_TOCKE: Record<RazlogTocke, Beseda> = {
+  manjka: "rcTRManjka",
+  "ni-narejeno": "rcTRNiNarejeno",
+  "brez-dokaza": "rcTRBrezDokaza",
+  "dokaz-ni-najden": "rcTRDokazNiNajden",
+};
+
+/** Tocke naloge s preverjenimi dokazi (24. 11. 2026): »3/5 narejeno«, manjkajoce z razlogom; predlog za manjkajoce samo po potrditvi. */
+function TockeNaloge({ tocke, predlog, zaposlen, onPredlagaj }: { tocke: PovzetekTock; predlog: string | null; zaposlen: boolean; onPredlagaj: () => void }) {
+  return (
+    <div className="mt-2 text-sm">
+      <p className={tocke.popolno ? "font-semibold" : "font-semibold text-[var(--color-signal)]"} role="status">
+        {tocke.narejeno}/{tocke.skupaj} {t("rcTockeNarejeno")}
+      </p>
+      {tocke.manjkajoce.length ? (
+        <>
+          <p className="mt-1 text-xs">{t("rcTockeManjkajo")}:</p>
+          <ul className="mt-1 list-none space-y-1 pl-0 text-xs">
+            {tocke.manjkajoce.map((m) => (
+              <li key={m.st} className="break-words">
+                <span className="font-mono">T{m.st}</span> {m.besedilo} <span className="text-[var(--color-moss)]">({t(RAZLOG_TOCKE[m.razlog])})</span>
+              </li>
+            ))}
+          </ul>
+          {predlog && predlog !== "napaka" ? (
+            <p className="mt-1 text-xs text-[var(--color-moss)]">{t("rcTockePredlog")}</p>
+          ) : (
+            <button type="button" className="lina-gumb-majhen mt-2" disabled={zaposlen} onClick={onPredlagaj}>
+              {t("rcTockePredlagaj")}
+            </button>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Nacrt agenta (nacrt.html): HTML pripravi streznik (varno branje, CSP kot prvi del dokumenta). Prikaz samo v okvirju s praznim
+ * sandbox (brez skript, obrazcev, vtickov in brez istega izvora), nalozi se sele na lastnikov klik.
+ */
+function NacrtOgled({ id, cakaOdgovor }: { id: string; cakaOdgovor: boolean }) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [napaka, setNapaka] = useState(false);
+  return (
+    <details className="mt-2" onToggle={(e) => {
+      if (!(e.currentTarget as HTMLDetailsElement).open || html !== null) return;
+      void nacrtClaudeNalogeFn({ data: { id } })
+        .then((r) => {
+          setNapaka(r.html === null);
+          if (r.html !== null) setHtml(r.html);
+        })
+        .catch(() => setNapaka(true));
+    }}>
+      <summary className="cursor-pointer text-sm">{t("rcNacrt")} · {t("rcNacrtPokazi")}</summary>
+      {cakaOdgovor ? <p className="mt-1 text-sm">{t("rcNacrtOdgovor")}</p> : null}
+      {napaka ? <p role="alert" className="mt-1 text-sm text-[var(--color-signal)]">{t("rcNacrtNi")}</p> : null}
+      {html !== null ? (
+        <iframe sandbox="" srcDoc={html} title={t("rcNacrtOkvir")} referrerPolicy="no-referrer" className="mt-2 h-[32rem] w-full rounded-xl border border-[var(--color-rule)]" />
+      ) : null}
+    </details>
+  );
+}
+
+// ------------------------------------------------------------------ Lina kot vodja: pregled in zdruzitev (lastnik 24. 11. 2026)
+
+const KONCNE: readonly FazaVodje[] = ["zdruzeno", "prazno", "lastnik", "uveljavljeno"];
+const VLOGA: Record<VlogaNaloge, Beseda> = { pregled: "vdVlogaPregled", popravek: "vdVlogaPopravek", spor: "vdVlogaSpor" };
+const FAZA: Record<FazaVodje, Beseda> = {
+  dela: "vdFazaDela",
+  pregled: "vdFazaPregled",
+  popravek: "vdFazaPopravek",
+  zdruzi: "vdFazaZdruzi",
+  spor: "vdFazaSpor",
+  zdruzeno: "vdFazaZdruzeno",
+  prazno: "vdFazaPrazno",
+  lastnik: "vdFazaLastnik",
+  uveljavljeno: "vdFazaUveljavljeno",
+};
+const RAZLOG_VODJE: Record<RazlogVodje, Beseda> = {
+  diff: "vdRDiff",
+  korak: "vdRKorak",
+  krogi: "vdRKrogi",
+  spor: "vdFazaSpor",
+  preizkusi: "vdRPreizkusi",
+  "brez-meje": "vdRBrezMeje",
+  "brez-preizkusov": "vdRPreizkusi",
+  zdruzitev: "vdRZdruzitev",
+  "brez-peskovnika": "vdRBrezPeskovnika",
+};
+
+/** Tocka 7: besedilo razloga (SL/EN) namesto kode. */
+const OPIS_NAPAKE: Record<OpisNapake, Beseda> = {
+  "git-nastavitve": "vdOpisGitNastavitve",
+  "git-kopije": "vdOpisGitKopije",
+  povezava: "vdOpisPovezava",
+  binarno: "vdOpisBinarno",
+  diff: "vdOpisDiff",
+  "kopija-velika": "vdOpisKopijaVelika",
+  veja: "vdOpisVeja",
+  premaknjen: "vdOpisPremaknjen",
+  umazan: "vdOpisUmazan",
+  spremenjen: "vdOpisSpremenjen",
+  patch: "vdOpisPatch",
+  neznano: "vdOpisNeznano",
+};
+
+function OpisRazloga({ opis, podrobnost }: { opis: OpisNapake | null | undefined; podrobnost: string | null | undefined }) {
+  if (!opis) return null;
+  return (
+    <span className="block">
+      {t(OPIS_NAPAKE[opis] ?? "vdOpisNeznano")}
+      {podrobnost ? <> (<span className="font-mono">{podrobnost}</span>)</> : null}
+    </span>
+  );
+}
+
+const RAZLOG_ZDRUZITVE: Record<NonNullable<JavnaZdruzitev["razlog"]>, Beseda> = {
+  spor: "vdFazaSpor",
+  padlo: "vdRPreizkusi",
+  "brez-meje": "vdRBrezMeje",
+  vrnjen: "vdRVrnjen",
+  "brez-peskovnika": "vdRBrezPeskovnika",
+  uveljavi: "vdRUveljavi",
+};
+
+/** Faza pregleda in zdruzitve: krog N od 3, najdbe zadnjega pregleda, razlog, zakaj odloci lastnik. */
+export function VodjaStanje({ v }: { v: VodjaNaloge }) {
+  return (
+    <p className={`mt-1 text-xs ${v.faza === "lastnik" ? "text-[var(--color-signal)]" : ""}`}>
+      {t(FAZA[v.faza])}
+      {v.krog > 0 ? ` · ${t("vdKrog")} ${v.krog}/3` : ""}
+      {v.najdbe !== null ? ` · ${v.najdbe < 0 ? t("vdNajdbeNeberljivo") : `${t("vdNajdbe")}: ${v.najdbe}`}` : ""}
+      {v.razlog ? ` · ${t(RAZLOG_VODJE[v.razlog])}` : ""}
+      <OpisRazloga opis={v.opis} podrobnost={v.podrobnost} />
+    </p>
+  );
+}
+
+/**
+ * Projekti z vec agenti: vrsta agentov po projektu (stanje, faza, krog, najdbe, polne poti), pregledovalec, ukazi preizkusov in
+ * zdruzeno delo z gumbom »Uveljavi« (poslje zgostitev, ki jo lastnik vidi).
+ */
+export function VodjaKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanjeNalog; zaposlen: boolean; onUkaz: (u: Record<string, unknown>) => Promise<boolean> }) {
+  const projekti = [...new Set([...stanje.naloge.flatMap((n) => (n.vodja ? [n.vodja.projekt] : [])), ...stanje.zdruzitve.map((z) => z.projekt)])];
+  const pregledovalci = stanje.agenti.filter((a) => a.vklopljen && a.stanje === "pripravljen" && a.zacetniPoziv);
+  return (
+    <div className="lina-kartica flex flex-col gap-3">
+      <h3><Ikona ime="racunalnik" /> {t("vdNaslov")}</h3>
+      <p className="text-sm text-[var(--color-moss)]">{t("vdNamig")}</p>
+      <label className="grid gap-1 text-sm">
+        {t("vdPregledovalec")}
+        <select
+          value={stanje.pregledovalec}
+          disabled={zaposlen}
+          onChange={(e) => void onUkaz({ ukaz: "pregledovalec", agent: e.target.value })}
+          className={POLJE}
+        >
+          {[...new Set([stanje.pregledovalec, ...pregledovalci.map((a) => a.id)])].map((id) => (
+            <option key={id} value={id}>
+              {stanje.agenti.find((a) => a.id === id)?.ime ?? id}
+            </option>
+          ))}
+        </select>
+      </label>
+      {projekti.map((p) => (
+        <ProjektVodje
+          key={p}
+          projekt={p}
+          naloge={stanje.naloge.filter((n) => n.mapa === p)}
+          zdruzitev={stanje.zdruzitve.find((z) => z.projekt === p) ?? null}
+          preizkusi={stanje.preizkusi[p] ?? []}
+          zaposlen={zaposlen}
+          onUkaz={onUkaz}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Ukaz »Uveljavi« veze zgostitev, ki jo lastnik vidi (streznik jo izracuna znova in brez nje zavrne). */
+export function ukazUveljavi(z: JavnaZdruzitev): Record<string, unknown> {
+  return { ukaz: "uveljavi", projekt: z.projekt, zgostitev: z.zgostitev };
+}
+
+function ProjektVodje({ projekt, naloge, zdruzitev, preizkusi, zaposlen, onUkaz }: {
+  projekt: string; naloge: JavnaNaloga[]; zdruzitev: JavnaZdruzitev | null; preizkusi: string[][]; zaposlen: boolean;
+  onUkaz: (u: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const [ukazi, setUkazi] = useState(preizkusi.map((a) => a.join(" ")).join("\n"));
+  return (
+    <section className="border-t border-[var(--color-rule)] pt-3" aria-label={projekt}>
+      <p className="break-all font-mono text-xs">{projekt}</p>
+      <ul className="mt-1 text-sm">
+        {naloge.map((n) => (
+          <li key={n.id} className="py-1">
+            <span className="font-semibold">{n.agent}</span> · {t(STANJE[n.stanje])}
+            {n.vodja ? <VodjaStanje v={n.vodja} /> : null}
+            {n.kopija ? <p className="break-all font-mono text-xs">{n.kopija}</p> : null}
+          </li>
+        ))}
+      </ul>
+      {zdruzitev ? (
+        <div className="mt-2 grid gap-1 text-xs">
+          <p className="font-semibold">{t("vdZdruzitev")}</p>
+          <p className="break-all font-mono">{zdruzitev.pot}</p>
+          {zdruzitev.veja ? <p>{t("vdVeja")}: <span className="font-mono">{zdruzitev.veja}</span></p> : null}
+          {zdruzitev.diff ? <p className="break-all">{t("vdDiff")}: <span className="font-mono">{zdruzitev.diff}</span></p> : null}
+          {zdruzitev.zgostitev ? <p className="break-all">{t("vdZgostitev")}: <span className="font-mono">{zdruzitev.zgostitev}</span></p> : null}
+          {zdruzitev.osvezi ? <p>{t("vdOsvezuje")}</p> : null}
+          {zdruzitev.razlog ? (
+            <p className="text-[var(--color-signal)]">
+              {t(RAZLOG_ZDRUZITVE[zdruzitev.razlog])}
+              <OpisRazloga opis={zdruzitev.opis} podrobnost={zdruzitev.podrobnost} />
+            </p>
+          ) : null}
+          {/* git nastavitev in neshranjene spremembe lastnik odpravi sam; ponovna zdruzitev bi naletela na isto zavrnitev */}
+          {zdruzitev.razlog && zdruzitev.opis !== "git-nastavitve" && zdruzitev.opis !== "umazan" ? (
+            <>
+              <p className="text-[var(--color-moss)]">{t("vdZnovaNamig")}</p>
+              <button type="button" className="lina-gumb-majhen self-start" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "zdruzitev-znova", projekt: zdruzitev.projekt })}>
+                {t("vdZnova")}
+              </button>
+            </>
+          ) : null}
+          {zdruzitev.diff ? (
+            <button type="button" className="lina-gumb-majhen self-start" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "izvozi-zdruzitev", projekt: zdruzitev.projekt })}>
+              {t("vdIzvozi")}
+            </button>
+          ) : null}
+          {zdruzitev.izvoz ? (
+            <p className="break-all">
+              {t("vdIzvozeno")}: <span className="font-mono">{zdruzitev.izvoz}</span>
+            </p>
+          ) : null}
+          <button type="button" className="lina-gumb-majhen self-start" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "opusti-zdruzitev", projekt: zdruzitev.projekt })}>
+            {t("vdOpusti")}
+          </button>
+          {zdruzitev.zgostitev && zdruzitev.naloge.length && !zdruzitev.osvezi ? (
+            <>
+              <p className="text-[var(--color-moss)]">{t("vdUveljaviNamig")}</p>
+              <button
+                type="button"
+                className="lina-gumb-majhen self-start"
+                disabled={zaposlen}
+                onClick={() => void onUkaz(ukazUveljavi(zdruzitev))}
+              >
+                {t("vdUveljavi")}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      <form
+        className="mt-2 grid gap-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          // argv brez lupine: presledki locijo dele ukaza
+          void onUkaz({ ukaz: "preizkusi", projekt, ukazi: ukazi.split("\n").map((v) => v.trim().split(/\s+/).filter(Boolean)).filter((a) => a.length) });
+        }}
+      >
+        <label className="grid gap-1 text-sm">
+          {t("vdPreizkusi")}
+          <textarea value={ukazi} onChange={(e) => setUkazi(e.target.value)} rows={2} spellCheck={false} className={POLJE} />
+        </label>
+        <button type="submit" disabled={zaposlen} className="lina-gumb-majhen self-start">{t("vdShraniPreizkuse")}</button>
+      </form>
+    </section>
+  );
+}
+
 // ------------------------------------------------------------------ Agenti na racunalniku (lastnik 24. 11. 2026)
 
 function opisStanjaAgenta(a: StanjeAgenta): string {
   if (a.stanje === "ni-najden") return t("agNiNajden");
   if (a.stanje === "izklopljen") return t("agIzklopljen");
   if (a.stanje === "ne-deluje") return t("agNeDeluje");
+  if (a.stanje === "brez-peskovnika") return t("agBrezPeskovnika");
   if (a.stanje === "prijava") return `${t("agPrijava")} (${a.id} login)`;
   return a.razlicica ? `${t("agPripravljen")} · ${a.razlicica}` : t("agPripravljen");
 }
@@ -291,6 +613,7 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
   const [cas, setCas] = useState("");
   const [po, setPo] = useState("");
   const [prepovedane, setPrepovedane] = useState(stanje.prepovedane.join("\n"));
+  const [podobne, setPodobne] = useState(true);
   const prednice = stanje.naloge.filter((n) => ["dodeljeno", "zaganja", "tece"].includes(n.stanje));
   const izbran = izbira.some((a) => a.id === agent) ? agent : izbira[0]?.id ?? "";
   const pogoj = kdaj === "zdaj" ? "zdaj" : kdaj === "ura" ? (cas && Number.isFinite(new Date(cas).getTime()) ? `ura:${new Date(cas).toISOString()}` : "") : po ? `po:${po}` : "";
@@ -318,6 +641,11 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
           </li>
         ))}
       </ul>
+      {stanje.omrezjeAgentov === "gostitelj" ? (
+        <p role="note" className="text-sm text-[var(--color-signal)]">
+          {t("rcOmrezjePasta")}
+        </p>
+      ) : null}
       <button type="button" className="lina-gumb-majhen self-start" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "preveri-agente" })}>
         {t("agPreveri")}
       </button>
@@ -326,7 +654,7 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
         className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void onUkaz({ ukaz: "dodeli", agent: izbran, mapa, besedilo, pogoj }).then((ok) => {
+          void onUkaz({ ukaz: "dodeli", agent: izbran, mapa, besedilo, pogoj, podobne }).then((ok) => {
             if (ok) setBesedilo("");
           });
         }}
@@ -372,6 +700,7 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
             </select>
           ) : null}
         </fieldset>
+        <PodobneIzbira id="podobne-dodeli" izbrano={podobne} onIzbira={setPodobne} onemogoceno={zaposlen} />
         <button type="submit" disabled={zaposlen || !izbran || !mapa.trim() || !besedilo.trim() || !pogoj || !stanje.geslo} className="self-start rounded-full bg-[var(--color-signal)] px-5 py-2 text-sm text-[var(--color-on-ink)] disabled:opacity-50">
           {t("agDodeli")}
         </button>
@@ -590,6 +919,8 @@ function GradnjaVrstica({ g, zaposlen, onUkaz, onSporocilo }: { g: JavnaGradnja;
   const apk = g.tok === "gradnja.yml";
   // pregled 0225 A-3: deb se namesti kot skrbnik; pred namestitvijo lastnik vidi vejo, commit in sha256 in potrdi se enkrat
   const [potrjujem, setPotrjujem] = useState(false);
+  // »Velja tudi za vse podobne« (isti tok, ista veja) velja samo za ZAGON; namestitev se vedno potrdi posebej
+  const [podobne, setPodobne] = useState(true);
   const debNiDovoljen = !apk && g.stanje === "koncano" && g.paket !== null && g.commit !== null && !g.lahkoNamesti;
   return (
     <li className="py-3 text-sm">
@@ -597,10 +928,10 @@ function GradnjaVrstica({ g, zaposlen, onUkaz, onSporocilo }: { g: JavnaGradnja;
         <span className="font-semibold">{t(STANJE_GRADNJE[g.stanje])}</span>
         <span>{apk ? t("ghTokApk") : t("ghTokDeb")} · {g.veja}</span>
         <span className="text-xs text-[var(--color-moss)]">{g.izvor === "lina" ? t("ghIzvorLina") : g.izvor === "telefon" ? t("ghIzvorTelefon") : t("ghIzvorLastnik")}</span>
-        <span className="ml-auto text-xs tabular-nums text-[var(--color-brass)]">{new Date(g.konec ?? g.ustvarjeno).toLocaleString()}</span>
+        <span className="ml-auto text-xs tabular-nums text-[var(--color-brass)]">{ura(g.konec ?? g.ustvarjeno)}</span>
       </div>
       {g.razlog ? <p className="mt-1 text-[var(--color-signal)]">{opisRazlogaGradnje(g.razlog)}</p> : null}
-      {g.ocenaKonca ? <p className="mt-1 text-xs">{t("ghOcena")}: {new Date(g.ocenaKonca).toLocaleTimeString()}</p> : null}
+      {g.ocenaKonca ? <p className="mt-1 text-xs">{t("ghOcena")}: {uraGlave(new Date(g.ocenaKonca))}</p> : null}
       {g.mapa ? (
         <p className="mt-1 break-all font-mono text-xs">
           {t("ghMapa")}: {g.paket ? `${g.mapa}/${g.paket.pot}` : g.mapa}
@@ -629,9 +960,10 @@ function GradnjaVrstica({ g, zaposlen, onUkaz, onSporocilo }: { g: JavnaGradnja;
       <div className="mt-2 flex flex-wrap gap-2">
         {g.stanje === "caka" ? (
           <>
-            <button type="button" className="lina-gumb-majhen" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "potrdi", id: g.id, zgostitev: g.zgostitev })}>
+            <button type="button" className="lina-gumb-majhen" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "potrdi", id: g.id, zgostitev: g.zgostitev, podobne })}>
               {t("ghPotrdi")}
             </button>
+            <PodobneIzbira id={`podobne-gradnja-${g.id}`} izbrano={podobne} onIzbira={setPodobne} onemogoceno={zaposlen} />
             <button type="button" className="lina-gumb-majhen" disabled={zaposlen} onClick={() => void onUkaz({ ukaz: "odkloni", id: g.id })}>
               {t("ghOdkloni")}
             </button>
@@ -775,6 +1107,141 @@ function AgentPomocStikala() {
         />
         <span>{t2("agPregledStikalo")}</span>
       </label>
+    </div>
+  );
+}
+
+/** Lokalni n8n tokovi (24. 11. 2026): seznam, predlogi ustvarjanja/zagona in potrditev lastnika z zgostitvijo. */
+function N8nKartica() {
+  const [stanje, setStanje] = useState<JavnoStanjeN8n | null>(null);
+  const [opis, setOpis] = useState("");
+  const [ime, setIme] = useState("");
+  const [napaka, setNapaka] = useState("");
+  const [zaposlen, setZaposlen] = useState(false);
+  // »Velja tudi za vse podobne« samo za ZAGON istega toka (po ID); ustvarjanje toka se vedno potrdi posebej
+  const [podobne, setPodobne] = useState(true);
+
+  const osvezi = useCallback(() => {
+    void stanjeN8nFn()
+      .then((s) => {
+        setStanje(s);
+        setNapaka(s.napaka ? opisRazlogaN8n(s.napaka, jezikVmesnika()) : "");
+      })
+      .catch(() => setNapaka(t("n8nNiPovezave")));
+  }, []);
+  useEffect(osvezi, [osvezi]);
+
+  async function ukaz(u: Record<string, unknown>): Promise<boolean> {
+    setNapaka("");
+    setZaposlen(true);
+    try {
+      const r = await ukazN8nFn({ data: { ukaz: u } });
+      if (!r.ok) {
+        setNapaka(opisRazlogaN8n(r.razlog as RazlogN8n, jezikVmesnika()));
+        osvezi();
+        return false;
+      }
+      setStanje(r.stanje);
+      return true;
+    } catch {
+      setNapaka(t("n8nNiPovezave"));
+      return false;
+    } finally {
+      setZaposlen(false);
+    }
+  }
+
+  if (!stanje) return null;
+  return (
+    <div className="lina-kartica flex flex-col gap-3">
+      <h3><Ikona ime="racunalnik" /> {t("n8nNaslov")}</h3>
+      <p className="text-sm text-[var(--color-moss)]">{t("n8nNamig")}</p>
+      {!stanje.vklopljeno ? <p className="text-sm text-[var(--color-signal)]">{t("n8nIzklopljeno")}</p> : null}
+      {stanje.vklopljeno && !stanje.povezan ? <p className="text-sm text-[var(--color-signal)]">{t("n8nNiPovezave")}</p> : null}
+      {stanje.vklopljeno ? (
+        <>
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void ukaz({ ukaz: "predlog_ustvari", opis, ...(ime.trim() ? { ime: ime.trim() } : {}) }).then((ok) => {
+                if (ok) {
+                  setOpis("");
+                  setIme("");
+                }
+              });
+            }}
+          >
+            <label className="grid gap-1 text-sm">
+              {t("n8nOpisPolje")}
+              <input value={opis} onChange={(e) => setOpis(e.target.value)} maxLength={400} className={POLJE} />
+            </label>
+            <label className="grid gap-1 text-sm">
+              {t("n8nImePolje")}
+              <input value={ime} onChange={(e) => setIme(e.target.value)} maxLength={80} className={POLJE} />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" disabled={zaposlen || opis.trim().length < 3} className="rounded-full bg-[var(--color-signal)] px-4 py-1.5 text-sm text-[var(--color-on-ink)] disabled:opacity-50">
+                {t("n8nUstvariPredlog")}
+              </button>
+              <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void ukaz({ ukaz: "seznam" })}>
+                {t("n8nOsvezi")}
+              </button>
+              {!stanje.pripravljen ? (
+                <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void ukaz({ ukaz: "pripravi" })}>
+                  {t("n8nPripravi")}
+                </button>
+              ) : null}
+            </div>
+          </form>
+          {napaka ? <p role="alert" className="text-sm text-[var(--color-signal)]">{napaka}</p> : null}
+          {stanje.tokovi.length === 0 ? (
+            <p className="text-sm text-[var(--color-moss)]">{t("n8nPraznoTokovi")}</p>
+          ) : (
+            <ul className="divide-y divide-[var(--color-rule)] text-sm">
+              {stanje.tokovi.map((tok) => (
+                <li key={tok.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>
+                    <span className="font-medium">{tok.ime}</span>{" "}
+                    <span className="text-xs text-[var(--color-moss)]">({tok.id}, {tok.aktiven ? t("n8nAktiven") : t("n8nNeaktiven")})</span>
+                  </span>
+                  <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void ukaz({ ukaz: "predlog_zazeni", cilj: tok.id })}>
+                    {t("n8nZazeniPredlog")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {stanje.predlogi.length > 0 ? (
+            <div className="mt-1">
+              <h4 className="text-sm font-semibold">{t("n8nPredlogiNaslov")}</h4>
+              <ul className="mt-1 divide-y divide-[var(--color-rule)] text-sm">
+                {stanje.predlogi.slice(0, 10).map((p) => (
+                  <li key={p.id} className="py-2">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="font-medium">{p.imeToka}</span>
+                      <span className="text-xs text-[var(--color-moss)]">{p.stanje}</span>
+                      <span className="ml-auto text-xs tabular-nums text-[var(--color-brass)]">{ura(p.ustvarjeno)}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-[var(--color-moss)]">{p.rezultat ?? p.povzetek}</p>
+                    {p.stanje === "caka" ? (
+                      <div className="mt-1.5 flex flex-wrap gap-2">
+                        <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void ukaz({ ukaz: "potrdi", id: p.id, zgostitev: p.zgostitev, podobne: p.vrsta === "zazeni" && podobne })}>
+                          {t("n8nPotrdi")}
+                        </button>
+                        {p.vrsta === "zazeni" ? <PodobneIzbira id={`podobne-n8n-${p.id}`} izbrano={podobne} onIzbira={setPodobne} onemogoceno={zaposlen} /> : null}
+                        <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void ukaz({ ukaz: "odkloni", id: p.id })}>
+                          {t("n8nOdkloni")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

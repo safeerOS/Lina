@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { t } from "@/lib/lina/besedila.ts";
-import { asistentFn, asistentZgodovinaFn, govorFn, koledarSeznamFn, koledarSpremeniFn, nastavitveObvestilFn, prepisFn } from "@/lib/lina/functions.ts";
+import { en, sl, sporociloNapake, sporociloStreznika, t } from "@/lib/lina/besedila.ts";
+import { asistentFn, asistentZgodovinaFn, govorFn, koledarSeznamFn, koledarSpremeniFn, nastavitveObvestilFn, nastavitveZvokaFn, prepisFn } from "@/lib/lina/functions.ts";
+import { PRAG_GOVORA_RMS, ZaznavaGovora, omejitveMikrofona } from "@/lib/lina/zvok-mikrofon.ts";
 import { PRIVZETE_NASTAVITVE_OBVESTIL, odlociObvestilo } from "@/lib/lina/obvestila-odlocitev.ts";
-import { datumBesedilo, pregledDneva, razberiCas, uraBesedilo, type ZapisKoledar } from "@/lib/lina/koledar.ts";
+import { pregledDneva, razberiCas, uraBesedilo, type ZapisKoledar } from "@/lib/lina/koledar.ts";
 import type { BrainPublic } from "@/lib/lina/types.ts";
+import { datumDanes, vLjubljani } from "@/lib/lina/ui-videz.ts";
 import { UcenjePopravkovKartica } from "./ucenje-popravkov-kartica.tsx";
+import { odpriSnemanje, type Zaklep } from "./odpiranje-mikrofona.ts";
 
 /** Prva stran programa: pogovor z Lino (tipkanje ali govor) in pregled dneva. Videz: styles.css (.zar, .lina-*). */
 export const DOGODEK_KOLEDAR = "lina-koledar";
 
 function fault(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "Nekaj je šlo narobe.";
+  return sporociloNapake(cause);
 }
 
 type Sporocilo = { vloga: "lastnik" | "lina"; besedilo: string; cas: string };
@@ -43,7 +46,6 @@ type StanjeMika = "mirno" | "poslusam" | "prepisujem";
 const NAJDALJSI_POSNETEK_MS = 60_000;
 const TISINA_PO_GOVORU_MS = 1_600;
 const BREZ_GOVORA_MS = 8_000;
-const PRAG_GOVORA = 0.035;
 const STOLPCEV = 56;
 
 function IkonaMikrofon({ konec }: { konec: boolean }) {
@@ -62,7 +64,7 @@ function IkonaMikrofon({ konec }: { konec: boolean }) {
 function kodiraj(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const bralnik = new FileReader();
-    bralnik.onerror = () => reject(new Error("Posnetka ni mogoče prebrati."));
+    bralnik.onerror = () => reject(new Error(t("d2PosnetkaNiBrati")));
     bralnik.onload = () => resolve(String(bralnik.result).split(",")[1] ?? "");
     bralnik.readAsDataURL(blob);
   });
@@ -73,14 +75,15 @@ function kodiraj(blob: Blob): Promise<string> {
 async function odpriMikrofon(): Promise<MediaStream> {
   const md = navigator.mediaDevices;
   try {
-    return await md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    return await md.getUserMedia({ audio: omejitveMikrofona() });
   } catch (napaka) {
     if (!(napaka instanceof DOMException) || napaka.name !== "NotReadableError") throw napaka;
     const vhodi = (await md.enumerateDevices()).filter((d) => d.kind === "audioinput" && d.deviceId !== "default" && d.deviceId !== "");
     vhodi.sort((a, b) => Number(/software conversions/i.test(b.label)) - Number(/software conversions/i.test(a.label)));
     for (const d of vhodi) {
       try {
-        return await md.getUserMedia({ audio: { deviceId: { exact: d.deviceId } } });
+        // ista obdelava (NS, AEC, AGC) kot privzeta naprava; prej jo je rezervna pot izgubila
+        return await md.getUserMedia({ audio: omejitveMikrofona(d.deviceId) });
       } catch {
         /* naslednja naprava */
       }
@@ -120,6 +123,8 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
   const zar = useRef<HTMLButtonElement | null>(null);
   const platno = useRef<HTMLCanvasElement | null>(null);
   const snemanje = useRef<{ ustavi: () => void } | null>(null);
+  // N9: en sam zagon mikrofona naenkrat (od odpiranja do rec.onstop)
+  const zaklepMikrofona = useRef<Zaklep>({ zaseden: false });
   const zvok = useRef<HTMLAudioElement | null>(null);
   const ziv = useRef(true);
 
@@ -241,7 +246,7 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
       if (!ziv.current) return;
       setSporocila(izid.zgodovina);
       if (!izid.ok) {
-        setNapaka(izid.sporocilo);
+        setNapaka(sporociloStreznika(izid.sporocilo));
         // Znanje 22. 11. 2026: ob napaki uporabnikovo besedilo ostane (ne izgine), da lahko samo pritisne Poslji znova.
         if (vsebina === undefined) setBesedilo((prej) => prej || novo);
         // Neuspesno poslane priponke se vrnejo v vrstico, da jih uporabniku ni treba izbrati znova.
@@ -268,19 +273,36 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
     }
     utisaj();
     setNapaka("");
-    let tok: MediaStream;
-    try {
-      tok = await odpriMikrofon();
-    } catch {
-      setNapaka(t("mikNapaka"));
+    // Stikalo »Zmanjšanje hrupa« (zvok.json, privzeto vklopljeno): konec govora po zaznavi, odporni na hrup; izklop = stari stalni prag.
+    const zmanjsanjeHrupa = nastavitveZvokaFn().then((n) => n.ciscenjeKlicev !== false, () => true);
+    // N9: zaklep (drugi zagon se zavrne), preverba priklopa po vsakem await, ob napaki priprave se sledi ustavijo
+    const odprto = await odpriSnemanje({
+      zaklep: zaklepMikrofona.current,
+      odpri: odpriMikrofon,
+      nastavitev: zmanjsanjeHrupa,
+      ziv: () => ziv.current,
+      pripravi: (tok, zmanjsanje) => {
+        const ctx = new AudioContext();
+        try {
+          const zaznava = zmanjsanje ? new ZaznavaGovora(ctx.sampleRate) : null;
+          const analiza = ctx.createAnalyser();
+          analiza.fftSize = 1024;
+          ctx.createMediaStreamSource(tok).connect(analiza);
+          const tip = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((x) => MediaRecorder.isTypeSupported(x));
+          const rec = new MediaRecorder(tok, tip ? { mimeType: tip } : undefined);
+          return { ctx, zaznava, analiza, rec };
+        } catch (e) {
+          void ctx.close();
+          throw e;
+        }
+      },
+    });
+    if (!odprto.ok) {
+      if (odprto.razlog === "mikrofon" || odprto.razlog === "priprava") setNapaka(t("mikNapaka"));
       return;
     }
-    const ctx = new AudioContext();
-    const analiza = ctx.createAnalyser();
-    analiza.fftSize = 1024;
-    ctx.createMediaStreamSource(tok).connect(analiza);
-    const tip = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((x) => MediaRecorder.isTypeSupported(x));
-    const rec = new MediaRecorder(tok, tip ? { mimeType: tip } : undefined);
+    const tok = odprto.tok;
+    const { ctx, zaznava, analiza, rec } = odprto.vrednost;
     const kosi: Blob[] = [];
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) kosi.push(e.data);
@@ -289,6 +311,8 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
     const vzorec = new Float32Array(analiza.fftSize);
     const zgodovinaGlasnosti: number[] = Array.from({ length: STOLPCEV }, () => 0);
     let govoril = false;
+    // glasnost nad starim pragom: posnetek se ne zavrze kot »nic govora«, tudi ce zaznava govora (zelo glasen hrup) ni sprozila
+    let slisno = false;
     let tihoOd = 0;
     let koncano = false;
     let okvir = 0;
@@ -332,7 +356,8 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
           g.fill();
         });
       }
-      if (raven > PRAG_GOVORA) {
+      if (raven > PRAG_GOVORA_RMS) slisno = true;
+      if (zaznava ? zaznava.okvir(vzorec, zdaj) : raven > PRAG_GOVORA_RMS) {
         govoril = true;
         tihoOd = 0;
       } else if (govoril) {
@@ -350,11 +375,12 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
     }
     rec.onstop = async () => {
       tok.getTracks().forEach((s) => s.stop());
+      zaklepMikrofona.current.zaseden = false;
       void ctx.close();
       zar.current?.style.removeProperty("--glasnost");
       snemanje.current = null;
       if (!ziv.current) return;
-      if (!govoril) {
+      if (!govoril && !slisno) {
         setStanje("mirno");
         setNapaka(t("mikNicGovora"));
         return;
@@ -365,7 +391,7 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
         const izid = await prepisFn({ data: { zvok: await kodiraj(blob), mime: blob.type } });
         if (!ziv.current) return;
         setStanje("mirno");
-        if (!izid.ok) setNapaka(izid.sporocilo);
+        if (!izid.ok) setNapaka(sporociloStreznika(izid.sporocilo));
         else await poslji(izid.besedilo, true);
       } catch (e) {
         if (ziv.current) {
@@ -375,7 +401,16 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
       }
     };
     snemanje.current = { ustavi };
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      tok.getTracks().forEach((s) => s.stop());
+      void ctx.close();
+      snemanje.current = null;
+      zaklepMikrofona.current.zaseden = false;
+      setNapaka(t("mikNapaka"));
+      return;
+    }
     setStanje("poslusam");
     okvir = requestAnimationFrame(risi);
   }
@@ -476,6 +511,12 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
                   <button type="button" className="underline" onClick={() => void navigator.clipboard?.writeText(s.besedilo).then(() => setNamig(t("pogovorKopirano"))).catch(() => undefined)}>
                     {t("pogovorKopiraj")}
                   </button>
+                  {/* Navodilo za dostavo (paket-klepet.server.ts): en klik = »da«; samo zadnje sporocilo, streznik preveri cakajoci predlog in rok. */}
+                  {i === sporocila.length - 1 && !caka && (s.besedilo.endsWith(sl.paketKlepetVprasanje) || s.besedilo.endsWith(en.paketKlepetVprasanje)) ? (
+                    <button type="button" className="underline" onClick={() => void poslji("da")}>
+                      {t("paketPotrdi")}
+                    </button>
+                  ) : null}
                   {s.besedilo.length > 400 || sporocila[i - 1]?.besedilo.includes("📎") ? (
                     <button type="button" className="underline" onClick={() => shraniKotDatoteko(s.besedilo, s.cas)}>
                       {t("pogovorShrani")}
@@ -601,7 +642,7 @@ function useDanes() {
   const [zapisi, setZapisi] = useState<ZapisKoledar[] | null>(null);
   const [zdaj, setZdaj] = useState<Date | null>(null);
   const osvezi = useCallback(() => {
-    setZdaj(new Date());
+    setZdaj(vLjubljani(new Date()));
     void koledarSeznamFn().then(setZapisi).catch(() => setZapisi([]));
   }, []);
   useEffect(() => {
@@ -631,7 +672,7 @@ export function DanesPregled({ onPredlog, osveziPopravke }: { onPredlog: (besedi
     <aside className="flex min-w-0 flex-col gap-6 rounded-3xl bg-[var(--color-sheet)] p-5 sm:p-6" aria-label={t("danesNaslov")}>
       <div>
         <h3 className="display text-2xl">{t("danesNaslov")}</h3>
-        <p className="mt-1 text-sm text-[var(--color-moss)]">{zdaj ? datumBesedilo(zdaj) : " "}</p>
+        <p className="mt-1 text-sm text-[var(--color-moss)]">{zdaj ? datumDanes(zdaj) : " "}</p>
         {pregled && vrstice.length === 0 && pregled.zamujeno.length === 0 ? <p className="mt-4 text-sm text-[var(--color-brass)]">{t("danesPrazno")}</p> : null}
         {vrstice.length > 0 ? (
           <ul className="mt-4 divide-y divide-[var(--color-rule)]">
@@ -654,7 +695,7 @@ export function DanesPregled({ onPredlog, osveziPopravke }: { onPredlog: (besedi
               <li key={z.id} className="flex items-start gap-3 py-2.5">
                 <span className="min-w-0 flex-1 text-sm">
                   {z.naslov}
-                  <span className="block text-xs text-[var(--color-brass)]">{(() => { const d = razberiCas(z.cas); return d ? `${datumBesedilo(d)}, ${uraBesedilo(z.cas)}` : ""; })()}</span>
+                  <span className="block text-xs text-[var(--color-brass)]">{(() => { const d = razberiCas(z.cas); return d ? `${datumDanes(d)}, ${uraBesedilo(z.cas)}` : ""; })()}</span>
                 </span>
                 <button type="button" onClick={() => void opravljeno(z.id)} aria-label={`${t("danesOpravi")}: ${z.naslov}`} title={t("danesOpravi")} className="lina-kljukica shrink-0" />
               </li>
@@ -702,7 +743,7 @@ export function DanesKartica({ onVec }: { onVec: () => void }) {
           {t("d2Vec")} ›
         </button>
       </h3>
-      <p className="lina-karta-datum">{zdaj ? datumBesedilo(zdaj) : " "}</p>
+      <p className="lina-karta-datum">{zdaj ? datumDanes(zdaj) : " "}</p>
       {prikaz.length > 0 ? (
         <ul className="lina-danes-seznam">
           {prikaz.map((z) => (

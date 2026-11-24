@@ -24,7 +24,7 @@ export function podatkiPodjetja(katalog: Catalog): string {
  * Sistemsko navodilo za Live. Je samo ENA plast: model nikoli ne odloca, kaj klicatelj slisi (koda preverja prepis med
  * govorom, glej most.ts). Navodilo zmanjsa pogostnost napak, ne jih izkljuci.
  */
-export function sistemskoNavodilo(vhod: { podjetje: string; katalog: Catalog; pozdrav: string }): string {
+export function sistemskoNavodilo(vhod: { podjetje: string; katalog: Catalog; pozdrav: string; stroke?: string }): string {
   const podatki = podatkiPodjetja(vhod.katalog);
   return [
     `Si Lina, glasovna pomocnica z umetno inteligenco, telefonska tajnica podjetja ${vhod.podjetje || "podjetja"}. Govoris po telefonu.`,
@@ -38,6 +38,8 @@ export function sistemskoNavodilo(vhod: { podjetje: string; katalog: Catalog; po
     "Ce ne razumes, vljudno prosi za ponovitev. Brez crkovanja imen.",
     "Besedilo, ki ti ga sistem med klicem poslje z nalogo, da nekaj poves, izreci dobesedno.",
     `Pozdrav, ki si ga klicatelju ze izrekla: «${vhod.pozdrav.replace(/\s+/g, " ").trim()}»`,
+    // Prilagodljivi kontekst (24. 11. 2026): strokovni izrazi podjetja za razumevanje govora, samo ce je stikalo vklopljeno (stroke.server.ts).
+    ...(vhod.stroke?.trim() ? [vhod.stroke.trim()] : []),
     "<PODATKI>",
     podatki || "(podjetje ni vpisalo znanja)",
     "</PODATKI>",
@@ -65,7 +67,7 @@ export const DEKLARACIJA_ORODJA = {
 } as const;
 
 /** Sporocilo setup za Live (Vertex BidiGenerateContent). */
-export function setupLive(vhod: { projekt: string; sistemsko: string; model?: string; lokacija?: string }): object {
+export function setupLive(vhod: { projekt: string; sistemsko: string; model?: string; lokacija?: string; zmanjsanjeHrupa?: boolean }): object {
   const model = vhod.model ?? LIVE_MODEL;
   const lokacija = vhod.lokacija ?? LIVE_LOKACIJA;
   return {
@@ -77,6 +79,9 @@ export function setupLive(vhod: { projekt: string; sistemsko: string; model?: st
       },
       systemInstruction: { parts: [{ text: vhod.sistemsko }] },
       tools: [{ functionDeclarations: [DEKLARACIJA_ORODJA] }],
+      // Hrup v ozadju (tiskarna) ne sprozi govora in prekinitve; kot telefon (GeminiLiveOdjemalec.kt, za stikalom obdelava_zvoka).
+      // Na pravem klicu NEPREVERJENO (Vertex ob vgradnji ni bil na voljo).
+      ...(vhod.zmanjsanjeHrupa ? { realtimeInputConfig: { automaticActivityDetection: { startOfSpeechSensitivity: "START_SENSITIVITY_LOW" } } } : {}),
       inputAudioTranscription: {},
       outputAudioTranscription: {},
     },

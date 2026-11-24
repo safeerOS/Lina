@@ -32,21 +32,22 @@ const PRICAKOVANI_PODJETJE_SL: Array<{ id: string; oznaka: string }> = [
   { id: "zapiski", oznaka: "Zapiski" },
   { id: "telefon", oznaka: "Poveži telefon" },
   { id: "linija", oznaka: "Linija" },
+  { id: "kontrola", oznaka: "Kontrola tiska" },
   { id: "racunalnik", oznaka: "Računalnik" },
   { id: "nastavitve", oznaka: "Nastavitve" },
 ];
 
-test("menijStrani v nacinu podjetje in undefined vrne vseh 15 vnosov v starem vrstnem redu in z istimi oznakami", () => {
+test("menijStrani v nacinu podjetje in undefined vrne vseh 16 vnosov v starem vrstnem redu in z istimi oznakami", () => {
   for (const nacin of ["podjetje", undefined, "neznan"] as const) {
     const meni = menijStrani(nacin);
-    assert.equal(meni.length, 15);
+    assert.equal(meni.length, 16);
     assert.deepEqual(
       meni.map(({ id, oznaka }) => ({ id, oznaka })),
       PRICAKOVANI_PODJETJE_SL,
     );
   }
   const enPodjetje = menijStrani("podjetje", "en");
-  assert.equal(enPodjetje.length, 15);
+  assert.equal(enPodjetje.length, 16);
   assert.equal(enPodjetje.find((v) => v.id === "racunalnik")?.oznaka, "Computer");
   assert.equal(enPodjetje.find((v) => v.id === "narocila")?.oznaka, "Orders");
   assert.equal(enPodjetje.find((v) => v.id === "znanje")?.oznaka, "Knowledge");
@@ -65,7 +66,7 @@ test("menijStrani v osebnem nacinu skrije Znanje in preimenuje Narocila v Sporoc
   assert.equal(meni.find((v) => v.id === "narocila")?.oznaka, "Sporočila");
   assert.deepEqual(
     meni.map((v) => v.id),
-    PRICAKOVANI_PODJETJE_SL.filter((v) => v.id !== "znanje").map((v) => v.id),
+    PRICAKOVANI_PODJETJE_SL.filter((v) => v.id !== "znanje" && v.id !== "kontrola").map((v) => v.id),
   );
 
   const meniEn = menijStrani("osebna", "en");

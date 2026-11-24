@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { t } from "@/lib/lina/besedila.ts";
+import { jezikVmesnika, t } from "@/lib/lina/besedila.ts";
 import { noviceBeriFn, noviceDodajVirFn, noviceOceniFn, noviceOdstraniVirFn, noviceOsveziFn, noviceShraniFn } from "@/lib/lina/functions.ts";
 import { MEJA_KATEGORIJE, MEJA_ZANIMANJ, ocenaPostavke, relativniCas, type Postavka, type VrstaVira } from "@/lib/lina/novice.ts";
 
@@ -50,7 +50,7 @@ function Vrstica({ p, zdaj }: { p: Postavka; zdaj: Date | null }) {
   const meta = [
     p.vir,
     p.kategorija,
-    zdaj ? relativniCas(p.cas, zdaj, "sl") : "",
+    zdaj ? relativniCas(p.cas, zdaj, jezikVmesnika()) : "",
     p.tocke !== null ? `${p.tocke} ${t("novTocke")}` : "",
     p.komentarji !== null ? `${p.komentarji} ${t("novKomentarji")}` : "",
     p.tudi.length ? `${t("novTudi")} ${p.tudi.join(", ")}` : "",
@@ -262,7 +262,7 @@ export function NovicePanel() {
           </div>
         </div>
         <p className="mt-2 text-xs text-[var(--color-brass)]">
-          {pogled?.osvezeno && zdaj ? `${t("novOsvezeno")} ${relativniCas(pogled.osvezeno, zdaj, "sl")}` : t("novNikoli")}
+          {pogled?.osvezeno && zdaj ? `${t("novOsvezeno")} ${relativniCas(pogled.osvezeno, zdaj, jezikVmesnika())}` : t("novNikoli")}
           {pogled && pogled.ocenjenih > 0 ? ` · ${pogled.ocenjenih} ${t("novOcenjenih")}` : ""}
         </p>
         {napaka ? (

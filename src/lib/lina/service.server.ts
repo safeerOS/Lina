@@ -41,7 +41,7 @@ import { odgovorKatalog, razumiIzrek, type ModelRazumevanja } from "./razumevanj
 import { SKIL_RAZLICICA } from "./skil-lina.ts";
 import { NAJMANJ_VSEBINSKIH_BESED, VPRASALNICA_OSEBNA, VPRASANJE_O_ZAPISU, beriZnaneNapake, jeKonecOsebno, jePonovitev, prosnjaZaPonovitev, lociMetaVprasanje, lociVprasanjeOdsotnosti, jeMalopogovor, jeProsnjaZaCakanje, lociSlovo, jeSamoPozdravnoPolnilo, stevilkaBesedno, vrstaVgrajenega, vsebinskeBesede, type VrstaVgrajenega } from "./osebna-polnila.ts";
 import { odsotnostOdgovor, odsotnostStavek, vrstaVprasanjaOdsotnosti } from "./odsotnost.ts";
-import { aktivnoNavodiloPaketa, jeDostava } from "./paket.ts";
+import { aktivnoNavodiloPaketa, jeDostava, odgovorDostavljalcu } from "./paket.ts";
 import { razumiOsebniIzrek } from "./osebna-razumevanje.server.ts";
 import { imaSlovo, izberiVarianto, jeVabiloAliVprasanje } from "./osebna-slovo.ts";
 import { preveriOdgovorZnanja, skrajsajZnanje, stavkiBesedila, zadnjiStavek } from "./odgovor-znanje.ts";
@@ -990,8 +990,8 @@ async function obratKlica(
       call.order.povprasevanje = call.order.tajnica.sporocilo.slice(0, 200);
       return odgovori(t("osebnaNevarnost"), false);
     }
-    // Dostava paketa (lastnik 23. 11. 2026, paket.ts): klicatelj se predstavi kot dostava in lastnik je vpisal navodilo -> Lina pove, da lastnik
-    // trenutno ne more odgovoriti, in navodilo. Koda pred modelom, najvec enkrat na klic; navodilo nikoli v drugih klicih ali dejstvih modela.
+    // Dostava paketa (lastnik 23. in 24. 11. 2026, paket.ts): klicatelj se predstavi kot dostava in lastnik je vpisal navodilo -> Lina rece
+    // »Paket pričakujemo. Prosim, pustite ga <mesto>.« Koda pred modelom, najvec enkrat na klic; navodilo nikoli v drugih klicih ali dejstvih modela.
     // Izrek dostavljalca je sporocilo klica (zapis kot obicajno), brez oznake nujno.
     const navodiloPaketa = call.paketPovedan ? "" : aktivnoNavodiloPaketa(pravila, casZdaj);
     if (navodiloPaketa && jeDostava(text)) {
@@ -1007,7 +1007,7 @@ async function obratKlica(
       };
       call.order.povprasevanje = call.order.tajnica.sporocilo.slice(0, 200);
       // Brez imena lastnika (pregled 0.2.10, najdba 2): »tukaj DPD« lahko rece kdorkoli.
-      return odgovori(`${t("paketNeMore")} ${t("paketUvod")} ${navodiloPaketa}`, false);
+      return odgovori(odgovorDostavljalcu(navodiloPaketa), false);
     }
     // Prevezava na zahtevo (osebna): »lahko govorim z njo«, »nujno je ...«. Nujen izrek je hkrati sporocilo (kot pri nevarnosti), da se ob
     // neuspeli prevezavi nic ne izgubi; prosnja po osebi sama ni sporocilo (Lina po neuspehu vprasa po njem), vsebina ob njej pa je (CodeRabbit 029).

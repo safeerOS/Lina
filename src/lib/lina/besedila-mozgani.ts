@@ -1,3 +1,4 @@
+import { jezikVmesnika } from "./besedila.ts";
 /**
  * Besedila nastavitev »Model za klice« in »Model za asistentko« ter kljuca OpenRouter samo za asistentko (lastnik 24. 11. 2026,
  * NALOGA-LINA-MODELI-KLICI-IN-ASISTENTKA.md A1, A6, B5, C1, C4). Locena datoteka (kot besedila-avtonomija.ts), da se zdruzitev
@@ -171,6 +172,6 @@ export const itM: { [K in BesedaM]: string } = {
 export const besedilaM = { sl: slM, en: enM, de: deM, es: esM, fr: frM, it: itM };
 export type JezikM = keyof typeof besedilaM;
 
-export function tM(kljuc: BesedaM, jezik: JezikM = "sl"): string {
+export function tM(kljuc: BesedaM, jezik: JezikM = jezikVmesnika()): string {
   return besedilaM[jezik]?.[kljuc] ?? slM[kljuc];
 }

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, open, readdir, rename, stat, unlink } from "node:fs/promises";
+import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import path from "node:path";
 import {
   CAKAJOCE_MS,
@@ -193,8 +194,13 @@ export async function pocistiStarePovzetke(root: string, zdaj: Date): Promise<nu
 
 type Odlocitev =
   | { akcija: "izvedi"; stevilka?: string; besedilo?: string }
-  | { akcija: "caka" }
+  | { akcija: "caka"; id: string }
   | { akcija: "zavrni"; razlog: Razlog };
+
+/** Obseg dovoljenja za podobna opravila: opravilo + povezava (povzetek dneva nima povezave). */
+export function obsegAvtonomije(opravilo: VrstaOpravila, povezavaId: string): { opravilo: string; povezava: string } {
+  return { opravilo, povezava: povezavaId || "brez" };
+}
 
 /**
  * Sprozi opravilo: preverba + rezervacija meje v transakciji, nato ucinek. `izvor` je samo oznaka, od kod prihaja sprozilec
@@ -217,18 +223,19 @@ export async function sprozi(
       const o = smeAvtonomno(opravilo, { izvor, povezavaId, potrjeno: opcije.potrjeno === true }, s, zdaj, dovoljenePredpone);
       if (o.izid === "zavrni") return { akcija: "zavrni", razlog: o.razlog };
       if (o.izid === "zahtevaj-potrditev") {
-        const ze = s.cakajoca.some((c) => c.vrsta === opravilo && c.povezavaId === (povezavaId ?? "") && c.sprozilecId === sprozilecId);
-        if (ze) return { akcija: "caka" };
+        const ze = s.cakajoca.find((c) => c.vrsta === opravilo && c.povezavaId === (povezavaId ?? "") && c.sprozilecId === sprozilecId);
+        if (ze) return { akcija: "caka", id: ze.id };
         if (s.cakajoca.length >= NAJVEC_CAKAJOCIH) return { akcija: "zavrni", razlog: "cakalna-vrsta" };
+        const id = randomBytes(8).toString("hex");
         s.cakajoca.push({
-          id: randomBytes(8).toString("hex"),
+          id,
           povezavaId: povezavaId ?? "",
           vrsta: opravilo,
           sprozilecId: sprozilecId.slice(0, 32),
           ustvarjeno: zdaj.toISOString(),
           poteceDo: new Date(zdaj.getTime() + CAKAJOCE_MS).toISOString(),
         });
-        return { akcija: "caka" };
+        return { akcija: "caka", id };
       }
       const prejemnik = o.prejemnikId ? s.prejemniki.find((p) => p.id === o.prejemnikId) : undefined;
       const predloga = o.predlogaId ? s.predloge.find((p) => p.id === o.predlogaId) : undefined;
@@ -252,6 +259,11 @@ export async function sprozi(
   }
   if (odl.akcija === "caka") {
     await zapisiDnevnik(root, { opravilo, izid: "caka", razlog: "nacin-potrditev", povezavaId }, zdaj);
+    // Lastnik je ze dovolil podobna (isto opravilo, ista povezava; Nastavitve > Dovoljenja): ista pot kot njegova odobritev,
+    // pravila in meje se ZNOVA preverijo. Sprozilec samo z lastnikovim dovoljenjem v shrambi (nikoli iz vsebine klica ali SMS).
+    if (!opcije.potrjeno && (await najdiDovoljenje(root, "avtonomija", obsegAvtonomije(opravilo, povezavaId ?? ""), {}, zdaj))) {
+      return odobriCakajoce(root, odl.id, zdaj);
+    }
     return { izid: "caka", razlog: "nacin-potrditev" };
   }
   if (kavljePredUcinkom) await kavljePredUcinkom();

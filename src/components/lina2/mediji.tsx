@@ -16,6 +16,7 @@ import {
   nastaviMotivacijoFn,
   nastavitveZvokaFn,
 } from "@/lib/lina/functions.ts";
+import { jezikVmesnika } from "@/lib/lina/besedila.ts";
 import { t2 } from "./besedila.ts";
 
 /**
@@ -234,7 +235,10 @@ type PogledMotivacije = Awaited<ReturnType<typeof dnevnaMotivacijaFn>>;
 /** Kartica na Domovu: misel dneva (jutro, po 17. uri vecer). Ob napaki ali izklopu ostane stalno besedilo (podano kot `rezerva`). */
 export function MotivacijaBesedilo({ rezerva }: { rezerva: string }) {
   const [pogled, setPogled] = useState<PogledMotivacije | null>(null);
+  // Misel dneva tvori model v slovenscini: v drugem jeziku vmesnika ostane stalno besedilo v tem jeziku.
+  const slovensko = jezikVmesnika() === "sl";
   useEffect(() => {
+    if (!slovensko) return;
     let zivo = true;
     dnevnaMotivacijaFn()
       .then((p) => {
@@ -244,7 +248,7 @@ export function MotivacijaBesedilo({ rezerva }: { rezerva: string }) {
     return () => {
       zivo = false;
     };
-  }, []);
+  }, [slovensko]);
   async function nastavi(vklopljena: boolean) {
     try {
       await nastaviMotivacijoFn({ data: { popravek: { vklopljena } } });
@@ -253,7 +257,7 @@ export function MotivacijaBesedilo({ rezerva }: { rezerva: string }) {
       /* ostane staro stanje */
     }
   }
-  if (!pogled) return <em>{rezerva}</em>;
+  if (jezikVmesnika() !== "sl" || !pogled) return <em>{rezerva}</em>;
   if (!pogled.nastavitve.vklopljena) {
     return (
       <span className="lina-mot">

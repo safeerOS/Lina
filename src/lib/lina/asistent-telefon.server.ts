@@ -32,8 +32,10 @@ import { kodaQr, svgQr } from "./qr.ts";
 import { VarovalkaKode } from "./varovalka-kode.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { nastaviDodatekZaTelefon, opisStanjaDodatkov, stanjeDodatkovZaTelefon } from "./dodatki-telefon.server.ts";
+import { kanalSeznamN8n, kanalUstvariN8n, kanalZazeniN8n, telefonPotrdiN8n, telefonPredlogN8n, telefonStanjeN8n } from "./n8n.server.ts";
 import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gradnje-github.server.ts";
 import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
+import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 
 export const NASTAVITVE_ASISTENTA = "asistent-telefon.json";
 export const PRIVZETA_VRATA_ASISTENTA = 8446;
@@ -265,11 +267,20 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         pot: potVticnice(root, process.platform, k.imeCevi),
         zeton: async () => (await preberiKanal(root)).zeton,
         ozjiKrog: () => krog,
-        // orodje dodatki v Claude Code: stanje takoj, preklop samo po podpisani odobritvi naprave (asistent.server.ts)
+        // orodje dodatki v Claude Code: stanje/n8n_seznam takoj, preklop in n8n ustvarjanje/zagon samo po podpisani odobritvi naprave
         dodatki: {
           stanje: async () => opisStanjaDodatkov(await stanjeDodatkovZaTelefon(root)),
           nastavi: async (d, v) => opisStanjaDodatkov(await nastaviDodatekZaTelefon(d, v, root)),
+          n8nSeznam: () => kanalSeznamN8n(root),
+          n8nZazeni: (tok, moznosti) => kanalZazeniN8n(root, tok, {}, moznosti),
+          n8nUstvari: (opis, ime) => kanalUstvariN8n(root, opis, ime),
         },
+        // dovoljenje za podobne: samo naprava, ki ga je dala, s podpisom, ki znova velja s kljucem iz trenutnega ozjega kroga
+        dovoljenoPodobno: async (dodatek, smer, naprava) =>
+          !!(await najdiDovoljenje(root, "dodatek", { dodatek, smer }, { naprava, kljuci: (await preberiKanal(root)).dovoljene })),
+        // zagon istega n8n toka (po ID) s podpisanim dovoljenjem za podobne te naprave; ustvarjanje toka tega nima
+        dovoljenZagonN8n: async (tok, naprava) =>
+          !!(await najdiDovoljenje(root, "n8n-zagon", { tok }, { naprava, kljuci: (await preberiKanal(root)).dovoljene })),
       });
       const osvezi = setInterval(() => { void preberiKanal(root).then((x) => { krog = new Set(x.dovoljene.keys()); }).catch(() => undefined); }, 3000);
       osvezi.unref?.();
@@ -284,13 +295,21 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       koda.obZaprtju = ustaviOglas;
       // ocena cilja ob izidu agenta: samo predlog na telefon, nadaljevanje podpise naprava (cilj-naloge.server.ts)
       const sCiljem = ovijCilj(izvajalec, oceniZModelom(() => pogovorBrain(root), undefined, () => dovoliOcenoIzida(root)));
-      // Dodatki na racunalniku za napravo ozjega kroga (23. 11. 2026): stanje in preklop s podpisom naprave
-      const dodatki = { stanje: () => stanjeDodatkovZaTelefon(root), nastavi: (d: Parameters<typeof nastaviDodatekZaTelefon>[0], v: boolean) => nastaviDodatekZaTelefon(d, v, root) };
+      // Dodatki na racunalniku za napravo ozjega kroga (23. 11. 2026) + n8n tokovi (24. 11. 2026): stanje, preklop in n8n s podpisom naprave
+      const dodatki = {
+        stanje: () => stanjeDodatkovZaTelefon(root),
+        nastavi: (d: Parameters<typeof nastaviDodatekZaTelefon>[0], v: boolean) => nastaviDodatekZaTelefon(d, v, root),
+        n8n: {
+          stanje: () => telefonStanjeN8n(root),
+          predlog: (vrsta: unknown, cilj: unknown, ime?: unknown) => telefonPredlogN8n(root, vrsta, cilj, ime),
+          potrdi: (id: unknown, zg: unknown, dovoli: unknown) => telefonPotrdiN8n(root, id, zg, dovoli),
+        },
+      };
       // Gradnje na GitHubu (24. 11. 2026): stanje, predlog, potrditev in APK zadnje potrjene gradnje s podpisom naprave
       const gradnje = {
         stanje: () => telefonStanje(root),
-        predlog: async (tok: unknown, veja: unknown) => telefonPredlog(root, tok, veja),
-        potrdi: (id: unknown, z: unknown) => telefonPotrdi(root, id, z),
+        predlog: async (tok: unknown, veja: unknown, naprava?: { naprava: string; kljuci: ReadonlyMap<string, string> }) => telefonPredlog(root, tok, veja, {}, naprava),
+        potrdi: (id: unknown, z: unknown, podobne?: Parameters<typeof telefonPotrdi>[4]) => telefonPotrdi(root, id, z, {}, podobne),
         apk: () => apkZaTelefon(root),
       };
       // Naloge agentov na racunalniku (24. 11. 2026): vrsta, dodelitev (= potrditev za en zagon) in preklic s podpisom naprave

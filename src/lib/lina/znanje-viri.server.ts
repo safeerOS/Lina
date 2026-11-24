@@ -3,6 +3,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { preveriCitate } from "./citat.ts";
+import { naucIzDokumenta } from "./stroke.server.ts";
 import { izvleciBesedilo, MEJE_DOKUMENTA, NapakaDokumenta, type Meje, type Vrsta } from "./dokument-izvlecek.server.ts";
 import { kljucLastnika } from "./keys.server.ts";
 import { callProvider } from "./providers.ts";
@@ -140,6 +141,8 @@ export async function naloziVir(
     rodovi.set(root, rod);
     return rod;
   });
+  // Prilagodljivi kontekst (24. 11. 2026): lastnikov dokument predlaga stroko in nove izraze (z imenom vira; lokalno, vsebina se ne shrani).
+  await naucIzDokumenta(root, prikaz, znanje.slice(0, 200_000));
 
   // Predlog izdelkov: isti potek kot pri spletni strani; brez kljuca lastnika (ali Vertex/lasten streznik) samo znanje.
   const kljuc = await kljucLastnika(root);

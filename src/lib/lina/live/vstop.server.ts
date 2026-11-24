@@ -21,6 +21,7 @@ import { resolveDataDir } from "../store.server.ts";
 import { ciscenjeKlicevVklopljeno } from "../zvok-ciscenje.server.ts";
 import { LiveMost, type NacinBesedila, type OdvisnostiMosta, type TwilioVrata, type ZapisnikLive } from "./most.ts";
 import { setupLive, sistemskoNavodilo } from "./navodilo.ts";
+import { odsekStrokKlic } from "../stroke.server.ts";
 import { odpriLiveWs } from "./odjemalec.server.ts";
 import { posnetekMulaw } from "./posnetek.server.ts";
 import { POT_LIVE } from "./twiml.ts";
@@ -115,15 +116,16 @@ export function pravaOdvisnost(root: string, zasedenost: ZasedenostLive, dnevnik
       const [line, pravila, brain] = await Promise.all([loadLine(root), loadPravila(root), activeBrain(root)]);
       if (brain?.provider !== "vertex" || !brain.project) throw new Error("Live potrebuje prijavo Google Cloud (Vertex).");
       const pozdrav = uvodKlica(pravila, line.catalog.company.name);
-      const sistemsko = sistemskoNavodilo({ podjetje: line.catalog.company.name, katalog: line.catalog, pozdrav });
+      const sistemsko = sistemskoNavodilo({ podjetje: line.catalog.company.name, katalog: line.catalog, pozdrav, stroke: await odsekStrokKlic(root) });
+      const ciscenjeZvoka = await ciscenjeKlicevVklopljeno(root);
       return {
-        setup: setupLive({ projekt: brain.project, sistemsko }),
+        setup: setupLive({ projekt: brain.project, sistemsko, zmanjsanjeHrupa: ciscenjeZvoka }),
         katalog: line.catalog,
         pozdrav,
         temaOdgovor: pravila.temaOdgovor,
         oprostilo: zRazkritjem(pravila, t("oprostiteSlovo")),
         najdaljsiMinut: pravila.najdaljsiPogovorMinut,
-        ciscenjeZvoka: await ciscenjeKlicevVklopljeno(root),
+        ciscenjeZvoka,
       };
     },
     odpriLive: odpriLiveWs(),

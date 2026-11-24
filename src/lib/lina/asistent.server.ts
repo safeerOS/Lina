@@ -15,6 +15,8 @@ import {
   ORODJE_DODATKI,
   jeDodatekTelefona,
   predogledDodatka,
+  predogledN8nUstvari,
+  predogledN8nZagon,
   type DodatekTelefona,
   ID_ODOBRITVE,
   IME_ORODJA,
@@ -250,7 +252,24 @@ export type MoznostiClaudeCode = {
   /** Imena nameščenih cli-anything-<program> (samo ce je dodatek Programi vklopljen; sicer prazen seznam). */
   programi?: () => Promise<string[]>;
   /** Orodje dodatki (dodatki-telefon.server.ts): stanje in preklop; vrne kratko besedilo za Claude Code. Brez njega orodje vrne napako. */
-  dodatki?: { stanje(): Promise<string>; nastavi(dodatek: DodatekTelefona, vklop: boolean): Promise<string> };
+  dodatki?: {
+    stanje(): Promise<string>;
+    nastavi(dodatek: DodatekTelefona, vklop: boolean): Promise<string>;
+    /** n8n tokovi (n8n.server.ts): seznam takoj; zagon in ustvarjanje samo po preverbi v dodatki() spodaj. */
+    n8nSeznam?(): Promise<string>;
+    n8nZazeni?(tok: string, moznosti?: { samoId?: boolean }): Promise<string>;
+    n8nUstvari?(opis: string, ime?: string): Promise<string>;
+  };
+  /**
+   * Skupni modul dovoljenj (02f): ali je naprava s PODPISOM ze dovolila podobna dejanja (isti dodatek, ista smer). Lina to preveri sama
+   * (shramba + podpis naprave), zato kanal preklopa brez podpisane odobritve ali podpisanega dovoljenja ne more sprozit.
+   */
+  dovoljenoPodobno?: (dodatek: DodatekTelefona, smer: "vklopi" | "izklopi", naprava: string) => Promise<boolean>;
+  /**
+   * Ali ima naprava naloge podpisano dovoljenje za podobne za zagon TEGA toka n8n (vrsta n8n-zagon, obseg = ID toka). Preveri Lina iz
+   * svoje shrambe in kljuca naprave, ne kanal. Za ustvarjanje toka takega dovoljenja ni.
+   */
+  dovoljenZagonN8n?: (tok: string, naprava: string) => Promise<boolean>;
 };
 
 type Aktivna = {
@@ -477,7 +496,9 @@ export class IzvajalecClaudeCode implements Izvajalec {
       const a = this.veljavna(sp.chatId) ?? (tip === "koncano" || tip === undefined ? null : this.ponovnoOdpri(sp.chatId));
       if (!a) return;
       this.odprteZaNadaljevanje.delete(sp.chatId);
-      if (tip === "koncano") this.koncaj(sp.chatId, { vrsta: "izid", ok: true, besedilo: sp.besedilo }, true);
+      // tocke (kanal, 24. 11. 2026): koncano brez preverjenega dokaza za vsako tocko ni uspeh (besedilo ze vsebuje »Tocke: 3/5 narejeno«)
+      const nepopolno = typeof sp.tocke === "object" && sp.tocke !== null && (sp.tocke as { popolno?: unknown }).popolno === false;
+      if (tip === "koncano") this.koncaj(sp.chatId, { vrsta: "izid", ok: !nepopolno, besedilo: sp.besedilo }, true);
       else a.naDogodek(tip ? { vrsta: "stanje", besedilo: sp.besedilo, tip } : { vrsta: "stanje", besedilo: sp.besedilo });
       return;
     }
@@ -501,7 +522,7 @@ export class IzvajalecClaudeCode implements Izvajalec {
       return;
     }
     if (sp.vrsta === "dodatki" && typeof sp.zahteva === "string" && typeof sp.chatId === "string") {
-      void this.dodatki(sp.zahteva, sp.chatId, sp.dejanje, sp.dodatek).catch(() => undefined);
+      void this.dodatki(sp.zahteva, sp.chatId, sp.dejanje, sp.dodatek, sp.tok, sp.opis, sp.ime).catch(() => undefined);
       return;
     }
     if (sp.vrsta === "umaknjeno" && typeof sp.id === "string") {
@@ -536,7 +557,9 @@ export class IzvajalecClaudeCode implements Izvajalec {
    * Orodje dodatki: stanje brez odobritve; vklop ali izklop SAMO, ce je Lina to zahtevo sama poslala na napravo kot orodje dodatki s tem
    * predogledom (dodatek in smer) in jo je ista naprava, ki je dala nalogo, s podpisom dovolila (odobri). Kanal sam preklopa ne more sprozit.
    */
-  private async dodatki(zahteva: string, chatId: string, dejanje: unknown, dodatek: unknown): Promise<void> {
+  private async dodatki(
+    zahteva: string, chatId: string, dejanje: unknown, dodatek: unknown, tok?: unknown, opis?: unknown, ime?: unknown,
+  ): Promise<void> {
     const sock = this.sock;
     const vrni = (ok: boolean, besedilo: string) => { if (sock && !sock.destroyed) this.poslji(sock, { vrsta: "dodatkiIzid", zahteva, ok, besedilo }); };
     // vsebina, ki je bila na napravi V TRENUTKU »Dovoli« (posnetek v odobri), ne morda kasneje zamenjana
@@ -546,13 +569,36 @@ export class IzvajalecClaudeCode implements Izvajalec {
     this.dovoljene.delete(zahteva);
     const a = this.veljavna(chatId);
     if (!a || !this.m.dodatki) return vrni(false, "Dodatkov ta Lina ne upravlja ali naloga ni vec aktivna; nic ni spremenjeno.");
+    // podpisana odobritev naprave naloge za NATANKO ta predogled (sestavi ga Lina iz polj, ki jih bo izvedla)
+    const odobreno = (pricakovan: string) => !!pr && !!od && pr.chatId === chatId && od.nalogaId === chatId && od.posiljatelj === a.posiljatelj
+      && pr.orodje === ORODJE_DODATKI && pr.predogled === pricakovan;
+    const zavrni = () => vrni(false, "Ni podpisane odobritve lastnika za to dejanje; nic ni spremenjeno.");
     try {
       if (dejanje === "stanje") return vrni(true, await this.m.dodatki.stanje());
+      if (dejanje === "n8n_seznam") {
+        if (!this.m.dodatki.n8nSeznam) return vrni(false, "n8n tokov ta Lina ne podpira.");
+        return vrni(true, await this.m.dodatki.n8nSeznam());
+      }
+      if (dejanje === "n8n_zazeni") {
+        if (typeof tok !== "string" || !tok.trim() || tok.length > 120) return vrni(false, "Neveljavna zahteva; nic ni spremenjeno.");
+        if (!this.m.dodatki.n8nZazeni) return vrni(false, "n8n tokov ta Lina ne podpira.");
+        if (odobreno(predogledN8nZagon(tok))) return vrni(true, await this.m.dodatki.n8nZazeni(tok));
+        // dovoljenje za podobne: samo isti tok po ID in samo podpisano dovoljenje TE naprave (Lina preveri sama)
+        if (await this.m.dovoljenZagonN8n?.(tok, a.posiljatelj).catch(() => false)) return vrni(true, await this.m.dodatki.n8nZazeni(tok, { samoId: true }));
+        return zavrni();
+      }
+      if (dejanje === "n8n_ustvari") {
+        if (typeof opis !== "string" || opis.trim().length < 3 || opis.length > 400) return vrni(false, "Neveljavna zahteva; nic ni spremenjeno.");
+        if (!this.m.dodatki.n8nUstvari) return vrni(false, "n8n tokov ta Lina ne podpira.");
+        const imeStr = typeof ime === "string" && ime.trim() ? ime.trim() : undefined;
+        // ustvarjanje: vedno samo z odobritvijo za natanko to vsebino (dovoljenja za podobne ni)
+        if (!odobreno(predogledN8nUstvari(opis, imeStr))) return zavrni();
+        return vrni(true, await this.m.dodatki.n8nUstvari(opis, imeStr));
+      }
       if ((dejanje !== "vklopi" && dejanje !== "izklopi") || !jeDodatekTelefona(dodatek)) return vrni(false, "Neveljavna zahteva; nic ni spremenjeno.");
       const vklop = dejanje === "vklopi";
-      if (!pr || !od || pr.chatId !== chatId || od.nalogaId !== chatId || od.posiljatelj !== a.posiljatelj
-        || pr.orodje !== ORODJE_DODATKI || pr.predogled !== predogledDodatka(dodatek, vklop)) {
-        return vrni(false, "Ni podpisane odobritve lastnika za to dejanje; nic ni spremenjeno.");
+      if (!odobreno(predogledDodatka(dodatek, vklop)) && !(await this.m.dovoljenoPodobno?.(dodatek, dejanje, a.posiljatelj).catch(() => false))) {
+        return zavrni();
       }
       return vrni(true, await this.m.dodatki.nastavi(dodatek, vklop));
     } catch (e) {

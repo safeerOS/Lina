@@ -36,6 +36,8 @@ import {
   zapisiDnevnik,
 } from "./avtonomija-stanje.server.ts";
 import { tA } from "./besedila-avtonomija.ts";
+import { zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
+import { obsegAvtonomije } from "./avtonomija-izvedba.server.ts";
 import { resolveDataDir } from "./store.server.ts";
 
 /**
@@ -340,7 +342,14 @@ export async function ukazAvtonomije(token: string | null, ukaz: unknown, dir?: 
       break;
     }
     case "odobri": {
-      rezultat = await odobriCakajoce(root, id(u.id), zdaj);
+      const cid = id(u.id);
+      // »Velja tudi za vse podobne« (samo strogo true iz seje lastnika): isto opravilo na isti povezavi (isti prejemnik in predloga);
+      // nova povezava ali nov prejemnik je nov obseg in se vprasa znova. Obseg se prebere PRED odobritvijo (ta zapis odstrani).
+      const c = u.podobne === true ? (await preberiStanje(root)).stanje?.cakajoca.find((x) => x.id === cid) : undefined;
+      rezultat = await odobriCakajoce(root, cid, zdaj);
+      if (c && rezultat.izid !== "zavrnjeno") {
+        await zapisiDovoljenje(root, "avtonomija", obsegAvtonomije(c.vrsta, c.povezavaId), { kdo: "lastnik" }, zdaj);
+      }
       break;
     }
     case "odkloni": {

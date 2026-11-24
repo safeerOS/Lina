@@ -1,6 +1,13 @@
 // @ts-nocheck
 // Rekonstruirano iz prevoda nameščene Line (20. 11. 2026): izvirni .ts je bil izbrisan; tipi niso ohranjeni.
 import { fold } from "./guards.ts";
+import { sl as BESEDILA_SL } from "./besedila.ts";
+/** Razlogi zavrnitve vnosa: streznik vrne slovensko besedilo (pogovor, glas) in kodo, vmesnik jo prevede s t() (N5). */
+var RAZLOGI_VNOSA = ["kolNapVrsta", "kolNapNaslov", "kolNapDolg", "kolNapCas", "kolNapOpomnikCas", "kolNapDogodekCas"] as const;
+type RazlogVnosa = (typeof RAZLOGI_VNOSA)[number];
+function razlogVnosa(sporocilo: string): RazlogVnosa | null {
+	return RAZLOGI_VNOSA.find((k) => BESEDILA_SL[k] === sporocilo) ?? null;
+}
 var VRSTE = [
 	"dogodek",
 	"opomnik",
@@ -25,13 +32,13 @@ function razberiCas(cas) {
 /** Preveri vnos; vrne zapis brez id ali razlog. Naslov je navaden podatek: brez krmilnih znakov, najvec 200 znakov. */
 function ocistiVnos(vhod: VhodKoledar): string | { vrsta: VrstaKoledar; naslov: string; cas: string | null } {
 	const vrsta = VRSTE.find((v) => v === vhod.vrsta) as VrstaKoledar | undefined;
-	if (!vrsta) return "Izberite vrsto: dogodek, opomnik ali zapisek.";
+	if (!vrsta) return BESEDILA_SL.kolNapVrsta;
 	const naslov = String(vhod.naslov ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
-	if (!naslov) return "Vpišite naslov.";
-	if (naslov.length > 200) return `Naslov je lahko dolg največ 200 znakov.`;
+	if (!naslov) return BESEDILA_SL.kolNapNaslov;
+	if (naslov.length > 200) return BESEDILA_SL.kolNapDolg;
 	const surovCas = vhod.cas === void 0 || vhod.cas === null || vhod.cas === "" ? null : String(vhod.cas);
-	if (surovCas !== null && !razberiCas(surovCas)) return "Čas ni veljaven. Vpišite datum in uro.";
-	if (vrsta !== "zapisek" && surovCas === null) return vrsta === "opomnik" ? "Opomnik potrebuje datum in uro." : "Dogodek potrebuje datum in uro.";
+	if (surovCas !== null && !razberiCas(surovCas)) return BESEDILA_SL.kolNapCas;
+	if (vrsta !== "zapisek" && surovCas === null) return vrsta === "opomnik" ? BESEDILA_SL.kolNapOpomnikCas : BESEDILA_SL.kolNapDogodekCas;
 	return {
 		vrsta,
 		naslov,
@@ -141,7 +148,7 @@ function razberiIzluscenje(surovo, zdaj) {
 	}
 	return ocisceno;
 }
-export { VRSTE, OBLIKA_CASA, lokalniCas, razberiCas, ocistiVnos, jeDanes, uraBesedilo, DNEVI, MESECI, datumBesedilo, casBesedilo, pregledDneva, odgovorDneva, vprasanjeDneva, jeKoledarskaNamera, navodiloIzluscenja, razberiIzluscenje };
+export { RAZLOGI_VNOSA, razlogVnosa, type RazlogVnosa, VRSTE, OBLIKA_CASA, lokalniCas, razberiCas, ocistiVnos, jeDanes, uraBesedilo, DNEVI, MESECI, datumBesedilo, casBesedilo, pregledDneva, odgovorDneva, vprasanjeDneva, jeKoledarskaNamera, navodiloIzluscenja, razberiIzluscenje };
 export type VrstaKoledar = "dogodek" | "opomnik" | "zapisek";
 /** Vnos zapisa, kot pride iz obrazca ali pogovora: karkoli, ocistiVnos preveri in ocisti vsako polje. */
 export type VhodKoledar = { vrsta?: unknown; naslov?: unknown; cas?: unknown };

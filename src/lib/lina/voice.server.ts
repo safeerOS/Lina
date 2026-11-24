@@ -40,6 +40,7 @@ import { istaStevilka } from "./guards.ts";
 import { vE164 } from "./plast.ts";
 import { jeNedovoljenaPreusmeritev } from "./preusmeritev.ts";
 import { atributiGovora, izraziKataloga } from "./govor-model.ts";
+import { namigiStrok } from "./stroke.server.ts";
 import { loadPravila } from "./pravila.server.ts";
 import { CAKAJ_NADALJEVANJE_SEK, jeNedokoncan, TIMEOUT_OSEBNA_PO_SPOROCILU_SEK, TIMEOUT_OSEBNA_PO_VPRASANJU_SEK, TISINA_OSEBNA_PO_SPOROCILU_SEK, TISINA_PRIVZETO_SEK, tisinaIzNastavitve, tisinaPoGovoru, zdruziIzrek, type CakaPodatek } from "./tisina.ts";
 import { rokZbira } from "./trajanje.ts";
@@ -751,7 +752,8 @@ async function obdelajVoiceZahtevo(
     const pravila = await loadPravila(root);
     // Izrazi kataloga v obeh nacinih (lastnik 23. 11. 2026: privzeto vse za podjetje in osebno; samo za podjetja je le, kar izrecno
     // narocim). izrazeKatalogaIzklop = meritev brez njih (samo pravila.json).
-    govorAtributi = atributiGovora(pravila, pravila.izrazeKatalogaIzklop ? [] : izraziKataloga(line.catalog));
+    // Prilagodljivi kontekst (24. 11. 2026): izrazi stroke za izrazi kataloga (samo branje slovarja; prazno ob izklopu stikala).
+    govorAtributi = atributiGovora(pravila, [...(pravila.izrazeKatalogaIzklop ? [] : izraziKataloga(line.catalog)), ...(await namigiStrok(root))]);
     // Action URL je nastavitev. X-Forwarded-* ne sme prepisati gostitelja.
     const origin = javniIzvor(request, pravila.javniNaslov ?? "");
     const action = `${origin}/api/voice/turn`;

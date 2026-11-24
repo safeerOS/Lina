@@ -13,6 +13,7 @@
  */
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from "node:crypto";
 import path from "node:path";
+import { jeTveganoDejanje } from "./dovoljenja-podobne.ts";
 
 /** Ime streznika v .mcp.json; Claude Code ga pokaze kot source="lina". */
 export const IME_KANALA = "lina";
@@ -149,6 +150,11 @@ export function nizSinhron(posiljatelj: string, cas: number, enkratni: string, z
   return `safeer-lina-sinhron-v1\n${posiljatelj}\n${cas}\n${enkratni}\n${zgostitev}`;
 }
 
+/** Fotografija za kontrolo tiska s telefona (24. 11. 2026): podpis pokriva sha256 (hex) surovih bajtov slike. */
+export function nizSlikeKontrole(posiljatelj: string, cas: number, enkratni: string, zgostitev: string): string {
+  return `safeer-lina-kontrola-slika-v1\n${posiljatelj}\n${cas}\n${enkratni}\n${zgostitev}`;
+}
+
 /** Dodatki na racunalniku, ki jih sme naprava ozjega kroga videti in preklopiti (lastnik 23. 11. 2026); zaprt seznam. */
 export const DODATKI_TELEFONA = ["paperclip", "n8n", "affine", "slovenski"] as const;
 export type DodatekTelefona = (typeof DODATKI_TELEFONA)[number];
@@ -164,6 +170,26 @@ export function nizStanjaDodatkov(posiljatelj: string, cas: number, enkratni: st
 /** Kar podpise telefon za vklop ali izklop enega dodatka (POST /dodatek): podpis veze dodatek in smer. */
 export function nizDodatka(posiljatelj: string, dodatek: DodatekTelefona, vklop: boolean, cas: number, enkratni: string): string {
   return `safeer-lina-dodatek-v1\n${posiljatelj}\n${dodatek}\n${vklop ? "vklopi" : "izklopi"}\n${cas}\n${enkratni}`;
+}
+
+/** n8n tokovi prek telefona (obstoječa pot dodatkov): branje stanja in seznama tokov (GET /dodatki/n8n). */
+export function nizN8nStanja(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-dodatki-n8n-stanje-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+
+/** Zgostitev vnosa predloga n8n s telefona (vrsta, cilj/opis, ime) kot JSON polje, da meje polj ne morejo zdrsniti. */
+export function zgostitevN8nPredlogaVnos(vrsta: "ustvari" | "zazeni", cilj: string, ime = ""): string {
+  return createHash("sha256").update(JSON.stringify([vrsta, cilj, ime]), "utf8").digest("hex");
+}
+
+/** Predlog ustvarjanja ali zagona n8n toka s telefona (POST /dodatki/n8n/predlog): podpis veze vrsto in zgostitev vsebine. */
+export function nizN8nPredloga(posiljatelj: string, vrsta: "ustvari" | "zazeni", zgostitev: string, cas: number, enkratni: string): string {
+  return `safeer-lina-dodatki-n8n-predlog-v1\n${posiljatelj}\n${vrsta}\n${zgostitev}\n${cas}\n${enkratni}`;
+}
+
+/** Potrditev ali preklic predloga n8n s telefona (POST /dodatki/n8n/potrdi): podpis veze id, dovoli in zgostitev predloga. */
+export function nizN8nPotrditve(posiljatelj: string, id: string, dovoli: boolean, zgostitev: string, cas: number, enkratni: string): string {
+  return `safeer-lina-dodatki-n8n-potrdi-v1\n${posiljatelj}\n${id}\n${dovoli ? "allow" : "deny"}\n${zgostitev}\n${cas}\n${enkratni}`;
 }
 
 /** Gradnje na GitHubu (24. 11. 2026, gradnje-github.server.ts): branje stanja (GET /gradnje). */
@@ -204,7 +230,7 @@ export function nizApkGradnje(posiljatelj: string, cas: number, enkratni: string
 
 /** Orodje Claude Code za dodatke (kanal lina); to ime nosi zahteva za odobritev na telefonu. */
 export const ORODJE_DODATKI = "mcp__lina__dodatki";
-export type DejanjeDodatkov = "stanje" | "vklopi" | "izklopi";
+export type DejanjeDodatkov = "stanje" | "vklopi" | "izklopi" | "n8n_seznam" | "n8n_zazeni" | "n8n_ustvari";
 /** Predogled na telefonu: dejanje in dodatek, ki ju podpis odobritve veze (prek zgostitevPrikaza). */
 export function predogledDodatka(dodatek: DodatekTelefona, vklop: boolean): string {
   return `${vklop ? "vklopi" : "izklopi"} ${dodatek}`;
@@ -215,6 +241,22 @@ export function opisDodatka(dodatek: DodatekTelefona, vklop: boolean): string {
   return dodatek === "slovenski"
     ? "Vklop slovenskega modela na racunalniku: prvi vklop prenese in namesti priblizno 1,6 GB in zasede pomnilnik."
     : `Vklop dodatka ${dodatek} na racunalniku: zazene vsebnik Docker (samo 127.0.0.1).`;
+}
+/** Predogled in opis odobritve za zagon n8n toka prek kanala Claude Code (koda sestavi oba niza, podpis ju veze). */
+export function predogledN8nZagon(tok: string): string {
+  return ocistiZaTelefon(`n8n zazeni: ${tok.trim()}`, 240);
+}
+export function opisN8nZagon(tok: string): string {
+  return ocistiZaTelefon(`Zagon toka v lokalnem n8n (${tok.trim()}) na racunalniku.`, 400);
+}
+/** Predogled in opis odobritve za ustvarjanje n8n toka prek kanala Claude Code (ustvarjen neaktiven). */
+export function predogledN8nUstvari(opis: string, ime?: string): string {
+  const i = ime?.trim();
+  return ocistiZaTelefon(i ? `n8n ustvari (${i}): ${opis.trim()}` : `n8n ustvari: ${opis.trim()}`, 400);
+}
+export function opisN8nUstvari(opis: string, ime?: string): string {
+  const i = ime?.trim();
+  return ocistiZaTelefon(`Ustvarjanje novega toka v lokalnem n8n (neaktiven)${i ? ` »${i}«` : ""}: ${opis.trim()}`, 600);
 }
 
 /** Besedilo brez osamljenih nadomestnih znakov (N-G); tako besedilo se zavrne, ne popravi. */
@@ -319,8 +361,8 @@ export type IzKanala =
   | { vrsta: "odgovor"; chatId: string; besedilo: string; koncano: boolean; tip?: VrstaOdgovora }
   | { vrsta: "odobritev"; chatId: string; zahtevaId: string; orodje: string; opis: string; predogled: string; zgostitev: string }
   | { vrsta: "umaknjeno"; id: string }
-  /** Orodje dodatki: stanje brez odobritve; vklopi/izklopi samo po podpisani odobritvi naprave, ki je dala nalogo (zahteva = ID odobritve). */
-  | { vrsta: "dodatki"; zahteva: string; chatId: string; dejanje: DejanjeDodatkov; dodatek?: DodatekTelefona }
+  /** Orodje dodatki: stanje/n8n_seznam brez odobritve; vklopi/izklopi/n8n_zazeni/n8n_ustvari samo po podpisani odobritvi naprave, ki je dala nalogo (zahteva = ID odobritve). */
+  | { vrsta: "dodatki"; zahteva: string; chatId: string; dejanje: DejanjeDodatkov; dodatek?: DodatekTelefona; tok?: string; opis?: string; ime?: string }
   /** `nadaljevanje`: zavrnjen je bil odgovor v obstojeco nalogo - naloga sama tece naprej (Lina je ne konca). */
   | { vrsta: "zavrnjeno"; id: string; razlog?: string; nadaljevanje?: boolean }
   | { vrsta: "napaka"; razlog: string };
@@ -360,8 +402,8 @@ export const NAVODILO_KANALA =
   "SAMO, ko je naloga v celoti koncana ali je ne mores narediti (takrat napisi izid). Brez polja vrsta Lina odgovor steje kot " +
   'vmesno in caka naprej. Oznaka nadaljevanje="da" je odgovor Line ali lastnika na tvoje vprasanje v isti nalogi. Oznaka ' +
   'ustavi="da" pomeni, da je naloga ustavljena (lastnik, rok ali umik naprave): prenehaj z delom na njej in poslji reply z vrsta="koncano". ' +
-  "Dodatke na tem racunalniku (paperclip, n8n, affine, slovenski) upravljaj z orodjem dodatki (stanje, vklopi, izklopi), ne z Dockerjem " +
-  "ali datotekami: vklop in izklop izvede Lina sele, ko ga lastnik odobri na napravi.";
+  "Dodatke na tem racunalniku (paperclip, n8n, affine, slovenski) upravljaj z orodjem dodatki (stanje, vklopi, izklopi, n8n_seznam, n8n_zazeni, n8n_ustvari), ne z Dockerjem " +
+  "ali datotekami: vklop, izklop ter ustvarjanje in zagon n8n tokov izvede Lina sele, ko jih lastnik odobri na napravi.";
 
 /** Razcleni eno vrstico JSON; neveljavna ali predolga vrstica je null (nikoli izjema). */
 export function razcleniVrstico(vrstica: string): Record<string, unknown> | null {
@@ -458,12 +500,14 @@ export function ocistiZaSejo(s: string): string {
 }
 
 /**
- * Ena odobritev na program (lastnik, 20. 11. 2026): ce je ukaz Bash en sam preprost klic cli-anything-<program> z varnimi
- * argumenti (brez lupinskih znakov, ; | & $ ` < > ( ) { } \\ narekovajev, prelomov), vrne ime programa, sicer null.
+ * Ena odobritev na program in podukaz (lastnik, 20. 11. 2026; najdba B2 1750): ce je ukaz Bash en sam preprost klic
+ * cli-anything-<program> z varnimi argumenti (brez lupinskih znakov, ; | & $ ` < > ( ) { } \\ narekovajev, prelomov), vrne ime
+ * programa in podukaz (prvi argument brez »-«, sicer urejen nabor zastavic brez vrednosti), sicer null. Tvegan argument (brisanje, push, posiljanje, placilo,
+ * kljuci, namestitev) ali pot zunaj projekta (absolutna, ~, ..) nima obsega: tak ukaz se vedno vprasa na telefonu.
  * input_preview je lahko JSON {"command": "..."} ali golo besedilo ukaza.
  */
 const UKAZ_PROGRAMA = /^cli-anything-([a-z0-9][a-z0-9_.-]{0,60})(?: [A-Za-z0-9_./=:@%+,-]+)*$/;
-export function programIzUkaza(orodje: string, predogled: unknown): string | null {
+export function programIzUkaza(orodje: string, predogled: unknown): { program: string; podukaz: string } | null {
   if (orodje !== "Bash" || typeof predogled !== "string") return null;
   let ukaz = predogled.trim();
   if (ukaz.startsWith("{")) {
@@ -475,5 +519,21 @@ export function programIzUkaza(orodje: string, predogled: unknown): string | nul
       return null;
     }
   }
-  return UKAZ_PROGRAMA.exec(ukaz)?.[1] ?? null;
+  const program = UKAZ_PROGRAMA.exec(ukaz)?.[1];
+  if (!program) return null;
+  const argumenti = ukaz.split(" ").slice(1);
+  // pot zunaj projekta tudi v obliki -o/pot, --x=@/pot ali / v imenu zastavice
+  const zunaj = (a: string) =>
+    (a.startsWith("-") && a.split("=")[0]!.includes("/")) ||
+    a.split(/[=:,@%+]/).some((d) => d.replace(/^-[A-Za-z]?/, "").startsWith("/") || d.startsWith("/") || d.startsWith("~") || d.split("/").includes(".."));
+  if (argumenti.some((a) => jeTveganoDejanje(a.replace(/[-_.]+/g, " ")) || zunaj(a))) return null;
+  // podukaz je samo PRVI argument (zastavica pred njim bi lahko vzela podukaz za vrednost). Golo ime programa nima obsega.
+  // R1 (24. 11. 2026): klic samih zastavic ima za obseg natancno urejen nabor imen zastavic; zastavica z vrednostjo (=, :, @ ...) ga nima,
+  // sicer bi odobren »--help« veljal tudi za »--python=x.py« ali »--exec=...«.
+  if (!argumenti.length) return null;
+  if (argumenti.every((a) => a.startsWith("-"))) {
+    if (!argumenti.every((a) => /^--?[A-Za-z0-9][A-Za-z0-9_-]*$/.test(a))) return null;
+    return { program, podukaz: [...new Set(argumenti)].sort().join(" ") };
+  }
+  return argumenti[0]!.startsWith("-") ? null : { program, podukaz: argumenti[0]! };
 }

@@ -163,7 +163,9 @@ describe("B-4 okoljeZaGh", () => {
     for (const k of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "AWS_SECRET_ACCESS_KEY", "TWILIO_X"]) {
       assert.equal(zaGh[k], undefined, k);
     }
-    for (const k of ["PATH", "HOME", "LANG", "XDG_RUNTIME_DIR", "DISPLAY", "GH_TOKEN", "GITHUB_TOKEN"]) assert.equal(zaGh[k], vhod[k as keyof typeof vhod], k);
+    for (const k of ["PATH", "HOME", "LANG", "XDG_RUNTIME_DIR", "DISPLAY"]) assert.equal(zaGh[k], vhod[k as keyof typeof vhod], k);
+    // najdba B4 1750: zeton okolja ne prevlada nad prijavo (kot github-dostop)
+    for (const k of ["GH_TOKEN", "GITHUB_TOKEN"]) assert.equal(zaGh[k], undefined, k);
     const brezGh = okoljeZaGh(vhod, false);
     assert.equal(brezGh.GH_TOKEN, undefined);
     assert.equal(brezGh.GITHUB_TOKEN, undefined);

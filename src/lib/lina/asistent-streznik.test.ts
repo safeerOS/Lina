@@ -2,9 +2,9 @@
 // podpisi iz Kotlina (vektor) in skozi pravi kanal Claude Code. Vsako varovalo preverjeno z mutacijo (orodja/lina-kanal-mutacije.py).
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { generateKeyPairSync, randomBytes, sign, X509Certificate, type KeyObject } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, sign, X509Certificate, type KeyObject } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import net from "node:net";
 import { request } from "node:https";
 import { tmpdir } from "node:os";
@@ -14,10 +14,12 @@ import { fileURLToPath } from "node:url";
 import { IzvajalecClaudeCode, type Dogodek, type Izvajalec, type Naloga } from "./asistent.server.ts";
 import {
   AsistentStreznik, NAJVEC_NEZNANIH_NA_MINUTO, NAJVEC_POVEZAV_NA_NASLOV, NAJVEC_ZAHTEV_NA_MINUTO, NAJVEC_ZAVRNITEV_NA_MINUTO, POT, odtisPotrdila, potrdiloAsistenta, ustvariPotrdilo, zasebenNaslov, zasebenOdjemalec,
-  dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO,
+  dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO, POT_SLIKA_KONTROLE,
 } from "./asistent-streznik.server.ts";
-import { idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
+import { idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizSlikeKontrole, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
+import { nizDovoljenjaOdobritve } from "./dovoljenja-podobne.ts";
+import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { ovijCilj } from "./cilj-naloge.server.ts";
 
 const KOREN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -583,5 +585,98 @@ test("A-17: notranje besedilo napake izvajalca (pot v domaci mapi) ne gre telefo
     assert.ok(!JSON.stringify(r.telo).includes("/home/"), JSON.stringify(r.telo));
   } finally {
     await s2.pospravi();
+  }
+});
+
+test("dovoljenja za podobne (02f): odobritev s telefona zapise dovoljenje SAMO z veljavnim locenim podpisom in samo za program ali dodatek", async () => {
+  const s = await streznik({ krog: [ANA, BOR] });
+  try {
+    const id = idNaloge();
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "uredi sliko z gimpom"))).status, 202);
+    const odobri = async (zahtevaId: string, predogled: string, podobne: "brez" | "dober" | "slab" | "neoznacen", opis = "Uredi sliko") => {
+      const zg = zgostitevPrikaza("Bash", predogled, opis);
+      s.l.dogodek(id, { vrsta: "odobritev", zahtevaId, orodje: "Bash", predogled, opis, zgostitev: zg });
+      const p = podpisi(ANA, (c, e) => nizOdobritve(zahtevaId, true, ANA.id, c, e, id, zg));
+      const podpisPodobne = podobne === "dober" ? sign("sha256", Buffer.from(nizDovoljenjaOdobritve(ANA.id, zahtevaId, id, zg, p.cas, p.enkratni)), ANA.zasebni).toString("base64")
+        : podobne === "slab" ? sign("sha256", Buffer.from(nizDovoljenjaOdobritve(ANA.id, zahtevaId, id, "0".repeat(64), p.cas, p.enkratni)), ANA.zasebni).toString("base64")
+        : undefined;
+      const telo = { nalogaId: id, zahtevaId, dovoli: true, posiljatelj: ANA.id, ...p, ...(podpisPodobne ? { podobnePodpis: podpisPodobne } : {}), ...(podobne === "neoznacen" ? { podobne: true } : {}) };
+      assert.equal((await s.z("POST", `${POT}/odobritev`, telo)).status, 202);
+    };
+    const krog = new Map([[ANA.id, ANA.kljuc], [BOR.id, BOR.kljuc]]);
+    await odobri("abcde", '{"command":"cli-anything-gimp --help"}', "brez");
+    await odobri("abcdf", '{"command":"cli-anything-gimp --help"}', "neoznacen");     // polje brez podpisa ne pomeni nicesar
+    await odobri("abcdg", '{"command":"cli-anything-gimp --help"}', "slab");
+    await odobri("abcdh", '{"command":"git status"}', "dober");                        // poljuben ukaz nima obsega
+    assert.equal(await najdiDovoljenje(s.dir, "program", { program: "gimp", podukaz: "--help" }, { naprava: ANA.id, kljuci: krog }), null);
+    assert.equal((await readFile(path.join(s.dir, "dovoljenja-podobne.json"), "utf8").catch(() => "")), "");
+    await odobri("abcdj", '{"command":"cli-anything-gimp --help"}', "dober");
+    assert.ok(await najdiDovoljenje(s.dir, "program", { program: "gimp", podukaz: "--help" }, { naprava: ANA.id, kljuci: krog }));
+    assert.equal(await najdiDovoljenje(s.dir, "program", { program: "gimp", podukaz: "--help" }, { naprava: BOR.id, kljuci: krog }), null);
+    assert.equal(await najdiDovoljenje(s.dir, "program", { program: "gimp", podukaz: "--help" }), null, "racunalnik ne podeduje dovoljenja naprave");
+    assert.equal(s.l.klici.filter((k) => k.kaj === "odobri").length, 5, "vsaka odobritev je sla izvajalcu kot prej");
+  } finally {
+    await s.pospravi();
+  }
+});
+
+// ------------------------------------------------------------------ kontrola tiska: fotografija s telefona (24. 11. 2026)
+
+/** Surovi bajti slike, podpis v glavah (preveri se pred branjem telesa). */
+function posljiSliko(s: { vrata: number; cert: string; odtis: string }, bajti: Buffer, glave: Record<string, string>, tip = "image/jpeg"): Promise<{ status: number; telo: any } | { napaka: string }> {
+  return new Promise((ok) => {
+    const r = request({
+      host: "127.0.0.1", port: s.vrata, method: "POST", path: POT_SLIKA_KONTROLE, ca: s.cert, rejectUnauthorized: true,
+      checkServerIdentity: (_h, c) => (c.fingerprint256.replace(/:/g, "").toLowerCase() === s.odtis ? undefined : new Error("odtis")),
+      headers: { "content-type": tip, "content-length": String(bajti.length), ...glave },
+    }, (res) => {
+      const k: Buffer[] = [];
+      res.on("data", (d) => k.push(d));
+      res.on("end", () => {
+        let j: unknown = null;
+        try { j = JSON.parse(Buffer.concat(k).toString("utf8")); } catch { /* ni JSON */ }
+        ok({ status: res.statusCode ?? 0, telo: j });
+      });
+    });
+    r.on("error", (e) => ok({ napaka: (e as NodeJS.ErrnoException).code ?? "napaka" }));
+    r.end(bajti);
+  });
+}
+const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+function glaveSlike(d: Naprava, bajti: Buffer, cas?: number): Record<string, string> {
+  const z = sha(bajti);
+  const p = podpisi(d, (c, e) => nizSlikeKontrole(d.id, c, e, z), cas);
+  return { "x-lina-posiljatelj": d.id, "x-lina-cas": String(p.cas), "x-lina-enkratni": p.enkratni, "x-lina-podpis": p.podpis, "x-lina-zgostitev": z };
+}
+const status = (r: { status: number } | { napaka: string }) => ("status" in r ? r.status : r.napaka);
+
+test("kontrola tiska: podpisana fotografija s telefona se samo shrani v prejeto; nepodpisana, tuja, spremenjena, ne-slika in prevelika se zavrnejo", async () => {
+  const s = await streznik({ krog: [{ id: ANA.id, kljuc: ANA.kljuc }] });
+  try {
+    const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), randomBytes(2000)]);
+    const glave = glaveSlike(ANA, jpg);
+    const r = await posljiSliko(s, jpg, glave);
+    assert.ok("status" in r && r.status === 200, JSON.stringify(r));
+    if (!("status" in r)) return;
+    assert.equal(r.telo.sprejeto, true);
+    assert.match(r.telo.id, /^\d{8}-\d{6}-[a-f0-9]{6}\.jpg$/);
+    const pot = path.join(s.dir, "kontrola-tiska", "prejeto", r.telo.id);
+    assert.ok(existsSync(pot));
+    assert.equal(statSync(pot).mode & 0o777, 0o600);
+    assert.equal(status(await posljiSliko(s, jpg, glave)), 403);                                   // ponovitev
+    const druga = Buffer.concat([jpg.subarray(0, 100), Buffer.alloc(10)]);
+    assert.equal(status(await posljiSliko(s, druga, glaveSlike(ANA, jpg))), 403);                 // telo ne ustreza podpisani zgostitvi
+    assert.equal(status(await posljiSliko(s, jpg, glaveSlike(BOR, jpg))), 403);                   // naprava izven seznama
+    assert.equal(status(await posljiSliko(s, jpg, { "x-lina-zgostitev": sha(jpg) })), 400);       // brez podpisa
+    assert.equal(status(await posljiSliko(s, jpg, glaveSlike(ANA, jpg), "application/json")), 415);
+    const pdf = Buffer.from("%PDF-1.4 nic");
+    assert.equal(status(await posljiSliko(s, pdf, glaveSlike(ANA, pdf))), 415);                  // podpisano, a ni JPEG/PNG
+    const velika = Buffer.alloc(17 * 1024 * 1024, 0xff);
+    const v = await posljiSliko(s, velika, glaveSlike(ANA, velika));
+    assert.ok(status(v) === 413 || status(v) === "ECONNRESET" || status(v) === "EPIPE", String(status(v)));  // odgovor pred branjem telesa
+    assert.equal((await s.z("GET", POT_SLIKA_KONTROLE)).status, 405);
+    assert.equal(POTI_ODDALJENO.has(POT_SLIKA_KONTROLE), false, "od zunaj doma pot ni dovoljena");
+  } finally {
+    await s.pospravi();
   }
 });
