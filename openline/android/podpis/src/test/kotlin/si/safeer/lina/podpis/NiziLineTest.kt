@@ -101,4 +101,21 @@ class NiziLineTest {
         assertEquals(null, NiziLine.nizSinhron("tuja\nnaprava", cas, "enkratni-vektor-0004", z))
         assertEquals(null, NiziLine.nizSinhron(id, cas, "enkratni-vektor-0004", "ni-zgostitev"))
     }
+
+    @Test
+    fun `samostojna naloga in samodejni odgovor (vec vrstic, povezave, nacrt do 3400 znakov) gresta skozi preverbo naloge in podpis`() {
+        // oblika iz SamostojnaNaloga.pripravi (modul samostojna): naloga, nacrt, povezave, zapiski, omejitve
+        val nal = "Uporabi LearnHarness po mojem tehničnem načrtu.\n\nNačrt iz pogovora z lastnikom:\n" +
+            (1..60).joinToString("\n") { "$it. korak: preizkusi modul $it" } +
+            "\n\nPovezave iz pogovora z lastnikom:\n- github.com/primer/learnharness\n- https://example.org/a?b=c\n\n" +
+            "Pravila: upoštevaj AGENTS.md ciljnega projekta; ne briši datotek, ne uporabljaj git push in sudo. " +
+            "Ko potrebuješ odločitev ali podatek, pošlji reply z vrsta=\"vprasanje\"; ko je naloga v celoti končana, vrsta=\"koncano\"."
+        val dolga = (nal + "\n" + "x".repeat(3400)).take(3400)
+        for (b in listOf(nal, dolga, "Zdaj naredi korak 2 načrta:\n- dodaj preizkuse\n- poženi z mejo pomnilnika")) {
+            assertEquals(b, NalogaLine.besedilo(b))
+            val n = NalogaLine.podpisiNadaljevanje("naloga-0001-aaaaaaaaaaaa", "n-5ef0fcb562008e97", b, 1763120000000, "enkratni-vektor-0011") { "podpis" }
+            assertEquals(b, n?.besedilo)
+            assertTrue(NiziLine.nizNaloge("naloga-vektor-01", "n-5ef0fcb562008e97", b, 1763120000000, "enkratni-vektor-0012") != null)
+        }
+    }
 }

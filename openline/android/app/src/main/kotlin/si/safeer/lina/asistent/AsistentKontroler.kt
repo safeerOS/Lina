@@ -383,7 +383,15 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 if (si.safeer.lina.samostojna.SamodejniOdgovor.jeVprasanje(d.besedilo, d.vprasanje)) cakaOdgovor = true
                 else if (d.odgovor) cakaOdgovor = false
             }
-            is DogodekLine.Odobritev -> odprta = d
+            is DogodekLine.Odobritev -> {
+                // tocka (b): odobritev ostane gumb lastnika; Lina takoj obvesti (enkrat na zahtevo)
+                if (odprta?.zahtevaId != d.zahtevaId) runCatching {
+                    OpomnikAlarm.pokaziObvestilo(context, "odobritev-${d.zahtevaId}",
+                        context.getString(si.safeer.lina.R.string.assistant_approval_title) + "\n" +
+                            context.getString(si.safeer.lina.R.string.assistant_approval_tool, d.orodje))
+                }
+                odprta = d
+            }
             is DogodekLine.Izid -> { izid = d; cakaOdgovor = false; dodaj(d.besedilo); zaPregled = d.takeIf { it.ok } }
         }
         if (koncano) { nalogaId = null; odprta = null; cakaOdgovor = false; spremljana = id }
@@ -452,6 +460,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     fun ustavi() {
         val id = nalogaId ?: return
+        // lastnik je nalogo ustavil: Lina je ne pregleduje in ne nadaljuje sama
+        samodejni.ustavi(id)
         Thread {
             val pov = povezava()
             val cas = System.currentTimeMillis()
