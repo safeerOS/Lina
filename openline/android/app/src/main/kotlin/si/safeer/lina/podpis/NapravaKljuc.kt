@@ -99,4 +99,9 @@ object NapravaKljuc {
     fun podpisiPredlogGradnje(tok: String, veja: String, cas: Long, enkratni: String): String? = podpisnik.podpisiPredlogGradnje(tok, veja, cas, enkratni)
     fun podpisiPotrditevGradnje(id: String, zgostitev: String, cas: Long, enkratni: String): String? = podpisnik.podpisiPotrditevGradnje(id, zgostitev, cas, enkratni)
     fun podpisiApkGradnje(cas: Long, enkratni: String): String? = podpisnik.podpisiApkGradnje(cas, enkratni)
+
+    /** Agenti in naloge (24. 11. 2026). Dodelitev samo po »Razumem« (Podpisnik). */
+    fun podpisiStanjeAgentNalog(cas: Long, enkratni: String): String? = podpisnik.podpisiStanjeAgentNalog(cas, enkratni)
+    fun podpisiDodelitevAgentNaloge(zgostitev: String, cas: Long, enkratni: String): String? = podpisnik.podpisiDodelitevAgentNaloge(zgostitev, cas, enkratni)
+    fun podpisiPreklicAgentNaloge(id: String, cas: Long, enkratni: String): String? = podpisnik.podpisiPreklicAgentNaloge(id, cas, enkratni)
 }

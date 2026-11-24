@@ -94,6 +94,23 @@ class Podpisnik(
         return podpisi(niz.toByteArray(Charsets.UTF_8))
     }
 
+    /** Agenti in naloge (24. 11. 2026): branje in preklic brez »Razumem« (kot ustavitev), dodelitev samo po njem. */
+    fun podpisiStanjeAgentNalog(cas: Long, enkratni: String): String? {
+        val niz = NiziLine.nizStanjaAgentNalog(idNaprave(), cas, enkratni) ?: return null
+        return podpisi(niz.toByteArray(Charsets.UTF_8))
+    }
+
+    fun podpisiDodelitevAgentNaloge(zgostitev: String, cas: Long, enkratni: String): String? {
+        if (!sme()) return null
+        val niz = NiziLine.nizDodelitveAgentNaloge(idNaprave(), zgostitev, cas, enkratni) ?: return null
+        return podpisi(niz.toByteArray(Charsets.UTF_8))
+    }
+
+    fun podpisiPreklicAgentNaloge(id: String, cas: Long, enkratni: String): String? {
+        val niz = NiziLine.nizPreklicaAgentNaloge(idNaprave(), id, cas, enkratni) ?: return null
+        return podpisi(niz.toByteArray(Charsets.UTF_8))
+    }
+
     fun podpisiApkGradnje(cas: Long, enkratni: String): String? {
         if (!sme()) return null
         val niz = NiziLine.nizApkGradnje(idNaprave(), cas, enkratni) ?: return null

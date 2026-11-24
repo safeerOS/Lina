@@ -179,6 +179,28 @@ object NiziLine {
         return "$PREDPONA_GRADNJA_APK\n$posiljatelj\n$cas\n$enkratni"
     }
 
+    const val PREDPONA_AGENTI_STANJE = "safeer-lina-agenti-stanje-v1"
+    const val PREDPONA_AGENT_DODELI = "safeer-lina-agent-dodeli-v1"
+    const val PREDPONA_AGENT_PREKLICI = "safeer-lina-agent-preklici-v1"
+
+    /** Vrsta nalog agentov (kanal-claude.ts nizStanjaAgentNalog, 24. 11. 2026): branje. */
+    fun nizStanjaAgentNalog(posiljatelj: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni)) return null
+        return "$PREDPONA_AGENTI_STANJE\n$posiljatelj\n$cas\n$enkratni"
+    }
+
+    /** Dodelitev naloge agentu (kanal-claude.ts nizDodelitveAgentNaloge): podpis veze zgostitev (agent, mapa, besedilo, pogoj). */
+    fun nizDodelitveAgentNaloge(posiljatelj: String, zgostitev: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni) || !ZGOSTITEV.matches(zgostitev)) return null
+        return "$PREDPONA_AGENT_DODELI\n$posiljatelj\n$zgostitev\n$cas\n$enkratni"
+    }
+
+    /** Preklic dodeljene naloge (kanal-claude.ts nizPreklicaAgentNaloge): podpis veze id. */
+    fun nizPreklicaAgentNaloge(posiljatelj: String, id: String, cas: Long, enkratni: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni) || !AgentiLine.ID.matches(id)) return null
+        return "$PREDPONA_AGENT_PREKLICI\n$posiljatelj\n$id\n$cas\n$enkratni"
+    }
+
     /** Besedilo brez osamljenih nadomestnih znakov; tako besedilo se zavrne, ne popravi (praviUnicode v Lini). */
     fun praviUnicode(s: String): Boolean {
         var i = 0

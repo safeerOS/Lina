@@ -5,6 +5,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import si.safeer.lina.seznanitev.AsistentNaslov
+import si.safeer.lina.podpis.AgentiLine
 import si.safeer.lina.podpis.AsistentProtokol
 import si.safeer.lina.podpis.GlaveApk
 import si.safeer.lina.podpis.GradnjeLine
@@ -91,6 +92,12 @@ class HttpPovezavaZLino(
         get("gradnje", GradnjeLine.NAJVEC_ODGOVORA, podpisanaPoizvedba(posiljatelj, cas, enkratni, podpis))
     override fun predlogGradnje(telo: String) = post("gradnja/predlog", telo)
     override fun potrditevGradnje(telo: String) = post("gradnja/potrdi", telo)
+
+    // Agenti in naloge (24. 11. 2026): samo domace omrezje (poti niso v POTI_ODDALJENO); vrsta do 30 nalog po 8000 znakov.
+    override fun stanjeAgentNalog(posiljatelj: String, cas: Long, enkratni: String, podpis: String) =
+        get("agent-naloge", AgentiLine.NAJVEC_ODGOVORA, podpisanaPoizvedba(posiljatelj, cas, enkratni, podpis))
+    override fun dodeliAgentNalogo(telo: String) = post("agent-naloga/dodeli", telo)
+    override fun prekliciAgentNalogo(telo: String) = post("agent-naloga/preklici", telo)
 
     /**
      * GET /gradnja/apk v [mapa] (cacheDir): pretok z lastnim stetjem bajtov in rokom (ne prek izvedi, ki omeji velikost in bere

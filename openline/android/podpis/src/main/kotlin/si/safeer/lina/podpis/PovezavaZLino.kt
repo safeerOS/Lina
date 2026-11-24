@@ -35,6 +35,12 @@ interface PovezavaZLino {
     fun predlogGradnje(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
     /** POST /gradnja/potrdi: zagon po lastnikovem podpisanem gumbu. */
     fun potrditevGradnje(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** GET /agent-naloge (24. 11. 2026): vrsta nalog agentov; samo domace omrezje. Privzeto 404 kot stara Lina. */
+    fun stanjeAgentNalog(posiljatelj: String, cas: Long, enkratni: String, podpis: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** POST /agent-naloga/dodeli: podpisana dodelitev = lastnikova potrditev za en zagon. */
+    fun dodeliAgentNalogo(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
+    /** POST /agent-naloga/preklici. */
+    fun prekliciAgentNalogo(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
 }
 
 /** Kaj uporabnik izve ob napaki (kljuc besedila v aplikaciji). Vse 403 so ista koda (Lina ne pove razloga). */

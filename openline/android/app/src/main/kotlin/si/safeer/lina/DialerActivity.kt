@@ -142,6 +142,7 @@ class DialerActivity : Activity() {
     private lateinit var tabComputer: View
     private lateinit var dodatkiRacunalnika: si.safeer.lina.asistent.DodatkiRacunalnikaPogled
     private lateinit var gradnje: si.safeer.lina.asistent.GradnjePogled
+    private lateinit var agentiNaloge: si.safeer.lina.asistent.AgentiNalogePogled
     /** Opozorilo ob prvem zagonu in Nastavitve > O Lini (24. 11. 2026). */
     private val opozorilo by lazy { si.safeer.lina.asistent.OpozoriloPogled(this) }
     private lateinit var navButtons: Map<Zavihek, Button>
@@ -474,6 +475,10 @@ class DialerActivity : Activity() {
         tabComputer = findViewById(R.id.tabComputer)
         dodatkiRacunalnika = si.safeer.lina.asistent.DodatkiRacunalnikaPogled(this, tabComputer as android.widget.LinearLayout)
         gradnje = si.safeer.lina.asistent.GradnjePogled(this, tabComputer as android.widget.LinearLayout) { opozorilo.pokazi() }
+        // Agenti in naloge (24. 11. 2026): na istem mestu kot Dovoli/Zavrni za Claude Code - kartica tik nad tem razdelkom.
+        (tabComputer as android.widget.LinearLayout).let { t ->
+            agentiNaloge = si.safeer.lina.asistent.AgentiNalogePogled(this, t, t.indexOfChild(findViewById(R.id.assistantApproval))) { opozorilo.pokazi() }
+        }
         tabHome = findViewById(R.id.tabHome)
         tabNotes = findViewById(R.id.tabNotes)
         tabSummary = findViewById(R.id.tabSummary)
@@ -619,7 +624,7 @@ class DialerActivity : Activity() {
         // Domov kaze stanje povezave (vrstica stanja je zdaj na Domovu).
         if (z == Zavihek.DOMOV) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
-        if (z == Zavihek.RACUNALNIK) { dodatkiRacunalnika.osvezi(); gradnje.osvezi() }
+        if (z == Zavihek.RACUNALNIK) { dodatkiRacunalnika.osvezi(); gradnje.osvezi(); agentiNaloge.osvezi() }
         osveziNavRacunalnik()
     }
 
