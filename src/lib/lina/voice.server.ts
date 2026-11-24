@@ -198,6 +198,8 @@ export type MoznostiKlica = {
   razumevanje?: ModelRazumevanja;
   /** Ura v ms za starost opravil in cas obrata; vbrizgana v preizkusih. */
   ura?: () => number;
+  /** Samo za preizkuse: obrat se zacne sele, ko se obljuba izpolni (deterministicen »obrat se ni koncal v prvi zahtevi«). */
+  zadrziObrat?: () => Promise<void>;
 };
 
 /** Obrat v teku: model in sinteza teceta mimo webhooka, zahteve cak samo cakajo nanj. */
@@ -400,6 +402,7 @@ function zazeniObrat(
   nadSt = 0,
   prevezavaZahteva?: "cilj" | "brez",
   izvenCasa = false,
+  zadrzi?: () => Promise<void>,
 ): Opravilo {
   const zacetek = ura();
   pocistiOpravila(zacetek);
@@ -424,7 +427,7 @@ function zazeniObrat(
     izrek: vhod.text,
     nadSt,
   };
-  const obrat = recordCaller(vhod, root, model, { ...(nujniPrevezava ? { nujniPrevezava: true } : {}), ...(prevezavaZahteva ? { prevezavaZahteva } : {}), ...(izvenCasa ? { prevezavaIzvenCasa: true } : {}), ...(razumevanje ? { razumevanje } : {}) });
+  const obrat = (zadrzi ? zadrzi() : Promise.resolve()).then(() => recordCaller(vhod, root, model, { ...(nujniPrevezava ? { nujniPrevezava: true } : {}), ...(prevezavaZahteva ? { prevezavaZahteva } : {}), ...(izvenCasa ? { prevezavaIzvenCasa: true } : {}), ...(razumevanje ? { razumevanje } : {}) }));
   opravilo.besedilo = obrat.then(
     (izid) => {
       opravilo.izid = izid;
@@ -1160,6 +1163,7 @@ async function obdelajVoiceZahtevo(
       nadSt,
       naZahtevo === null ? undefined : naZahtevo === "brez" ? "brez" : "cilj",
       izvenCasa,
+      moznosti.zadrziObrat,
     );
     return oddaj(opravilo, kljuc, prvi);
   }

@@ -396,8 +396,15 @@ describe("pregled 029: prevezava brez cilja ob oddaji v skoku (najdba 9)", { con
     const sid = "CA-SK-1";
     await voice(dir, { CallSid: sid, From: OD, To: LINA }, "/api/voice/incoming");
     await voice(dir, { CallSid: sid, From: OD, To: LINA, SpeechResult: "Ana Primer, nisem iz podjetja." }, "/api/voice/turn?obr=1");
-    const moznosti: MoznostiKlica = { cakajMs: 0, cakajNaprejMs: 0, cakajBrezGlasuMs: 0 };
+    // Obrat zadrzimo, dokler prva zahteva ne odgovori (CI 24. 11. 2026: brez tega se je obrat vcasih koncal v 0 ms in je prvi
+    // odgovor ze vseboval Dial - preizkus je bil odvisen od hitrosti racunalnika).
+    let spusti: () => void = () => undefined;
+    const vrata = new Promise<void>((r) => { spusti = r; });
+    let klicev = 0;
+    const moznosti: MoznostiKlica = { cakajMs: 0, cakajNaprejMs: 0, cakajBrezGlasuMs: 0, zadrziObrat: async () => { klicev += 1; await vrata; } };
     const prvi = await voice(dir, { CallSid: sid, From: OD, To: LINA, SpeechResult: "Rad bi govoril s pravo osebo." }, "/api/voice/turn?obr=2", moznosti);
+    spusti();
+    assert.ok(klicev > 0, "obrat ni bil zadrzan - zadrzevanje ne deluje");
     assert.match(prvi, /cak=1/, "obrat se ni koncal v prvi zahtevi");
     // obrat je izracunal prevezavo; lastnik vmes izklopi stikalo
     for (let i = 0; i < 500 && (await preberiKlic(sid, dir))?.nujniDogodki === undefined; i += 1) await new Promise((r) => setTimeout(r, 5));
