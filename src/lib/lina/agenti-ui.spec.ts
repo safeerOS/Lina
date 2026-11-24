@@ -24,7 +24,9 @@ describe("AgentiKartica", () => {
   const html = renderToStaticMarkup(createElement(AgentiKartica, { stanje: STANJE, zaposlen: false, onUkaz: ni }));
 
   it("zaznani agenti imajo stikalo; nezaznan nima; grok pove, da je potrebna prijava (grok login)", () => {
-    expect(html.match(/type="checkbox"/g)?.length).toBe(5);
+    // Stikala agentov (aria-label = ime agenta); obrazec »Dodeli nalogo« ima od 02f se izbiro »Velja tudi za vse podobne«.
+    expect(html.match(/type="checkbox" aria-label="(?:claude|agy|opencode|kimi|pi|grok)"/g)?.length).toBe(5);
+    expect(html).toContain('id="podobne-dodeli"');
     expect(html).toContain('aria-label="agy"');
     expect(html).toContain(sl.agPrijava);
     expect(html).toContain("grok login");
