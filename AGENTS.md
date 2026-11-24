@@ -138,5 +138,8 @@ Celotno pravilo: projekt-3/AGENTS.md »Lina gradi APK in deb na GitHubu«. Na te
   (preizkus pade, ce se besedilo spremeni brez nove razlicice). Vedno v Nastavitve > O Lini.
 - Odlocitev (24. 11. 2026): brez »Razumem« (trenutna razlicica) kljuc naprave NE podpise nalog, nadaljevanj (tudi samodejnih
   odgovorov) in gradenj (Podpisnik, varovalo v kodi; branje stanja, ustavitev in odobritev ostanejo). Klici: nova namestitev brez
-  potrditve klica ne prevzame (GatewayInCallService.evaluate, CallCommandController ANSWER); ze namescena Lina (posodobitev cez
-  starejso razlicico, oznaka se zapise enkrat ob prvem zagonu procesa) prevzema klice kot prej, dokler ne potrdi.
+  potrditve klica ne prevzame (GatewayInCallService.evaluate, oddaljeni ANSWER v CallCommandController; lastnikov lokalni odgovor
+  ni zaprt); ze namescena Lina prevzema klice kot prej, dokler ne potrdi. »Ze namescena« = posodobitev cez starejso razlicico
+  (lastUpdateTime > firstInstallTime) IN neprazne nastavitve lina_policy ali gateway_config (namestitev, ki je kdaj ocenila klic,
+  ima v lina_policy vsaj line_id_key; privzeto Lina brez seznama klica ne prevzame). Po »Pocisti podatke« velja za novo. Oznaka se
+  zapise enkrat ob prvem zagonu procesa (GatewayApplication). Odobritev (dovoli) ni zaprta: odlocitev za vodjo.
