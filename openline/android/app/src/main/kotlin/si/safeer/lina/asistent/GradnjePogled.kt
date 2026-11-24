@@ -36,6 +36,8 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
     private val seznam = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
     private val predlagaj = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.builds_propose); isEnabled = false }
     private val mapaApk = File(a.cacheDir, "gradnje")
+    /** Ena zahteva na Lino naenkrat iz tega zaslona (vOzadju); prenos APK ima svojo zastavico na proces (NamestitevApk). */
+    @Volatile private var dela = false
     private var zadnje: StanjeGradenj? = null
 
     private companion object {
