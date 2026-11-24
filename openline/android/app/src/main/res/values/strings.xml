@@ -518,7 +518,8 @@
     <string name="builds_pick_branch">From which branch?</string>
     <string name="builds_propose_msg">Proposing %1$s from branch %2$s. Nothing starts until you confirm the start.</string>
     <string name="builds_confirm">Confirm start</string>
-    <string name="builds_confirm_msg">Start the build on GitHub?\n\nWhat: %1$s\nBranch: %2$s</string>
+    <string name="builds_confirm_msg">Start the build on GitHub?\n\nWhat: %1$s\nBranch: %2$s\nCommit: %3$s</string>
+    <string name="builds_commit_missing">This build has no commit to show, so it was not signed.</string>
     <string name="builds_start">Start</string>
     <string name="builds_install">Install on this phone</string>
     <string name="builds_refresh">Refresh</string>
@@ -619,6 +620,9 @@
     <string name="agents_confirm_title">Check and sign</string>
     <string name="agents_confirm_msg">Agent: %1$s\nFolder: %2$s\n%3$s\n\nTask:\n%4$s\n\nSigning with this phone confirms one start of this task.</string>
     <string name="agents_confirm_sign">Sign and assign</string>
+    <string name="agents_text_cleaned_title">Check the cleaned task</string>
+    <string name="agents_text_cleaned">Hidden or special characters were removed. Only this text is signed:\n\n%1$s</string>
+    <string name="agents_text_cleaned_ok">Use this text</string>
     <string name="agents_assigned">Task assigned.</string>
     <string name="agents_err_unreachable">The computer cannot be reached. Tasks work only on your home network; check that Lina is running on the computer, then tap Refresh.</string>
     <string name="agents_err_denied">The computer refused the request. Tasks are allowed only on the home network; if needed, pair the phone with Lina again.</string>

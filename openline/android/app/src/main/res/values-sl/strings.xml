@@ -517,7 +517,8 @@
     <string name="builds_pick_branch">S katere veje?</string>
     <string name="builds_propose_msg">Predlagam: %1$s z veje %2$s. Nič se ne zažene, dokler zagona ne potrdiš.</string>
     <string name="builds_confirm">Potrdi zagon</string>
-    <string name="builds_confirm_msg">Zaženem gradnjo na GitHubu?\n\nKaj: %1$s\nVeja: %2$s</string>
+    <string name="builds_confirm_msg">Zaženem gradnjo na GitHubu?\n\nKaj: %1$s\nVeja: %2$s\nCommit: %3$s</string>
+    <string name="builds_commit_missing">Ta gradnja nima commita za prikaz, zato ni podpisana.</string>
     <string name="builds_start">Zaženi</string>
     <string name="builds_install">Namesti na ta telefon</string>
     <string name="builds_refresh">Osveži</string>
@@ -618,6 +619,9 @@
     <string name="agents_confirm_title">Preveri in podpiši</string>
     <string name="agents_confirm_msg">Agent: %1$s\nMapa: %2$s\n%3$s\n\nNaloga:\n%4$s\n\nPodpis s tem telefonom potrdi en zagon te naloge.</string>
     <string name="agents_confirm_sign">Podpiši in dodeli</string>
+    <string name="agents_text_cleaned_title">Preveri očiščeno nalogo</string>
+    <string name="agents_text_cleaned">Odstranjeni so bili skriti ali posebni znaki. Podpiše se samo to besedilo:\n\n%1$s</string>
+    <string name="agents_text_cleaned_ok">Uporabi to besedilo</string>
     <string name="agents_assigned">Naloga je dodeljena.</string>
     <string name="agents_err_unreachable">Računalnik ni dosegljiv. Naloge delujejo samo v domačem omrežju; preveri, ali Lina na računalniku teče, nato tapni Osveži.</string>
     <string name="agents_err_denied">Računalnik je zahtevo zavrnil. Naloge so dovoljene samo v domačem omrežju; po potrebi telefon znova poveži z Lino.</string>

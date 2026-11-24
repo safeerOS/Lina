@@ -464,4 +464,10 @@
     <string name="asist_or_account_paid">Compte avec crédit : vous pouvez choisir n’importe quel modèle.</string>
     <string name="asist_or_daily_fmt">Requêtes gratuites aujourd’hui : encore %1$d sur %2$d.</string>
     <string name="asist_or_pick">Choisir un modèle dans la liste</string>
+    <string name="builds_confirm_msg">Lancer la compilation sur GitHub ?\n\nQuoi : %1$s\nBranche : %2$s\nCommit : %3$s</string>
+    <string name="builds_commit_missing">Cette compilation n’a pas de commit à afficher, donc rien n’a été signé.</string>
+    <string name="agents_confirm_msg">Agent : %1$s\nDossier : %2$s\n%3$s\n\nTâche :\n%4$s\n\nLa signature avec ce téléphone confirme un seul lancement de cette tâche.</string>
+    <string name="agents_text_cleaned_title">Vérifier la tâche nettoyée</string>
+    <string name="agents_text_cleaned">Des caractères cachés ou spéciaux ont été retirés. Seul ce texte est signé :\n\n%1$s</string>
+    <string name="agents_text_cleaned_ok">Utiliser ce texte</string>
 </resources>

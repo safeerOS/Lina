@@ -24,7 +24,7 @@ import si.safeer.lina.podpis.ZavrnitevApk
 import java.io.File
 
 /**
- * »Gradnje na GitHubu« v zavihku Racunalnik (lastnik 24. 11. 2026): stanje, predlog in potrditev (tok in veja vidna pred podpisom),
+ * »Gradnje na GitHubu« v zavihku Racunalnik (lastnik 24. 11. 2026): stanje, predlog in potrditev (tok, veja in commit vidni pred podpisom),
  * ura konca po ljubljanskem casu, POLNA pot mape na racunalniku in sha256, opozorila GitHuba kot golo besedilo; »Namesti na ta
  * telefon«. Logika v modulu podpis (GradnjeLine, NamestitevApk; preizkusi), tu pogledi in niti. Samo domace omrezje (LAN povezava).
  * NEPREVERJENO na napravi (app se lokalno ne prevaja).
@@ -36,7 +36,6 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
     private val seznam = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
     private val predlagaj = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.builds_propose); isEnabled = false }
     private val mapaApk = File(a.cacheDir, "gradnje")
-    @Volatile private var dela = false
     private var zadnje: StanjeGradenj? = null
 
     private companion object {
@@ -48,7 +47,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
     init {
         // Kopija od prejsnje namestitve (posodobitev same sebe ustavi proces, preden pospravi); enkrat na proces, ne ob zasuku
         // zaslona, ko bi lahko nit se pisala vanjo.
-        if (!pospravljeno) { pospravljeno = true; NamestitevApk.pobrisi(mapaApk) }
+        if (!pospravljeno) { pospravljeno = true; NamestitevApk.pobrisiOstanke(mapaApk) }
         koren.addView(TextView(a, null, 0, R.style.Gw_Heading).apply {
             setText(R.string.builds_title); isAccessibilityHeading = true; setPadding(0, dp(16), 0, 0)
         })
@@ -222,11 +221,13 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
             .show()
     }
 
-    /** Lastnik pred podpisom vidi tok in vejo; zgostitev izracuna telefon (GradnjeLine.potrdi). */
+    /** Lastnik pred podpisom vidi tok, vejo in commit (prvih 12 znakov). Brez commita se nic ne podpise. */
     private fun potrdi(g: Gradnja) {
+        val commit = GradnjeLine.prikazCommita(g.commit)
+        if (commit == null) { stanje.setText(R.string.builds_commit_missing); return }
         AlertDialog.Builder(a, R.style.Gw_Dialog)
             .setTitle(R.string.builds_confirm)
-            .setMessage(a.getString(R.string.builds_confirm_msg, imeToka(g.tok), g.veja))
+            .setMessage(a.getString(R.string.builds_confirm_msg, imeToka(g.tok), g.veja, commit))
             .setPositiveButton(R.string.builds_start) { _, _ ->
                 vOzadju({ pov, id ->
                     GradnjeLine.potrdi(pov, id, g, System.currentTimeMillis(), NalogaLine.nakljucno(32)) { i, z, c, e ->
@@ -248,10 +249,11 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
         ZavrnitevApk.PREKINJENO -> R.string.install_err_prekinjeno
     }
 
-    /** Prenos v cacheDir, preverbe (NamestitevApk + PackageManager), nato PackageInstaller; sistemsko okno potrdi lastnik. */
+    /** Prenos v svojo datoteko v cacheDir, preverbe na njej, nato PackageInstaller; sistemsko okno potrdi lastnik. */
     private fun namesti(g: Gradnja) {
-        if (dela) return
+        if (!NamestitevApk.zacetekPrenosa()) return
         if (!NamestitevPaketa.imaDovoljenje(a)) {
+            NamestitevApk.konecPrenosa()
             AlertDialog.Builder(a, R.style.Gw_Dialog)
                 .setTitle(R.string.builds_install)
                 .setMessage(R.string.install_perm_needed)
@@ -260,29 +262,34 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                 .show()
             return
         }
-        dela = true
         stanje.setText(R.string.install_downloading)
         Thread({
-            val pov = povezava()
+            var pov: HttpPovezavaZLino? = null
+            var kopija: File? = null
             val besedilo: String = try {
+                val zveza = povezava().also { pov = it }
                 val id = runCatching { NapravaKljuc.id() }.getOrNull()
                 val cas = System.currentTimeMillis()
                 val e = NalogaLine.nakljucno(32)
                 val podpis = if (id == null) null else NapravaKljuc.podpisiApkGradnje(cas, e)
                 when {
-                    pov == null || id == null -> a.getString(R.string.builds_err_unreachable)
+                    zveza == null || id == null -> a.getString(R.string.builds_err_unreachable)
                     podpis == null -> a.getString(R.string.builds_need_warning)
                     else -> {
                         mapaApk.mkdirs()
-                        val (izid, napaka) = pov.prenesiApk(id, cas, e, podpis, mapaApk)
+                        val (izid, napaka) = zveza.prenesiApk(id, cas, e, podpis, mapaApk)
                         when {
                             napaka is OdgovorLine.Napaka && napaka.status == 404 -> a.getString(R.string.install_none)
                             napaka is OdgovorLine.Napaka && napaka.status == 409 && napaka.koda == "vsota" -> a.getString(R.string.install_changed)
                             napaka != null -> sporocilo(GradnjeLine.napaka(napaka))
                             izid is IzidPrenosa.Zavrnjeno -> a.getString(zavrnitev(izid.razlog))
                             // Namesti se samo gradnja, ki jo je lastnik tapnil (id in sha256 iz prikaza).
-                            izid is IzidPrenosa.Ok && (izid.gradnja != g.id || izid.sha256 != g.paket?.sha256) -> a.getString(R.string.install_changed)
+                            izid is IzidPrenosa.Ok && (izid.gradnja != g.id || izid.sha256 != g.paket?.sha256) -> {
+                                kopija = izid.datoteka
+                                a.getString(R.string.install_changed)
+                            }
                             izid is IzidPrenosa.Ok -> {
+                                kopija = izid.datoteka
                                 glavna.post { stanje.setText(R.string.install_checking) }
                                 val z = NamestitevPaketa.preveriArhiv(a, izid.datoteka)
                                 if (z != null) a.getString(zavrnitev(z))
@@ -296,9 +303,10 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                 a.getString(R.string.builds_err_generic)
             } finally {
                 pov?.zapri()
-                NamestitevApk.pobrisi(mapaApk) // vsaka pot: kopija ne ostane (bajti so ze v seji ali zavrnjeni)
+                kopija?.let { NamestitevApk.pobrisi(it) }
+                NamestitevApk.konecPrenosa()
             }
-            glavna.post { dela = false; stanje.text = besedilo }
+            glavna.post { stanje.text = besedilo }
         }, "lina-namestitev").start()
     }
 }

@@ -23,7 +23,7 @@ data class DatotekaGradnje(val pot: String, val sha256: String, val velikost: Lo
 
 /** Ena gradnja iz GET /gradnje (gradnje-github.server.ts JavnaGradnja); casi so ISO nizi racunalnika. */
 data class Gradnja(
-    val id: String, val izvor: String, val tok: String, val veja: String, val zgostitev: String, val stanje: String,
+    val id: String, val izvor: String, val tok: String, val veja: String, val commit: String?, val zgostitev: String, val stanje: String,
     val ustvarjeno: String, val potrjeno: String?, val tekId: Long?, val zacetekTeka: String?, val konec: String?,
     val zakljucek: String?, val anotacije: List<AnotacijaGradnje>, val mapa: String?, val datoteke: List<DatotekaGradnje>,
     val paket: DatotekaGradnje?, val podpis: String?, val razlog: String?, val ocenaKonca: String?, val lahkoNamesti: Boolean,
@@ -46,7 +46,8 @@ sealed class IzidGradenj {
 /**
  * Gradnje na GitHubu s telefona (lastnik 24. 11. 2026; pogodba v Lininem AGENTS.md in gradnje-telefon.test.ts): podpisano GET /gradnje,
  * POST /gradnja/predlog in /gradnja/potrdi. Odgovor racunalnika je nezaupljiv: samo znane vrednosti, sicer se zavrze ves; besedila
- * brez nevidnih znakov. Zgostitev za potrditev telefon izracuna SAM iz prikazanega toka in veje (lastnik podpise, kar vidi).
+ * brez nevidnih znakov. Zgostitev za potrditev telefon izracuna SAM iz prikazanega toka, veje in commita
+ * (gradnje-github.ts zgostitevGradnje). Lastnik podpise samo to, kar vidi; streznikove zgostitve telefon ne prevzame.
  */
 object GradnjeLine {
     /** Repozitorij in tokovi so stalni (gradnje-github.ts REPOZITORIJ, TOKOVI). */
@@ -67,6 +68,8 @@ object GradnjeLine {
 
     private val VEJA = Regex("^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$")
     private val HEX64 = Regex("^[0-9a-f]{64}$")
+    /** Polni SHA commita, male crke (gradnje-github.ts oblikaCommita). */
+    private val COMMIT = Regex("^[0-9a-f]{40}$")
     private val CAS = Regex("^[0-9TZ:.+-]{10,40}$")
     private val RAZLOG = Regex("^[a-z-]{1,30}$")
     private val ZAKLJUCEK = Regex("^[a-z_]{1,30}$")
@@ -81,9 +84,14 @@ object GradnjeLine {
     fun oblikaVeje(v: String): Boolean =
         VEJA.matches(v) && ".." !in v && "//" !in v && "/." !in v && !v.endsWith("/") && !v.endsWith(".") && !v.endsWith(".lock")
 
-    /** Kar lastnik vidi in potrdi (gradnje-github.ts zgostitevGradnje). */
-    fun zgostitev(tok: String, veja: String): String =
-        MessageDigest.getInstance("SHA-256").digest("$REPOZITORIJ\u0000$tok\u0000$veja".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    fun oblikaCommita(c: String): Boolean = COMMIT.matches(c)
+
+    /** Prvih 12 znakov commita za okno pred podpisom; null, ce oblika ni prava. */
+    fun prikazCommita(c: String?): String? = c?.takeIf(::oblikaCommita)?.take(12)
+
+    /** Kar lastnik vidi in potrdi (gradnje-github.ts zgostitevGradnje): repozitorij, tok, veja, commit. */
+    fun zgostitev(tok: String, veja: String, commit: String): String =
+        MessageDigest.getInstance("SHA-256").digest("$REPOZITORIJ\u0000$tok\u0000$veja\u0000$commit".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
     /** ISO cas racunalnika -> ura po ljubljanskem casu (HH:mm); null, ce casa ni ali ni berljiv. */
     fun uraLjubljana(iso: String?): String? = iso?.let { runCatching { OffsetDateTime.parse(it).atZoneSameInstant(LJUBLJANA).format(URA) }.getOrNull() }
@@ -129,6 +137,7 @@ object GradnjeLine {
             izvor = o.niz("izvor").vNaboru(IZVORI),
             tok = o.niz("tok").vNaboru(TOKOVI),
             veja = o.niz("veja").also { if (!oblikaVeje(it)) slabo() },
+            commit = o.nizAliNull("commit").ujemaAliNull(COMMIT),
             zgostitev = o.niz("zgostitev").ujema(HEX64),
             stanje = o.niz("stanje").vNaboru(STANJA),
             ustvarjeno = o.niz("ustvarjeno").ujema(CAS),
@@ -186,8 +195,9 @@ object GradnjeLine {
     }
 
     /**
-     * Predlog: tok s stalnega seznama, veja TOCNO s seznama, ki ga je poslal racunalnik (in prave oblike). Odgovor mora nositi
-     * zgostitev, ki jo telefon izracuna sam za ta tok in vejo. [podpisi] = Podpisnik.podpisiPredlogGradnje (null brez »Razumem«).
+     * Predlog: tok s stalnega seznama, veja TOCNO s seznama, ki ga je poslal racunalnik (in prave oblike). Podpis veze tok in vejo.
+     * Ce odgovor nosi commit, mora zgostitev ustrezati izracunu telefona; brez commita zgostitve ne prevzamemo in je ne podpisemo.
+     * [podpisi] = Podpisnik.podpisiPredlogGradnje (null brez »Razumem«).
      */
     fun predlagaj(
         pov: PovezavaZLino, posiljatelj: String, tok: String, veja: String, veje: List<String>, cas: Long, enkratni: String,
@@ -203,18 +213,25 @@ object GradnjeLine {
         return runCatching {
             val j = json.parseToJsonElement(ok.telo).jsonObject
             val id = j.niz("id").ujema(NiziLine.ID_GRADNJE)
-            val z = j.niz("zgostitev")
-            if (z != zgostitev(tok, veja)) slabo()
-            IzidGradenj.Predlog(id, z)
+            val z = j.niz("zgostitev").ujema(HEX64)
+            val commit = j.nizAliNull("commit")
+            if (commit != null) {
+                if (!oblikaCommita(commit) || z != zgostitev(tok, veja, commit)) slabo()
+                IzidGradenj.Predlog(id, zgostitev(tok, veja, commit))
+            } else {
+                IzidGradenj.Predlog(id, "")
+            }
         }.getOrElse { IzidGradenj.Napaka(NapakaGradenj.NAPAKA) }
     }
 
     /**
-     * Potrditev cakajoce gradnje, ki jo lastnik vidi (tok in veja). Podpise se zgostitev, ki jo izracuna telefon; ce racunalnik
-     * pokaze drugo, se nic ne podpise. [podpisi] = Podpisnik.podpisiPotrditevGradnje (null brez »Razumem«).
+     * Potrditev cakajoce gradnje, ki jo lastnik vidi (tok, veja, commit). Podpise se zgostitev, ki jo telefon izracuna iz teh
+     * polj; ce racunalnik pokaze drugo ali commita ni, se nic ne podpise. [podpisi] = Podpisnik.podpisiPotrditevGradnje (null brez »Razumem«).
      */
     fun potrdi(pov: PovezavaZLino, posiljatelj: String, g: Gradnja, cas: Long, enkratni: String, podpisi: (String, String, Long, String) -> String?): IzidGradenj {
-        val z = zgostitev(g.tok, g.veja)
+        val commit = g.commit
+        if (commit == null || !oblikaCommita(commit)) return IzidGradenj.Napaka(NapakaGradenj.NAPAKA)
+        val z = zgostitev(g.tok, g.veja, commit)
         if (g.stanje != "caka" || g.zgostitev != z || g.tok !in TOKOVI || !oblikaVeje(g.veja)) return IzidGradenj.Napaka(NapakaGradenj.NAPAKA)
         val podpis = podpisi(g.id, z, cas, enkratni) ?: return IzidGradenj.Napaka(NapakaGradenj.NI_POTRDITVE)
         val telo = buildJsonObject {

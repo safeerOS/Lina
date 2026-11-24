@@ -64,7 +64,7 @@ object NamestitevPaketa {
                     apk.inputStream().use { it.copyTo(izhod) }
                     s.fsync(izhod)
                 }
-                NamestitevApk.pobrisi(apk.parentFile!!)
+                NamestitevApk.pobrisi(apk)
                 val namen = Intent(c, IzidNamestitve::class.java).setAction(AKCIJA)
                 val pending = PendingIntent.getBroadcast(c, id, namen, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
                 s.commit(pending.intentSender)
@@ -73,7 +73,7 @@ object NamestitevPaketa {
             if (id >= 0) runCatching { pi.abandonSession(id) }
             throw e
         } finally {
-            apk.parentFile?.let { NamestitevApk.pobrisi(it) }
+            NamestitevApk.pobrisi(apk)
         }
     }
 }

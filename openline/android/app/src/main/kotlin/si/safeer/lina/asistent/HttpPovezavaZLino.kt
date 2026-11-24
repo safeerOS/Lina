@@ -113,12 +113,11 @@ class HttpPovezavaZLino(
                     val g = GlaveApk(odg.header("x-lina-sha256"), odg.header("content-length")?.toLongOrNull(), odg.header("x-lina-paket"),
                         odg.header("x-lina-gradnja"), odg.header("content-type"))
                     val telo = odg.body ?: return@use (IzidPrenosa.Zavrnjeno(ZavrnitevApk.GLAVE) to null)
-                    NamestitevApk.shrani(telo.byteStream(), g, mapa) to null
+                    NamestitevApk.shrani(telo.byteStream(), g, mapa, enkratni) to null
                 }
             }
         }
     } catch (_: Exception) {
-        NamestitevApk.pobrisi(mapa)
         null to OdgovorLine.Nedosegljiva
     }
 

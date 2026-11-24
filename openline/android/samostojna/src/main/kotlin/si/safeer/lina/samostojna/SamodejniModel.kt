@@ -58,6 +58,11 @@ object SamodejniModel {
         Ponudnik.OPENROUTER to Regex("^(openai/gpt-|anthropic/claude-|google/gemini-)"),
     )
 
+    /** Predpone OpenRouter, znotraj katerih sme samodejni preklop ostati. Druga predpona pogovora ne vidi. */
+    val PREDPONE_OPENROUTER = listOf("openai/", "anthropic/", "google/")
+
+    fun predponaModela(model: String): String? = PREDPONE_OPENROUTER.firstOrNull { model.startsWith(it) }
+
     /** Vzrok iz statusa IN telesa (nikoli samo iz 404); enako kot racunalnik vzrokNapake. */
     fun vzrok(koda: Int, telo: String): VzrokNapake? {
         val e: JsonObject? = try {
@@ -117,13 +122,14 @@ object SamodejniModel {
         } catch (e: Exception) { null }
     }
 
-    fun kandidati(p: Ponudnik, seznam: List<String>?, izkljuci: List<String> = emptyList()): List<String> {
+    fun kandidati(p: Ponudnik, seznam: List<String>?, izkljuci: List<String> = emptyList(), samoPredpona: String? = null): List<String> {
         val priporoceni = PRIPOROCENI[p] ?: emptyList()
         val izSeznama = if (seznam == null) priporoceni else priporoceni.filter { it in seznam }
         val druzina = DRUZINA[p]
         val rezerva = if (seznam == null || druzina == null) emptyList() else seznam.filter { druzina.containsMatchIn(it) && !NI_ZA_POGOVOR.containsMatchIn(it) }
         return (izSeznama + rezerva).distinct()
             .filter { VELJAVEN.matches(it) && !jeBrezplacenModel(it) && it !in izkljuci }
+            .filter { samoPredpona == null || it.startsWith(samoPredpona) }
             .take(NAJVEC_POSKUSOV)
     }
 
@@ -134,10 +140,13 @@ object SamodejniModel {
     }
 
     /** Izbere model, ki je na preizkusni klic odgovoril. Kljuc, dobroimetje ali omejitev ustavi iskanje s pravim vzrokom. */
-    fun izberi(prenos: Prenos, p: Ponudnik, kljuc: ShranjevalnikKljuca, izkljuci: List<String> = emptyList(), spanje: (Long) -> Unit = { Thread.sleep(it) }): Izbira {
+    fun izberi(
+        prenos: Prenos, p: Ponudnik, kljuc: ShranjevalnikKljuca, izkljuci: List<String> = emptyList(),
+        spanje: (Long) -> Unit = { Thread.sleep(it) }, samoPredpona: String? = null,
+    ): Izbira {
         if (p == Ponudnik.VERTEX) return Izbira.Napaka("Google Cloud: model izbere prijava Google.", null)
         val k = kljuc.preberi() ?: return Izbira.Napaka("Manjka ključ.", VzrokNapake.KLJUC)
-        for (m in kandidati(p, seznam(prenos, p, k.izpostavi()), izkljuci)) {
+        for (m in kandidati(p, seznam(prenos, p, k.izpostavi()), izkljuci, samoPredpona)) {
             val sledi = SlediPrenos(prenos)
             val r = ustvariOdjemalca(p, kljuc, sledi, m).also { nastaviSpanje(it, spanje) }
                 .poslji(listOf(Sporocilo("user", "Odgovori samo z besedo: da.")), "")
@@ -159,8 +168,9 @@ object SamodejniModel {
 }
 
 /**
- * Odjemalec, ki med delovanjem sam zamenja model, ki ga ponudnik ne pozna vec: isti ponudnik in kljuc, ponovitev zahteve, shranitev
- * novega modela in ena vrstica lastniku. Model bere ob vsakem klicu iz shrambe, zato tudi asistentka, ustvarjena za ves dan, dobi novega.
+ * Odjemalec, ki med delovanjem sam zamenja model, ki ga ponudnik ne pozna vec: isti ponudnik in kljuc, pri OpenRouter pa se
+ * ista predpona (openai/, anthropic/ ali google/) kot trenutni model. Ponovitev zahteve, shranitev novega modela in ena vrstica
+ * lastniku. Model bere ob vsakem klicu iz shrambe, zato tudi asistentka, ustvarjena za ves dan, dobi novega.
  */
 class SamodejniOdjemalec(
     private val ponudnik: Ponudnik,
@@ -177,7 +187,9 @@ class SamodejniOdjemalec(
         if (r !is Rezultat.Napaka || SamodejniModel.vzrok(sledi.koda, sledi.telo) != VzrokNapake.MODEL) return r
         // Brezplacni modeli OpenRouter imajo svoja sporocila (B6); zamenjava samo za placljive.
         if (ponudnik == Ponudnik.OPENROUTER && jeBrezplacenModel(model)) return r
-        return when (val izbira = SamodejniModel.izberi(prenos, ponudnik, shramba, listOf(model), spanje)) {
+        val predpona = if (ponudnik == Ponudnik.OPENROUTER) SamodejniModel.predponaModela(model) else null
+        if (ponudnik == Ponudnik.OPENROUTER && predpona == null) return r
+        return when (val izbira = SamodejniModel.izberi(prenos, ponudnik, shramba, listOf(model), spanje, predpona)) {
             is SamodejniModel.Izbira.Napaka -> Rezultat.Napaka(sledi.koda, izbira.sporocilo)
             is SamodejniModel.Izbira.Model -> {
                 modeli.shrani(ponudnik, izbira.model)

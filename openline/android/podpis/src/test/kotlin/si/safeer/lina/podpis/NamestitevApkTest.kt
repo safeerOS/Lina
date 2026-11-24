@@ -20,10 +20,12 @@ import kotlin.test.assertTrue
 class NamestitevApkTest {
     private val vsebina = "APK-VSEBINA".toByteArray()
     private val sha = MessageDigest.getInstance("SHA-256").digest(vsebina).joinToString("") { "%02x".format(it) }
+    private val enkratni = "e".repeat(16)
     private fun glave(
         sha256: String? = sha, velikost: Long? = vsebina.size.toLong(), paket: String? = "si.safeer.lina",
         gradnja: String? = "0123456789abcdef", vrsta: String? = "application/vnd.android.package-archive",
     ) = GlaveApk(sha256, velikost, paket, gradnja, vrsta)
+    private fun ime(gradnja: String = "0123456789abcdef", e: String = enkratni) = NamestitevApk.imeDatoteke(gradnja, e)!!
 
     private fun mapa(): File = Files.createTempDirectory("lina-apk-").toFile()
 
@@ -43,9 +45,9 @@ class NamestitevApkTest {
     @Test
     fun `pravi prenos se shrani v svojo datoteko v cacheDir`() {
         val m = mapa()
-        val r = NamestitevApk.shrani(ByteArrayInputStream(vsebina), glave(), m)
+        val r = NamestitevApk.shrani(ByteArrayInputStream(vsebina), glave(), m, enkratni)
         val ok = r as IzidPrenosa.Ok
-        assertEquals(File(m, NamestitevApk.IME_DATOTEKE), ok.datoteka)
+        assertEquals(File(m, ime()), ok.datoteka)
         assertTrue(ok.datoteka.readBytes().contentEquals(vsebina))
         assertEquals(sha, ok.sha256)
         assertEquals("0123456789abcdef", ok.gradnja)
@@ -54,23 +56,23 @@ class NamestitevApkTest {
     @Test
     fun `drugacna vsebina enake velikosti - vsota se ne ujema, kopija pobrisana`() {
         val m = mapa()
-        val r = NamestitevApk.shrani(ByteArrayInputStream("APK-VSEBINO".toByteArray()), glave(), m)
+        val r = NamestitevApk.shrani(ByteArrayInputStream("APK-VSEBINO".toByteArray()), glave(), m, enkratni)
         assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.VSOTA), r)
-        assertFalse(File(m, NamestitevApk.IME_DATOTEKE).exists())
+        assertFalse(File(m, ime()).exists())
     }
 
     @Test
     fun `krajse ali daljse telo od content-length je zavrnjeno, daljse se ne bere do konca`() {
         val m = mapa()
-        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.VELIKOST), NamestitevApk.shrani(ByteArrayInputStream(vsebina.copyOf(5)), glave(), m))
+        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.VELIKOST), NamestitevApk.shrani(ByteArrayInputStream(vsebina.copyOf(5)), glave(), m, enkratni))
         var prebrano = 0L
         val neskoncno = object : InputStream() {
             override fun read(): Int { prebrano++; return 'A'.code }
             override fun read(b: ByteArray, off: Int, len: Int): Int { java.util.Arrays.fill(b, off, off + len, 'A'.code.toByte()); prebrano += len; return len }
         }
-        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.VELIKOST), NamestitevApk.shrani(neskoncno, glave(), m))
+        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.VELIKOST), NamestitevApk.shrani(neskoncno, glave(), m, enkratni))
         assertTrue(prebrano <= vsebina.size + 64 * 1024, "bral $prebrano")
-        assertFalse(File(m, NamestitevApk.IME_DATOTEKE).exists())
+        assertFalse(File(m, ime()).exists())
     }
 
     @Test
@@ -80,8 +82,8 @@ class NamestitevApkTest {
             var n = 0
             override fun read(): Int = if (n++ < 3) 'A'.code else throw IOException("prekinjeno")
         }
-        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.PREKINJENO), NamestitevApk.shrani(prekinjen, glave(), m))
-        assertFalse(File(m, NamestitevApk.IME_DATOTEKE).exists())
+        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.PREKINJENO), NamestitevApk.shrani(prekinjen, glave(), m, enkratni))
+        assertFalse(File(m, ime()).exists())
     }
 
     @Test
@@ -89,7 +91,7 @@ class NamestitevApkTest {
         val m = mapa()
         var bral = false
         val tok = object : InputStream() { override fun read(): Int { bral = true; return -1 } }
-        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.GLAVE), NamestitevApk.shrani(tok, glave(sha256 = null), m))
+        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.GLAVE), NamestitevApk.shrani(tok, glave(sha256 = null), m, enkratni))
         assertFalse(bral)
         assertTrue(m.listFiles()!!.isEmpty())
     }
@@ -116,11 +118,50 @@ class NamestitevApkTest {
     @Test
     fun `pospravljanje pobrise samo svojo datoteko`() {
         val m = mapa()
-        File(m, NamestitevApk.IME_DATOTEKE).writeText("x")
+        val svoja = File(m, ime())
+        val sosednja = File(m, ime("fedcba9876543210", "f".repeat(16)))
+        svoja.writeText("x")
+        sosednja.writeText("z")
         File(m, "drugo.apk").writeText("y")
         File(m, "slike").mkdir()
-        assertTrue(NamestitevApk.pobrisi(m))
+        assertTrue(NamestitevApk.pobrisi(svoja))
+        assertFalse(svoja.exists())
+        assertTrue(sosednja.exists())
+        assertTrue(File(m, "drugo.apk").exists())
+        assertTrue(NamestitevApk.pobrisi(svoja), "ce je ni, je pospravljeno")
+        assertTrue(NamestitevApk.pobrisi(m), "mapa ni datoteka in se ne izprazni")
+        assertTrue(sosednja.exists())
+        File(m, NamestitevApk.IME_DATOTEKE).writeText("staro")
+        assertTrue(NamestitevApk.pobrisiOstanke(m))
+        assertFalse(sosednja.exists())
+        assertFalse(File(m, NamestitevApk.IME_DATOTEKE).exists())
         assertEquals(setOf("drugo.apk", "slike"), m.list()!!.toSet())
-        assertTrue(NamestitevApk.pobrisi(m), "ce je ni, je pospravljeno")
+    }
+
+    @Test
+    fun `dva prenosa ne prepiseta drug drugega, slab enkratni niz ne zapise`() {
+        val m = mapa()
+        val r1 = NamestitevApk.shrani(ByteArrayInputStream(vsebina), glave(), m, "a".repeat(16)) as IzidPrenosa.Ok
+        val r2 = NamestitevApk.shrani(ByteArrayInputStream(vsebina), glave(gradnja = "fedcba9876543210"), m, "b".repeat(16)) as IzidPrenosa.Ok
+        assertTrue(r1.datoteka.exists() && r2.datoteka.exists())
+        assertFalse(r1.datoteka.path == r2.datoteka.path)
+        val pred = m.list()!!.toSet()
+        assertEquals(IzidPrenosa.Zavrnjeno(ZavrnitevApk.GLAVE), NamestitevApk.shrani(ByteArrayInputStream(vsebina), glave(), m, "kratek"))
+        assertNull(NamestitevApk.imeDatoteke("../x", enkratni))
+        assertEquals(File(m, "lina-0123456789abcdef-${"a".repeat(16)}.apk"), r1.datoteka)
+        assertEquals(File(m, "lina-fedcba9876543210-${"b".repeat(16)}.apk"), r2.datoteka)
+        assertEquals(pred, m.list()!!.toSet())
+    }
+
+    @Test
+    fun `zacetek prenosa je eden na proces`() {
+        assertTrue(NamestitevApk.zacetekPrenosa())
+        try {
+            assertFalse(NamestitevApk.zacetekPrenosa())
+        } finally {
+            NamestitevApk.konecPrenosa()
+        }
+        assertTrue(NamestitevApk.zacetekPrenosa())
+        NamestitevApk.konecPrenosa()
     }
 }

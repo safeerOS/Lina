@@ -89,7 +89,7 @@ class AgentiLineTest {
         "pogoj":{"vrsta":"ura","cas":"2026-11-24T10:00:00.000Z"},"ocena":{"konec":"2026-11-24T10:30:00.000Z","groba":true},
         "opomnik":{"cas":"2026-11-24T10:30:00.000Z","razlog":null,"krog":0},"koncano":null$dodatno}"""
     private fun agent(aid: String, stanje: String = "pripravljen", vkl: Boolean = true, poziv: Boolean = true) =
-        """{"id":"$aid","ime":"Ime $aid","stanje":"$stanje","vklopljen":$vkl,"zacetniPoziv":$poziv,"kanal":${aid == "claude"}}"""
+        """{"id":"$aid","ime":"${AgentiLine.IMENA.getValue(aid)}","stanje":"$stanje","vklopljen":$vkl,"zacetniPoziv":$poziv,"kanal":${aid == "claude"}}"""
     private fun odgovor(naloge: String = naloga(), mape: String = "") =
         """{"agenti":[${agent("claude")},${agent("pi")},${agent("kimi", poziv = false)},${agent("grok", stanje = "prijava")},${agent("agy", vkl = false)}],
         "naloge":[$naloge]$mape}"""
@@ -277,5 +277,63 @@ class AgentiLineTest {
         assertEquals(1, pov.preklici.size)
         assertEquals(IzidAgentov.Napaka(NapakaGradenj.NAPAKA),
             AgentiLine.preklici(Lazna(OdgovorLine.Ok("""{"id":"fedcba9876543210"}""")), id, n, 3, e) { _, _, _ -> "P" })
+    }
+
+    @Test
+    fun `prikaz agenta je iz tabele telefona, ne iz imena v odgovoru`() {
+        assertEquals("pi (Pi)", AgentiLine.prikazAgenta("pi"))
+        assertEquals("claude (Claude Code)", AgentiLine.prikazAgenta("claude"))
+        assertEquals("opencode (opencode (Gemini))", AgentiLine.prikazAgenta("opencode"))
+        assertEquals("neznan", AgentiLine.prikazAgenta("neznan"))
+        assertTrue(AgentiLine.imeUjema("pi", "Pi"))
+        assertFalse(AgentiLine.imeUjema("pi", "Ime pi"))
+        assertFalse(AgentiLine.imeUjema("pi", ""))
+        assertFalse(AgentiLine.prikazAgenta("pi").contains("Zlobni"))
+    }
+
+    @Test
+    fun `ciscenje besedila je kot na racunalniku in odstrani nevidne znake`() {
+        val ze = "Naredi \"to\"\nin\\ ono č"
+        assertEquals(BesediloPodpisa(ze, false), AgentiLine.besediloZaPodpis(ze))
+        assertEquals("ab\ncd", AgentiLine.ocistiBesediloNaloge("ab\r\ncd"))
+        assertEquals("ab\ncd", AgentiLine.ocistiBesediloNaloge("ab\rcd"))
+        assertEquals(BesediloPodpisa("a\nb", true), AgentiLine.besediloZaPodpis("a\r\nb"))
+        assertEquals("abc", AgentiLine.ocistiBesediloNaloge("a\u202eb\u200bc"))
+        assertEquals("abc", AgentiLine.ocistiBesediloNaloge("a\u3164b\uE000c"))
+        assertEquals("ab", AgentiLine.ocistiBesediloNaloge("a\uFEFFb"))
+        assertEquals("abc", AgentiLine.ocistiBesediloNaloge("\u00A0abc\u00A0"))
+        assertEquals("\u00e9", AgentiLine.ocistiBesediloNaloge("e\u0301"))
+        assertEquals("ab", AgentiLine.ocistiBesediloNaloge("a\u034Fb"))
+        assertEquals("ab", AgentiLine.ocistiBesediloNaloge("a\uFE0Fb"))
+        val oznaka = StringBuilder("a").appendCodePoint(0xE0001).append("b").toString()
+        assertEquals("ab", AgentiLine.ocistiBesediloNaloge(oznaka))
+        val pua = StringBuilder("a").appendCodePoint(0xF0000).append("b").toString()
+        assertEquals("ab", AgentiLine.ocistiBesediloNaloge(pua))
+        assertEquals("a\tb", AgentiLine.ocistiBesediloNaloge("a\tb"))
+        assertNull(AgentiLine.ocistiBesediloNaloge("  \n "))
+        assertNull(AgentiLine.ocistiBesediloNaloge("pol\uD800"))
+        assertNull(AgentiLine.ocistiBesediloNaloge("a".repeat(8001)))
+        assertNull(AgentiLine.besediloZaPodpis("  \n "))
+    }
+
+    @Test
+    fun `dodelitev ne podpise cudnega imena ali neociscenega besedila, podpise samo ocisceno`() {
+        val pov = Lazna(OdgovorLine.Ok("""{"id":"00112233aabbccdd"}"""))
+        var klicev = 0
+        fun d(s: StanjeAgentov = stanje, besedilo: String = "x") =
+            AgentiLine.dodeli(pov, id, s, "pi", "/dom/projekt", besedilo, "zdaj", 9, e) { _, _, _ -> klicev++; "P" }
+        val tuje = AgentiLine.razcleni(odgovor().replace("\"ime\":\"Pi\"", "\"ime\":\"Zlobni\""))!!
+        val prazno = AgentiLine.razcleni(odgovor().replace("\"ime\":\"Pi\"", "\"ime\":\"\""))!!
+        assertEquals(IzidAgentov.Napaka(NapakaGradenj.NAPAKA), d(tuje))
+        assertEquals(IzidAgentov.Napaka(NapakaGradenj.NAPAKA), d(prazno))
+        assertEquals(IzidAgentov.Napaka(NapakaGradenj.NAPAKA), d(besedilo = "a\r\nb"))
+        assertEquals(0, klicev)
+        val cisto = AgentiLine.besediloZaPodpis("a\r\nb")!!
+        assertEquals("a\nb", cisto.besedilo)
+        assertTrue(cisto.drugic)
+        assertEquals(IzidAgentov.Dodeljeno("00112233aabbccdd"), d(besedilo = cisto.besedilo))
+        assertEquals(1, klicev)
+        assertTrue(pov.dodelitve.single().contains("\"besedilo\":\"a\\nb\""))
+        assertFalse(pov.dodelitve.single().contains("\\r"))
     }
 }

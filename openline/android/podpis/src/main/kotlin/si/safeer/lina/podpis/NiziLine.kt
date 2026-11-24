@@ -167,7 +167,7 @@ object NiziLine {
         return "$PREDPONA_GRADNJA_PREDLOG\n$posiljatelj\n$tok\n$veja\n$cas\n$enkratni"
     }
 
-    /** Potrditev zagona (kanal-claude.ts nizPotrditveGradnje): podpis veze id predloga in zgostitev (repozitorij, tok, veja). */
+    /** Potrditev zagona (kanal-claude.ts nizPotrditveGradnje): podpis veze id predloga in zgostitev (repozitorij, tok, veja, commit). Oblika niza je ista. */
     fun nizPotrditveGradnje(posiljatelj: String, id: String, zgostitev: String, cas: Long, enkratni: String): String? {
         if (!skupno(posiljatelj, cas, enkratni) || !ID_GRADNJE.matches(id) || !ZGOSTITEV.matches(zgostitev)) return null
         return "$PREDPONA_GRADNJA_POTRDI\n$posiljatelj\n$id\n$zgostitev\n$cas\n$enkratni"

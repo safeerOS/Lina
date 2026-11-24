@@ -51,8 +51,14 @@ class GradnjeLineTest {
 
     @Test
     fun `zgostitev gradnje je ista kot zgostitevGradnje v gradnje-github ts`() {
-        assertEquals("9b493ea64c2c785c03ee6547ea9b8043f49ca64c8b83795047f4e0ce51a9e250", GradnjeLine.zgostitev("gradnja.yml", "main"))
-        assertEquals("f388ec77471d5e7b0ae47c8fa5907dc539761d0b57322bb0c79e58346ff4177a", GradnjeLine.zgostitev("racunalnik.yml", "lina-android-namesti-2411"))
+        val c = "a".repeat(40)
+        assertEquals("568d2d5c3e05d4215496a069b13e0bfb1b201c899e19ee6897c7d82c30a2a8e8", GradnjeLine.zgostitev("gradnja.yml", "main", c))
+        assertEquals("b5515608d75d0c8d6a615f71270f5962d023298795d6a5da538d56f784fa1103", GradnjeLine.zgostitev("racunalnik.yml", "lina-android-namesti-2411", c))
+        assertEquals("da786ae1b4a62668e51dd6287a9f25c2e3fed014d1aff6235ea03f376b0f5b0b", GradnjeLine.zgostitev("gradnja.yml", "dev", c))
+        assertEquals("aaaaaaaaaaaa", GradnjeLine.prikazCommita(c))
+        assertNull(GradnjeLine.prikazCommita("A".repeat(40)))
+        assertNull(GradnjeLine.prikazCommita("a".repeat(39)))
+        assertNull(GradnjeLine.prikazCommita(null))
     }
 
     @Test
@@ -97,11 +103,12 @@ class GradnjeLineTest {
         assertNull(p.podpisiNalogo("naloga-0001-abcdefghijk", "Preveri", 5, e))
     }
 
-    private val z = GradnjeLine.zgostitev("gradnja.yml", "main")
+    private val commit = "a".repeat(40)
+    private val z = GradnjeLine.zgostitev("gradnja.yml", "main", commit)
     private fun gradnja(
         stanje: String = "koncano", anotacije: String = "[]", mapa: String = "\"/dom/Prejemi/Lina gradnje/2026-11-24 1012-gradnja-main\"",
         zgost: String = z, dodatno: String = "",
-    ) = """{"id":"0123456789abcdef","izvor":"telefon","tok":"gradnja.yml","veja":"main","zgostitev":"$zgost","stanje":"$stanje",
+    ) = """{"id":"0123456789abcdef","izvor":"telefon","tok":"gradnja.yml","veja":"main","commit":"$commit","zgostitev":"$zgost","stanje":"$stanje",
         "ustvarjeno":"2026-11-24T09:00:00.000Z","potrjeno":"2026-11-24T09:01:00.000Z","prejsnjiTek":5,"tekId":12345,
         "zacetekTeka":"2026-11-24T09:02:00.000Z","konec":"2026-11-24T09:14:00.000Z","zakljucek":"success","anotacije":$anotacije,
         "mapa":$mapa,"datoteke":[{"pot":"app-release.apk","sha256":"${"c".repeat(64)}","velikost":12345678}],
@@ -124,6 +131,7 @@ class GradnjeLineTest {
         assertEquals("ujema", g.podpis)
         assertTrue(g.lahkoNamesti)
         assertEquals(12345L, g.tekId)
+        assertEquals("a".repeat(40), g.commit)
     }
 
     @Test
@@ -142,6 +150,7 @@ class GradnjeLineTest {
         for (s in listOf(
             odgovor(gradnja(stanje = "zagnano")),
             odgovor(gradnja(zgost = "z".repeat(64))),
+            odgovor(gradnja().replace("\"commit\":\"${"a".repeat(40)}\"", "\"commit\":\"NE\"")),
             odgovor(gradnja().replace("\"0123456789abcdef\"", "\"../../etc\"")),
             odgovor(gradnja().replace("\"izvor\":\"telefon\"", "\"izvor\":\"splet\"")),
             odgovor(gradnja().replace("\"podpis\":\"ujema\"", "\"podpis\":\"da\"")),
@@ -201,7 +210,7 @@ class GradnjeLineTest {
         val ok = Lazna(OdgovorLine.Ok("""{"id":"0123456789abcdef","zgostitev":"$z"}"""))
         val podpisani = mutableListOf<String>()
         val r = GradnjeLine.predlagaj(ok, id, "gradnja.yml", "main", listOf("main"), 8, e) { t, v, c, x -> podpisani.add("$t|$v|$c|$x"); "SIG" }
-        assertEquals(IzidGradenj.Predlog("0123456789abcdef", z), r)
+        assertEquals(IzidGradenj.Predlog("0123456789abcdef", ""), r, "brez commita zgostitve ne prevzamemo")
         assertEquals(listOf("gradnja.yml|main|8|$e"), podpisani)
         assertEquals("""{"posiljatelj":"$id","tok":"gradnja.yml","veja":"main","cas":8,"enkratni":"$e","podpis":"SIG"}""", ok.predlogi.single())
 
@@ -210,14 +219,20 @@ class GradnjeLineTest {
         assertEquals(IzidGradenj.Napaka(NapakaGradenj.NAPAKA), GradnjeLine.predlagaj(nic, id, "gradnja.yml", "dev", listOf("main"), 1, e) { _, _, _, _ -> "SIG" })
         assertEquals(IzidGradenj.Napaka(NapakaGradenj.NI_POTRDITVE), GradnjeLine.predlagaj(nic, id, "gradnja.yml", "main", listOf("main"), 1, e) { _, _, _, _ -> null })
         assertTrue(nic.predlogi.isEmpty())
-        // odgovor z drugo zgostitvijo, kot jo telefon izracuna za izbrani tok in vejo: zavrnjen
+        // brez commita tujih zgostitev ne prevzamemo
         val tuja = Lazna(OdgovorLine.Ok("""{"id":"0123456789abcdef","zgostitev":"${"b".repeat(64)}"}"""))
-        assertEquals(IzidGradenj.Napaka(NapakaGradenj.NAPAKA), GradnjeLine.predlagaj(tuja, id, "gradnja.yml", "main", listOf("main"), 1, e) { _, _, _, _ -> "SIG" })
+        assertEquals(IzidGradenj.Predlog("0123456789abcdef", ""), GradnjeLine.predlagaj(tuja, id, "gradnja.yml", "main", listOf("main"), 1, e) { _, _, _, _ -> "SIG" })
+        // commit in zgostitev, ki se ne ujema z izracunom telefona: zavrnjeno, nic se ne podpise naprej
+        val lazna = Lazna(OdgovorLine.Ok("""{"id":"0123456789abcdef","zgostitev":"${"b".repeat(64)}","commit":"$commit"}"""))
+        assertEquals(IzidGradenj.Napaka(NapakaGradenj.NAPAKA), GradnjeLine.predlagaj(lazna, id, "gradnja.yml", "main", listOf("main"), 1, e) { _, _, _, _ -> "SIG" })
+        val prava = Lazna(OdgovorLine.Ok("""{"id":"0123456789abcdef","zgostitev":"$z","commit":"$commit"}"""))
+        assertEquals(IzidGradenj.Predlog("0123456789abcdef", z), GradnjeLine.predlagaj(prava, id, "gradnja.yml", "main", listOf("main"), 1, e) { _, _, _, _ -> "SIG" })
     }
 
     @Test
-    fun `potrditev - samo cakajoca gradnja, zgostitev telefon izracuna iz prikazanega toka in veje`() {
+    fun `potrditev - samo cakajoca gradnja, zgostitev telefon izracuna iz prikazanega toka, veje in commita`() {
         val g = GradnjeLine.razcleni(odgovor(gradnja(stanje = "caka")))!!.gradnje.single()
+        assertEquals(commit.take(12), GradnjeLine.prikazCommita(g.commit))
         val ok = Lazna(OdgovorLine.Ok("""{"id":"0123456789abcdef"}"""))
         val podpisani = mutableListOf<String>()
         assertEquals(IzidGradenj.Potrjeno("0123456789abcdef"), GradnjeLine.potrdi(ok, id, g, 9, e) { i, zz, c, x -> podpisani.add("$i|$zz|$c|$x"); "SIG" })
@@ -227,9 +242,10 @@ class GradnjeLineTest {
         val nic = Lazna(OdgovorLine.Ok("{}"))
         val koncana = GradnjeLine.razcleni(odgovor(gradnja(stanje = "koncano")))!!.gradnje.single()
         assertEquals(IzidGradenj.Napaka(NapakaGradenj.NAPAKA), GradnjeLine.potrdi(nic, id, koncana, 1, e) { _, _, _, _ -> "SIG" })
-        // racunalnik poslje zgostitev, ki ne ustreza prikazanemu toku in veji: telefon ne podpise
-        val podtaknjena = g.copy(zgostitev = GradnjeLine.zgostitev("gradnja.yml", "dev"))
+        // racunalnik poslje zgostitev, ki ne ustreza prikazanemu toku, veji in commitu: telefon ne podpise
+        val podtaknjena = g.copy(zgostitev = GradnjeLine.zgostitev("gradnja.yml", "dev", commit))
         assertEquals(IzidGradenj.Napaka(NapakaGradenj.NAPAKA), GradnjeLine.potrdi(nic, id, podtaknjena, 1, e) { _, _, _, _ -> "SIG" })
+        assertEquals(IzidGradenj.Napaka(NapakaGradenj.NAPAKA), GradnjeLine.potrdi(nic, id, g.copy(commit = null), 1, e) { _, _, _, _ -> "SIG" })
         assertEquals(IzidGradenj.Napaka(NapakaGradenj.NI_POTRDITVE), GradnjeLine.potrdi(nic, id, g, 1, e) { _, _, _, _ -> null })
         assertTrue(nic.potrditve.isEmpty())
     }

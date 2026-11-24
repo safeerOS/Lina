@@ -17,13 +17,32 @@ sealed class IzidPrenosa {
 
 /**
  * »Namesti na ta telefon« (lastnik 24. 11. 2026): varovala pred PackageInstallerjem, cista logika (app dela samo PackageManager in
- * sejo). Vrstni red: glave -> prenos v SVOJO datoteko v cacheDir z mejo velikosti -> sha256 in velikost = glave -> paket
- * si.safeer.lina in podpisni certifikat = namescena aplikacija. Vsaka zavrnitev pobrise kopijo; drugih datotek se ne dotika.
+ * sejo). Vrstni red: glave -> prenos v SVOJO datoteko (id gradnje in enkratni niz v imenu) z mejo velikosti -> sha256 in
+ * velikost = glave -> paket si.safeer.lina in podpisni certifikat = namescena aplikacija. Preverba in kopija v sejo veljata
+ * za to datoteko. Zastavica prenosa je ena na proces. Vsaka zavrnitev pobrise samo svojo kopijo.
  */
 object NamestitevApk {
     const val PAKET = "si.safeer.lina"
     const val VRSTA = "application/vnd.android.package-archive"
+    /** Stara skupna pot; pobrisiOstanke jo se pobrise, nov prenos je ne uporabi. */
     const val IME_DATOTEKE = "lina-gradnja.apk"
+    private val IME_OSTANKA = Regex("^lina-[a-f0-9]{16}-[A-Za-z0-9_-]{16,64}\\.apk$")
+    @Volatile private var prenosTece = false
+
+    /** Ena na proces, ne na zaslon: drugi zaslon (zasuk) ne sme zaceti drugega prenosa. */
+    @Synchronized fun zacetekPrenosa(): Boolean {
+        if (prenosTece) return false
+        prenosTece = true
+        return true
+    }
+
+    @Synchronized fun konecPrenosa() { prenosTece = false }
+
+    /** Ime datoteke samo iz preverjenega id gradnje in enkratnega niza. Null, ce oblika ni prava. */
+    fun imeDatoteke(gradnja: String, enkratni: String): String? {
+        if (!NiziLine.ID_GRADNJE.matches(gradnja) || !NiziLine.ENKRATNI.matches(enkratni)) return null
+        return "lina-$gradnja-$enkratni.apk"
+    }
     /** Zgornja meja velikosti APK (Lina je ~100 MB; vec je napaka ali napad na prostor). */
     const val NAJVEC_BAJTOV = 300L * 1024 * 1024
     private val HEX64 = Regex("^[0-9a-f]{64}$")
@@ -41,13 +60,14 @@ object NamestitevApk {
     fun odtis(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
     /**
-     * Prebere najvec content-length + 1 bajt v [mapa]/IME_DATOTEKE (prepise samo svojo prejsnjo kopijo) in sproti racuna sha256.
-     * Krajse ali daljse telo, drugacna vsota ali prekinitev: kopija se pobrise.
+     * Prebere najvec content-length + 1 bajt v svojo datoteko (id gradnje + enkratni niz) in sproti racuna sha256.
+     * Krajse ali daljse telo, drugacna vsota ali prekinitev: ta kopija se pobrise, druge ne.
      */
-    fun shrani(vhod: InputStream, g: GlaveApk, mapa: File): IzidPrenosa {
+    fun shrani(vhod: InputStream, g: GlaveApk, mapa: File, enkratni: String): IzidPrenosa {
         preveriGlave(g)?.let { return IzidPrenosa.Zavrnjeno(it) }
+        val ime = imeDatoteke(g.gradnja!!, enkratni) ?: return IzidPrenosa.Zavrnjeno(ZavrnitevApk.GLAVE)
         val velikost = g.velikost!!
-        val cilj = File(mapa, IME_DATOTEKE)
+        val cilj = File(mapa, ime)
         val md = MessageDigest.getInstance("SHA-256")
         var prebrano = 0L
         val izid: ZavrnitevApk? = try {
@@ -86,9 +106,16 @@ object NamestitevApk {
         else -> null
     }
 
-    /** Pobrise samo svojo kopijo v [mapa]; true, ce je ni vec. */
-    fun pobrisi(mapa: File): Boolean {
-        val f = File(mapa, IME_DATOTEKE)
-        return !f.exists() || f.delete()
+    /** Pobrise to datoteko, ne mape in ne sosed. True, ce je ni vec. */
+    fun pobrisi(datoteka: File): Boolean = !datoteka.isFile || datoteka.delete() || !datoteka.exists()
+
+    /** Ostanki prejsnjega procesa: samo nasa imena (tudi stara skupna pot), ne drugih datotek. */
+    fun pobrisiOstanke(mapa: File): Boolean {
+        val datoteke = mapa.listFiles() ?: return !mapa.exists()
+        var vse = true
+        for (f in datoteke) {
+            if (f.isFile && (f.name == IME_DATOTEKE || IME_OSTANKA.matches(f.name)) && !f.delete() && f.exists()) vse = false
+        }
+        return vse
     }
 }

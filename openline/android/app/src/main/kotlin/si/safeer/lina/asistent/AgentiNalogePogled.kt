@@ -25,7 +25,8 @@ import java.time.Instant
 /**
  * Kartica »Agenti in naloge« v zavihku Racunalnik (lastnik 24. 11. 2026 »Bo gumb na telefonu?« - DA): vrsta nalog (agent, mapa, stanje,
  * ura konca po ljubljanskem casu, opomnik) in »Dodeli nalogo« (agent in mapa s seznama z racunalnika, besedilo, kdaj). Pred podpisom
- * okno pokaze vse; podpis s kljucem naprave je lastnikova potrditev za ta zagon (brez »Razumem« se ne podpise: Podpisnik). Kartica je
+ * okno pokaze id in ime iz tabele telefona ter besedilo, ki se podpise. Ce ciscenje besedilo spremeni, lastnik potrdi se enkrat.
+ * Podpis s kljucem naprave je lastnikova potrditev za ta zagon (brez »Razumem« se ne podpise: Podpisnik). Kartica je
  * vstavljena TIK NAD obstojeci Dovoli/Zavrni za Claude Code (isto mesto): vprasanja Claude Code so spodaj. Logika v modulu podpis
  * (AgentiLine; preizkusi), tu pogledi in niti. Samo domace omrezje (LAN). NEPREVERJENO na napravi (app se lokalno ne prevaja z Gradlom).
  */
@@ -53,7 +54,8 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
         starsi.addView(koren, if (mesto in 0..starsi.childCount) mesto else starsi.childCount)
     }
 
-    private fun imeAgenta(id: String): String = zadnje?.agenti?.firstOrNull { it.id == id }?.ime?.takeIf { it.isNotEmpty() } ?: id
+    /** Id in ime iz tabele telefona. Ime iz odgovora streznika sem ne pride. */
+    private fun imeAgenta(id: String): String = AgentiLine.prikazAgenta(id)
 
     private fun besediloStanja(s: String): String = a.getString(when (s) {
         "caka" -> R.string.agents_state_caka
@@ -194,10 +196,10 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
 
     private fun izberiAgenta() {
         val s = zadnje ?: return
-        val agenti = s.agenti.filter { it.zaIzbiro }
+        val agenti = s.agenti.filter { it.zaIzbiro && AgentiLine.imeUjema(it.id, it.ime) }
         if (agenti.isEmpty()) { stanje.setText(R.string.agents_none_ready); return }
         if (s.mape.isEmpty()) { stanje.setText(R.string.agents_no_folders); return }
-        izberi(R.string.agents_pick_agent, agenti.map { it.ime.ifEmpty { it.id } }) { i -> izberiMapo(s, agenti[i].id) }
+        izberi(R.string.agents_pick_agent, agenti.map { AgentiLine.prikazAgenta(it.id) }) { i -> izberiMapo(s, agenti[i].id) }
     }
 
     private fun izberiMapo(s: StanjeAgentov, agent: String) =
@@ -214,11 +216,13 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
             .setTitle(R.string.agents_text_title)
             .setView(vnos)
             .setPositiveButton(R.string.agents_next) { _, _ ->
-                val b = vnos.text.toString().trim()
+                val surovo = vnos.text.toString()
+                val odlocitev = AgentiLine.besediloZaPodpis(surovo)
                 when {
-                    b.isEmpty() -> stanje.setText(R.string.agents_text_empty)
-                    !AgentiLine.dolzinaVRedu(b, mapa) -> stanje.setText(R.string.agents_err_too_long)
-                    else -> izberiKdaj(s, agent, mapa, b)
+                    odlocitev == null -> stanje.setText(if (surovo.length > AgentiLine.NAJVEC_BESEDILO) R.string.agents_err_too_long else R.string.agents_text_empty)
+                    !AgentiLine.dolzinaVRedu(odlocitev.besedilo, mapa) -> stanje.setText(R.string.agents_err_too_long)
+                    odlocitev.drugic -> potrdiCiscenje(s, agent, mapa, odlocitev.besedilo)
+                    else -> izberiKdaj(s, agent, mapa, odlocitev.besedilo)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -246,7 +250,17 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
         }
     }
 
-    /** Pred podpisom lastnik vidi agenta, mapo, celo besedilo in kdaj; zgostitev izracuna telefon iz istih vrednosti (AgentiLine.dodeli). */
+    /** Ce ciscenje spremeni besedilo, lastnik vidi ocisceno in ga potrdi, preden izbere kdaj. Podpise se samo ocisceno. */
+    private fun potrdiCiscenje(s: StanjeAgentov, agent: String, mapa: String, cisto: String) {
+        AlertDialog.Builder(a, R.style.Gw_Dialog)
+            .setTitle(R.string.agents_text_cleaned_title)
+            .setMessage(a.getString(R.string.agents_text_cleaned, cisto))
+            .setPositiveButton(R.string.agents_text_cleaned_ok) { _, _ -> izberiKdaj(s, agent, mapa, cisto) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** Pred podpisom lastnik vidi id in ime iz tabele, mapo, celo (ze ocisceno) besedilo in kdaj. Ime iz odgovora ni v stavku. */
     private fun potrdi(s: StanjeAgentov, agent: String, mapa: String, besedilo: String, pogoj: String, kdaj: String) {
         AlertDialog.Builder(a, R.style.Gw_Dialog)
             .setTitle(R.string.agents_confirm_title)

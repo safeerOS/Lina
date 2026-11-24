@@ -62,6 +62,10 @@ class SamodejniModelTest {
     fun `kandidati - priporoceni s seznama brez brezplacnih in najvec 3`() {
         assertEquals(listOf("claude-haiku-5-5", "claude-opus-5-5"), SamodejniModel.kandidati(Ponudnik.CLAUDE, listOf("claude-opus-5-5", "claude-haiku-5-5", "claude-3-x")))
         assertEquals(listOf("openai/gpt-6-luna"), SamodejniModel.kandidati(Ponudnik.OPENROUTER, listOf("openai/gpt-oss-20b:free", "openai/gpt-6-luna")))
+        assertEquals(listOf("openai/gpt-6-luna"), SamodejniModel.kandidati(Ponudnik.OPENROUTER, listOf("anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro", "openai/gpt-6-luna"), samoPredpona = "openai/"))
+        assertEquals(listOf("anthropic/claude-sonnet-4.5"), SamodejniModel.kandidati(Ponudnik.OPENROUTER, listOf("anthropic/claude-sonnet-4.5", "openai/gpt-6-luna"), samoPredpona = "anthropic/"))
+        assertNull(SamodejniModel.predponaModela("meta/llama-3"))
+        assertEquals("google/", SamodejniModel.predponaModela("google/gemini-2.5-pro"))
         assertTrue(SamodejniModel.kandidati(Ponudnik.OPENAI, listOf("gpt-6-luna", "gpt-6.1-terra", "gpt-6.2-sol", "gpt-5")).size <= 3)
     }
 
@@ -150,5 +154,35 @@ class SamodejniModelTest {
         }
         assertNull(p.zahteve.first { it.metoda == "GET" }.glave["Authorization"])
         for (z in p.zahteve) assertTrue(z.url.startsWith("https://openrouter.ai/api/v1/"), z.url)
+    }
+
+    @Test
+    fun `OpenRouter preklop ostane pri isti predponi in nikoli ne poslje brezplacnega`() {
+        val modeli = PomnilniskaModelShramba()
+        val p = Lazen(OdgovorHttp(200, """{"data":[{"id":"anthropic/claude-sonnet-4.5"},{"id":"google/gemini-2.5-pro"},{"id":"openai/gpt-oss-20b:free"},{"id":"openai/gpt-6-luna"}]}""")) { m ->
+            if (m == "openai/gpt-4o") OdgovorHttp(400, """{"error":{"code":400,"message":"openai/gpt-4o is not a valid model ID"}}""")
+            else OdgovorHttp(200, """{"choices":[{"message":{"content":"da"}}]}""")
+        }
+        val r = SamodejniOdjemalec(Ponudnik.OPENROUTER, shramba("sk-or-1"), p, modeli).apply { spanje = {} }.poslji(listOf(Sporocilo("user", "a")), "")
+        assertTrue(r is Rezultat.Besedilo)
+        assertEquals("openai/gpt-6-luna", modeli.beri(Ponudnik.OPENROUTER))
+        for (z in p.zahteve.filter { it.metoda == "POST" }) {
+            assertFalse(z.telo.contains("anthropic/"), z.telo)
+            assertFalse(z.telo.contains("google/"), z.telo)
+            assertFalse(z.telo.contains(":free"), z.telo)
+        }
+    }
+
+    @Test
+    fun `OpenRouter z neznano predpono ne isce drugega modela`() {
+        val modeli = PomnilniskaModelShramba().also { it.shrani(Ponudnik.OPENROUTER, "meta/llama-3.1-70b") }
+        val p = Lazen(OdgovorHttp(200, """{"data":[{"id":"openai/gpt-6-luna"},{"id":"anthropic/claude-sonnet-4.5"}]}""")) {
+            OdgovorHttp(400, """{"error":{"message":"meta/llama-3.1-70b is not a valid model ID"}}""")
+        }
+        val r = SamodejniOdjemalec(Ponudnik.OPENROUTER, shramba("sk-or-1"), p, modeli).apply { spanje = {} }.poslji(listOf(Sporocilo("user", "a")), "")
+        assertTrue(r is Rezultat.Napaka)
+        assertEquals("meta/llama-3.1-70b", modeli.beri(Ponudnik.OPENROUTER))
+        assertEquals(1, p.zahteve.size)
+        assertEquals("POST", p.zahteve.single().metoda)
     }
 }

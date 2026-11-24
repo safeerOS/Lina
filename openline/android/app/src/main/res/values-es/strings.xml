@@ -464,4 +464,10 @@
     <string name="asist_or_account_paid">Cuenta con saldo: puede elegir cualquier modelo.</string>
     <string name="asist_or_daily_fmt">Solicitudes gratuitas hoy: quedan %1$d de %2$d.</string>
     <string name="asist_or_pick">Elegir un modelo de la lista</string>
+    <string name="builds_confirm_msg">¿Inicio la compilación en GitHub?\n\nQué: %1$s\nRama: %2$s\nCommit: %3$s</string>
+    <string name="builds_commit_missing">Esta compilación no tiene un commit para mostrar, así que no se ha firmado.</string>
+    <string name="agents_confirm_msg">Agente: %1$s\nCarpeta: %2$s\n%3$s\n\nTarea:\n%4$s\n\nFirmar con este teléfono confirma un inicio de esta tarea.</string>
+    <string name="agents_text_cleaned_title">Revisa la tarea limpia</string>
+    <string name="agents_text_cleaned">Se quitaron caracteres ocultos o especiales. Solo se firma este texto:\n\n%1$s</string>
+    <string name="agents_text_cleaned_ok">Usar este texto</string>
 </resources>

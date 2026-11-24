@@ -464,4 +464,10 @@
     <string name="asist_or_account_paid">Konto mit Guthaben: Sie können jedes Modell wählen.</string>
     <string name="asist_or_daily_fmt">Kostenlose Anfragen heute: noch %1$d von %2$d.</string>
     <string name="asist_or_pick">Modell aus der Liste wählen</string>
+    <string name="builds_confirm_msg">Build auf GitHub starten?\n\nWas: %1$s\nZweig: %2$s\nCommit: %3$s</string>
+    <string name="builds_commit_missing">Dieser Build hat keinen Commit zum Anzeigen, daher wurde nichts signiert.</string>
+    <string name="agents_confirm_msg">Agent: %1$s\nOrdner: %2$s\n%3$s\n\nAufgabe:\n%4$s\n\nDie Signatur mit diesem Telefon bestätigt einen Start dieser Aufgabe.</string>
+    <string name="agents_text_cleaned_title">Bereinigte Aufgabe prüfen</string>
+    <string name="agents_text_cleaned">Verborgene oder Sonderzeichen wurden entfernt. Signiert wird nur dieser Text:\n\n%1$s</string>
+    <string name="agents_text_cleaned_ok">Diesen Text verwenden</string>
 </resources>

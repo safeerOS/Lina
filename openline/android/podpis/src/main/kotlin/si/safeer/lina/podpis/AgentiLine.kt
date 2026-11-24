@@ -40,6 +40,9 @@ data class NalogaAgenta(
  */
 data class StanjeAgentov(val agenti: List<AgentRacunalnika>, val naloge: List<NalogaAgenta>, val mape: List<String>, val mapeRacunalnika: Boolean)
 
+/** Ocisceno besedilo naloge. [drugic] = razlikuje se od vnosa, okno zahteva se eno potrditev. Podpise se samo [besedilo]. */
+data class BesediloPodpisa(val besedilo: String, val drugic: Boolean)
+
 sealed class IzidAgentov {
     data class Stanje(val stanje: StanjeAgentov) : IzidAgentov()
     data class Dodeljeno(val id: String) : IzidAgentov()
@@ -55,6 +58,24 @@ sealed class IzidAgentov {
  */
 object AgentiLine {
     val AGENTI = setOf("claude", "agy", "opencode", "kimi", "pi", "grok")
+    /** Imena iz stalne tabele telefona (claude-naloge.ts OPIS_AGENTOV). Odgovor streznika sem ne pride. */
+    val IMENA: Map<String, String> = mapOf(
+        "claude" to "Claude Code",
+        "agy" to "Antigravity",
+        "opencode" to "opencode (Gemini)",
+        "kimi" to "Kimi",
+        "pi" to "Pi",
+        "grok" to "Grok Build",
+    )
+
+    /** Id in ime iz tabele, za okno pred podpisom. */
+    fun prikazAgenta(id: String): String {
+        val ime = IMENA[id] ?: return id
+        return "$id ($ime)"
+    }
+
+    /** Ime iz odgovora se ujema s tabelo. Prazno ali drugo ime: dodelitve ne podpisi. */
+    fun imeUjema(id: String, imeIzOdgovora: String): Boolean = IMENA[id] == imeIzOdgovora
     val STANJA = setOf("caka", "zaganja", "tece", "koncano", "odklonjeno", "poteklo", "napaka", "dodeljeno", "zamujeno", "preklicano")
     /** Naloge, na katere lahko caka »ko konca«: se niso koncne. */
     val NEKONCNA = setOf("caka", "zaganja", "tece", "dodeljeno", "zamujeno")
@@ -222,9 +243,11 @@ object AgentiLine {
         cas: Long, enkratni: String, podpisi: (String, Long, String) -> String?,
     ): IzidAgentov {
         val nap = IzidAgentov.Napaka(NapakaGradenj.NAPAKA)
-        if (s.agenti.none { it.id == agent && it.zaIzbiro } || agent.length > NAJVEC_AGENT) return nap
+        val zapis = s.agenti.firstOrNull { it.id == agent && it.zaIzbiro }
+        if (zapis == null || agent.length > NAJVEC_AGENT || !imeUjema(agent, zapis.ime)) return nap
         if (mapa !in s.mape || mapa.length > NAJVEC_MAPA) return nap
-        if (besedilo.isBlank() || besedilo.length > NAJVEC_BESEDILO || !NiziLine.praviUnicode(besedilo)) return nap
+        val cisto = ocistiBesediloNaloge(besedilo) ?: return nap
+        if (cisto != besedilo) return nap
         if (!veljavenPogoj(pogoj, s)) return nap
         val zg = zgostitevDodelitve(agent, mapa, besedilo, pogoj)
         val podpis = podpisi(zg, cas, enkratni) ?: return IzidAgentov.Napaka(NapakaGradenj.NI_POTRDITVE)
@@ -236,6 +259,67 @@ object AgentiLine {
         val o = pov.dodeliAgentNalogo(telo)
         val ok = (o as? OdgovorLine.Ok) ?: return napaka(o)
         return runCatching { IzidAgentov.Dodeljeno(json.parseToJsonElement(ok.telo).jsonObject.niz("id").ujema(ID)) }.getOrElse { nap }
+    }
+
+    /**
+     * Isto ciscenje kot ocistiBesediloNaloge na racunalniku, plus nevidni znaki iz naloge: NFC, CRLF v LF,
+     * kontrolni, smerni, \p{Cf}, Default_Ignorable, U+E0000-E007F, U+3164, zasebna obmocja, trim.
+     * Null, ce niz ni pravilen Unicode, je po ciscenju prazen ali je daljsi od [najvec].
+     */
+    fun ocistiBesediloNaloge(v: String, najvec: Int = NAJVEC_BESEDILO): String? {
+        if (!NiziLine.praviUnicode(v)) return null
+        val zLf = java.text.Normalizer.normalize(v, java.text.Normalizer.Form.NFC).replace(Regex("\r\n?"), "\n")
+        val sb = StringBuilder()
+        var i = 0
+        while (i < zLf.length) {
+            val cp = zLf.codePointAt(i)
+            if (!jeOdstranjenZnak(cp)) sb.appendCodePoint(cp)
+            i += Character.charCount(cp)
+        }
+        val cisto = obreziKotJs(sb.toString())
+        if (cisto.isEmpty() || cisto.length > najvec) return null
+        return cisto
+    }
+
+    /** Null = ne podpisi. Sicer samo ocisceno besedilo; ce se razlikuje od vnosa, okno zahteva drugo potrditev. */
+    fun besediloZaPodpis(v: String): BesediloPodpisa? {
+        val c = ocistiBesediloNaloge(v) ?: return null
+        return BesediloPodpisa(c, c != v)
+    }
+
+    /** Tab in LF ostaneta (kot na racunalniku). Ostalo: kontrolni, Cf, zasebno, Default_Ignorable, U+3164, oznake. */
+    private fun jeOdstranjenZnak(cp: Int): Boolean {
+        if (cp == 0x09 || cp == 0x0A) return false
+        if (cp in 0x00..0x08 || cp in 0x0B..0x1F || cp in 0x7F..0x9F) return true
+        if (cp == 0x3164 || cp in 0xE0000..0xE007F) return true
+        val vrsta = Character.getType(cp)
+        if (vrsta == Character.FORMAT.toInt() || vrsta == Character.PRIVATE_USE.toInt()) return true
+        return jePrivzetoNeviden(cp)
+    }
+
+    /** Default_Ignorable, ki ni ze Cf ali kontrolni znak (Unicode DerivedCoreProperties). */
+    private fun jePrivzetoNeviden(cp: Int): Boolean = when (cp) {
+        0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x2065, 0x3164, 0xFFA0 -> true
+        in 0x180B..0x180E -> true
+        in 0xFE00..0xFE0F -> true
+        in 0xE0100..0xE01EF -> true
+        else -> false
+    }
+
+    /** Robni presledki kot String.prototype.trim (tudi NBSP), da podpisano besedilo racunalnik ne obreze drugace. */
+    private fun obreziKotJs(s: String): String {
+        fun presledek(cp: Int) = cp == 0x09 || cp == 0x0A || cp == 0x0B || cp == 0x0C || cp == 0x0D || cp == 0x20 ||
+            cp == 0xA0 || cp == 0x1680 || cp == 0x2028 || cp == 0x2029 || cp == 0x202F || cp == 0x205F || cp == 0x3000 ||
+            cp == 0xFEFF || cp in 0x2000..0x200A
+        var a = 0
+        var b = s.length
+        while (a < b && presledek(s.codePointAt(a))) a += Character.charCount(s.codePointAt(a))
+        while (b > a) {
+            val cp = s.codePointBefore(b)
+            if (!presledek(cp)) break
+            b -= Character.charCount(cp)
+        }
+        return s.substring(a, b)
     }
 
     /** Ali bi bilo telo dodelitve pod mejo racunalnika (za opozorilo v oknu, preden lastnik podpise). */
