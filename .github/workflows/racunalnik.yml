@@ -199,6 +199,7 @@ jobs:
           set +e
           timeout 1800 npm test > preizkusi.log 2>&1
           KODA=$?
+          echo "KODA=${KODA}"; tail -n 3 preizkusi.log
           {
             echo "### Preizkusi (koda ${KODA})"
             grep -E '^# (tests|pass|fail|cancelled|skipped)' preizkusi.log || true

@@ -13,4 +13,6 @@ const izid = spawnSync(process.execPath, ["--experimental-strip-types", "--test"
   stdio: "inherit",
   env: { ...process.env, LINA_PODROBNI_POTEK: "1" },
 });
+// Izhod v dnevnik (CI 24. 11. 2026: koda 1 ob »fail 0« - vzrok mora biti viden): status, signal, napaka zagona.
+console.error(`[test.mjs] status=${izid.status} signal=${izid.signal} napaka=${izid.error?.message ?? "-"}`);
 process.exit(izid.status ?? 1);
