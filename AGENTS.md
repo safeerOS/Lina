@@ -145,8 +145,9 @@ Celotno pravilo: projekt-3/AGENTS.md »Lina gradi APK in deb na GitHubu«. Na te
   zapise enkrat ob prvem zagonu procesa (GatewayApplication). Odobritev (dovoli) ni zaprta: odlocitev za vodjo.
 
 ## Agenti in naloge s telefona (lastnik 24. 11. 2026: »Bo gumb na telefonu?« - DA; projekt-3/AGENTS.md, ista vrstica)
-- Zavihek Racunalnik, kartica »Agenti in naloge« TIK NAD obstojecim Dovoli/Zavrni za Claude Code (isto mesto; vprasanja ima samo
-  Claude Code prek kanala Line, drugi agenti jih na telefon ne posiljajo). Vrsta: agent, mapa, stanje, kdaj, ura konca po ljubljanskem
+- Zavihek Racunalnik, kartica »Agenti in naloge« TIK NAD obstojecim Dovoli/Zavrni za Claude Code (isto mesto). Dovoli/Zavrni velja samo
+  za naloge, poslane Claude Code iz pogovora (POST /naloga, /dogodki); naloge iz vrste tecejo v terminalu in njihova vprasanja na
+  telefon NE pridejo (SE NI: racunalnik jih ne poslje). Vrsta: agent, mapa, stanje, kdaj, ura konca po ljubljanskem
   casu, opomnik; »Prekliči« za dodeljeno ali zamujeno. »Dodeli nalogo«: agent s seznama pripravljenih z racunalnika, mapa s seznama
   dovoljenih (prostega vnosa poti NI), besedilo, kdaj (zdaj / ob uri / ko konca naloga); okno pred podpisom pokaze vse.
 - Podpis s kljucem naprave = lastnikova potrditev za EN zagon; podpis veze zgostitev (agent, mapa, besedilo, pogoj), ki jo telefon
@@ -154,4 +155,5 @@ Celotno pravilo: projekt-3/AGENTS.md »Lina gradi APK in deb na GitHubu«. Na te
   preklic ostaneta. Samo domace omrezje (HttpPovezavaZLino, ne IzbirnaPovezava).
 - V kodi (24. 11. 2026): modul podpis (AgentiLine, NiziLine.niz*AgentNalog*, AgentiLineTest), app samo pogled (AgentiNalogePogled).
   Racunalnik polja `mape` v GET /agent-naloge SE NE POSILJA: dokler ga ni, telefon ponudi samo mape, ki so ze v vrsti.
-  »Zazeni zdaj« za zamujeno nalogo s telefona: SE NI (ni poti na racunalniku). NEPREVERJENO na napravi.
+  »Zazeni zdaj« za zamujeno nalogo s telefona: SE NI (ni poti na racunalniku). Ura »ob uri« se v oknu pred podpisom pokaze z dnem
+  (danes / jutri / datum). NEPREVERJENO na napravi.
