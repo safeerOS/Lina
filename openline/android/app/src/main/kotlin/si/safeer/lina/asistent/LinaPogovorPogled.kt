@@ -24,6 +24,7 @@ import si.safeer.lina.samostojna.poPrijaviGoogle
 import si.safeer.lina.samostojna.vklopiVertex
 import si.safeer.lina.samostojna.Ponudnik
 import si.safeer.lina.samostojna.ustvariOdjemalca
+import si.safeer.lina.samostojna.IzbiraAsistentke
 import si.safeer.lina.samostojna.KljucGemini
 import si.safeer.lina.samostojna.Odgovor
 import si.safeer.lina.samostojna.SistemskoNavodilo
@@ -127,7 +128,9 @@ class LinaPogovorPogled(
     }
 
     private fun jeVertex() = SkupniKljuci.aktivniPonudnik(a) == Ponudnik.VERTEX
-    private fun imaDostop() = if (jeVertex()) google.prijavljen() && googleShramba.projekt() != null else SkupniKljuci.preberiKljucAktivnegaPonudnika(a) != null
+    private fun imaDostop() = imaKljucAsistentke() ||
+        if (jeVertex()) google.prijavljen() && googleShramba.projekt() != null else SkupniKljuci.preberiKljucAktivnegaPonudnika(a) != null
+    private fun imaKljucAsistentke() = SkupniKljuci.shrambaAsistentke(a).preberi() != null
 
     fun obdelajPovezavo(povezava: String) {
         nastavitveKljuci.obdelajPovezavo(povezava)
@@ -328,7 +331,10 @@ class LinaPogovorPogled(
         val danes = zdaj.toLocalDate()
         val obstojeci = asistent
         if (obstojeci != null && asistentDan == danes) return obstojeci
-        val odjemalec = if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
+        // A4, C (24. 11. 2026): kljuc samo za asistentko ima prednost; brez njega isti ponudnik kot klici (A6).
+        val nastavitveAsistentke = AsistentkaShramba(a)
+        val odjemalec = IzbiraAsistentke.odjemalec(SkupniKljuci.shrambaAsistentke(a), nastavitveAsistentke.model(), nastavitveAsistentke.brezplacni(), prenos)
+            ?: if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos) else ustvariOdjemalca(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos)
         val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo, koledar = true)
         vprasajZaKoledar()
@@ -421,7 +427,7 @@ class LinaPogovorPogled(
             if (isEmpty()) data?.data?.let { add(it) }
         }
         if (uriji.isEmpty()) return
-        val ponudnik = SkupniKljuci.aktivniPonudnik(a)
+        val ponudnik = if (imaKljucAsistentke()) Ponudnik.OPENROUTER else SkupniKljuci.aktivniPonudnik(a)
         nit.execute {
             val izidi = uriji.map { uri -> preberiPriponko(uri, ponudnik) }
             glavna.post {

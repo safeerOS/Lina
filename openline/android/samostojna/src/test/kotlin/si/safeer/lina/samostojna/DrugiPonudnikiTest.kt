@@ -97,6 +97,67 @@ class DrugiPonudnikiTest {
         assertEquals(0, p.klici)
     }
 
+    // ---- Brezplacni modeli OpenRouter samo za asistentko (lastnik 24. 11. 2026, B2, B3, B6, B8, C6, C8) ----
+
+    private fun openRouter(p: Lazen, model: String, dovoli: Boolean = false, rezerva: String? = null) =
+        OpenAiOdjemalec(shramba("sk-or-1"), "https://openrouter.ai/api", model, p, openRouter = true, dovoliBrezplacne = dovoli, rezervniBrezplacni = rezerva).also { it.spanje = {} }
+
+    @Test
+    fun `deny izpade samo z dovoljenjem asistentke in tocnim free modelom`() {
+        val ok = OdgovorHttp(200, """{"choices":[{"message":{"content":"ok"}}]}""")
+        fun telo(model: String, dovoli: Boolean) = Lazen(listOf(ok)).also { openRouter(it, model, dovoli).poslji(emptyList(), "") }.telo
+        assertFalse(telo("google/gemma-4-31b-it:free", true).contains("data_collection"))
+        assertFalse(telo("openrouter/free", true).contains("data_collection"))
+        assertTrue(telo("google/gemma-4-31b-it:free", false).contains("\"data_collection\":\"deny\""), "brez dovoljenja (privzeto) deny ostane")
+        assertTrue(telo("openai/gpt-4o", true).contains("\"data_collection\":\"deny\""), "placljiv model vedno z deny")
+        assertTrue(telo("Google/Gemma:FREE", true).contains("\"data_collection\":\"deny\""), "netocen ID ne izpusti deny")
+        // Privzeti odjemalec OpenRouter (ustvariOdjemalca, pot brez asistentke) je vedno z deny.
+        val p = Lazen(listOf(ok))
+        ustvariOdjemalca(Ponudnik.OPENROUTER, shramba("sk-or-1"), p).poslji(emptyList(), "")
+        assertTrue(p.telo.contains("\"data_collection\":\"deny\""))
+    }
+
+    @Test
+    fun `dovoljenje brezplacnih je samo za OpenRouter, OpenAI in Grok ne dobita polja provider`() {
+        assertThrows(IllegalArgumentException::class.java) { OpenAiOdjemalec(shramba("sk-1"), prenos = Lazen(emptyList()), dovoliBrezplacne = true) }
+        val p = Lazen(listOf(OdgovorHttp(200, """{"choices":[{"message":{"content":"ok"}}]}""")))
+        OpenAiOdjemalec(shramba("sk-1"), "https://api.x.ai", "grok-4", p).poslji(emptyList(), "")
+        assertFalse(p.telo.contains("provider"))
+    }
+
+    @Test
+    fun `predikata brezplacnih modelov enaka kot na racunalniku`() {
+        for (m in listOf("a/b:free", "A/B:FREE", " a/b:free ", "openrouter/free", "x:free:extended", "openrouter/free-x")) assertTrue(jeBrezplacenModel(m), m)
+        for (m in listOf("openai/gpt-4o", "freedom/model", "a/free")) assertFalse(jeBrezplacenModel(m), m)
+        for (m in listOf("a/b:free", "openrouter/free", "google/gemma-4-31b-it:free")) assertTrue(jeTocnoBrezplacen(m), m)
+        for (m in listOf("A/B:FREE", " a/b:free", "x:free:extended", "b:free", "openrouter/free-x", "a/b:free/c")) assertFalse(jeTocnoBrezplacen(m), m)
+    }
+
+    @Test
+    fun `404 pri free modelu pove, kaj vklopiti, 402 in 429 razumljivo`() {
+        fun napaka(koda: Int, model: String, dovoli: Boolean) =
+            (openRouter(Lazen(listOf(OdgovorHttp(koda, """{"error":{"message":"No endpoints found sk-or-1"}}"""))), model, dovoli).poslji(emptyList(), "") as Rezultat.Napaka)
+        assertEquals("OpenRouter: vklopite brezplačne modele v računu OpenRouter (Privacy) ali izberite drug model.", napaka(404, "a/b:free", true).sporocilo)
+        assertEquals("OpenRouter: vklopite stikalo za brezplačne modele.", napaka(404, "a/b:free", false).sporocilo)
+        assertEquals("OpenRouter: na računu OpenRouter ni dobroimetja ali je negativen; izberite brezplačen model ali dodajte kredit.", napaka(402, "openai/gpt-4o", false).sporocilo)
+        assertTrue(napaka(429, "a/b:free", true).sporocilo.contains("omejitev brezplačnih modelov"))
+        assertEquals(402, napaka(402, "openai/gpt-4o", false).koda)
+        assertFalse(napaka(404, "openai/gpt-4o", false).sporocilo.contains("sk-or-1"))
+    }
+
+    @Test
+    fun `C6 placljiv model z 402 enkrat poskusi brezplacnega in to pove, brez dovoljenja ne`() {
+        val p = Lazen(listOf(OdgovorHttp(402, "{}"), OdgovorHttp(200, """{"choices":[{"message":{"content":"zivjo"}}]}""")))
+        val r = openRouter(p, "anthropic/claude-sonnet-4.5", dovoli = true, rezerva = PRIVZETI_BREZPLACNI).poslji(emptyList(), "")
+        assertTrue((r as Rezultat.Besedilo).besedilo.startsWith("zivjo"))
+        assertTrue(r.besedilo.contains("brezplačni model $PRIVZETI_BREZPLACNI"))
+        assertEquals(2, p.klici)
+        assertTrue(p.telo.contains("\"model\":\"$PRIVZETI_BREZPLACNI\"") && !p.telo.contains("data_collection"))
+        val brez = Lazen(listOf(OdgovorHttp(402, "{}"), OdgovorHttp(200, """{"choices":[{"message":{"content":"x"}}]}""")))
+        assertTrue(openRouter(brez, "anthropic/claude-sonnet-4.5", dovoli = false, rezerva = PRIVZETI_BREZPLACNI).poslji(emptyList(), "") is Rezultat.Napaka)
+        assertEquals(1, brez.klici, "brez dovoljenja ni povratka")
+    }
+
     @Test
     fun `neznan id ponudnika je Gemini`() {
         assertEquals(Ponudnik.GEMINI, Ponudnik.izId(null))

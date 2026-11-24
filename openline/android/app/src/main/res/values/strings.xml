@@ -479,4 +479,20 @@
     <string name="assistant_auto_limit">Lina has already answered %1$d times in this task.</string>
     <string name="assistant_auto_no_brain">Lina has no model set up.</string>
     <string name="assistant_auto_busy">Sending is busy.</string>
+    <!-- Kljuc OpenRouter samo za asistentko (lastnik 24. 11. 2026) -->
+    <string name="asist_or_title">OpenRouter key for the assistant only (optional)</string>
+    <string name="asist_or_note">The key is used only for conversations with the assistant. The provider for calls stays unchanged.</string>
+    <string name="asist_or_key_hint">OpenRouter key (sk-or-…)</string>
+    <string name="asist_or_model_hint">Assistant model (e.g. google/gemma-4-31b-it:free)</string>
+    <string name="asist_or_consent">Free models: the provider may use your messages for training. Applies to the assistant only, never to calls. In your OpenRouter account enable Settings → Privacy → Enable free endpoints that may train on inputs. I understand and allow free models for the assistant.</string>
+    <string name="asist_or_free_switch">Allow free models (assistant only)</string>
+    <string name="asist_or_free_note">The provider of a free model may use your messages for training. Applies only to conversations with the assistant, never to calls. In your OpenRouter account you must also enable Settings → Privacy → Enable free endpoints that may train on inputs.</string>
+    <string name="asist_or_save">Save assistant key</string>
+    <string name="asist_or_forget">Remove assistant key</string>
+    <string name="asist_or_ready_fmt">The assistant uses OpenRouter (%1$s). Calls stay on: %2$s.</string>
+    <string name="asist_or_same">The assistant uses the same model as calls.</string>
+    <string name="asist_or_account_free">Account without credit: only free models are available.</string>
+    <string name="asist_or_account_paid">Account with credit: you can choose any model.</string>
+    <string name="asist_or_daily_fmt">Free requests today: %1$d of %2$d left.</string>
+    <string name="asist_or_pick">Choose a model from the list</string>
 </resources>

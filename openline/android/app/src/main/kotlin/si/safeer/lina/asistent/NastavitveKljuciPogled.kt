@@ -25,6 +25,12 @@ import si.safeer.lina.samostojna.PrijavaGoogle
 import si.safeer.lina.samostojna.ProjektGoogle
 import si.safeer.lina.samostojna.poPrijaviGoogle
 import si.safeer.lina.samostojna.vklopiVertex
+import si.safeer.lina.samostojna.IzbiraAsistentke
+import si.safeer.lina.samostojna.OpenRouterRacun
+import si.safeer.lina.samostojna.PRIVZETI_BREZPLACNI
+import si.safeer.lina.samostojna.StanjeOpenRouter
+import android.widget.CheckBox
+import android.widget.Switch
 
 class NastavitveKljuciPogled(
     private val a: Activity,
@@ -54,6 +60,8 @@ class NastavitveKljuciPogled(
     private val tinyfish = SkupniKljuci.shrambaZaOrodje(a, VrstaOrodja.TINYFISH)
     private val twilioZeton = SkupniKljuci.shrambaZaOrodje(a, VrstaOrodja.TWILIO_ZETON)
     private val twilio = TwilioShramba(a)
+    private val kljucAsistentke = SkupniKljuci.shrambaAsistentke(a)
+    private val nastavitveAsistentke = AsistentkaShramba(a)
     private val osveziVse = mutableListOf<() -> Unit>()
 
     init {
@@ -80,6 +88,7 @@ class NastavitveKljuciPogled(
             )
         }
 
+        razdelekAsistentke()
         razdelek(
             naslov = R.string.tool_brave_title, opomba = R.string.tool_brave_note,
             polja = listOf(R.string.tool_brave_hint), skrita = listOf(true),
@@ -213,6 +222,91 @@ class NastavitveKljuciPogled(
     }
 
     private fun dp(v: Int) = (v * a.resources.displayMetrics.density).toInt()
+
+    /**
+     * Kljuc OpenRouter SAMO za asistentko (lastnik 24. 11. 2026, C1-C4, C8, A6): svoje mesto shrambe, ponudnik za klice ostane.
+     * Brezplacen model samo s potrditvijo (enkrat); stikalo ostane za kasnejso spremembo. Brez kljuca: isti model kot klici.
+     */
+    private fun razdelekAsistentke() {
+        fun vrstica(v: View, zgoraj: Int) = vsebnik.addView(
+            v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(zgoraj) },
+        )
+        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Body); setText(R.string.asist_or_title); typeface = android.graphics.Typeface.DEFAULT_BOLD }, 16)
+        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.asist_or_note) }, 4)
+        val vnos = EditText(a, null, 0, R.style.Gw_Field).apply {
+            setHint(R.string.asist_or_key_hint)
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            filters = arrayOf(android.text.InputFilter.LengthFilter(400))
+        }.also { vrstica(it, 8) }
+        val model = EditText(a, null, 0, R.style.Gw_Field).apply {
+            setHint(R.string.asist_or_model_hint)
+            setText(nastavitveAsistentke.model() ?: PRIVZETI_BREZPLACNI)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            filters = arrayOf(android.text.InputFilter.LengthFilter(80))
+        }.also { vrstica(it, 8) }
+        val izberi = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.asist_or_pick) }.also { vrstica(it, 8) }
+        val soglasje = CheckBox(a).apply { setTextAppearance(R.style.Gw_Body); setText(R.string.asist_or_consent) }.also { vrstica(it, 8) }
+        val shrani = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.asist_or_save) }.also { vrstica(it, 8) }
+        val stanje = TextView(a).apply { setTextAppearance(R.style.Gw_Muted); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }.also { vrstica(it, 8) }
+        val pozabi = Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.asist_or_forget) }.also { vrstica(it, 8) }
+        val stikalo = Switch(a).apply { setTextAppearance(R.style.Gw_Body); setText(R.string.asist_or_free_switch) }.also { vrstica(it, 12) }
+        vrstica(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.asist_or_free_note) }, 4)
+
+        var sporocilo: String? = null
+        fun narisi() {
+            val ima = kljucAsistentke.preberi() != null
+            soglasje.visibility = if (nastavitveAsistentke.brezplacni()) View.GONE else View.VISIBLE
+            pozabi.visibility = if (ima) View.VISIBLE else View.GONE
+            stikalo.isChecked = nastavitveAsistentke.brezplacni()
+            shrani.isEnabled = !caka
+            stanje.text = sporocilo ?: if (ima) a.getString(R.string.asist_or_ready_fmt, nastavitveAsistentke.model() ?: PRIVZETI_BREZPLACNI, SkupniKljuci.aktivniPonudnik(a).oznaka)
+            else a.getString(R.string.asist_or_same)
+        }
+        osveziVse.add(::narisi)
+
+        fun preberiStanje() = nit.execute {
+            val st = OpenRouterRacun.stanje(prenos, kljucAsistentke)
+            glavna.post { if (!a.isFinishing) { sporocilo = opisStanja(st); narisi() } }
+        }
+        shrani.setOnClickListener {
+            val k = vnos.text.toString().trim()
+            val m = model.text.toString().trim().ifEmpty { PRIVZETI_BREZPLACNI }
+            IzbiraAsistentke.razlogZavrnitve(k, kljucAsistentke.preberi() != null, m, soglasje.isChecked, nastavitveAsistentke.brezplacni())
+                ?.let { sporocilo = it; narisi(); return@setOnClickListener }
+            if (k.isNotEmpty()) kljucAsistentke.shrani(KljucGemini(k))
+            nastavitveAsistentke.shraniModel(m)
+            if (soglasje.isChecked) nastavitveAsistentke.nastaviBrezplacne(true)
+            vnos.setText(""); sporocilo = null; obSpremembi(); narisi()
+            preberiStanje()
+        }
+        // C3: brez dobroimetja samo brezplacni modeli z orodji, z dobroimetjem vsi (javni seznam).
+        izberi.setOnClickListener {
+            nit.execute {
+                val st = OpenRouterRacun.stanje(prenos, kljucAsistentke)
+                val modeli = OpenRouterRacun.modeli(prenos, samoBrezplacni = st?.brezplacniRacun != false)
+                glavna.post {
+                    if (a.isFinishing || modeli.isEmpty()) return@post
+                    AlertDialog.Builder(a).setTitle(R.string.asist_or_pick)
+                        .setItems(modeli.toTypedArray()) { _, i -> model.setText(modeli[i]) }
+                        .setNegativeButton(android.R.string.cancel, null).show()
+                }
+            }
+        }
+        pozabi.setOnClickListener { kljucAsistentke.izbrisi(); sporocilo = null; obSpremembi(); narisi() }
+        stikalo.setOnCheckedChangeListener { _, v ->
+            if (v != nastavitveAsistentke.brezplacni()) { nastavitveAsistentke.nastaviBrezplacne(v); obSpremembi(); narisi() }
+        }
+    }
+
+    private fun opisStanja(st: StanjeOpenRouter?): String? {
+        if (st == null) return null
+        val deli = listOfNotNull(
+            when (st.brezplacniRacun) { true -> a.getString(R.string.asist_or_account_free); false -> a.getString(R.string.asist_or_account_paid); null -> null },
+            if (st.dnevnoPreostalo != null && st.dnevnoMeja != null) a.getString(R.string.asist_or_daily_fmt, st.dnevnoPreostalo, st.dnevnoMeja) else null,
+        )
+        return deli.joinToString(" ").ifEmpty { null }
+    }
 
     private fun razdelek(
         naslov: Int, opomba: Int, polja: List<Int>, skrita: List<Boolean>,

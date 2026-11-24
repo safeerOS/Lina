@@ -145,7 +145,20 @@ class GoogleShramba(private val context: Context) {
 }
 
 /** Orodja s kljucem, ki niso ponudniki AI. */
-enum class VrstaOrodja(val id: String) { BRAVE("brave"), TINYFISH("tinyfish"), TWILIO_ZETON("twilio_zeton") }
+enum class VrstaOrodja(val id: String) {
+    BRAVE("brave"), TINYFISH("tinyfish"), TWILIO_ZETON("twilio_zeton"),
+    /** Kljuc OpenRouter SAMO za asistentko (lastnik 24. 11. 2026): svoj AES kljuc in zapis, nikoli mesto ponudnika za klice. */
+    OPENROUTER_ASISTENTKA("openrouter_asistentka"),
+}
+
+/** Model asistentke in stikalo brezplacnih modelov (ni skrivnost). Brez kljuca asistentke se ne uporabi (A6: isti kot klici). */
+class AsistentkaShramba(private val context: Context) {
+    private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+    fun model(): String? = prefs().getString("asistentka_model", null)
+    fun shraniModel(m: String) { prefs().edit().putString("asistentka_model", m).apply() }
+    fun brezplacni(): Boolean = prefs().getBoolean("asistentka_brezplacni", false)
+    fun nastaviBrezplacne(v: Boolean) { prefs().edit().putBoolean("asistentka_brezplacni", v).apply() }
+}
 
 /** Twilio Account SID ni skrivnost (zeton je v Keystore), zato navadne nastavitve. */
 class TwilioShramba(private val context: Context) {
@@ -177,6 +190,10 @@ object SkupniKljuci {
         shrambaZaPonudnikaTest?.invoke(p) ?: KeystoreShranjevalnik(context, p)
     
     fun shrambaZaOrodje(context: Context, o: VrstaOrodja): ShranjevalnikKljuca = KeystoreShranjevalnik(context, o)
+
+    var shrambaAsistentkeTest: ShranjevalnikKljuca? = null
+    /** Kljuc samo za asistentko; klici (aktivniPonudnik, Gemini Live) tega mesta nikoli ne berejo. */
+    fun shrambaAsistentke(context: Context): ShranjevalnikKljuca = shrambaAsistentkeTest ?: KeystoreShranjevalnik(context, VrstaOrodja.OPENROUTER_ASISTENTKA)
     
     fun preberiKljucAktivnegaPonudnika(context: Context): KljucGemini? {
         return shrambaZaPonudnika(context, aktivniPonudnik(context)).preberi()

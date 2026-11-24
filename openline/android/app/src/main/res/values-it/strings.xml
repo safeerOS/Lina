@@ -446,4 +446,20 @@
     <string name="assistant_auto_limit">Lina ha già risposto %1$d volte in questa attività.</string>
     <string name="assistant_auto_no_brain">Lina non ha un modello configurato.</string>
     <string name="assistant_auto_busy">L’invio è occupato.</string>
+    <!-- Kljuc OpenRouter samo za asistentko (lastnik 24. 11. 2026) -->
+    <string name="asist_or_title">Chiave OpenRouter solo per l’assistente (facoltativa)</string>
+    <string name="asist_or_note">La chiave si usa solo per le conversazioni con l’assistente. Il fornitore delle chiamate non cambia.</string>
+    <string name="asist_or_key_hint">Chiave OpenRouter (sk-or-…)</string>
+    <string name="asist_or_model_hint">Modello dell’assistente (es. google/gemma-4-31b-it:free)</string>
+    <string name="asist_or_consent">Modelli gratuiti: il fornitore può usare i tuoi messaggi per l’addestramento. Solo per l’assistente, mai per le chiamate. Nel tuo account OpenRouter attiva Settings → Privacy → Enable free endpoints that may train on inputs. Ho capito e consento i modelli gratuiti per l’assistente.</string>
+    <string name="asist_or_free_switch">Consenti modelli gratuiti (solo assistente)</string>
+    <string name="asist_or_free_note">Il fornitore di un modello gratuito può usare i tuoi messaggi per l’addestramento. Vale solo per le conversazioni con l’assistente, mai per le chiamate. Nel tuo account OpenRouter devi attivare anche Settings → Privacy → Enable free endpoints that may train on inputs.</string>
+    <string name="asist_or_save">Salva la chiave dell’assistente</string>
+    <string name="asist_or_forget">Rimuovi la chiave dell’assistente</string>
+    <string name="asist_or_ready_fmt">L’assistente usa OpenRouter (%1$s). Le chiamate restano su: %2$s.</string>
+    <string name="asist_or_same">L’assistente usa lo stesso modello delle chiamate.</string>
+    <string name="asist_or_account_free">Account senza credito: solo modelli gratuiti disponibili.</string>
+    <string name="asist_or_account_paid">Account con credito: puoi scegliere qualsiasi modello.</string>
+    <string name="asist_or_daily_fmt">Richieste gratuite oggi: ne restano %1$d su %2$d.</string>
+    <string name="asist_or_pick">Scegli un modello dall’elenco</string>
 </resources>

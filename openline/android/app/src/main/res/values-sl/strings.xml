@@ -478,4 +478,20 @@
     <string name="assistant_auto_limit">Lina je v tej nalogi odgovorila že %1$d-krat.</string>
     <string name="assistant_auto_no_brain">Lina nima nastavljenega modela.</string>
     <string name="assistant_auto_busy">Pošiljanje je zasedeno.</string>
+    <!-- Kljuc OpenRouter samo za asistentko (lastnik 24. 11. 2026) -->
+    <string name="asist_or_title">Ključ OpenRouter samo za asistentko (neobvezno)</string>
+    <string name="asist_or_note">Ključ se uporabi samo za pogovor z asistentko. Ponudnik za klice ostane nespremenjen.</string>
+    <string name="asist_or_key_hint">Ključ OpenRouter (sk-or-…)</string>
+    <string name="asist_or_model_hint">Model asistentke (npr. google/gemma-4-31b-it:free)</string>
+    <string name="asist_or_consent">Brezplačni modeli: ponudnik lahko vaša sporočila uporabi za učenje. Velja samo za asistentko, nikoli za klice. V računu OpenRouter vklopite Settings → Privacy → Enable free endpoints that may train on inputs. Razumem in dovolim brezplačne modele za asistentko.</string>
+    <string name="asist_or_free_switch">Dovoli brezplačne modele (samo asistentka)</string>
+    <string name="asist_or_free_note">Ponudnik brezplačnega modela lahko vaša sporočila uporabi za učenje. Velja samo za pogovor z asistentko, nikoli za klice. V računu OpenRouter morate vklopiti tudi Settings → Privacy → Enable free endpoints that may train on inputs.</string>
+    <string name="asist_or_save">Shrani ključ za asistentko</string>
+    <string name="asist_or_forget">Odstrani ključ za asistentko</string>
+    <string name="asist_or_ready_fmt">Asistentka uporablja OpenRouter (%1$s). Klici ostanejo na: %2$s.</string>
+    <string name="asist_or_same">Asistentka uporablja isti model kot klici.</string>
+    <string name="asist_or_account_free">Račun brez dobroimetja: na voljo so samo brezplačni modeli.</string>
+    <string name="asist_or_account_paid">Račun z dobroimetjem: izberete lahko katerikoli model.</string>
+    <string name="asist_or_daily_fmt">Brezplačni zahtevki danes: še %1$d od %2$d.</string>
+    <string name="asist_or_pick">Izberi model s seznama</string>
 </resources>

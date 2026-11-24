@@ -446,4 +446,20 @@
     <string name="assistant_auto_limit">Lina hat in dieser Aufgabe bereits %1$d-mal geantwortet.</string>
     <string name="assistant_auto_no_brain">Für Lina ist kein Modell eingerichtet.</string>
     <string name="assistant_auto_busy">Senden ist belegt.</string>
+    <!-- Kljuc OpenRouter samo za asistentko (lastnik 24. 11. 2026) -->
+    <string name="asist_or_title">OpenRouter-Schlüssel nur für die Assistentin (optional)</string>
+    <string name="asist_or_note">Der Schlüssel wird nur für Gespräche mit der Assistentin verwendet. Der Anbieter für Anrufe bleibt unverändert.</string>
+    <string name="asist_or_key_hint">OpenRouter-Schlüssel (sk-or-…)</string>
+    <string name="asist_or_model_hint">Modell der Assistentin (z. B. google/gemma-4-31b-it:free)</string>
+    <string name="asist_or_consent">Kostenlose Modelle: Der Anbieter kann Ihre Nachrichten zum Training verwenden. Gilt nur für die Assistentin, nie für Anrufe. Aktivieren Sie im OpenRouter-Konto Settings → Privacy → Enable free endpoints that may train on inputs. Ich verstehe und erlaube kostenlose Modelle für die Assistentin.</string>
+    <string name="asist_or_free_switch">Kostenlose Modelle erlauben (nur Assistentin)</string>
+    <string name="asist_or_free_note">Der Anbieter eines kostenlosen Modells kann Ihre Nachrichten zum Training verwenden. Gilt nur für Gespräche mit der Assistentin, nie für Anrufe. Im OpenRouter-Konto müssen Sie auch Settings → Privacy → Enable free endpoints that may train on inputs aktivieren.</string>
+    <string name="asist_or_save">Schlüssel der Assistentin speichern</string>
+    <string name="asist_or_forget">Schlüssel der Assistentin entfernen</string>
+    <string name="asist_or_ready_fmt">Die Assistentin verwendet OpenRouter (%1$s). Anrufe bleiben bei: %2$s.</string>
+    <string name="asist_or_same">Die Assistentin verwendet dasselbe Modell wie Anrufe.</string>
+    <string name="asist_or_account_free">Konto ohne Guthaben: nur kostenlose Modelle verfügbar.</string>
+    <string name="asist_or_account_paid">Konto mit Guthaben: Sie können jedes Modell wählen.</string>
+    <string name="asist_or_daily_fmt">Kostenlose Anfragen heute: noch %1$d von %2$d.</string>
+    <string name="asist_or_pick">Modell aus der Liste wählen</string>
 </resources>

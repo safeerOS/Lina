@@ -446,4 +446,20 @@
     <string name="assistant_auto_limit">Lina a déjà répondu %1$d fois dans cette tâche.</string>
     <string name="assistant_auto_no_brain">Aucun modèle n’est configuré pour Lina.</string>
     <string name="assistant_auto_busy">L’envoi est occupé.</string>
+    <!-- Kljuc OpenRouter samo za asistentko (lastnik 24. 11. 2026) -->
+    <string name="asist_or_title">Clé OpenRouter pour l’assistante uniquement (facultatif)</string>
+    <string name="asist_or_note">La clé sert uniquement aux conversations avec l’assistante. Le fournisseur des appels ne change pas.</string>
+    <string name="asist_or_key_hint">Clé OpenRouter (sk-or-…)</string>
+    <string name="asist_or_model_hint">Modèle de l’assistante (p. ex. google/gemma-4-31b-it:free)</string>
+    <string name="asist_or_consent">Modèles gratuits : le fournisseur peut utiliser vos messages pour l’entraînement. Uniquement pour l’assistante, jamais pour les appels. Dans votre compte OpenRouter, activez Settings → Privacy → Enable free endpoints that may train on inputs. Je comprends et j’autorise les modèles gratuits pour l’assistante.</string>
+    <string name="asist_or_free_switch">Autoriser les modèles gratuits (assistante uniquement)</string>
+    <string name="asist_or_free_note">Le fournisseur d’un modèle gratuit peut utiliser vos messages pour l’entraînement. Uniquement pour les conversations avec l’assistante, jamais pour les appels. Dans votre compte OpenRouter, vous devez aussi activer Settings → Privacy → Enable free endpoints that may train on inputs.</string>
+    <string name="asist_or_save">Enregistrer la clé de l’assistante</string>
+    <string name="asist_or_forget">Supprimer la clé de l’assistante</string>
+    <string name="asist_or_ready_fmt">L’assistante utilise OpenRouter (%1$s). Les appels restent sur : %2$s.</string>
+    <string name="asist_or_same">L’assistante utilise le même modèle que les appels.</string>
+    <string name="asist_or_account_free">Compte sans crédit : seuls les modèles gratuits sont disponibles.</string>
+    <string name="asist_or_account_paid">Compte avec crédit : vous pouvez choisir n’importe quel modèle.</string>
+    <string name="asist_or_daily_fmt">Requêtes gratuites aujourd’hui : encore %1$d sur %2$d.</string>
+    <string name="asist_or_pick">Choisir un modèle dans la liste</string>
 </resources>

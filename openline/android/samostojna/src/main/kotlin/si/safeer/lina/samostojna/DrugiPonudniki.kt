@@ -36,6 +36,23 @@ enum class Ponudnik(val id: String, val oznaka: String, val model: String) {
 
 private val json = Json { ignoreUnknownKeys = true }
 
+/**
+ * Brezplacni modeli OpenRouter (lastnik 24. 11. 2026): ponudnik lahko pozive uporabi za ucenje, zato SAMO za asistentko.
+ * Enako kot racunalnik (types.ts): siroko za zaporo (vse, kar je videti brezplacno), ozko za izpust »data_collection: deny«.
+ */
+fun jeBrezplacenModel(model: String): Boolean {
+    val m = model.trim().lowercase()
+    return m.contains(":free") || m.startsWith("openrouter/free")
+}
+
+private val TOCNO_BREZPLACEN = Regex("^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*:free$")
+fun jeTocnoBrezplacen(model: String): Boolean = model == "openrouter/free" || TOCNO_BREZPLACEN.matches(model)
+
+/** Predlogi z orodji (javni seznam OpenRouter, 24. 11. 2026); prvi je privzeti. Kakovost NI izmerjena (meritev C7). */
+val PREDLOGI_BREZPLACNIH = listOf("google/gemma-4-31b-it:free", "nvidia/nemotron-3-ultra-550b-a55b:free", "inclusionai/ling-3.2-flash:free", "openrouter/free")
+val PRIVZETI_BREZPLACNI = PREDLOGI_BREZPLACNIH[0]
+const val SOGLASJE_BREZPLACNI = "Za brezplačne modele potrdite obvestilo (ponudnik lahko sporočila uporabi za učenje)."
+
 /** Skupna zanka: privzeto do 3 poskusov pri 429 in 5xx, drugace takoj; odgovor nad 1 MB je zavrnjen. Kljuca nikoli ne vstavi v sporocilo napake. */
 internal fun posljiZPonovitvami(
     prenos: Prenos, url: String, glave: Map<String, String>, telo: String, spanje: (Long) -> Unit,
@@ -85,12 +102,18 @@ class OpenAiOdjemalec(
     private val prenos: Prenos = JavaHttpPrenos(),
     /** OpenRouter: ponudnikom prepove hrambo podatkov (data_collection deny), kot racunalniska Lina. */
     private val openRouter: Boolean = false,
+    /** B8: deny sme izpasti SAMO asistentki s potrditvijo in tocnim :free modelom; privzeto false (klici in vse drugo). */
+    private val dovoliBrezplacne: Boolean = false,
+    /** C6: brezplacni model, ki enkrat odgovori, ce placljiv vrne 402 (samo z dovoliBrezplacne); nikoli drug ponudnik (B9). */
+    private val rezervniBrezplacni: String? = null,
 ) : PonudnikOdjemalec {
+    init { require(!dovoliBrezplacne || openRouter) { "brezplacni modeli samo pri OpenRouter" } }
+
     var spanje: (Long) -> Unit = { Thread.sleep(it) }
 
-    fun gradiTelo(zgodovina: List<Sporocilo>, sistemsko: String): String = buildJsonObject {
+    fun gradiTelo(zgodovina: List<Sporocilo>, sistemsko: String, model: String = this.model): String = buildJsonObject {
         put("model", model)
-        if (openRouter) put("provider", buildJsonObject { put("data_collection", "deny") })
+        if (openRouter && !(dovoliBrezplacne && jeTocnoBrezplacen(model))) put("provider", buildJsonObject { put("data_collection", "deny") })
         put("messages", buildJsonArray {
             if (sistemsko.isNotEmpty()) add(buildJsonObject { put("role", "system"); put("content", sistemsko) })
             for (s in zgodovina) add(buildJsonObject {
@@ -115,12 +138,45 @@ class OpenAiOdjemalec(
 
     override fun poslji(zgodovina: List<Sporocilo>, sistemsko: String): Rezultat {
         val kljuc = shramba.preberi() ?: return Rezultat.Napaka(null, "Manjka kljuc")
+        val r = enkrat(kljuc, zgodovina, sistemsko, model)
+        val rezerva = rezervniBrezplacni
+        if (r is Rezultat.Napaka && r.koda == 402 && dovoliBrezplacne && rezerva != null && !jeBrezplacenModel(model) && jeTocnoBrezplacen(rezerva)) {
+            val r2 = enkrat(kljuc, zgodovina, sistemsko, rezerva)
+            return if (r2 is Rezultat.Besedilo) Rezultat.Besedilo("${r2.besedilo}\n\n(Na računu OpenRouter ni dobroimetja, zato je odgovoril brezplačni model $rezerva.)") else r2
+        }
+        return r
+    }
+
+    private fun enkrat(kljuc: KljucGemini, zgodovina: List<Sporocilo>, sistemsko: String, m: String): Rezultat {
         val url = "${osnovniNaslov.trimEnd('/')}/v1/chat/completions"
         val glave = buildMap {
             put("Authorization", "Bearer ${kljuc.izpostavi()}")
             if (openRouter) put("X-Title", "Lina")
         }
-        return posljiZPonovitvami(prenos, url, glave, gradiTelo(zgodovina, sistemsko), spanje, ::razberi)
+        // Zadnja koda HTTP (posljiZPonovitvami jo pri telesu z napako izgubi), da je sporocilo OpenRouter razumljivo.
+        var koda = 0
+        val sledi = object : Prenos {
+            override fun post(url: String, glave: Map<String, String>, telo: String, casMs: Long): OdgovorHttp = prenos.post(url, glave, telo, casMs).also { koda = it.koda }
+        }
+        val r = posljiZPonovitvami(sledi, url, glave, gradiTelo(zgodovina, sistemsko, m), spanje, ::razberi)
+        if (r !is Rezultat.Napaka) return r
+        if (openRouter) razlogOpenRouter(koda, m)?.let { return Rezultat.Napaka(koda, it) }
+        // C10: ponudnik lahko v sporocilu napake ponovi kljuc - kljuc nikoli v sporocilo (kot hideSecret na racunalniku).
+        return Rezultat.Napaka(r.koda, r.sporocilo.replace(kljuc.izpostavi(), "••••"))
+    }
+
+    /** B6, C8: razumljiva sporocila OpenRouter (enaka kot na racunalniku, pot asistentke). */
+    private fun razlogOpenRouter(koda: Int, m: String): String? {
+        val brezplacen = jeBrezplacenModel(m)
+        return when {
+            koda == 401 -> "OpenRouter: ključ ni veljaven."
+            koda == 402 -> "OpenRouter: na računu OpenRouter ni dobroimetja ali je negativen; izberite brezplačen model ali dodajte kredit."
+            koda == 429 && brezplacen -> "OpenRouter: dosežena omejitev brezplačnih modelov (20 zahtevkov na minuto; 50 na dan, z vsaj 10 kupljenimi krediti 1000)."
+            (koda == 404 || koda == 503) && brezplacen ->
+                if (dovoliBrezplacne) "OpenRouter: vklopite brezplačne modele v računu OpenRouter (Privacy) ali izberite drug model."
+                else "OpenRouter: vklopite stikalo za brezplačne modele."
+            else -> null
+        }
     }
 
     fun razberi(telo: String): Rezultat {
