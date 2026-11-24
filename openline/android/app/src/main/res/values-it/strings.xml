@@ -244,6 +244,8 @@
     <string name="local_provider_selected">selezionato</string>
     <string name="local_key_save">Salva chiave</string>
     <string name="local_key_bad">Questa non sembra una chiave Gemini.</string>
+    <string name="local_key_model_fmt">Chiave salvata. Lina ha scelto il modello %1$s (la chiamata di prova ha risposto).</string>
+    <string name="local_key_model_unchecked_fmt">Chiave salvata con il modello predefinito %1$s; non è stato possibile contattare il fornitore per verificarlo.</string>
     <string name="local_key_forget">Dimentica chiave</string>
     <string name="local_chat_hint">Chiedi o di’ qualcosa a Lina…</string>
     <string name="local_send">Invia</string>

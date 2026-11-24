@@ -11,6 +11,8 @@ import android.widget.TextView
 import si.safeer.lina.R
 import si.safeer.lina.samostojna.IzidOrodja
 import si.safeer.lina.samostojna.KljucGemini
+import si.safeer.lina.samostojna.PomnilniskiShranjevalnik
+import si.safeer.lina.samostojna.SamodejniModel
 import si.safeer.lina.samostojna.Prenos
 import si.safeer.lina.samostojna.SpletnaOrodja
 import java.util.concurrent.ExecutorService
@@ -136,13 +138,36 @@ class NastavitveKljuciPogled(
     private fun jeVertex() = SkupniKljuci.aktivniPonudnik(a) == Ponudnik.VERTEX
     private fun imaDostop() = if (jeVertex()) google.prijavljen() && googleShramba.projekt() != null else SkupniKljuci.preberiKljucAktivnegaPonudnika(a) != null
 
+    /**
+     * Lastnik 24. 11. 2026: ob shranjevanju Lina sama izbere delujoc model (seznam, priporoceni, preizkusni klic). Kljuc, ki ga
+     * ponudnik zavrne (kljuc, dobroimetje, omejitev), se ne shrani in uporabnik vidi pravi vzrok; brez povezave privzeti model.
+     */
     private fun shraniKljuc() {
         val k = kljucVnos.text.toString().trim()
         if (k.length < 20 || k.any { it.isWhitespace() }) { kljucVnos.error = a.getString(R.string.local_key_bad); return }
-        SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)).shrani(KljucGemini(k))
-        kljucVnos.setText("")
-        obSpremembi()
-        osvezi()
+        if (caka) return
+        val p = SkupniKljuci.aktivniPonudnik(a)
+        caka = true
+        kljucShrani.isEnabled = false
+        nit.execute {
+            val izbira = SamodejniModel.izberi(prenos, p, PomnilniskiShranjevalnik().also { it.shrani(KljucGemini(k)) })
+            glavna.post {
+                caka = false
+                kljucShrani.isEnabled = true
+                if (a.isFinishing) return@post
+                val model = when (izbira) {
+                    is SamodejniModel.Izbira.Model -> izbira.model
+                    is SamodejniModel.Izbira.Napaka -> if (izbira.vzrok == null) p.model else { kljucVnos.error = izbira.sporocilo; return@post }
+                }
+                SkupniKljuci.shrambaZaPonudnika(a, p).shrani(KljucGemini(k))
+                ModelShrambaAndroid(a).shrani(p, model)
+                val sporocilo = if (izbira is SamodejniModel.Izbira.Model) a.getString(R.string.local_key_model_fmt, model) else a.getString(R.string.local_key_model_unchecked_fmt, model)
+                android.widget.Toast.makeText(a, sporocilo, android.widget.Toast.LENGTH_LONG).show()
+                kljucVnos.setText("")
+                obSpremembi()
+                osvezi()
+            }
+        }
     }
 
     private fun zacniPrijavoGoogle() {

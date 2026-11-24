@@ -244,6 +244,8 @@
     <string name="local_provider_selected">ausgewählt</string>
     <string name="local_key_save">Schlüssel speichern</string>
     <string name="local_key_bad">Das sieht nicht nach einem Gemini-Schlüssel aus.</string>
+    <string name="local_key_model_fmt">Schlüssel gespeichert. Lina hat das Modell %1$s gewählt (der Testaufruf hat geantwortet).</string>
+    <string name="local_key_model_unchecked_fmt">Schlüssel mit dem Standardmodell %1$s gespeichert; der Anbieter war für die Prüfung nicht erreichbar.</string>
     <string name="local_key_forget">Schlüssel vergessen</string>
     <string name="local_chat_hint">Lina fragen oder etwas sagen …</string>
     <string name="local_send">Senden</string>

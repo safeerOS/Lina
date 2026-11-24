@@ -52,7 +52,7 @@ interface PonudnikOdjemalec {
 class GeminiOdjemalec(
     private val shramba: ShranjevalnikKljuca,
     private val osnovniNaslov: String = "https://generativelanguage.googleapis.com",
-    private val model: String = "gemini-2.5-flash",
+    private val model: String = Ponudnik.GEMINI.model,
     private val prenos: Prenos = JavaHttpPrenos()
 ) : PonudnikOdjemalec {
     var spanje: (Long) -> Unit = { Thread.sleep(it) }
