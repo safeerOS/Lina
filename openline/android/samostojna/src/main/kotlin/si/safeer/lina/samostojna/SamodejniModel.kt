@@ -38,6 +38,7 @@ object SamodejniModel {
     const val NAJVEC_POSKUSOV = 3
     private val json = Json { ignoreUnknownKeys = true }
     private val VELJAVEN = Regex("^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,79}$")
+    private val MODEL_NI = Regex("not a valid model|invalid model|model\\b[^\\n]{0,80}\\b(does not exist|not found|no longer available|has been retired)|(does not exist|not found)[^\\n]{0,40}\\bmodel", RegexOption.IGNORE_CASE)
     private val NI_ZA_POGOVOR = Regex("(audio|realtime|transcribe|tts|image|imagine|search|embedding|live|voice|vision|instruct|codex|native)", RegexOption.IGNORE_CASE)
 
     /** Vrstni red priporocil (prvi je privzeti); imena iz javne dokumentacije 24. 11. 2026, OpenRouter samo privzeti + seznam. */
@@ -74,9 +75,8 @@ object SamodejniModel {
         if (koda != 400 && koda != 404) return null
         if (tip == "not_found_error" || oznaka == "model_not_found") return VzrokNapake.MODEL
         if (koda == 404 && niz("status") == "NOT_FOUND") return VzrokNapake.MODEL
-        if (Regex("model", RegexOption.IGNORE_CASE).containsMatchIn(sporocilo) &&
-            Regex("not found|does not exist|not exist|not a valid|invalid model|no longer|not available|unknown|not supported|retired", RegexOption.IGNORE_CASE).containsMatchIn(sporocilo)
-        ) return VzrokNapake.MODEL
+        // Ozko: napaka parametra (»'max_tokens' is not supported with this model«) NI »model ne obstaja«.
+        if (MODEL_NI.containsMatchIn(sporocilo)) return VzrokNapake.MODEL
         return null
     }
 
@@ -97,7 +97,7 @@ object SamodejniModel {
         Ponudnik.VERTEX -> null
     }
 
-    /** {data:[{id}]} (Anthropic, OpenAI, xAI, OpenRouter) ali {models:[{name:"models/x"}]} (Gemini); najvec 400. */
+    /** {data:[{id}]} (Anthropic, OpenAI, xAI, OpenRouter) ali {models:[{name:"models/x"}]} (Gemini); brez zgornje meje (OpenRouter > 500). */
     fun razberiSeznam(p: Ponudnik, telo: String): List<String> {
         val o = try { json.parseToJsonElement(telo) as? JsonObject } catch (e: Exception) { null } ?: return emptyList()
         val vrstice = (o[if (p == Ponudnik.GEMINI) "models" else "data"] as? JsonArray) ?: return emptyList()
@@ -105,7 +105,7 @@ object SamodejniModel {
             val m = v as? JsonObject ?: return@mapNotNull null
             val id = if (p == Ponudnik.GEMINI) (m["name"] as? JsonPrimitive)?.contentOrNull?.removePrefix("models/") else (m["id"] as? JsonPrimitive)?.contentOrNull
             id?.takeIf { VELJAVEN.matches(it) }
-        }.distinct().take(400)
+        }.distinct()
     }
 
     /** Seznam ali null (napaka, prenos brez GET v starih preizkusih, ni seznama) - takrat se preizkusijo priporoceni. */

@@ -44,6 +44,18 @@ class SamodejniModelTest {
         assertEquals(VzrokNapake.KLJUC, SamodejniModel.vzrok(401, "{}"))
         assertEquals(VzrokNapake.DOBROIMETJE, SamodejniModel.vzrok(400, """{"error":{"type":"invalid_request_error","message":"Your credit balance is too low"}}"""))
         assertEquals(VzrokNapake.OMEJITEV, SamodejniModel.vzrok(429, "{}"))
+        // Napaka parametra pri novem modelu ni »model ne obstaja«.
+        assertNull(SamodejniModel.vzrok(400, """{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.","code":"unsupported_parameter"}}"""))
+        assertEquals(VzrokNapake.MODEL, SamodejniModel.vzrok(404, """{"error":{"message":"The model `gpt-4.1-mini` does not exist or you do not have access to it."}}"""))
+    }
+
+    @Test
+    fun `seznam brez zgornje meje - priporocen za 400 mestom je na seznamu`() {
+        val ids = (0 until 450).map { "openai/gpt-$it-drag" } + "openai/gpt-4o"
+        val telo = ids.joinToString(",", "{\"data\":[", "]}") { "{\"id\":\"$it\"}" }
+        val seznam = SamodejniModel.razberiSeznam(Ponudnik.OPENROUTER, telo)
+        assertEquals(451, seznam.size)
+        assertEquals("openai/gpt-4o", SamodejniModel.kandidati(Ponudnik.OPENROUTER, seznam).first())
     }
 
     @Test
