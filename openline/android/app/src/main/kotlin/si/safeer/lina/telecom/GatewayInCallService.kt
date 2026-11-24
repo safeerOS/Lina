@@ -357,6 +357,9 @@ class GatewayInCallService : InCallService() {
     }
 
     private fun evaluate(callId: String, call: Call): TakeoverVerdict {
+        // Opozorilo ob prvem zagonu (24. 11. 2026): nova namestitev brez »Razumem« klica ne prevzame (zvoni kot obicajno);
+        // ze namescena Lina sprejema kot prej, dokler ga ne potrdi (OpozoriloLine.smeSprejematiKlice).
+        if (!si.safeer.lina.config.OpozoriloShramba(this).smeSprejematiKlice()) return TakeoverVerdict.REFUSE
         val settings = LinaSettingsStore(this).load()
         val started = ringStartedAt[callId]
         val elapsed = if (started == null) 0L else SystemClock.elapsedRealtime() - started

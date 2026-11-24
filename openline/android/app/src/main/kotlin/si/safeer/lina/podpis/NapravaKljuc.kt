@@ -50,7 +50,13 @@ object NapravaKljuc {
         return java.util.Base64.getEncoder().encodeToString(s.sign())
     }
 
-    private val podpisnik = Podpisnik(::podpisi, ::id, ::javniKljucB64)
+    /**
+     * Opozorilo ob prvem zagonu (24. 11. 2026): nastavi GatewayApplication (OpozoriloShramba.smeDelati). Privzeto ZAPRTO - dokler
+     * ni nastavljeno, se naloge, nadaljevanja in gradnje ne podpisejo.
+     */
+    @Volatile var smeDelati: () -> Boolean = { false }
+
+    private val podpisnik = Podpisnik(::podpisi, ::id, ::javniKljucB64) { smeDelati() }
 
     /** Seznanitev s kodo iz QR v1 (pogodba @7a065fb); null, ce polja niso veljavna. */
     fun podpisiSeznanitev(koda: String, ime: String, cas: Long, enkratni: String): PodpisSeznanitve? =
@@ -87,4 +93,10 @@ object NapravaKljuc {
     /** Dodatki na racunalniku (23. 11. 2026): branje stanja in preklop enega dodatka. */
     fun podpisiStanjeDodatkov(cas: Long, enkratni: String): String? = podpisnik.podpisiStanjeDodatkov(cas, enkratni)
     fun podpisiDodatek(dodatek: String, vklop: Boolean, cas: Long, enkratni: String): String? = podpisnik.podpisiDodatek(dodatek, vklop, cas, enkratni)
+
+    /** Gradnje na GitHubu (24. 11. 2026). Predlog, potrditev in APK samo po »Razumem« (Podpisnik). */
+    fun podpisiStanjeGradenj(cas: Long, enkratni: String): String? = podpisnik.podpisiStanjeGradenj(cas, enkratni)
+    fun podpisiPredlogGradnje(tok: String, veja: String, cas: Long, enkratni: String): String? = podpisnik.podpisiPredlogGradnje(tok, veja, cas, enkratni)
+    fun podpisiPotrditevGradnje(id: String, zgostitev: String, cas: Long, enkratni: String): String? = podpisnik.podpisiPotrditevGradnje(id, zgostitev, cas, enkratni)
+    fun podpisiApkGradnje(cas: Long, enkratni: String): String? = podpisnik.podpisiApkGradnje(cas, enkratni)
 }

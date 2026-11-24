@@ -14,6 +14,10 @@ class GatewayApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Opozorilo ob prvem zagonu: brez »Razumem« kljuc naprave ne podpise nalog in gradenj; oznaka namestitve se zapise zdaj.
+        val opozorilo = si.safeer.lina.config.OpozoriloShramba(this)
+        si.safeer.lina.podpis.NapravaKljuc.smeDelati = { opozorilo.smeDelati() }
+        opozorilo.namestitev()
         CallAudioBridge.initialize(this)
         LinaCallGate.setManualListener { GatewayRuntime.forgetCall(it) }
         GatewayRuntime.initialize(this)
