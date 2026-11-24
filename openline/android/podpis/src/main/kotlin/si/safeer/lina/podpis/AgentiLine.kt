@@ -111,6 +111,17 @@ object AgentiLine {
 
     fun pogojPo(id: String): String? = if (ID.matches(id)) "po:$id" else null
 
+    /** Ura zagona za prikaz (lastnik podpise dan in uro, ki ju vidi): dni od danes po ljubljanskem casu, ura HH:mm in datum d. M. */
+    data class DanZagona(val dni: Long, val ura: String, val datum: String)
+
+    fun danZagona(iso: String?, zdaj: Instant): DanZagona? = iso?.let {
+        runCatching {
+            val t = java.time.OffsetDateTime.parse(it).atZoneSameInstant(LJUBLJANA)
+            val dni = java.time.temporal.ChronoUnit.DAYS.between(zdaj.atZone(LJUBLJANA).toLocalDate(), t.toLocalDate())
+            DanZagona(dni, "%02d:%02d".format(t.hour, t.minute), "${t.dayOfMonth}. ${t.monthValue}.")
+        }.getOrNull()
+    }
+
     private class Slabo : RuntimeException()
     private fun slabo(): Nothing = throw Slabo()
     private fun JsonObject.niz(k: String): String = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: slabo()

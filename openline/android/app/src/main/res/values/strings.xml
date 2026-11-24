@@ -574,7 +574,7 @@
     <string name="install_err_prekinjeno">The download was interrupted. Try again.</string>
     <!-- Agenti in naloge na racunalniku (24. 11. 2026) -->
     <string name="agents_title">Agents and tasks</string>
-    <string name="agents_desc">Give a task to an agent on the computer. Your signature on this phone confirms one start. Questions from Claude Code and the Allow and Deny buttons are right below.</string>
+    <string name="agents_desc">Give a task to an agent on the computer. Your signature on this phone confirms one start. The agent works in a terminal on the computer, and its questions appear there. Allow and Deny below apply to tasks you send to Claude Code from the chat with Lina.</string>
     <string name="agents_assign">Assign a task</string>
     <string name="agents_empty">No tasks yet.</string>
     <string name="agents_item">%1$s · %2$s</string>
@@ -589,14 +589,15 @@
     <string name="agents_state_zamujeno">missed</string>
     <string name="agents_state_preklicano">cancelled</string>
     <string name="agents_when_now">Start: now</string>
-    <string name="agents_when_at">Start: at %1$s</string>
+    <string name="agents_when_at">Start: today at %1$s</string>
+    <string name="agents_when_at_tomorrow">Start: tomorrow at %1$s</string>
+    <string name="agents_when_at_date">Start: %1$s at %2$s</string>
     <string name="agents_when_after">Start: when task %1$s finishes</string>
     <string name="agents_eta">Expected to finish at %1$s</string>
     <string name="agents_eta_rough">Expected to finish at about %1$s (rough estimate)</string>
     <string name="agents_reminder_running">The agent is still working.</string>
     <string name="agents_reminder_closed">The terminal is closed and there is no report yet.</string>
     <string name="agents_reminder_no_report">No report yet.</string>
-    <string name="agents_claude_questions">Questions from Claude Code for this task appear below.</string>
     <string name="agents_missed">The start time passed while the computer was off or asleep. Start it again on the computer, or cancel it.</string>
     <string name="agents_cancel">Cancel task</string>
     <string name="agents_cancel_msg">Cancel this task?\n\nAgent: %1$s\nFolder: %2$s\n\n%3$s</string>

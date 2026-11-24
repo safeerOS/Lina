@@ -573,7 +573,7 @@
     <string name="install_err_prekinjeno">Prenos je bil prekinjen. Poskusi znova.</string>
     <!-- Agenti in naloge na racunalniku (24. 11. 2026) -->
     <string name="agents_title">Agenti in naloge</string>
-    <string name="agents_desc">Daj nalogo agentu na računalniku. Tvoj podpis na tem telefonu potrdi en zagon. Vprašanja Claude Code ter gumba Dovoli in Zavrni so takoj spodaj.</string>
+    <string name="agents_desc">Daj nalogo agentu na računalniku. Tvoj podpis na tem telefonu potrdi en zagon. Agent dela v terminalu na računalniku, tam so tudi njegova vprašanja. Dovoli in Zavrni spodaj veljata za naloge, ki jih Claude Code pošlješ iz pogovora z Lino.</string>
     <string name="agents_assign">Dodeli nalogo</string>
     <string name="agents_empty">Nalog še ni.</string>
     <string name="agents_item">%1$s · %2$s</string>
@@ -588,14 +588,15 @@
     <string name="agents_state_zamujeno">zamujeno</string>
     <string name="agents_state_preklicano">preklicano</string>
     <string name="agents_when_now">Zagon: zdaj</string>
-    <string name="agents_when_at">Zagon: ob %1$s</string>
+    <string name="agents_when_at">Zagon: danes ob %1$s</string>
+    <string name="agents_when_at_tomorrow">Zagon: jutri ob %1$s</string>
+    <string name="agents_when_at_date">Zagon: %1$s ob %2$s</string>
     <string name="agents_when_after">Zagon: ko konča naloga %1$s</string>
     <string name="agents_eta">Predviden konec ob %1$s</string>
     <string name="agents_eta_rough">Predviden konec okoli %1$s (groba ocena)</string>
     <string name="agents_reminder_running">Agent še dela.</string>
     <string name="agents_reminder_closed">Terminal je zaprt, poročila še ni.</string>
     <string name="agents_reminder_no_report">Poročila še ni.</string>
-    <string name="agents_claude_questions">Vprašanja Claude Code za to nalogo so spodaj.</string>
     <string name="agents_missed">Ura zagona je minila, ko je bil računalnik ugasnjen ali v spanju. Zaženi jo znova na računalniku ali jo prekliči.</string>
     <string name="agents_cancel">Prekliči nalogo</string>
     <string name="agents_cancel_msg">Prekličem to nalogo?\n\nAgent: %1$s\nMapa: %2$s\n\n%3$s</string>

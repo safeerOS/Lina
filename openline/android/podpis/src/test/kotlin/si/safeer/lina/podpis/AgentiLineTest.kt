@@ -111,6 +111,19 @@ class AgentiLineTest {
         assertEquals(emptyList(), AgentiLine.razcleni("""{"agenti":[],"naloge":[]}""")!!.mape)
     }
 
+    /** Dobesedni odgovor telefonStanjeNalog (teki/stanje-streznika.mts proti kodi racunalnika, 24. 11. 2026; zacasna pot zamenjana z /x). */
+    @Test
+    fun `razclenitev sprejme pravi odgovor racunalnika`() {
+        val s = AgentiLine.razcleni("""{"agenti":[{"id":"claude","ime":"Claude Code","stanje":"pripravljen","vklopljen":true,"zacetniPoziv":true,"kanal":true},{"id":"agy","ime":"Antigravity","stanje":"pripravljen","vklopljen":true,"zacetniPoziv":true,"kanal":false},{"id":"opencode","ime":"opencode (Gemini)","stanje":"pripravljen","vklopljen":true,"zacetniPoziv":true,"kanal":false},{"id":"kimi","ime":"Kimi","stanje":"pripravljen","vklopljen":true,"zacetniPoziv":false,"kanal":false},{"id":"pi","ime":"Pi","stanje":"pripravljen","vklopljen":true,"zacetniPoziv":true,"kanal":false},{"id":"grok","ime":"Grok Build","stanje":"pripravljen","vklopljen":true,"zacetniPoziv":true,"kanal":false}],"naloge":[{"id":"0288d0a72b518b8b","izvor":"telefon","agent":"opencode","mapa":"/x/dom/projekt","besedilo":"Zdaj.","stanje":"tece","ustvarjeno":"2026-11-24T05:03:38.287Z","potrjeno":"2026-11-24T05:03:38.287Z","razlog":null,"pogoj":{"vrsta":"zdaj"},"ocena":{"konec":"2026-11-24T05:33:38.287Z","groba":true},"opomnik":{"cas":"2026-11-24T05:33:38.287Z","razlog":null,"krog":0},"koncano":null},{"id":"6e6a24658bcb49a1","izvor":"telefon","agent":"grok","mapa":"/x/dom/projekt","besedilo":"Za preklic.","stanje":"preklicano","ustvarjeno":"2026-11-24T05:03:38.285Z","potrjeno":null,"razlog":null,"pogoj":{"vrsta":"ura","cas":"2026-11-24T06:03:38.282Z"},"ocena":null,"opomnik":null,"koncano":null},{"id":"720efa627962a01f","izvor":"telefon","agent":"claude","mapa":"/x/dom/projekt","besedilo":"Ko konca prva.","stanje":"dodeljeno","ustvarjeno":"2026-11-24T05:03:38.284Z","potrjeno":null,"razlog":null,"pogoj":{"vrsta":"po","id":"9c89fe461d64d960"},"ocena":null,"opomnik":null,"koncano":null},{"id":"9c89fe461d64d960","izvor":"telefon","agent":"pi","mapa":"/x/dom/projekt","besedilo":"Ob uri\nz dvema vrsticama.","stanje":"dodeljeno","ustvarjeno":"2026-11-24T05:03:38.282Z","potrjeno":null,"razlog":null,"pogoj":{"vrsta":"ura","cas":"2026-11-24T06:03:38.282Z"},"ocena":null,"opomnik":null,"koncano":null}]}""")
+        assertNotNull(s)
+        assertEquals(listOf("claude", "agy", "opencode", "pi", "grok"), s.agenti.filter { it.zaIzbiro }.map { it.id })
+        assertEquals(listOf("tece", "preklicano", "dodeljeno", "dodeljeno"), s.naloge.map { it.stanje })
+        assertEquals(PogojNaloge("po", id = "9c89fe461d64d960"), s.naloge[2].pogoj)
+        assertEquals("2026-11-24T05:33:38.287Z", s.naloge[0].ocenaKonca)
+        assertEquals(listOf("/x/dom/projekt"), s.mape)
+        assertFalse(s.mapeRacunalnika, "racunalnik polja mape se ne poslje")
+    }
+
     @Test
     fun `razclenitev zavrne neznano, slabe id-je, poti z nevidnimi znaki, dvojnike, preveliko telo`() {
         for (s in listOf(
@@ -141,6 +154,14 @@ class AgentiLineTest {
         assertEquals("ura:2026-07-24T08:30:00Z", AgentiLine.pogojUra(10, 30, Instant.parse("2026-07-24T06:00:00Z")))
         // ista minuta = ze minila -> jutri
         assertEquals("ura:2026-11-25T09:00:00Z", AgentiLine.pogojUra(10, 0, Instant.parse("2026-11-24T09:00:00Z")))
+        // okno pred podpisom pokaze dan: »jutri« za uro, ki je danes ze minila
+        val zdaj = Instant.parse("2026-11-24T08:00:00Z")
+        assertEquals(AgentiLine.DanZagona(1, "08:00", "25. 11."), AgentiLine.danZagona(AgentiLine.pogojUra(8, 0, zdaj).removePrefix("ura:"), zdaj))
+        assertEquals(AgentiLine.DanZagona(0, "10:30", "24. 11."), AgentiLine.danZagona(AgentiLine.pogojUra(10, 30, zdaj).removePrefix("ura:"), zdaj))
+        // polnoc po ljubljanskem casu: 23:30 UTC 24. 11. je ze 25. 11. v Ljubljani
+        assertEquals(AgentiLine.DanZagona(1, "00:30", "25. 11."), AgentiLine.danZagona("2026-11-24T23:30:00.000Z", zdaj))
+        assertEquals(3L, AgentiLine.danZagona("2026-11-27T09:00:00Z", zdaj)!!.dni)
+        assertNull(AgentiLine.danZagona("vceraj", zdaj))
         assertEquals("po:0123456789abcdef", AgentiLine.pogojPo("0123456789abcdef"))
         assertNull(AgentiLine.pogojPo("0123"))
     }

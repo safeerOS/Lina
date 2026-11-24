@@ -142,10 +142,19 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
         setTextIsSelectable(izbirno)
     }
 
+    /** »danes ob 10:30« / »jutri ob 10:30« / »27. 11. ob 10:30« po ljubljanskem casu. */
+    private fun ura(iso: String?): String? = AgentiLine.danZagona(iso, Instant.now())?.let { d ->
+        when (d.dni) {
+            0L -> a.getString(R.string.agents_when_at, d.ura)
+            1L -> a.getString(R.string.agents_when_at_tomorrow, d.ura)
+            else -> a.getString(R.string.agents_when_at_date, d.datum, d.ura)
+        }
+    }
+
     private fun kdaj(n: NalogaAgenta): String? = n.pogoj?.let { p ->
         when (p.vrsta) {
             "zdaj" -> a.getString(R.string.agents_when_now)
-            "ura" -> GradnjeLine.uraLjubljana(p.cas)?.let { a.getString(R.string.agents_when_at, it) }
+            "ura" -> ura(p.cas)
             else -> a.getString(R.string.agents_when_after, p.id.orEmpty())
         }
     }
@@ -169,8 +178,6 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
             })))
         }
         n.razlog?.let { addView(tiho(a.getString(R.string.builds_reason, it))) }
-        // Vprasanja ima samo Claude Code (kanal Line); prikaze jih obstojeci razdelek tik pod kartico.
-        if (n.agent == "claude" && n.stanje == "tece") addView(tiho(a.getString(R.string.agents_claude_questions)))
         if (n.stanje == "zamujeno") addView(tiho(a.getString(R.string.agents_missed)))
         if (n.stanje in AgentiLine.PREKLICLJIVA) addView(Button(a, null, 0, R.style.Gw_Button).apply {
             setText(R.string.agents_cancel); setOnClickListener { preklici(n) }
@@ -229,7 +236,7 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
                     val zdaj = java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Ljubljana"))
                     TimePickerDialog(a, { _, h, m ->
                         val p = AgentiLine.pogojUra(h, m, Instant.now())
-                        potrdi(s, agent, mapa, besedilo, p, a.getString(R.string.agents_when_at, GradnjeLine.uraLjubljana(p.removePrefix("ura:")) ?: "%02d:%02d".format(h, m)))
+                        ura(p.removePrefix("ura:"))?.let { potrdi(s, agent, mapa, besedilo, p, it) }
                     }, zdaj.hour, zdaj.minute, true).show()
                 }
                 else -> izberi(R.string.agents_pick_first, prve.map { a.getString(R.string.agents_first_item, imeAgenta(it.agent), it.id, it.besedilo.take(60)) }) { j ->
