@@ -7,13 +7,18 @@
  * Seznam se prebere ob vsakem sporocilu in vsakih nekaj sekund: umik naprave takoj ustavi njene naloge (pravilo Linka).
  * V seznam ne dodaj kljuca TEGA racunalnika: njegov zasebni kljuc je na istem disku kot Lina (glej AGENTS.md).
  */
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { chmod, lstat, mkdir, readFile, unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
 import path from "node:path";
 import { dovoljenaNaloga, type Naloga } from "./asistent.server.ts";
 import {
+  ORODJE_DODATKI,
+  jeDodatekTelefona,
+  opisDodatka,
+  predogledDodatka,
+  type DodatekTelefona,
   ID_ODOBRITVE,
   IME_KANALA,
   IME_ORODJA,
@@ -29,6 +34,7 @@ import {
   ODTIS_KANALA,
   ROK_NALOGE_KANAL_MS,
   SPOROCILO_ODOBRITEV_Z_GUMBOM,
+  SPOROCILO_NADALJEVANJE_ZAVRNJENO,
   SPOROCILO_USTAVITEV_BREZ_PODPISA,
   NAJVEC_POGOVOROV,
   NAVODILO_KANALA,
@@ -41,8 +47,11 @@ import {
   dokazPrijave,
   enakoKonstantno,
   idPripadaKljucu,
+  nizNadaljevanja,
   nizNaloge,
   nizOdobritve,
+  VRSTE_ODGOVORA,
+  type VrstaOdgovora,
   nizUstavitve,
   programIzUkaza,
   praviUnicode,
@@ -208,13 +217,27 @@ export function nastavitevMcp(root: string, korenLine: string, node = process.ex
 // ------------------------------------------------------------------ streznik kanala
 
 type Odprta = { cas: number; orodje: string; opis: string; predogled: string; chatId: string; naprava: string; zgostitev: string; izvirniPredogled?: unknown };
-type Pogovor = { naprava: string; koncan: boolean; zacel: number };
+/** `ustavljen`: naloga je ustavljena (lastnik, rok, umik) - reply ali nadaljevanje je NE odpre znova (samo konec z reply jo). */
+type Pogovor = { naprava: string; koncan: boolean; zacel: number; ustavljen?: boolean; odgovori?: number[] };
 
 /** Najvec nalog in odobritev na minuto: zloraba ne sme zasuti seje ali poskusati odobritev (N7). */
 export const NAJVEC_NALOG_NA_MINUTO = 30;
 export const NAJVEC_ODOBRITEV_NA_MINUTO = 30;
+/** Orodje dodatki (stanje, vklopi, izklopi): agent v zanki ne zasuje telefona in ne porabi izdanih ID-jev (drugi pregled 0.2.10, N2). */
+export const NAJVEC_DODATKOV_NA_MINUTO = 10;
+/** Orodje reply na nalogo (pregled RAC-A, A5): agent v zanki ne zasuje telefona; prvi »koncano« je vedno dovoljen. */
+export const NAJVEC_ODGOVOROV_NA_MINUTO = 20;
 /** Kako pogosto kanal sam preveri, ali je bila katera naprava umaknjena iz kroga. */
 export const PREVERBA_UMIKOV_MS = 3000;
+/** Rok, v katerem Lina vrne izid orodja dodatki (stanje ali preklop); sicer Claude Code dobi napako. */
+export const ROK_DODATKOV_MS = 60_000;
+/** Nov ID zahteve za odobritev v obliki ID_ODOBRITVE (5 crk brez l), ki ga izda kanal sam (orodje dodatki). */
+function novIdOdobritve(): string {
+  const crke = "abcdefghijkmnopqrstuvwxyz";
+  let id = "";
+  for (let i = 0; i < 5; i++) id += crke[randomInt(crke.length)];
+  return id;
+}
 
 export type MoznostiKanala = {
   root: string;
@@ -245,6 +268,10 @@ export class KanalStreznik {
   private seja = false;
   private obvestilaTerminal = new Map<string, number>();
   private odprte = new Map<string, Odprta>();
+  /** Orodje dodatki: zahteve za odobritev, ki jih je izdal kanal sam (ID -> klic MCP, ki caka na lastnikovo odlocitev). */
+  private dodatkiOdobritve = new Map<string, { mcpId: unknown; dodatek: DodatekTelefona; vklop: boolean; chatId: string }>();
+  /** Zahteve orodja dodatki, ki jih izvaja Lina (zahteva -> klic MCP); brez izida v ROK_DODATKOV_MS Claude Code dobi napako. */
+  private dodatkiVTeku = new Map<string, { mcpId: unknown; cas: number }>();
   /** Programi (cli-anything-<ime>), ki jih je lastnik z ENO podpisano odobritvijo dovolil do konca te seje kanala. */
   private odobreniProgrami = new Set<string>();
   /** ID-ji zahtev, ki jih je kanal ze izdal (odprte, odgovorjene, potekle ali izrinjene): isti ID se ne odpre znova (R2-2). */
@@ -253,6 +280,7 @@ export class KanalStreznik {
   private videni = new Map<string, number>();
   private naloge: number[] = [];
   private odobritve: number[] = [];
+  private dodatkiKlici: number[] = [];
   private umiki: ReturnType<typeof setInterval> | null = null;
   /** Dokaz s casom pred zagonom procesa se zavrne: enkratni nizi so samo v pomnilniku (ponovni pregled N-C). */
   private readonly zagnan: number;
@@ -372,6 +400,67 @@ export class KanalStreznik {
     }
     const t = this.zdaj();
     for (const [id, p] of this.pogovori) if (!p.koncan && this.seja && t - p.zacel > this.rokNalogeMs) this.ustaviPogovor(id, p);
+    this.pocistiOdprte();
+    this.pocistiDodatke();
+  }
+
+  /** Odobritev dodatka, ki ni vec odprta (rok, konec naloge, umik), in izvedba brez izida v roku: Claude Code dobi resnico, ne tisine. */
+  private pocistiDodatke(): void {
+    for (const [z, d] of this.dodatkiOdobritve) {
+      if (this.odprte.has(z)) continue;
+      this.dodatkiOdobritve.delete(z);
+      this.odgovoriOrodju(d.mcpId, "Odobritev ni vec odprta (rok, konec naloge ali umik naprave); nic ni spremenjeno.", true);
+    }
+    const t = this.zdaj();
+    for (const [z, d] of this.dodatkiVTeku) {
+      if (t - d.cas <= ROK_DODATKOV_MS) continue;
+      this.dodatkiVTeku.delete(z);
+      this.odgovoriOrodju(d.mcpId, "Lina ni vrnila izida v roku; stanje preveri z dejanjem stanje.", true);
+    }
+  }
+
+  private odgovoriOrodju(mcpId: unknown, besedilo: string, napaka = false): void {
+    this.odgovori(mcpId, { content: [{ type: "text", text: besedilo }], isError: napaka });
+  }
+
+  /** Lini preda izvedbo (stanje ali preklop po odobritvi); izid pride kot dodatkiIzid. */
+  private dodatkiLini(zahteva: string, mcpId: unknown, chatId: string, dejanje: "stanje" | "vklopi" | "izklopi", dodatek?: DodatekTelefona): void {
+    if (!this.odjemalec || this.odjemalec.destroyed) return this.odgovoriOrodju(mcpId, "Lina ni povezana; nic ni spremenjeno.", true);
+    this.dodatkiVTeku.set(zahteva, { mcpId, cas: this.zdaj() });
+    this.poslji(this.odjemalec, { vrsta: "dodatki", zahteva, chatId, dejanje, ...(dodatek ? { dodatek } : {}) });
+  }
+
+  /**
+   * Orodje dodatki (lastnik 23. 11. 2026). Stanje: Lina ga prebere in vrne. Vklop in izklop: kanal odpre SVOJO zahtevo za odobritev
+   * (besedilo pise koda) na napravi, ki je dala nalogo; Lina preklopi sele po podpisani odobritvi te naprave. Klic MCP caka na odlocitev
+   * izven verige stdio (druge zahteve tecejo naprej).
+   */
+  private async orodjeDodatki(mcpId: unknown, a: Record<string, unknown>): Promise<void> {
+    const izid = (besedilo: string) => this.odgovoriOrodju(mcpId, besedilo, true);
+    const { dovoljene } = await this.preveriUmike();
+    const chatId = a.chat_id;
+    const p = typeof chatId === "string" ? this.pogovori.get(chatId) : undefined;
+    if (!p || p.koncan || typeof chatId !== "string") return izid("Neznan ali koncan chat_id: dodatke upravlja samo naloga iz Line.");
+    if (!dovoljene.has(p.naprava)) return izid("Naprava te naloge ni vec v ozjem krogu.");
+    if (!this.odjemalec || this.odjemalec.destroyed) return izid("Lina ni povezana; nic ni spremenjeno.");
+    if (!this.vMeji(this.dodatkiKlici, NAJVEC_DODATKOV_NA_MINUTO)) return izid("Prevec zahtev za dodatke v eni minuti; poskusi pozneje.");
+    if (a.dejanje === "stanje") return this.dodatkiLini(`s-${randomBytes(12).toString("base64url")}`, mcpId, chatId, "stanje");
+    if ((a.dejanje !== "vklopi" && a.dejanje !== "izklopi") || !jeDodatekTelefona(a.dodatek)) {
+      return izid("dejanje je stanje, vklopi ali izklopi; dodatek je paperclip, n8n, affine ali slovenski.");
+    }
+    this.pocistiOdprte();
+    if (this.odprte.size >= NAJVEC_ODPRTIH || this.izdane.size >= NAJVEC_IZDANIH) return izid("Prevec odprtih odobritev; poskusi pozneje.");
+    let id = novIdOdobritve();
+    while (this.odprte.has(id) || this.izdane.has(id)) id = novIdOdobritve();
+    const vklop = a.dejanje === "vklopi";
+    const orodje = ORODJE_DODATKI;
+    const predogled = predogledDodatka(a.dodatek, vklop);
+    const opis = opisDodatka(a.dodatek, vklop);
+    this.izdane.set(id, Date.now());
+    const o: Odprta = { cas: this.zdaj(), orodje, opis, predogled, chatId, naprava: p.naprava, zgostitev: zgostitevPrikaza(orodje, predogled, opis) };
+    this.odprte.set(id, o);
+    this.dodatkiOdobritve.set(id, { mcpId, dodatek: a.dodatek, vklop, chatId });
+    this.poslji(this.odjemalec, { vrsta: "odobritev", zahtevaId: id, chatId, orodje, opis, predogled, zgostitev: o.zgostitev });
   }
 
   /** `pocistiPot=false`, ko pot ni vec nasa: tuje datoteke na njenem mestu ne brisemo. */
@@ -516,11 +605,33 @@ export class KanalStreznik {
         || !this.uporabiOdobritev(zahtevaId, dovoli, posiljatelj)) return zavrni(zahtevaId);
       return;
     }
+    if (s.vrsta === "nadaljuj") {
+      // Nadaljevanje obstojece naloge (odgovor Line/lastnika na vprasanje Claude Code): ista vrata kot naloga, podpis naprave,
+      // ki je nalogo dala, in nikoli za ustavljeno nalogo (lastnik 23. 11. 2026 »Lina sama odgovori Claude Code«).
+      const { id, besedilo, posiljatelj } = s;
+      const p = typeof id === "string" ? this.pogovori.get(id) : undefined;
+      // zavrnitev nadaljevanja NE konca naloge na strani Line (zavrnjeno brez oznake bi jo)
+      const zavrni = (i: unknown, razlog = SPOROCILO_NADALJEVANJE_ZAVRNJENO) =>
+        this.poslji(sock, { vrsta: "zavrnjeno", id: typeof i === "string" ? i.slice(0, 64) : "", razlog, nadaljevanje: true });
+      if (!p || p.ustavljen || !this.seja || posiljatelj !== p.naprava || typeof besedilo !== "string" || !praviUnicode(besedilo)
+        || !dovoljenaNaloga({ id: id as string, besedilo, posiljatelj, izvor: "asistent" }, new Set(dovoljene.keys()))) return zavrni(id);
+      if (!this.preveriDokaz(p.naprava, s.dokaz, (cas, e) => nizNadaljevanja(id as string, p.naprava, besedilo, cas, e), dovoljene)) return zavrni(id);
+      if (!this.vMeji(this.naloge, NAJVEC_NALOG_NA_MINUTO)) return zavrni(id);
+      if (razberiOdobritev(besedilo)) return zavrni(id, SPOROCILO_ODOBRITEV_Z_GUMBOM);
+      // naloga, ki jo je Claude Code z reply koncal, je spet v teku (stare odobritve ostanejo zaprte, rok tece znova)
+      if (p.koncan) { p.koncan = false; p.zacel = this.zdaj(); }
+      this.obvesti("notifications/claude/channel", {
+        content: ocistiZaSejo(besedilo),
+        meta: { chat_id: id, naprava: p.naprava, nadaljevanje: "da" },
+      });
+      return;
+    }
     if (s.vrsta === "ustavi") {
       // ustavitev podpise naprava, ki je nalogo dala (N-E); rok in umik ustavi kanal sam
       const id = s.id;
       const p = typeof id === "string" ? this.pogovori.get(id) : undefined;
-      if (!p || p.koncan || !this.seja) return zavrni(id);
+      // koncano (z reply), a se ne ustavljeno nalogo lastnik lahko ustavi (pregled 0225 A-8): potem je reply vmesno ne odpre vec
+      if (!p || p.ustavljen || !this.seja) return zavrni(id);
       if (s.posiljatelj !== p.naprava
         || !this.preveriDokaz(p.naprava, s.dokaz, (cas, e) => nizUstavitve(id as string, p.naprava, cas, e), dovoljene)) {
         // naloga tece naprej; Lina to pove lastniku (ne konca je kot zavrnjeno)
@@ -528,11 +639,19 @@ export class KanalStreznik {
         return;
       }
       this.ustaviPogovor(id as string, p);
+      return;
+    }
+    if (s.vrsta === "dodatkiIzid") {
+      const z = typeof s.zahteva === "string" ? this.dodatkiVTeku.get(s.zahteva) : undefined;
+      if (!z || typeof s.besedilo !== "string") return;
+      this.dodatkiVTeku.delete(s.zahteva as string);
+      this.odgovoriOrodju(z.mcpId, s.besedilo.slice(0, NAJVEC_ODGOVOR_ZNAKOV), s.ok !== true);
     }
   }
 
   private ustaviPogovor(id: string, p: Pogovor): void {
     p.koncan = true;
+    p.ustavljen = true;
     for (const [z, o] of this.odprte) if (o.chatId === id) this.odprte.delete(z);
     this.obvesti("notifications/claude/channel", {
       content: "Naloga je ustavljena.",
@@ -577,6 +696,14 @@ export class KanalStreznik {
     const o = ID_ODOBRITVE.test(zahtevaId) ? this.odprte.get(zahtevaId) : undefined;
     if (!o || o.naprava !== naprava) return false;
     this.odprte.delete(zahtevaId);
+    // Zahteva orodja dodatki je kanalova, ne Claude Code: brez dovoljenja seji; ob »Dovoli« preklop izvede Lina.
+    const dod = this.dodatkiOdobritve.get(zahtevaId);
+    if (dod) {
+      this.dodatkiOdobritve.delete(zahtevaId);
+      if (dovoli) this.dodatkiLini(zahtevaId, dod.mcpId, dod.chatId, dod.vklop ? "vklopi" : "izklopi", dod.dodatek);
+      else this.odgovoriOrodju(dod.mcpId, "Lastnik je zavrnil; nic ni spremenjeno.", true);
+      return true;
+    }
     if (dovoli) {
       const p = programIzUkaza(o.orodje, o.izvirniPredogled);
       if (p) this.odobreniProgrami.add(p);
@@ -648,9 +775,26 @@ export class KanalStreznik {
               properties: {
                 chat_id: { type: "string", description: "chat_id iz oznake <channel>" },
                 text: { type: "string", description: `Kratko besedilo v slovenscini (najvec ${NAJVEC_ODGOVOR_ZNAKOV} znakov)` },
-                koncano: { type: "boolean", description: "true, ko je naloga koncana (privzeto); false za vmesno stanje" },
+                vrsta: {
+                  type: "string",
+                  enum: [...VRSTE_ODGOVORA],
+                  description: "vprasanje = potrebujes odgovor ali navodilo; vmesno = sprotno porocilo (privzeto); koncano = naloga je v celoti koncana ali je ne mores narediti",
+                },
+                koncano: { type: "boolean", description: "Zastarelo: uporabi vrsta. true je enako vrsta=koncano." },
               },
               required: ["chat_id", "text"],
+            },
+          }, {
+            name: "dodatki",
+            description: "Dodatki na racunalniku lastnika (paperclip, n8n, affine, slovenski model): stanje, vklopi ali izklopi. Vklop in izklop izvede Lina sele, ko ga lastnik odobri na napravi; stanje odgovori takoj.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                chat_id: { type: "string", description: "chat_id naloge iz oznake <channel>" },
+                dejanje: { type: "string", enum: ["stanje", "vklopi", "izklopi"] },
+                dodatek: { type: "string", enum: ["paperclip", "n8n", "affine", "slovenski"], description: "Obvezno za vklopi in izklopi" },
+              },
+              required: ["chat_id", "dejanje"],
             },
           }],
         });
@@ -659,6 +803,7 @@ export class KanalStreznik {
         const a = (params.arguments ?? {}) as Record<string, unknown>;
         const izid = (besedilo: string, napaka = false) =>
           this.odgovori(z.id, { content: [{ type: "text", text: besedilo }], isError: napaka });
+        if (params.name === "dodatki") return this.orodjeDodatki(z.id, a);
         if (params.name !== "reply") return izid("Neznano orodje.", true);
         const { dovoljene } = await this.preveriUmike();
         const p = typeof a.chat_id === "string" ? this.pogovori.get(a.chat_id) : undefined;
@@ -667,14 +812,29 @@ export class KanalStreznik {
         if (typeof a.text !== "string" || !a.text.trim()) return izid("Prazno besedilo.", true);
         if (a.text.length > NAJVEC_ODGOVOR_ZNAKOV) return izid(`Besedilo je predolgo (najvec ${NAJVEC_ODGOVOR_ZNAKOV} znakov).`, true);
         if (!this.odjemalec) return izid("Lina ni povezana; odgovor ni dostavljen.", true);
-        const koncano = a.koncano !== false;
+        // brez polja vrsta = vmesno (lastnik 23. 11. 2026: prvi odgovor ni konec naloge); zastareli koncano=true = koncano
+        if (a.vrsta !== undefined && !(VRSTE_ODGOVORA as readonly unknown[]).includes(a.vrsta)) {
+          return izid(`Neznana vrsta (dovoljeno: ${VRSTE_ODGOVORA.join(", ")}).`, true);
+        }
+        const tip: VrstaOdgovora = (a.vrsta as VrstaOdgovora | undefined) ?? (a.koncano === true ? "koncano" : "vmesno");
+        const koncano = tip === "koncano";
+        // A5: meja na nalogo (okno je na zapisu pogovora, zato izgine z njim); izjema je samo prvi »koncano« nekoncane naloge
+        if (!(koncano && !p.koncan) && !this.vMeji((p.odgovori ??= []), NAJVEC_ODGOVOROV_NA_MINUTO)) {
+          return izid(`Prevec odgovorov v eni minuti (najvec ${NAJVEC_ODGOVOROV_NA_MINUTO}); pocakaj ali poslji vrsta=koncano.`, true);
+        }
+        // ustavljena naloga (lastnik, rok, umik) sprejme samo se zakljucni odgovor - nikoli je ne odpre vmesni ali vprasanje
+        if (!koncano && p.ustavljen) return izid("Naloga je ustavljena; poslji samo vrsta=koncano.", true);
+        // Lastnik je Claude Code ukazal v terminalu po koncu: naslednji reply nalogo vrne v tek - ustavljene NIKOLI (rok, umik, lastnik).
+        // Rok tece od prvotnega zacetka (pregled 0225 A-6): reply modela ga ne ponastavi, sicer bi izmenjava koncano/vmesno rok obsla;
+        // nov rok zacne samo podpisano nadaljevanje naprave. Naloga, odprta po izteku roka, se ob naslednji preverbi ustavi.
+        if (!koncano && p.koncan && !p.ustavljen) p.koncan = false;
         // P1 (r3): ko je naloga koncana, se njene odprte odobritve zaprejo (pozen podpis ne sme dati allow za ukaz, ki je
         // potem prisel z druge naloge ali iz terminala).
         if (koncano) {
           p.koncan = true;
           for (const [z, o] of this.odprte) if (o.chatId === a.chat_id) this.odprte.delete(z);
         }
-        this.poslji(this.odjemalec, { vrsta: "odgovor", chatId: a.chat_id as string, besedilo: ocistiZaTelefon(a.text, NAJVEC_ODGOVOR_ZNAKOV), koncano });
+        this.poslji(this.odjemalec, { vrsta: "odgovor", chatId: a.chat_id as string, besedilo: ocistiZaTelefon(a.text, NAJVEC_ODGOVOR_ZNAKOV), koncano, tip });
         return izid("poslano");
       }
       case "notifications/claude/channel/permission_request": {

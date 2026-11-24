@@ -14,6 +14,7 @@ import {
 import {
   authStatus,
   daSoglasjeFn,
+  opozoriloFn,
   listCalls,
   listVrzeliFn,
   loginFn,
@@ -25,15 +26,18 @@ import {
   soglasjeFn,
 } from "@/lib/lina/functions.ts";
 import { t } from "@/lib/lina/besedila.ts";
+import { OpozoriloPrviZagon } from "@/components/opozorilo.tsx";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
     const auth = await authStatus();
     const soglasje = (await soglasjeFn()).dano;
+    const opozorilo = (await opozoriloFn()).potrjeno;
     // Brez soglasja ali prijave se podatki ne preberejo (zaslon ni dosegljiv).
     if (!soglasje || !auth.signedIn) {
       return {
         soglasje,
+        opozorilo,
         auth,
         line: null,
         calls: [],
@@ -51,7 +55,7 @@ export const Route = createFileRoute("/")({
       readPravilaFn(),
       listVrzeliFn(),
     ]);
-    return { soglasje, auth, line, calls, brain, storage, pravila, vrzeli };
+    return { soglasje, opozorilo, auth, line, calls, brain, storage, pravila, vrzeli };
   },
   component: Home,
   pendingComponent: Nalaganje,
@@ -71,6 +75,8 @@ function Home() {
   const data = Route.useLoaderData();
   const router = useRouter();
   if (!data.soglasje) return <Soglasje onDone={() => router.invalidate()} />;
+  // Opozorilo ob prvem zagonu (lastnik 24. 11. 2026): pred prijavo, ker brez njega Lina ne sprejema klicev in ne zaganja agentov.
+  if (!data.opozorilo) return <OpozoriloPrviZagon onDone={() => router.invalidate()} />;
   if (!data.auth.signedIn || !data.line || !data.storage || !data.pravila) {
     return <Gate needsSetup={data.auth.needsSetup} onDone={() => router.invalidate()} />;
   }

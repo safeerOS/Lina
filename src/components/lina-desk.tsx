@@ -1,9 +1,13 @@
 import { TinyFishKljuc } from "@/components/tinyfish-kljuc.tsx";
+import { GithubDostop } from "@/components/github-dostop.tsx";
+import { OLiniPanel } from "@/components/opozorilo.tsx";
 import { imeVTozilniku } from "@/lib/lina/ime-tozilnik.ts";
+import { zaShranjevanje } from "@/lib/lina/pravila-shranjevanje.ts";
 import { BraveKljuc } from "@/components/brave-kljuc.tsx";
 import { useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { dodajBesedilo, MEJA_DOKUMENTA_BAJTOV, MEJA_ZNANJA, preberiDokument } from "@/lib/lina/znanje-besedilo.ts";
+import { ZnanjeDatoteke } from "@/components/znanje-datoteke.tsx";
 import { t, type Beseda } from "@/lib/lina/besedila.ts";
 import { PoveziTelefon } from "@/components/povezi-telefon.tsx";
 import { casKlica, korakiNastavitve, stanjeKlica, vstavi, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
@@ -16,6 +20,8 @@ import { TwilioRacun } from "@/components/twilio-racun.tsx";
 import { NujnoOznaka } from "@/components/nujno-oznaka.tsx";
 import { NujniKlici } from "@/components/nujni-klici.tsx";
 import { Avtonomija } from "@/components/avtonomija.tsx";
+import { ModelAsistentke } from "@/components/model-asistentke.tsx";
+import { tM } from "@/lib/lina/besedila-mozgani.ts";
 import { SonioxNastavitve } from "@/components/soniox-nastavitve.tsx";
 import { posodobiLinoFn, stanjeDodatkovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
 import { StraniNastavitve } from "@/components/strani-nastavitve.tsx";
@@ -26,13 +32,14 @@ import { stanjeOmnirouteFn, shraniOmnirouteFn, pozabiOmnirouteFn, logoutFn, setu
 import type { MapaZapiskov, Zapisek, ZapisekVsebina } from "@/lib/lina/zapiski.ts";
 import { delezKratkih } from "@/lib/lina/povzetek.ts";
 import { DEFAULT_BRAIN_MODELS, DEFAULT_VERTEX_LOCATION, IME_PONUDNIKA, type BrainProvider, type BrainPublic, type CallSession, type Catalog, type LinijaZGlasom, type Material, type Pravila, type Predlog, type Product, type StorageView, type Vrzel, type ZapisVaje } from "@/lib/lina/types.ts";
-import { jeVeljavenEnaslov, naslovJeTezakZaGovor } from "@/lib/lina/eposta.ts";
+import { jeVeljavenEnaslov, naslovJeTezakZaGovor, naslovNaDomeni } from "@/lib/lina/eposta.ts";
 import { kazatiNamigZaVajo } from "@/lib/lina/vaja-namig.ts";
 import { RAZLOGI_KATALOG, razlogOdsotnosti, type NastavitveOdsotnosti } from "@/lib/lina/odsotnost.ts";
 import { obveznoBesedilo, prazenSeznamBesedilo, razdelekViden, vajaNamigBesedilo, veljavenZavihek, zavihki, type ZavihekId } from "@/lib/lina/osebni-nacin.ts";
 import { nizZaVklop, PREVERJENI_OPERATERJI, type Operater, type VrstaPreusmeritve } from "@/lib/lina/iphone.ts";
 import { Podokna } from "@/components/podokna.tsx";
 import { CiscenjeZvokaStikalo, SamoucenjeStikalo, SpominPogovorovStikalo } from "@/components/lina2/mediji.tsx";
+import { GradnjeStikalo } from "@/components/lina2/racunalnik.tsx";
 import { ObvestilaNastavitve } from "@/components/lina2/obvestila-nastavitve.tsx";
 import {
   NASTAVITVE,
@@ -149,6 +156,8 @@ export function LinaDesk({
   const [mind, setMind] = useState(brain);
   const [place, setPlace] = useState(storage);
   const [pravila, setPravila] = useState<Pravila & NastavitveOdsotnosti>(pravilaIn);
+  // Zadnji posnetek pravil s streznika: shrani se samo, kar je lastnik spremenil (pregled 0225 B3).
+  const osnovaPravil = useRef(pravilaIn);
   // Osebni nacin nima zavihka Znanje (poslovno): izbran zavihek, ki ga v tem nacinu ni, pade na »Klic«; »telefon« je v obeh nacinih.
   const tab: Tab = tabIzbran === "telefon" ? "telefon" : veljavenZavihek(tabIzbran, pravila.nacinKlica);
   const [vrzeli, setVrzeli] = useState(vrzeliIn);
@@ -169,6 +178,7 @@ export function LinaDesk({
     setPlace(storage);
   }, [storage]);
   useEffect(() => {
+    osnovaPravil.current = pravilaIn;
     setPravila(pravilaIn);
   }, [pravilaIn]);
   useEffect(() => {
@@ -304,7 +314,8 @@ export function LinaDesk({
     setBusy(true);
     setError("");
     try {
-      const saved = await savePravilaFn({ data: next });
+      const saved = await savePravilaFn({ data: zaShranjevanje(osnovaPravil.current, next) });
+      osnovaPravil.current = saved;
       setPravila(saved);
       setOpozorilo(saved.opozorila?.length ? saved.opozorila.join(" ") : "");
     } catch (cause) {
@@ -457,6 +468,18 @@ export function LinaDesk({
             <p className="mt-0.5 text-sm break-words">{opozorilo}</p>
           </div>
           <button type="button" onClick={() => setOpozorilo("")} className={GUMB_OBROBA}>
+            {t("uiZapri")}
+          </button>
+        </div>
+      ) : null}
+      {/* Enkratno obvestilo po posodobitvi (pregled 0.2.10, najdba 3): streznik ga pokaze samo, ce je bila nujna prevezava ze vklopljena. */}
+      {pravila.urnikObvestilo ? (
+        <div
+          role="status"
+          className="mt-5 flex flex-wrap items-start gap-x-4 gap-y-2 rounded-2xl border border-[var(--color-brass)] bg-[var(--color-surface)] px-4 py-3"
+        >
+          <p className="min-w-0 flex-1 text-sm break-words">{t("urnikObvestilo")}</p>
+          <button type="button" disabled={busy} onClick={() => void saveRules({ ...pravila, urnikObvestilo: false })} className={GUMB_OBROBA}>
             {t("uiZapri")}
           </button>
         </div>
@@ -774,6 +797,9 @@ export function LinaDesk({
             busy={busy}
             zacetno={podoknoNast}
             onPravila={setPravila}
+            onNaslovStreznika={(javniNaslov) => {
+              osnovaPravil.current = { ...osnovaPravil.current, javniNaslov };
+            }}
             onSave={() => void saveRules()}
             onBrain={(b) => {
               setMind(b);
@@ -887,6 +913,8 @@ function Settings({
 }) {
   const [provider, setProvider] = useState<BrainProvider>(brain.provider ?? "grok");
   const [model, setModel] = useState(brain.model || DEFAULT_BRAIN_MODELS[brain.provider ?? "grok"]);
+  // Lastnik 24. 11. 2026: model izbere Lina sama; rocni vnos (Napredno) velja samo, ce ga uporabnik spremeni.
+  const [rocniModel, setRocniModel] = useState(false);
   const [key, setKey] = useState("");
   const [project, setProject] = useState(brain.projekt ?? "");
   const [location, setLocation] = useState(brain.lokacija || "global");
@@ -911,15 +939,18 @@ function Settings({
       const next = await saveBrainFn({
         data: {
           provider,
-          model,
+          model: rocniModel ? model : "",
           key,
           project: samodejniProjekt ?? project,
           location,
+          samodejno: !rocniModel,
         },
       });
       onBrain(next);
       setKey("");
-      setNote(samodejniProjekt ? t("gpProjektSam") : vertex ? t("uiShranjenoVertex") : next.nastavljen ? t("uiShranjenoKljuc") : t("uiShranjenoBrezKljuca"));
+      setRocniModel(false);
+      const shranjeno = samodejniProjekt ? t("gpProjektSam") : vertex ? t("uiShranjenoVertex") : next.nastavljen ? t("uiShranjenoKljuc") : t("uiShranjenoBrezKljuca");
+      setNote(next.sporociloModela ? `${shranjeno} ${next.sporociloModela}` : shranjeno);
     } catch (cause) {
       onError(fault(cause));
     } finally {
@@ -974,10 +1005,13 @@ function Settings({
             {brain.namig ? (
               <span className="mt-1 block">{vstavi(t("uiMozganiShranjenKonec"), { namig: `…${brain.namig}` })}</span>
             ) : null}
+            {brain.zamenjavaModela ? <span className="mt-1 block">{brain.zamenjavaModela}</span> : null}
           </>
         )
       }
     >
+      {/* A1 (24. 11. 2026): ta izbira velja za KLICE; model za asistentko je v razdelku pod njim. */}
+      <h3 className="mb-3 text-base font-semibold text-[var(--color-ink)]">{tM("naslovKlici")}</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={OZNAKA_POLJA} htmlFor="ponudnik">
           {t("uiPonudnik")}
@@ -988,6 +1022,7 @@ function Settings({
               const next = event.target.value as BrainProvider;
               setProvider(next);
               setModel(DEFAULT_BRAIN_MODELS[next]);
+              setRocniModel(false);
               if (next === "vertex" && !location.trim()) setLocation(DEFAULT_VERTEX_LOCATION);
             }}
             className={POLJE}
@@ -1000,10 +1035,25 @@ function Settings({
             <option value="openrouter">OpenRouter</option>
           </select>
         </label>
-        <label className={OZNAKA_POLJA} htmlFor="model">
-          {t("uiModel")}
-          <input id="model" value={model} onChange={(event) => setModel(event.target.value)} className={POLJE} />
-        </label>
+        <details className="sm:col-span-2">
+          <summary className="cursor-pointer text-sm font-medium text-[var(--color-ink)]">{t("uiNapredno")}</summary>
+          <label className={`${OZNAKA_POLJA} mt-2`} htmlFor="model">
+            {t("uiModel")}
+            <input
+              id="model"
+              value={model}
+              aria-describedby="model-samodejno"
+              onChange={(event) => {
+                setModel(event.target.value);
+                setRocniModel(true);
+              }}
+              className={POLJE}
+            />
+          </label>
+          <p id="model-samodejno" className="mt-1 text-xs text-[var(--color-moss)]">
+            {t("uiModelSamodejno")}
+          </p>
+        </details>
         {vertex ? (
           <>
             <label className={OZNAKA_POLJA} htmlFor="projekt">
@@ -1726,6 +1776,7 @@ function SpletPanel({
   onError: (message: string) => void;
   onCatalog: (catalog: Catalog) => void;
 }) {
+  const router = useRouter();
   const [naslov, setNaslov] = useState("");
   const [predlog, setPredlog] = useState<Predlog | null>(null);
   const [strani, setStrani] = useState(0);
@@ -1776,6 +1827,7 @@ function SpletPanel({
             izbrano: !prev.znanje.izbrano,
           },
         };
+      if (prev.eposta && prev.eposta.id === id) return { ...prev, eposta: { ...prev.eposta, izbrano: !prev.eposta.izbrano } };
       if (prev.podjetje.id === id)
         return {
           ...prev,
@@ -1802,12 +1854,15 @@ function SpletPanel({
     const ids = [
       ...(predlog.podjetje.izbrano ? [predlog.podjetje.id] : []),
       ...(predlog.znanje?.izbrano && predlog.znanje.besedilo ? [predlog.znanje.id] : []),
+      ...(predlog.eposta?.izbrano && predlog.eposta.naslov ? [predlog.eposta.id] : []),
       ...predlog.vrstice.filter((vrstica) => vrstica.izbrano).map((vrstica) => vrstica.id),
     ];
     onBusy(true);
     onError("");
     try {
       onCatalog(await potrdiPredlogFn({ data: { ids } }));
+      // Potrjena e-posta gre v pravila na strezniku: osvezi pravila, da jih naslednje shranjevanje ne prepise s staro kopijo.
+      await router.invalidate();
       setPredlog(null);
       setStrani(0);
     } catch (cause) {
@@ -1898,6 +1953,19 @@ function SpletPanel({
               </span>
             </label>
           ) : null}
+          {predlog.eposta?.naslov ? (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={predlog.eposta.izbrano} onChange={() => toggle(predlog.eposta?.id ?? "eposta")} />
+              <span>
+                <span className="text-[var(--color-brass)]">{t("spletEposta")}</span>
+                <span className="mt-1 block">{predlog.eposta.naslov}</span>
+                {!naslovNaDomeni(predlog.eposta.naslov, predlog.gostitelj) ? (
+                  <span className="mt-1 block text-xs">{t("spletEpostaTuja")}</span>
+                ) : null}
+                <span className="mt-1 block text-xs">{t("spletEpostaImate")}</span>
+              </span>
+            </label>
+          ) : null}
           {predlog.vrstice.map((vrstica) => (
             <label className="flex items-start gap-2 text-sm" key={vrstica.id}>
               <input type="checkbox" checked={vrstica.izbrano} onChange={() => toggle(vrstica.id)} />
@@ -1960,7 +2028,7 @@ function ZnanjePolje({
 }: {
   catalog: Catalog;
   busy: boolean;
-  onChange: (catalog: Catalog) => void;
+  onChange: Dispatch<SetStateAction<Catalog>>;
   onError: (message: string) => void;
 }) {
   const [opomba, setOpomba] = useState("");
@@ -2027,6 +2095,7 @@ function ZnanjePolje({
         </label>
         {opomba ? <span className="text-sm">{opomba}</span> : null}
       </div>
+      <ZnanjeDatoteke catalog={catalog} busy={busy} onChange={onChange} onError={onError} />
     </div>
   );
 }
@@ -2050,7 +2119,7 @@ export function Knowledge({
   busy: boolean;
   pravila: Pravila;
   vrzeli: Vrzel[];
-  onChange: (catalog: Catalog) => void;
+  onChange: Dispatch<SetStateAction<Catalog>>;
   onPravila: (pravila: Pravila) => void;
   onVrzeli: (vrzeli: Vrzel[]) => void;
   onSave: () => void;
@@ -2317,6 +2386,25 @@ export function Knowledge({
           <div id="zn-nujni" className="grid gap-5 rounded-3xl bg-[var(--color-sheet)] p-4">
             <h2 className="display text-2xl">{t("nujnoOznaka")}</h2>
             <NujniKlici onError={onError} />
+            {/* Urnik prevezave velja tudi za nujne klice (pregled 0.2.10, najdba 3): isto stikalo kot v Pravilih klicev, tudi tu. */}
+            {pravila.nacinKlica !== "osebna" ? (
+              <div className="grid gap-1">
+                <label className={IZBIRA} htmlFor="prevezava-urnik-vklop-nujni">
+                  <input
+                    id="prevezava-urnik-vklop-nujni"
+                    type="checkbox"
+                    checked={pravila.prevezavaUrnikVklop !== false}
+                    aria-describedby="prevezava-urnik-nujni-namig"
+                    onChange={(event) => onPravila({ ...pravila, prevezavaUrnikVklop: event.target.checked })}
+                  />
+                  {t("prevezavaUrnikVklop")}
+                </label>
+                <p id="prevezava-urnik-nujni-namig" className={NAMIG}>
+                  {t("prevezavaUrnikNujniNamig")}
+                </p>
+                <ShraniPravilaGumb busy={busy} onSave={onSaveRules} />
+              </div>
+            ) : null}
           </div>
         ),
         "zn-avtonomija": (
@@ -2366,6 +2454,7 @@ export function NastavitveVsebina({
   onPlace,
   onError,
   onBusy,
+  onNaslovStreznika,
 }: {
   pravila: Pravila & NastavitveOdsotnosti;
   mind: BrainPublic;
@@ -2378,6 +2467,8 @@ export function NastavitveVsebina({
   onPlace: (place: StorageView) => void;
   onError: (message: string) => void;
   onBusy: (busy: boolean) => void;
+  /** Naslov, ki ga je zapisal streznik (pot/tunel): premakne tudi posnetek, da ga shranjevanje ne poslje kot spremembo (B3). */
+  onNaslovStreznika?: (naslov: string) => void;
 }) {
   const onChange = onPravila;
   // Shranjen razlog odsotnosti, ki ne prestane preverbe (stara datoteka): stikalo je izklopljeno, vmesnik pokaze razlog (pregled C8).
@@ -2459,6 +2550,49 @@ export function NastavitveVsebina({
               <p id="preveza-na-zahtevo-namig" className={NAMIG}>
                 {t("prevezaNaZahtevoNamig")}
               </p>
+              {/* Delovni cas prevezave (lastnik 23. 11. 2026): samo nacin podjetje; osebna tajnica te omejitve nima. */}
+              {pravila.nacinKlica !== "osebna" ? (
+                <fieldset className="mt-4">
+                  <label className={IZBIRA} htmlFor="prevezava-urnik-vklop">
+                    <input
+                      id="prevezava-urnik-vklop"
+                      type="checkbox"
+                      checked={pravila.prevezavaUrnikVklop !== false}
+                      aria-describedby="prevezava-urnik-namig"
+                      onChange={(event) => onChange({ ...pravila, prevezavaUrnikVklop: event.target.checked })}
+                    />
+                    {t("prevezavaUrnikVklop")}
+                  </label>
+                  <p id="prevezava-urnik-namig" className={NAMIG}>
+                    {t("prevezavaUrnikNamig")}
+                  </p>
+                  {pravila.prevezavaUrnikVklop !== false ? (
+                    <>
+                      <label className={`${OZNAKA_POLJA} mt-3`} htmlFor="prevezava-urnik">
+                        {t("prevezavaUrnikNaslov")}
+                        <input
+                          id="prevezava-urnik"
+                          value={pravila.prevezavaUrnik ?? ""}
+                          placeholder="pon-pet 07.00-15.00"
+                          maxLength={120}
+                          onChange={(event) => onChange({ ...pravila, prevezavaUrnik: event.target.value })}
+                          className={POLJE}
+                        />
+                      </label>
+                      <label className={`${OZNAKA_POLJA} mt-3`} htmlFor="prevezava-prosti">
+                        {t("prevezavaProstiNaslov")}
+                        <input
+                          id="prevezava-prosti"
+                          value={pravila.prevezavaProstiDnevi ?? ""}
+                          placeholder="2026-12-24, 2026-12-31"
+                          onChange={(event) => onChange({ ...pravila, prevezavaProstiDnevi: event.target.value })}
+                          className={POLJE}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                </fieldset>
+              ) : null}
               {pravila.prevzem === "neodgovorjeni" ? (
                 <label className={`${OZNAKA_POLJA} mt-4`} htmlFor="cakanje">
                   {t("cakanje")}
@@ -2506,6 +2640,7 @@ export function NastavitveVsebina({
               <CiscenjeZvokaStikalo razred={IZBIRA} />
               <SpominPogovorovStikalo razred={IZBIRA} />
               <SamoucenjeStikalo razred={IZBIRA} />
+              <GradnjeStikalo razred={IZBIRA} />
               <ObvestilaNastavitve razred={IZBIRA} />
               {pravila.nacinKlica !== "osebna" ? (
                 <label className={`${IZBIRA} mt-2`}>
@@ -2608,6 +2743,33 @@ export function NastavitveVsebina({
                         <span className={NAMIG}>{t("odsotnostNamig")}</span>
                       </>
                     ) : null}
+                  </fieldset>
+                  {/* Dostava paketa (lastnik 23. 11. 2026): navodilo slisi samo klicatelj, ki se predstavi kot dostava; prazno = izklopljeno. */}
+                  <fieldset className="mt-4">
+                    <legend className={OZNAKA_POLJA}>{t("paketNaslov")}</legend>
+                    <textarea
+                      id="paket-navodilo"
+                      aria-label={t("paketNaslov")}
+                      aria-describedby="paket-namig"
+                      value={pravila.paketNavodilo ?? ""}
+                      maxLength={160}
+                      rows={2}
+                      onChange={(event) => onChange({ ...pravila, paketNavodilo: event.target.value.replace(/\s*\n\s*/g, " ") })}
+                      className={`${POLJE} mt-2`}
+                    />
+                    <p id="paket-namig" className={NAMIG}>
+                      {t("paketNamig")}
+                    </p>
+                    <label className={`${OZNAKA_POLJA} mt-3`} htmlFor="paket-do">
+                      {t("paketDoNaslov")}
+                      <input
+                        id="paket-do"
+                        type="date"
+                        value={pravila.paketDo ?? ""}
+                        onChange={(event) => onChange({ ...pravila, paketDo: event.target.value })}
+                        className={POLJE}
+                      />
+                    </label>
                   </fieldset>
                 </>
               ) : null}
@@ -2761,12 +2923,13 @@ export function NastavitveVsebina({
               </label>
               <PotNaslova
                 trenutni={pravila.javniNaslov ?? ""}
-                onNaslov={(javniNaslov) =>
+                onNaslov={(javniNaslov) => {
+                  onNaslovStreznika?.(javniNaslov);
                   onChange({
                     ...pravila,
                     javniNaslov,
-                  })
-                }
+                  });
+                }}
                 onError={onError}
               />
             </Podrazdelek>
@@ -3019,8 +3182,15 @@ export function NastavitveVsebina({
           </Razdelek>
         ),
         "nast-posodobitev": <PosodobitevPanel onError={onError} />,
+        "nast-github": <GithubDostop id="nast-github" onError={onError} />,
+        "nast-o-lini": <OLiniPanel id="nast-o-lini" />,
         "nast-iphone": <IphoneNavodila />,
-        "nast-mozgani": <Settings brain={mind} busy={busy} onBrain={onBrain} onError={onError} onBusy={onBusy} />,
+        "nast-mozgani": (
+          <div className="grid gap-6">
+            <Settings brain={mind} busy={busy} onBrain={onBrain} onError={onError} onBusy={onBusy} />
+            <ModelAsistentke brain={mind} busy={busy} onBrain={onBrain} onError={onError} onBusy={onBusy} />
+          </div>
+        ),
         "nast-shranjevanje": <StoragePanel place={place} busy={busy} onPlace={onPlace} onError={onError} onBusy={onBusy} />,
         "mapa-zapiskov": <MapaZapiskovPanel onError={onError} />,
       }}

@@ -9,6 +9,7 @@ import { requireOwner } from "../auth.server.ts";
 import { glasNaVoljo, pripravljeniKljuci } from "../glas.server.ts";
 import { activeBrain } from "../keys.server.ts";
 import { pravaOdvisnost } from "../live/vstop.server.ts";
+import { opozoriloPotrjeno } from "../opozorilo.server.ts";
 import { uvodKlica } from "../povzetek.ts";
 import { loadPravila } from "../pravila.server.ts";
 import { loadLine } from "../service.server.ts";
@@ -229,6 +230,7 @@ export class SipSluzba {
 // ----------------------------------------------------------------------------------------------- prave odvisnosti
 
 const NI_NA_VOLJO: Sprejem = { ok: false, status: 480, razlog: "Temporarily Unavailable" };
+const BREZ_OPOZORILA: Sprejem = { ok: false, status: 503, razlog: "Service Unavailable" };
 
 /**
  * Sprejem klica SIP po istih pogojih kot pot Twilio Live (voice.server.ts): linija odprta, nacin podjetja (Live v osebnem
@@ -250,7 +252,8 @@ export function pravaOdvisnostSluzbe(root: string): OdvisnostiSluzbe {
   const zasedenost = { osvezi: (sid: string) => osveziAktivniKlic(root, sid), sprosti: (sid: string) => sprostiAktivniKlic(root, sid) };
   return {
     konfiguracija: () => sipKonfiguracija(root),
-    sprejem: (sid) => sprejemKlicaSip(root, sid),
+    // Opozorilo ob prvem zagonu (lastnik 24. 11. 2026): brez potrditve »Razumem« Lina klica ne sprejme.
+    sprejem: async (sid) => ((await opozoriloPotrjeno(root)) ? sprejemKlicaSip(root, sid) : BREZ_OPOZORILA),
     odvisnostiMosta: () => {
       // Iste odvisnosti kot most Twilio (nastavitve, Live prek Vertex, posnetki, zapisnik, zasedenost); zeton izda most SIP.
       const { porabiZeton: _neRabimo, ...odv } = pravaOdvisnost(root, zasedenost, dnevnik);

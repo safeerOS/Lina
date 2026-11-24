@@ -188,7 +188,7 @@ describe("naloga G4g (2): konec klica po potrditvi", { concurrency: 1 }, () => {
     const konec = o[3];
     assert.equal(konec.call.status, "zakljucen");
     assert.equal(konec.reply, `${STAVEK_EPOSTE} ${t("povzetekStik")} ${t("slovo")} ${t("lepDan")}`);
-    assert.equal(konec.reply, `Prosim, pošljite naročilo še po elektronski pošti na naslov info, afna, primer, pika, si. Če bomo potrebovali dodatne informacije, vas bomo poklicali na številko, s katere kličete. Hvala za klic. Lep dan.`);
+    assert.equal(konec.reply, `Prosim vas, če lahko povpraševanje pošljete še po elektronski pošti na naslov info, afna, primer, pika, si. Če bomo potrebovali dodatne informacije, vas bomo poklicali na številko, s katere kličete. Hvala za klic. Lep dan.`);
     assert.equal(konec.call.order.confirmed, true);
     assert.equal(konec.call.order.potrditevEposta, true);
     // Naslov je izgovorjen najvec enkrat na klic.

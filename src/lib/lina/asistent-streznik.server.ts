@@ -12,32 +12,47 @@
  * zagonom; enkratni niz. Dogodke bere samo, kdor pozna id naloge (vsaj 128 bitov, poslan samo prek pripetega TLS) - telefon,
  * ki jo je dal. Pogodba (poti, JSON, napake) je v AGENTS.md (»Koncna tocka asistentke za telefon«).
  */
-import { generateKeyPairSync, randomBytes, sign, timingSafeEqual, X509Certificate, createPrivateKey } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, generateKeyPairSync, randomBytes, sign, timingSafeEqual, X509Certificate, createPrivateKey } from "node:crypto";
+import { constants as fsKonstante } from "node:fs";
+import { chmod, lstat, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { NAJVEC_ZNAKOV, type Dogodek, type Izvajalec, type Naloga } from "./asistent.server.ts";
 import {
   ENKRATNI,
   ID_NAPRAVE,
   ID_ODOBRITVE,
   OKNO_PODPISA_MS,
+  nizDodatka,
   nizDogodkov,
   nizKlici,
+  nizNadaljevanja,
   nizNaloge,
   nizOdobritve,
   nizSeznanitve,
   nizSinhron,
   nizStanja,
+  nizStanjaDodatkov,
+  nizApkGradnje,
+  nizPotrditveGradnje,
+  nizPredlogaGradnje,
+  nizStanjaGradenj,
+  nizDodelitveAgentNaloge,
+  nizPreklicaAgentNaloge,
+  nizStanjaAgentNalog,
+  zgostitevDodelitve,
   nizUstavitve,
   zgostitevSinhron,
   idPripadaKljucu,
   praviUnicode,
   veljavenKljucNaprave,
   preveriPodpisNaprave,
+  jeDodatekTelefona,
+  type DodatekTelefona,
   type Dokaz,
 } from "./kanal-claude.ts";
 import { preberiKanal, preveriKoren } from "./kanal-claude.server.ts";
@@ -223,7 +238,9 @@ export const VIR_PREHODA = /^[A-Za-z0-9._:-]{1,64}$/;
 export const NAJVEC_POVEZAV_PREHOD = 32;
 /** Poti, ki jih sme poklicati OSEBA ZUNAJ DOMA (beli seznam); seznanjanje (/seznani, /koda/*) nikoli. */
 export const POTI_ODDALJENO: ReadonlyMap<string, string> = new Map([
-  [`${POT}/naloga`, "POST"], [`${POT}/odobritev`, "POST"], [`${POT}/ustavi`, "POST"], [`${POT}/dogodki`, "GET"], [`${POT}/stanje`, "GET"],
+  [`${POT}/naloga`, "POST"], [`${POT}/odobritev`, "POST"], [`${POT}/ustavi`, "POST"], [`${POT}/nadaljuj`, "POST"], [`${POT}/dogodki`, "GET"], [`${POT}/stanje`, "GET"],
+  // Dodatki na racunalniku (23. 11. 2026): ista naprava ozjega kroga s podpisom kot za nalogo; od zunaj sicer 403 kot »zavrnjeno«.
+  [`${POT}/dodatki`, "GET"], [`${POT}/dodatek`, "POST"],
 ]);
 
 type DogodekTelefona = Dogodek & { st: number };
@@ -273,6 +290,31 @@ export type MoznostiStreznika = {
   rokRokovanja?: number;
   /** F5: omogoci vhod za oddaljeni prehod (privzeto izklopljeno; streznik se vseeno veze samo na zasebni naslov). */
   omogociPrehod?: boolean;
+  /** Dodatki na racunalniku (dodatki-telefon.server.ts); brez njih poti /dodatki in /dodatek odgovorita 404. */
+  dodatki?: {
+    stanje(): Promise<unknown>;
+    nastavi(dodatek: DodatekTelefona, vklop: boolean): Promise<unknown>;
+  };
+  /**
+   * Gradnje na GitHubu (24. 11. 2026, gradnje-github.server.ts); brez njih poti /gradnje in /gradnja/* odgovorijo 404. Napaka z
+   * lastnostjo razlog (GradnjaNapaka) postane 409 {napaka: razlog}. Poti so samo za domace omrezje (ni v POTI_ODDALJENO).
+   */
+  gradnje?: {
+    stanje(): Promise<unknown>;
+    predlog(tok: unknown, veja: unknown): Promise<{ id: string; zgostitev: string }>;
+    potrdi(id: unknown, zgostitev: unknown): Promise<void>;
+    /** SAMO zadnja koncana gradnja APK s preverjenim podpisom (nikoli poljubna pot). */
+    apk(): Promise<{ id: string; pot: string; sha256: string; velikost: number; paket: string } | null>;
+  };
+  /**
+   * Naloge agentov na racunalniku (24. 11. 2026, claude-naloge.server.ts): vrsta, dodelitev in preklic s podpisom naprave; brez njih poti
+   * /agent-naloge in /agent-naloga/* odgovorijo 404. Napaka z lastnostjo razlog postane 409. Samo domace omrezje (ni v POTI_ODDALJENO).
+   */
+  agentiNaloge?: {
+    stanje(): Promise<unknown>;
+    dodeli(agent: string, mapa: string, besedilo: string, pogoj: string): Promise<{ id: string }>;
+    preklici(id: string): Promise<void>;
+  };
 };
 
 class Napaka extends Error {
@@ -415,11 +457,16 @@ export class AsistentStreznik {
       if (req.method === "GET" && url.pathname === `${POT}/dogodki`) return await this.dogodki(req, res, url);
       if (req.method === "GET" && url.pathname === `${POT}/seznani`) return this.poslji(res, 200, this.stanjeSeznanitve(req, url));
       if (req.method === "GET" && url.pathname === `${POT}/stanje`) return this.poslji(res, 200, await this.stanjeSeje(url));
+      if (req.method === "GET" && url.pathname === `${POT}/dodatki`) return this.poslji(res, 200, await this.stanjeDodatkov(url));
+      if (req.method === "GET" && url.pathname === `${POT}/gradnje`) return this.poslji(res, 200, await this.stanjeGradenj(url));
+      if (req.method === "GET" && url.pathname === `${POT}/gradnja/apk`) return await this.apkGradnje(url, res);
+      if (req.method === "GET" && url.pathname === `${POT}/agent-naloge`) return this.poslji(res, 200, await this.stanjeAgentNalog(url));
       if (req.method !== "POST") throw new Napaka(url.pathname.startsWith(POT) ? 405 : 404, "ni", "Ni take poti.");
       const telo = await this.telo(req, url.pathname === `${POT}/sinhron` ? NAJVEC_TELO_SINHRON : NAJVEC_TELO);
       const izid = url.pathname === `${POT}/naloga` ? await this.naloga(telo)
         : url.pathname === `${POT}/odobritev` ? await this.odobritev(telo)
           : url.pathname === `${POT}/ustavi` ? await this.ustavitev(telo)
+          : url.pathname === `${POT}/nadaljuj` ? await this.nadaljevanje(telo)
             : url.pathname === `${POT}/seznani` ? await this.seznani(telo)
               : url.pathname === `${POT}/koda/zacni` ? await this.kodaZacni(vir, telo)
                 : url.pathname === `${POT}/koda/spake` ? this.kodaSpake(telo)
@@ -427,7 +474,12 @@ export class AsistentStreznik {
                     : url.pathname === `${POT}/koda/odpovej` ? this.kodaOdpovej(telo)
                       : url.pathname === `${POT}/seznani/klici` ? await this.klici(telo)
                         : url.pathname === `${POT}/sinhron` ? await this.sinhron(telo)
-                          : null;
+                          : url.pathname === `${POT}/dodatek` ? await this.dodatek(telo)
+                            : url.pathname === `${POT}/gradnja/predlog` ? await this.predlogGradnje(telo)
+                              : url.pathname === `${POT}/gradnja/potrdi` ? await this.potrdiGradnjo(telo)
+                                : url.pathname === `${POT}/agent-naloga/dodeli` ? await this.dodeliAgentNalogo(telo)
+                                  : url.pathname === `${POT}/agent-naloga/preklici` ? await this.prekliciAgentNalogo(telo)
+                                    : null;
       if (!izid) throw new Napaka(404, "ni", "Ni take poti.");
       this.poslji(res, izid.status, izid.telo);
     } catch (e) {
@@ -538,7 +590,9 @@ export class AsistentStreznik {
       await this.m.izvajalec.zacni(naloga, (d) => this.dogodek(id, d));
     } catch (e) {
       this.naloge.delete(id);
-      throw new Napaka(503, "claude-code-ni", (e as Error).message.slice(0, 200));
+      // besedilo napake izvajalca (npr. pot vticnice v domaci mapi) gre samo v dnevnik; telefon dobi stalno besedilo (pregled 0225 A-17)
+      this.dnevnik(`naloga ni zacela: ${(e as Error).message.slice(0, 300)}`);
+      throw new Napaka(503, "claude-code-ni", "Seja Claude Code naloge ni sprejela ali ni dosegljiva.");
     }
     return { status: 202, telo: { id } };
   }
@@ -548,6 +602,8 @@ export class AsistentStreznik {
     if (!n) return;
     if (d.vrsta === "odobritev" && d.zgostitev) n.odprte.set(d.zahtevaId, d.zgostitev);
     if (d.vrsta === "izid") n.koncano = true;
+    // Claude Code je po koncu znova odgovoril (lastnik v terminalu): naloga je spet v teku, telefon jo spremlja naprej
+    else if (d.vrsta === "stanje" && d.tip && n.koncano) { n.koncano = false; n.cas = this.zdaj(); }
     if (n.dogodki.length >= NAJVEC_DOGODKOV) n.dogodki.shift();
     const st = (n.dogodki.at(-1)?.st ?? 0) + 1;
     n.dogodki.push({ ...d, st } as DogodekTelefona);
@@ -566,7 +622,7 @@ export class AsistentStreznik {
     if (!n || !zg || n.posiljatelj !== posiljatelj) throw zavrnjeno();
     const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizOdobritve(zahtevaId, dovoli, posiljatelj as string, c, e, nalogaId, zg));
     n.odprte.delete(zahtevaId);
-    await this.m.izvajalec.odobri(nalogaId, zahtevaId, dovoli, posiljatelj as string, dokaz);
+    await this.m.izvajalec.odobri(nalogaId, zahtevaId, dovoli, posiljatelj as string, dokaz, zg);
     return { status: 202, telo: { zahtevaId } };
   }
 
@@ -576,6 +632,30 @@ export class AsistentStreznik {
     if (!n || n.posiljatelj !== posiljatelj) throw zavrnjeno();
     const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizUstavitve(id as string, posiljatelj as string, c, e));
     await this.m.izvajalec.ustavi(id as string, dokaz);
+    return { status: 202, telo: { id } };
+  }
+
+  /**
+   * POST /nadaljuj {"id","posiljatelj","besedilo","cas","enkratni","podpis"} -> 202 {"id"}: odgovor ali navodilo v ISTO nalogo
+   * (lastnik 23. 11. 2026 »Lina sama odgovori Claude Code«). Samo naprava, ki je nalogo dala; podpis nizNadaljevanja.
+   */
+  private async nadaljevanje(t: Record<string, unknown>) {
+    const { id, posiljatelj, besedilo } = t;
+    const n = typeof id === "string" ? this.naloge.get(id) : undefined;
+    if (typeof besedilo !== "string" || !besedilo.trim() || besedilo.length > NAJVEC_ZNAKOV || !praviUnicode(besedilo)) {
+      throw new Napaka(400, "oblika", "Besedilo je prazno, predolgo ali ni veljaven Unicode.");
+    }
+    if (!n || n.posiljatelj !== posiljatelj) throw zavrnjeno();
+    const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizNadaljevanja(id as string, posiljatelj as string, besedilo, c, e));
+    if (!this.m.izvajalec.nadaljuj) throw new Napaka(501, "ni-podprto", "Izvajalec ne podpira odgovora v nalogo.");
+    try {
+      await this.m.izvajalec.nadaljuj(id as string, besedilo, posiljatelj as string, dokaz);
+    } catch (e) {
+      // kot zgoraj (A-17): podrobnost samo v dnevnik
+      this.dnevnik(`nadaljevanje ni sprejeto: ${(e as Error).message.slice(0, 300)}`);
+      throw new Napaka(409, "ni-v-teku", "Naloga ni v teku ali nadaljevanje ni dovoljeno.");
+    }
+    if (n.koncano) { n.koncano = false; n.cas = this.zdaj(); }
     return { status: 202, telo: { id } };
   }
 
@@ -737,6 +817,157 @@ export class AsistentStreznik {
     await this.preveri(posiljatelj, t, (c, e) => nizStanja(posiljatelj as string, c, e));
     const odprta = await this.m.izvajalec.razpolozljiv().catch(() => false);
     return { claudeCode: odprta ? "odprta" : "zaprta" };
+  }
+
+  private dodatkiStreznika() {
+    if (!this.m.dodatki) throw new Napaka(404, "ni", "Ni take poti.");
+    return this.m.dodatki;
+  }
+
+  /** Stanje dodatkov na racunalniku (podpisana poizvedba kot /stanje); samo branje, nic ne zazene. */
+  private async stanjeDodatkov(url: URL) {
+    const d = this.dodatkiStreznika();
+    const q = url.searchParams;
+    const posiljatelj = q.get("posiljatelj");
+    const t = { cas: Number(q.get("cas")), enkratni: q.get("enkratni") ?? "", podpis: q.get("podpis") ?? "" };
+    await this.preveri(posiljatelj, t, (c, e) => nizStanjaDodatkov(posiljatelj as string, c, e));
+    return await d.stanje();
+  }
+
+  /** Vklop ali izklop enega dodatka: podpis veze napravo, dodatek in smer (nizDodatka); vrne novo stanje vseh dodatkov. */
+  private async dodatek(t: Record<string, unknown>) {
+    const d = this.dodatkiStreznika();
+    const { posiljatelj, dodatek, vklop } = t;
+    if (!jeDodatekTelefona(dodatek) || typeof vklop !== "boolean") throw new Napaka(400, "oblika", "Neznan dodatek ali vklop ni true/false.");
+    await this.preveri(posiljatelj, t, (c, e) => nizDodatka(posiljatelj as string, dodatek, vklop, c, e));
+    return { status: 200, telo: await d.nastavi(dodatek, vklop) };
+  }
+
+  private gradnjeStreznika() {
+    if (!this.m.gradnje) throw new Napaka(404, "ni", "Ni take poti.");
+    return this.m.gradnje;
+  }
+
+  /** Napaka zaledja gradenj (stalna koda razlog) -> 409; besedilo napake ne gre telefonu. */
+  private async zaledjeGradenj<T>(delo: () => Promise<T>): Promise<T> {
+    try {
+      return await delo();
+    } catch (e) {
+      const r = (e as { razlog?: unknown }).razlog;
+      if (typeof r === "string" && /^[a-z-]{1,30}$/.test(r)) throw new Napaka(409, r, "Gradnja ni mogoca.");
+      throw e;
+    }
+  }
+
+  private podpisPoizvedbe(url: URL) {
+    const q = url.searchParams;
+    return { posiljatelj: q.get("posiljatelj"), t: { cas: Number(q.get("cas")), enkratni: q.get("enkratni") ?? "", podpis: q.get("podpis") ?? "" } };
+  }
+
+  private agentiNalogStreznika() {
+    if (!this.m.agentiNaloge) throw new Napaka(404, "ni", "Ni take poti.");
+    return this.m.agentiNaloge;
+  }
+
+  /** Vrsta nalog agentov (podpisana poizvedba); samo branje. */
+  private async stanjeAgentNalog(url: URL) {
+    const a = this.agentiNalogStreznika();
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    await this.preveri(posiljatelj, t, (c, e) => nizStanjaAgentNalog(posiljatelj as string, c, e));
+    return await this.zaledjeGradenj(() => a.stanje());
+  }
+
+  /** Dodelitev s telefona: podpis veze zgostitev (agent, mapa, besedilo, pogoj); zaledje preveri agenta, mapo, prepovedane mape in pogoj. */
+  private async dodeliAgentNalogo(t: Record<string, unknown>) {
+    const a = this.agentiNalogStreznika();
+    const { posiljatelj, agent, mapa, besedilo, pogoj } = t;
+    if (typeof agent !== "string" || typeof mapa !== "string" || typeof besedilo !== "string" || typeof pogoj !== "string"
+      || agent.length > 20 || mapa.length > 512 || besedilo.length > 8000 || pogoj.length > 40) throw new Napaka(400, "oblika", "Manjka agent, mapa, besedilo ali pogoj.");
+    await this.preveri(posiljatelj, t, (c, e) => nizDodelitveAgentNaloge(posiljatelj as string, zgostitevDodelitve(agent, mapa, besedilo, pogoj), c, e));
+    const z = await this.zaledjeGradenj(() => a.dodeli(agent, mapa, besedilo, pogoj));
+    return { status: 202, telo: { id: z.id } };
+  }
+
+  /** Preklic dodeljene naloge s telefona: podpis veze id. */
+  private async prekliciAgentNalogo(t: Record<string, unknown>) {
+    const a = this.agentiNalogStreznika();
+    const { posiljatelj, id } = t;
+    if (typeof id !== "string" || !/^[a-f0-9]{16}$/.test(id)) throw new Napaka(400, "oblika", "Neveljaven id.");
+    await this.preveri(posiljatelj, t, (c, e) => nizPreklicaAgentNaloge(posiljatelj as string, id, c, e));
+    await this.zaledjeGradenj(() => a.preklici(id));
+    return { status: 202, telo: { id } };
+  }
+
+  /** Stanje gradenj (podpisana poizvedba); samo branje. */
+  private async stanjeGradenj(url: URL) {
+    const g = this.gradnjeStreznika();
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    await this.preveri(posiljatelj, t, (c, e) => nizStanjaGradenj(posiljatelj as string, c, e));
+    return await this.zaledjeGradenj(() => g.stanje());
+  }
+
+  /** Predlog s telefona: podpis veze tok in vejo; nicesar ne zazene (zagon je posebna potrditev). */
+  private async predlogGradnje(t: Record<string, unknown>) {
+    const g = this.gradnjeStreznika();
+    const { posiljatelj, tok, veja } = t;
+    if (typeof tok !== "string" || typeof veja !== "string" || tok.length > 40 || veja.length > 120) throw new Napaka(400, "oblika", "Manjka tok ali veja.");
+    await this.preveri(posiljatelj, t, (c, e) => nizPredlogaGradnje(posiljatelj as string, tok, veja, c, e));
+    const p = await this.zaledjeGradenj(() => g.predlog(tok, veja));
+    return { status: 202, telo: { id: p.id, zgostitev: p.zgostitev } };
+  }
+
+  /** Potrditev zagona s telefona: podpis veze id predloga in zgostitev (repozitorij, tok, veja). */
+  private async potrdiGradnjo(t: Record<string, unknown>) {
+    const g = this.gradnjeStreznika();
+    const { posiljatelj, id, zgostitev } = t;
+    if (typeof id !== "string" || !/^[a-f0-9]{16}$/.test(id) || typeof zgostitev !== "string" || !/^[a-f0-9]{64}$/.test(zgostitev)) throw new Napaka(400, "oblika", "Neveljaven id ali zgostitev.");
+    await this.preveri(posiljatelj, t, (c, e) => nizPotrditveGradnje(posiljatelj as string, id, zgostitev, c, e));
+    await this.zaledjeGradenj(() => g.potrdi(id, zgostitev));
+    return { status: 202, telo: { id } };
+  }
+
+  /**
+   * APK zadnje potrjene gradnje: datoteka se odpre brez sledenja povezavi, vsota se izracuna iz ISTE odprte datoteke in mora biti
+   * enaka zapisani; sele nato se poslje (brez Range). Glave: x-lina-sha256, x-lina-paket, x-lina-gradnja, content-length.
+   */
+  private async apkGradnje(url: URL, res: ServerResponse): Promise<void> {
+    const g = this.gradnjeStreznika();
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    await this.preveri(posiljatelj, t, (c, e) => nizApkGradnje(posiljatelj as string, c, e));
+    const a = await g.apk();
+    if (!a) throw new Napaka(404, "ni", "Ni potrjene gradnje APK.");
+    let ds;
+    try {
+      // O_NONBLOCK: FIFO na poti ne obvisi ze ob odpiranju (pregled 0225 A-16); za navadno datoteko nima ucinka
+      ds = await open(a.pot, fsKonstante.O_RDONLY | (fsKonstante.O_NOFOLLOW ?? 0) | (fsKonstante.O_NONBLOCK ?? 0));
+    } catch {
+      throw new Napaka(404, "ni", "Ni potrjene gradnje APK.");
+    }
+    try {
+      // vrsta in velikost se preverita PRED branjem (A-16): FIFO, naprava ali spremenjena datoteka se ne bere
+      const st = await ds.stat();
+      if (!st.isFile() || st.size === 0 || st.size !== a.velikost) throw new Napaka(409, "vsota", "Datoteka se je spremenila.");
+      // odjemalec, ki je ze prekinil, ne dobi nicesar (A-11: prej je obljuba spodaj visela in deskriptor ostal odprt)
+      if (res.destroyed) return;
+      const h = createHash("sha256");
+      for await (const k of ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false })) h.update(k as Buffer);
+      if (h.digest("hex") !== a.sha256) throw new Napaka(409, "vsota", "Datoteka se je spremenila.");
+      if (res.destroyed) return;
+      res.writeHead(200, {
+        "content-type": "application/vnd.android.package-archive",
+        "content-length": st.size,
+        "cache-control": "no-store",
+        "x-lina-sha256": a.sha256,
+        "x-lina-paket": a.paket,
+        "x-lina-gradnja": a.id,
+      });
+      // pipeline se konca tudi ob prekinitvi odjemalca ali napaki branja (vticnica se tedaj zapre, ne visi)
+      await pipeline(ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false }), res).catch(() => {
+        res.destroy();
+      });
+    } finally {
+      await ds.close();
+    }
   }
 
   private neznan(naslov: string): void {

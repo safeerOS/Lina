@@ -11,6 +11,7 @@ import { pipeline } from "node:stream/promises";
 import { requireOwner } from "./auth.server.ts";
 import { ugasniTestnoOknoSprejema, vklopiTestnoOknoSprejema } from "./twilio-sprejem.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
+import { vVrstiPravil } from "./pravila.server.ts";
 
 /**
  * Javni https naslov linije brez terminala (lastnik 12. 11. 2026): hitri tunel Cloudflare (trycloudflare.com, brez racuna).
@@ -495,9 +496,12 @@ const PRIVZETI_PONUDNIK = "cloudflared";
 
 /** Vpis ali brisanje javniNaslov brez seje (ob padcu procesa seje ni); izprazni SAMO, ce polje se vedno nosi nas naslov. */
 export async function zapisiNaslov(root: string, naslov: string, samoCe?: string): Promise<void> {
-  const raw = (await readJsonFile<Record<string, unknown>>(root, "pravila.json")) ?? {};
-  if (samoCe !== undefined && raw.javniNaslov !== samoCe) return;
-  await writeJson(root, "pravila.json", { ...raw, javniNaslov: naslov });
+  // Ista vrsta kot ostali pisci pravila.json (drugi pregled 0.2.10, CR12/N1); izprazniSinhrono ob izhodu procesa ne more cakati.
+  await vVrstiPravil(root, async () => {
+    const raw = (await readJsonFile<Record<string, unknown>>(root, "pravila.json")) ?? {};
+    if (samoCe !== undefined && raw.javniNaslov !== samoCe) return;
+    await writeJson(root, "pravila.json", { ...raw, javniNaslov: naslov });
+  });
 }
 
 export function izprazniSinhrono(root: string, samoCe: string): void {

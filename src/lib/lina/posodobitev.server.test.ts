@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setupOwner } from "./auth.server.ts";
@@ -21,6 +21,7 @@ import {
   stanjePosodobitve,
   vsotaIzSeznama,
   zacniPosodobitev,
+  zacniPosodobitevIzGradnje,
   type Odvisnosti,
 } from "./posodobitev.server.ts";
 
@@ -153,6 +154,42 @@ test("napacno ime paketa ali razlicica v kontrolni datoteki se razlikuje od imen
     assert.deepEqual(await zacniPosodobitev(token, dir, odv), { ok: false, razlog: "napacen_paket" });
     assert.equal(zagoni.length, 0);
   }
+});
+
+test("gradnja na GitHubu (24. 11. 2026): namestitev iz mape gradnje s presledki gre skozi ista varovala; enaka razlicica = ni_novejsa", async () => {
+  const { dir, token } = await novaMapa();
+  const mapa = path.join(mkdtempSync(path.join(KOREN, "Lina gradnje-")), "2026-11-24 0905-racunalnik-main", "lina-deb");
+  mkdirSync(mapa, { recursive: true });
+  const deb = path.join(mapa, "lina-lupina_0.2.11_amd64.deb");
+  writeFileSync(deb, "deb-gradnje");
+  // posodobitev.json NE vpliva: vir je mapa gradnje, ki jo da streznik
+  writeFileSync(path.join(dir, "posodobitev.json"), JSON.stringify({ mapa: "/etc" }));
+  // pregled 0225 A-15: skripta dobi zasebno kopijo v <podatki>/posodobitev (0700), ne datoteke iz vidne mape gradnje
+  const kopija = path.join(dir, "posodobitev", "lina-lupina_0.2.11_amd64.deb");
+  const paketi = { [deb]: { paket: "lina-lupina", razlicica: "0.2.11" }, [kopija]: { paket: "lina-lupina", razlicica: "0.2.11" } };
+  const a = lazno({ namescena: "0.2.10", paketi });
+  const gradnja = { pot: deb, sha256: sha("deb-gradnje") };
+  assert.deepEqual(await zacniPosodobitevIzGradnje(token, gradnja, dir, a.odv), { ok: true, razlicica: "0.2.11" });
+  assert.deepEqual(a.zagoni[0]!.argumenti, ["/opt/Lina/resources/lina/posodobi.sh", kopija, dir, sha("deb-gradnje")]);
+  assert.equal(readFileSync(kopija, "utf8"), "deb-gradnje");
+  assert.equal(statSync(path.dirname(kopija)).mode & 0o777, 0o700);
+  a.zagoni[0]!.otrok.emit("exit");
+  const b = lazno({ namescena: "0.2.11", paketi });
+  assert.deepEqual(await zacniPosodobitevIzGradnje(token, gradnja, dir, b.odv), { ok: false, razlog: "ni_novejsa" });
+  assert.equal(b.zagoni.length, 0);
+  await assert.rejects(zacniPosodobitevIzGradnje(null, gradnja, dir, b.odv));
+  assert.deepEqual(await zacniPosodobitevIzGradnje(token, { pot: "relativna", sha256: gradnja.sha256 }, dir, b.odv), { ok: false, razlog: "pot" });
+  // datoteka, spremenjena po gradnji, ali novejsa datoteka, dodana v mapo: nic se ne zazene
+  const c = lazno({ namescena: "0.2.10", paketi: { ...paketi, [path.join(mapa, "lina-lupina_0.2.12_amd64.deb")]: { paket: "lina-lupina", razlicica: "0.2.12" } } });
+  writeFileSync(deb, "podtaknjeno");
+  assert.deepEqual(await zacniPosodobitevIzGradnje(token, gradnja, dir, c.odv), { ok: false, razlog: "vsota" });
+  writeFileSync(deb, "deb-gradnje");
+  writeFileSync(path.join(mapa, "lina-lupina_0.2.12_amd64.deb"), "drug");
+  assert.deepEqual(await zacniPosodobitevIzGradnje(token, gradnja, dir, c.odv), { ok: false, razlog: "vsota" });
+  // tudi z ENAKO vsebino: namesti se samo datoteka gradnje, ne druga datoteka v mapi
+  writeFileSync(path.join(mapa, "lina-lupina_0.2.12_amd64.deb"), "deb-gradnje");
+  assert.deepEqual(await zacniPosodobitevIzGradnje(token, gradnja, dir, c.odv), { ok: false, razlog: "vsota" });
+  assert.equal(c.zagoni.length, 0);
 });
 
 test("pot z nadzornim znakom se ne preda skripti", async () => {

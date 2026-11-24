@@ -49,12 +49,51 @@ export function izgovoriEnaslov(naslov: string): string {
   return deli.join(", ");
 }
 
-/** Stavek pred slovesom ali prazen niz, ce moznost ni vklopljena ali naslov ni veljaven. */
-export function stavekPotrditve(pravila: { potrditevEposta?: boolean; potrditevNaslov?: string; nacinKlica?: string }): string {
+const BESEDA_EPOSTE = /\b(e-? ?(post\w*|mail\w*|naslov\w*)|mail\w*|mejl\w*|meil\w*|email\w*|elektronsk\w* post\w*)\b/;
+/** Posiljanje ali vprasanje po naslovu (»poslal bom«, »napisem«, »imate«, »kam«); »moj mail je …« (narek svojega) ni omemba. */
+const POSILJANJE = /\b(poslj\w*|posl\w*|napis\w*|pis\w*|odda\w*|imate|mate|kam|kateri|lahko)\b/;
+
+/**
+ * Ali je klicatelj sam omenil, da bi povprasevanje poslal po e-posti (»poslal bom po mailu«, »imate e-naslov«). Prepis skrije
+ * stik (naslov, »afna«), zato iscemo samo besede: beseda za e-posto in posiljanje ali vprasanje v istem izreku.
+ */
+export function omenilEposto(izreki: string[]): boolean {
+  return izreki.some((izrek) => {
+    const f = izrek.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    // Pregled 0.2.10 (najdba 11): prosnja, naj PODJETJE pise klicatelju (»pošljite mi«, »na moj mail«), ni klicateljeva omemba
+    // posiljanja - razen ce v istem izreku posilja tudi sam (»pošljem«, »poslal bom«).
+    if ((PODJETJE_PISE.test(f) || /\bna moj\w*\b/.test(f)) && !KLICATELJ_POSLJE.test(f)) return false;
+    return BESEDA_EPOSTE.test(f) && POSILJANJE.test(f);
+  });
+}
+
+/** Druga oseba mnozine (podjetje naj poslje ali pise): »pošljete«, »pošljite«, »napišite«, »odpišete«, »odgovorite«. */
+const PODJETJE_PISE = /\b(poslj(ete|ite)|(na|od)?pis(ete|ite)|odgovor(ite|ete))\b/;
+/** Prva oseba (klicatelj poslje sam): »pošljem«, »pošljemo«, »poslal bom«, »napišem«, »pišem«, »oddam«. */
+const KLICATELJ_POSLJE = /\b(poslj(em|emo)|poslal\w*|(na)?pis(em|emo)|odda(m|mo))\b/;
+
+/**
+ * Prosnja pred slovesom ali prazen niz, ce moznost ni vklopljena ali naslov ni veljaven (lastnik 23. 11. 2026: »mora obvezno
+ * prositi, ce lahko povprasevanje se oddajo na elektronsko posto«). Ce je klicatelj e-posto ze omenil, se stavek nanj sklicuje.
+ */
+export function stavekPotrditve(
+  pravila: { potrditevEposta?: boolean; potrditevNaslov?: string; nacinKlica?: string },
+  omenjeno = false,
+): string {
   // Samo nacin podjetje: osebna tajnica nikoli ne prosi za narocilo po e-posti (22. 11. 2026).
   if (!pravila.potrditevEposta || pravila.nacinKlica === "osebna") return "";
   const izgovor = izgovoriEnaslov(pravila.potrditevNaslov ?? "");
-  return izgovor ? `${t("potrditevProsim")} ${izgovor}.` : "";
+  return izgovor ? `${t(omenjeno ? "potrditevOmenjeno" : "potrditevProsim")} ${izgovor}.` : "";
+}
+
+/**
+ * Naslov je na domeni strani (pregled 0.2.10, najdba 9): gostitelj z ali brez »www.« na obeh straneh; poddomena ni ista. Isto preverbo
+ * uporabljata predlog s strani (predizbira) in vmesnik (opozorilo »ni na domeni strani«).
+ */
+export function naslovNaDomeni(naslov: string, gostitelj: string): boolean {
+  const brezWww = (s: string) => s.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  const domena = naslov.split("@")[1];
+  return Boolean(domena) && brezWww(domena) === brezWww(gostitelj);
 }
 
 /** Najvecja dolzina naslova, ki se po telefonu se razumljivo izgovori (info@primer.si ima 14; lastnik poslusal MP3 11. 11. 2026). */

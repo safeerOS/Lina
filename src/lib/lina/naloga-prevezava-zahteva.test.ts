@@ -43,11 +43,15 @@ afterEach(async () => {
   }
 });
 
+/** Torek 24. 11. 2026 ob 10.00 v Ljubljani: znotraj privzetega urnika prevezave (pon-pet 07.00-15.00). */
+const DELOVNI = new Date("2026-11-24T10:00:00+01:00");
+
 async function linija(pravila: Record<string, unknown> = {}): Promise<{ dir: string; token: string }> {
   const dir = await mkdtemp(path.join(KOREN, "d-"));
   temps.push(dir);
   const token = await setupOwner("geslo-test-1234", dir);
   await publishLine({ open: true, brezGlasu: true, catalog: formaCatalog() }, { token }, dir);
+  // Pregled 0.2.10 (najdba 12): privzeti urnik prevezave ostane VKLOPLJEN (kot pri uporabniku); ura klica je vbrizgana v delovni cas (DELOVNI).
   await savePravila({ prevzem: "vsi", preusmeritev: LASTNIK, ...pravila }, token, dir);
   return { dir, token };
 }
@@ -65,7 +69,7 @@ async function voice(dir: string, params: Record<string, string>, pot: string, m
       body: new URLSearchParams(params).toString(),
     }),
     dir,
-    undefined,
+    DELOVNI,
     moznosti,
   );
   return odgovor.text();

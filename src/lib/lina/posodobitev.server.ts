@@ -7,8 +7,8 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync } from "node:fs";
-import { chmod, mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
+import { constants, createReadStream, existsSync } from "node:fs";
+import { chmod, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { jeLinuxAmd64 } from "./platforma.server.ts";
@@ -352,10 +352,66 @@ async function pripraviGithub(o: Odv, root: string, k: Kandidat): Promise<{ pot:
   }
 }
 
+/**
+ * Deb iz mape gradnje (vidna mapa v Prejemih, 0755, morda na deljeni particiji) se kopira v <podatki>/posodobitev (0700) brez
+ * sledenja povezavi; vsota se preveri na KOPIJI in skripta dobi kopijo (pregled 0225 A-15: med preverbo in pkexec dpkg -i datoteke
+ * v vidni mapi ni vec mogoce zamenjati). Vrne pot kopije ali null.
+ */
+async function kopirajGradnjo(root: string, deb: string): Promise<string | null> {
+  const mapa = path.join(root, MAPA_PRENOSA);
+  await mkdir(mapa, { recursive: true, mode: 0o700 });
+  await chmod(mapa, 0o700);
+  const zacasna = path.join(mapa, `.gradnja-${process.pid}.deb`);
+  let vir;
+  try {
+    vir = await open(deb, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  } catch {
+    return null;
+  }
+  try {
+    if (!(await vir.stat()).isFile()) return null;
+    await rm(zacasna, { force: true });
+    const cilj = await open(zacasna, "wx", 0o600);
+    try {
+      const kos = Buffer.alloc(1 << 20);
+      for (let mesto = 0; ;) {
+        const { bytesRead } = await vir.read(kos, 0, kos.length, mesto);
+        if (bytesRead === 0) break;
+        await cilj.write(kos, 0, bytesRead);
+        mesto += bytesRead;
+      }
+    } finally {
+      await cilj.close();
+    }
+    const koncna = path.join(mapa, path.basename(deb));
+    await rename(zacasna, koncna);
+    return koncna;
+  } catch {
+    return null;
+  } finally {
+    await vir.close();
+    await rm(zacasna, { force: true }).catch(() => undefined);
+  }
+}
+
 /** Zagon posodobitve: kandidata izracuna streznik znova (brskalnik ne da nicesar); skripta tece locena od streznika. */
 export async function zacniPosodobitev(token: string | null, dir?: string, odvisnosti: Odvisnosti = {}): Promise<IzidZagona> {
+  return zacni(token, dir, odvisnosti, null);
+}
+
+/**
+ * Gradnja na GitHubu (24. 11. 2026, gradnje-github.server.ts): isti potek in ista varovala (ime paketa, samo novejsa, vsota,
+ * zaklep, skripta). Paket je TOCNO datoteka zadnje gradnje iz stanja streznika (brskalnik ne da poti) in njena vsota mora biti
+ * enaka sha256, zapisani ob prenosu: datoteka, zamenjana ali dodana v vidni mapi po gradnji, se ne namesti.
+ */
+export async function zacniPosodobitevIzGradnje(token: string | null, deb: { pot: string; sha256: string }, dir?: string, odvisnosti: Odvisnosti = {}): Promise<IzidZagona> {
+  return zacni(token, dir, odvisnosti, deb);
+}
+
+async function zacni(token: string | null, dir: string | undefined, odvisnosti: Odvisnosti, gradnja: { pot: string; sha256: string } | null): Promise<IzidZagona> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
+  if (gradnja !== null && (!varnaPot(gradnja.pot) || !/^[0-9a-f]{64}$/.test(gradnja.sha256))) return { ok: false, razlog: "pot" };
   // Zaklep sinhrono, pred prvim await po preverbi lastnika: dva hkratna klika ne zazeneta dveh namestitev.
   if (tece) return { ok: false, razlog: "ze_tece" };
   tece = true;
@@ -366,7 +422,7 @@ export async function zacniPosodobitev(token: string | null, dir?: string, odvis
     if (typeof p === "string") return { ok: false, razlog: p };
     let k: Kandidat | null;
     try {
-      k = await kandidat(o, root, true);
+      k = gradnja !== null ? await kandidatMapa(o, path.dirname(path.resolve(gradnja.pot))) : await kandidat(o, root, true);
     } catch {
       return { ok: false, razlog: "ni_vira" };
     }
@@ -380,8 +436,16 @@ export async function zacniPosodobitev(token: string | null, dir?: string, odvis
       ({ pot: deb, vsota } = pripravljeno);
     } else {
       deb = k.pot!;
+      if (gradnja !== null) {
+        // gradnja: najnovejsi paket v mapi mora biti prav datoteka gradnje; preveri in namesti se njena zasebna kopija (A-15)
+        if (deb !== path.resolve(gradnja.pot)) return { ok: false, razlog: "vsota" };
+        const kopija = await kopirajGradnjo(root, deb);
+        if (!kopija) return { ok: false, razlog: "prenos" };
+        deb = kopija;
+      }
       vsota = await o.vsotaDatoteke(deb).catch(() => "");
       if (!/^[0-9a-f]{64}$/.test(vsota)) return { ok: false, razlog: "prenos" };
+      if (gradnja !== null && !vsotaEnaka(vsota, gradnja.sha256)) return { ok: false, razlog: "vsota" };
     }
     if (!varnaPot(deb) || !varnaPot(root)) return { ok: false, razlog: "pot" };
     const podatki = await podatkiPaketa(o, deb);

@@ -32,7 +32,7 @@ import {
   zapriStik,
 } from "./stik.ts";
 import { zabeleziVbrizg, zaznajVbrizg } from "./vbrizg.ts";
-import { stavekPotrditve } from "./eposta.ts";
+import { omenilEposto, stavekPotrditve } from "./eposta.ts";
 import { NAJVEC_SPOROCILA, imaTajnico, jeNujno, ocistiSporocilo, razvrstiKlice, sporociloObProsnji, zajemiTajnico, zeliPravoOsebo } from "./tajnica.ts";
 import { rezervirajKvoto, sprozNujnoObvestilo } from "./nujni.server.ts";
 import { odgovorTemeLastnika } from "./teme.ts";
@@ -41,6 +41,7 @@ import { odgovorKatalog, razumiIzrek, type ModelRazumevanja } from "./razumevanj
 import { SKIL_RAZLICICA } from "./skil-lina.ts";
 import { NAJMANJ_VSEBINSKIH_BESED, VPRASALNICA_OSEBNA, VPRASANJE_O_ZAPISU, beriZnaneNapake, jeKonecOsebno, jePonovitev, prosnjaZaPonovitev, lociMetaVprasanje, lociVprasanjeOdsotnosti, jeMalopogovor, jeProsnjaZaCakanje, lociSlovo, jeSamoPozdravnoPolnilo, stevilkaBesedno, vrstaVgrajenega, vsebinskeBesede, type VrstaVgrajenega } from "./osebna-polnila.ts";
 import { odsotnostOdgovor, odsotnostStavek, vrstaVprasanjaOdsotnosti } from "./odsotnost.ts";
+import { aktivnoNavodiloPaketa, jeDostava } from "./paket.ts";
 import { razumiOsebniIzrek } from "./osebna-razumevanje.server.ts";
 import { imaSlovo, izberiVarianto, jeVabiloAliVprasanje } from "./osebna-slovo.ts";
 import { preveriOdgovorZnanja, skrajsajZnanje, stavkiBesedila, zadnjiStavek } from "./odgovor-znanje.ts";
@@ -458,7 +459,7 @@ function zLepimDnem(text: string): string {
  * (meritev vodje 10. 11. 2026: »miza iz hrasta, dva metra« je obtical pri izbiri modela in klic se ni koncal).
  */
 /** Opozorilo samo enkrat. Ce okno preskocimo, opozorilo pride pred slovo in brez modela. */
-function odzivCasa(call: CallSession, faza: ReturnType<typeof fazaTrajanja>): { reply: string; konec: boolean } | null {
+function odzivCasa(call: CallSession, faza: ReturnType<typeof fazaTrajanja>, pravila?: Pravila): { reply: string; konec: boolean } | null {
   if (faza === "brez") return null;
   if (!call.opozorjen) {
     call.opozorjen = true;
@@ -474,7 +475,8 @@ function odzivCasa(call: CallSession, faza: ReturnType<typeof fazaTrajanja>): { 
   }
   if (faza === "potek") {
     call.order.oznaka = t("casPotekel");
-    return { reply: t("casSlovo"), konec: true };
+    // Prosnja za e-posto velja v vsakem klicu s povprasevanjem, tudi ob izteku casa (lastnik 23. 11. 2026).
+    return { reply: zlepi([pravila ? potrditevEnkrat(call, pravila) : "", t("casSlovo")]), konec: true };
   }
   return null;
 }
@@ -548,7 +550,8 @@ function povratniKlicEnkrat(call: CallSession): string {
  */
 function potrditevEnkrat(call: CallSession, pravila: Pravila): string {
   if (call.order.potrditevEposta || !imaPovprasevanje(call)) return "";
-  const stavek = stavekPotrditve(pravila);
+  const omenjeno = omenilEposto(call.transcript.filter((v) => v.role === "stranka").map((v) => v.text));
+  const stavek = stavekPotrditve(pravila, omenjeno);
   if (stavek) call.order.potrditevEposta = true;
   return stavek;
 }
@@ -650,6 +653,11 @@ export type MoznostiObrata = {
    * stikalo izklopljeno. "cilj" = stevilka za preusmeritev je veljavna (ve jo samo webhook), "brez" = prevezave ni, Lina zadevo oznaci kot nujno.
    */
   prevezavaZahteva?: "cilj" | "brez";
+  /**
+   * Prevezava bi bila mogoca (cilj obstaja), a je zunaj delovnega casa prevezave (nacin podjetje, urnik.ts; ve webhook). Ob prosnji po osebi ali
+   * nujnosti Lina enkrat na klic pove, da je zunaj delovnega casa, in vprasa po sporocilu; brez Diala, brez kvote in brez dogodka.
+   */
+  prevezavaIzvenCasa?: boolean;
 };
 
 /** Oznaka Nujno na zapisu klica (tudi brez sporocila: prevezava na zahtevo); sporocilo in razlog ostaneta. */
@@ -662,10 +670,13 @@ function oznaciNujno(call: CallSession): void {
  * Nadaljevanje po neuspeli prevezavi (klic ostane pri Lini): uvod (stalni stavek), nato vprasanje po sporocilu, ce ga se ni; sicer naslednje
  * manjkajoce vprasanje ali zakljucek (podjetje) oziroma poslusanje (osebna). deli so stavki za govor (vsak svoj stalni posnetek).
  */
-function poNeuspeliPrevezavi(call: CallSession, pravila: Pravila, uvod: string): { deli: string[]; konec: boolean } {
+function poNeuspeliPrevezavi(call: CallSession, pravila: Pravila, uvod: string, oznaci = true): { deli: string[]; konec: boolean } {
   // Klicatelj nujnosti ni povedal (oznaka je samo posledica neuspele prevezave): oznaka ostane, SMS in kvota nujnih ne (vodja, pregled 029).
-  if (call.order.tajnica?.nujno !== true) call.nujnoBrezIzjave = true;
-  oznaciNujno(call);
+  // Zunaj delovnega casa (oznaci = false) poskusa ni bilo: oznako NUJNO ima samo nujnost, ki jo je povedal klicatelj (zajemiTajnico).
+  if (oznaci) {
+    if (call.order.tajnica?.nujno !== true) call.nujnoBrezIzjave = true;
+    oznaciNujno(call);
+  }
   call.caka = undefined;
   const deli = [uvod];
   if (!call.order.tajnica?.sporocilo) {
@@ -806,8 +817,20 @@ async function obratKlica(
    */
   const sproziPrevezavoNaZahtevo = async (izrek: string, nujnoNovo: boolean, obSprozitvi?: (zeli: boolean) => void): Promise<TurnResult | null> => {
     const zahteva = moznosti.prevezavaZahteva;
-    if (!zahteva || moznosti.vaja || call.nujnoPrevezano || !izrek.trim()) return null;
+    if (!(zahteva || moznosti.prevezavaIzvenCasa) || moznosti.vaja || call.nujnoPrevezano || !izrek.trim()) return null;
     const zeli = zeliPravoOsebo(izrek);
+    // Zunaj delovnega casa prevezave (lastnik 23. 11. 2026): enkrat na klic stavek »zunaj delovnega casa« in vprasanje po sporocilu; nujnost, ki jo je
+    // klicatelj povedal, ostane oznacena. Brez Diala, kvote in dogodka prevezave.
+    if (moznosti.prevezavaIzvenCasa) {
+      if (!(zeli || nujnoNovo)) return null;
+      call.nujnoPrevezano = true;
+      obSprozitvi?.(zeli);
+      // Povedana nujnost dobi potrditev zapisa (obstojeci stalni stavek), tudi ce se klic takoj zakljuci.
+      const uvod = nujnoNovo ? `${t("prevezavaIzvenCasa")} ${t("nujnoZapisano")}` : t("prevezavaIzvenCasa");
+      const { deli, konec } = poNeuspeliPrevezavi(call, pravila, uvod, false);
+      return odgovori(deli.join(" "), konec);
+    }
+    if (!zahteva) return null;
     const imaCilj = zahteva === "cilj" || Boolean(moznosti.nujniPrevezava);
     // Brez cilja in brez povedane nujnosti (pregled 029, najdba 4): ni stavka o povezavi, ni oznake NUJNO, obrat tece naprej kot prej.
     if (imaCilj ? !(zeli || nujnoNovo) : !(zeli && nujnoNovo)) return null;
@@ -966,6 +989,25 @@ async function obratKlica(
       };
       call.order.povprasevanje = call.order.tajnica.sporocilo.slice(0, 200);
       return odgovori(t("osebnaNevarnost"), false);
+    }
+    // Dostava paketa (lastnik 23. 11. 2026, paket.ts): klicatelj se predstavi kot dostava in lastnik je vpisal navodilo -> Lina pove, da lastnik
+    // trenutno ne more odgovoriti, in navodilo. Koda pred modelom, najvec enkrat na klic; navodilo nikoli v drugih klicih ali dejstvih modela.
+    // Izrek dostavljalca je sporocilo klica (zapis kot obicajno), brez oznake nujno.
+    const navodiloPaketa = call.paketPovedan ? "" : aktivnoNavodiloPaketa(pravila, casZdaj);
+    if (navodiloPaketa && jeDostava(text)) {
+      call.paketPovedan = true;
+      const prejT = call.order.tajnica;
+      const vsebina = ocistiSporocilo(text).slice(0, 300) || text.slice(0, 300);
+      call.order.tajnica = {
+        sporocilo: dopolni(prejT?.sporocilo ?? "", vsebina).slice(0, 600),
+        izrek: dopolni(prejT?.izrek ?? "", brezIzgovorjenegaStika(vsebina)).slice(0, 600),
+        razlog: prejT?.razlog ?? "",
+        nujno: prejT?.nujno === true,
+        nujnostZnana: prejT?.nujnostZnana === true,
+      };
+      call.order.povprasevanje = call.order.tajnica.sporocilo.slice(0, 200);
+      // Brez imena lastnika (pregled 0.2.10, najdba 2): »tukaj DPD« lahko rece kdorkoli.
+      return odgovori(`${t("paketNeMore")} ${t("paketUvod")} ${navodiloPaketa}`, false);
     }
     // Prevezava na zahtevo (osebna): »lahko govorim z njo«, »nujno je ...«. Nujen izrek je hkrati sporocilo (kot pri nevarnosti), da se ob
     // neuspeli prevezavi nic ne izgubi; prosnja po osebi sama ni sporocilo (Lina po neuspehu vprasa po njem), vsebina ob njej pa je (CodeRabbit 029).
@@ -1358,12 +1400,12 @@ async function obratKlica(
 
   if (!text) {
     const faza = fazaTrajanja(call.startedAt, now, pravila.najdaljsiPogovorMinut);
-    const cas = odzivCasa(call, faza);
+    const cas = odzivCasa(call, faza, pravila);
     if (cas) return odgovori(cas.reply, cas.konec);
     const tisine = call.tisine ?? 0;
     if (!fresh && tisine + 1 >= 2) {
       call.tisine = tisine + 1;
-      return odgovori(t("slovoTisina"), true);
+      return odgovori(zlepi([potrditevEnkrat(call, pravila), t("slovoTisina")]), true);
     }
     if (!fresh) call.tisine = tisine + 1;
     if (fresh) {
@@ -1482,7 +1524,7 @@ async function obratKlica(
   const faza = fazaTrajanja(call.startedAt, now, pravila.najdaljsiPogovorMinut);
 
   // Ura pred modelom. Preskok okna najprej opozori, slovo sele na naslednjem obratu.
-  const cas = odzivCasa(call, faza);
+  const cas = odzivCasa(call, faza, pravila);
   if (cas) return odgovori(cas.reply, cas.konec);
 
   // Nujni klic na osebni telefon (stikalo »Prevezi nujni klic name«): Lina klicatelju pove SAMO, da ga poskusa povezati
@@ -2347,12 +2389,13 @@ export async function casLive(callSid: string, faza: "opozorilo" | "potek", dir?
   return vVrsti(vrsteSida, `${root}\n${sid}`, async () => {
     const call = (await loadCalls(root))[sid];
     if (!call || call.status === "zakljucen") return null;
-    const odziv = odzivCasa(call, faza);
+    const pravila = await loadPravila(root);
+    const odziv = odzivCasa(call, faza, pravila);
     if (!odziv) return null;
     const now = new Date().toISOString();
     call.transcript.push({ role: "lina", text: povzetekBrezPodatkov(odziv.reply), at: now });
     call.updatedAt = now;
-    if (odziv.konec) zakljuci(call, now, (await loadPravila(root)).povprasevanje);
+    if (odziv.konec) zakljuci(call, now, pravila.povprasevanje);
     await zapisiKnjigo(root, sid, call);
     return { besedilo: odziv.reply, konec: odziv.konec };
   });

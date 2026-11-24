@@ -31,7 +31,7 @@ export async function linija(pravila: Record<string, unknown> = { prevzem: "vsi"
 }
 
 /** Podpisana zahteva Twilio (kot v obstojecih preizkusih): token samo v procesu preizkusa. */
-export async function voice(dir: string, params: Record<string, string>, pot: string): Promise<string> {
+export async function voice(dir: string, params: Record<string, string>, pot: string, now?: Date): Promise<string> {
   const skrivnost = "twilio-zeton-preizkusa";
   process.env.TWILIO_AUTH_TOKEN = skrivnost;
   const url = `https://lina.primer${pot}`;
@@ -44,6 +44,7 @@ export async function voice(dir: string, params: Record<string, string>, pot: st
       body: new URLSearchParams(params).toString(),
     }),
     dir,
+    now,
   );
   return odgovor.text();
 }

@@ -604,7 +604,7 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
 - `vir` mora biti identiteta, ki jo je transport OVERIL (naprava s seznama dovoljenih na relu), nikoli naslov odjemalca na relu in nikoli
   id iz telesa zahteve (napadalec bi izpraznil kvoto zrtve). Omejitve zahtev, zavrnitev in povezav (8 na vir, 32 skupaj, rok rokovanja)
   tecejo po `p:<vir>`, ne po naslovu 127.0.0.1.
-- Beli seznam (POTI_ODDALJENO, razclenjen z istim URL kot usmerjanje): POST naloga, odobritev, ustavi; GET dogodki, stanje. Seznanjanje
+- Beli seznam (POTI_ODDALJENO, razclenjen z istim URL kot usmerjanje): POST naloga, odobritev, ustavi, dodatek (23. 11. 2026); GET dogodki, stanje, dodatki. Seznanjanje
   (/seznani, /koda/*) nikoli prek oddaljene poti. Podpis naprave, okno casa in enkratni niz preveri streznik kot doma; preklic naprave velja
   ze pri naslednji zahtevi (seznam se bere ob vsaki zahtevi).
 - Po neodvisnem slepem pregledu (18. 11. 2026) dodano in z mutacijo dokazano: `SSL_OP_NO_RENEGOTIATION` v `createSecureContext` (brez njega
@@ -998,6 +998,29 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   id, vec kot 120 zahtev ali vec kot 20 zavrnjenih (401/403) na minuto z enega naslova - tak naslov dobi 429 se PRED vsakim
   branjem diska in preverbo podpisa), 503 claude-code-ni (seja ni odprta ali kanal ni dosegljiv). Koncane naloge se pozabijo po 1 h, vse po 24 h.
 - Preizkusi: asistent-streznik.test.ts (vektor iz Kotlina @a54d304: naloga, odobritev, ustavitev; pot do pravega kanala).
+- Dodatki na racunalniku (lastnik 23. 11. 2026: »ali lina preko telefona ze zna upravljati dodatke ... ce ne, ji prosim to omogoci«;
+  dodatki-telefon.server.ts). Samo naprave s seznama kanala, brez novih vrat; od zunaj prek prehoda dovoljeni (POTI_ODDALJENO).
+  Dodatki: zaprt seznam paperclip, n8n, affine, slovenski (DODATKI_TELEFONA; »programi« ne).
+  - GET /dodatki?posiljatelj=&cas=&enkratni=&podpis= -> 200 {"dodatki":[{"id","vklopljen","stanje","razlog"}]}; podpis nizStanjaDodatkov
+    (»safeer-lina-dodatki-stanje-v1\n posiljatelj\n cas\n enkratni«). vklopljen = shranjeno stikalo (pravila.json), stanje =
+    izklopljen|se_zaganja|deluje|napaka|ni_na_voljo (isto kot namizni Dodatki, stanjeSlovenskega), razlog = stalna koda (npr.
+    namestitev-ni-uspela) ali "". Branje NICESAR ne zazene in ne namesti (namizna poizvedba lastnika pa ponovi zagon RSDO).
+  - POST /dodatek {"posiljatelj","dodatek","vklop","cas","enkratni","podpis"} -> 200 (isto telo kot GET); podpis nizDodatka
+    (»safeer-lina-dodatek-v1\n posiljatelj\n dodatek\n vklopi|izklopi\n cas\n enkratni«), zato zamenjana smer ali dodatek = 403.
+    Na disku se spremeni SAMO to stikalo (nastaviDodatekIzTelefona, zaporedni zapisi), nato isti potek kot savePravila
+    (poSpremembiDodatkov: Docker ob spremembi paperclip/n8n/affine, RSDO ob spremembi slovenskega, namestitev slovenskega SAMO ob
+    izklop->vklop). Telefon pred vklopom slovenskega pokaze pojasnilo (~1,6 GB) in poslje sele po potrditvi.
+  - Brez zaledja (preizkus) obe poti 404; telefon 404 pokaze kot »Lina na racunalniku tega se ne zna«. Skupni vektor nizov TS <-> Kotlin:
+    dodatki-telefon.test.ts in DodatkiLineTest.kt (isti dobesedni nizi).
+  - Orodje »dodatki« v kanalu Claude Code (kanal-claude.server.ts): stanje odgovori takoj (Lina prebere); vklopi/izklopi kanal odpre
+    SVOJO zahtevo za odobritev (orodje mcp__lina__dodatki, predogled »vklopi n8n«, opis pise koda) na napravi, ki je dala nalogo, in
+    ne da dovoljenja seji Claude Code. Lina preklopi sele po podpisanem »Dovoli« te naprave za to zahtevo, ta dodatek in to smer
+    (asistent.server.ts: zahteva mora biti pokazana na napravi IN dovoljena prek odobri); Zavrni, rok, konec naloge ali umik = nic in
+    Claude Code dobi napako. Ce ima Claude Code orodje lina dovoljeno brez vprasanja, odobritev kanala vseeno velja.
+  - Drugi pregled 0.2.10: dovoljenje se veze na ZGOSTITEV prikaza, ki jo je naprava podpisala (kanal, ki med preverjanjem podpisa isti ID pokaze
+    z drugo vsebino, ne dobi dovoljenja za novo vsebino). Orodje dodatki ima mejo 10 klicev na minuto (stanje, vklopi, izklopi).
+    Zapisi pravila.json (namizje, dodatki in navodila s telefona, mapa zapiskov, javni naslov tunela) so v ISTI vrsti (vVrstiPravil). Namestitev slovenskega se ne zazene, ce ze tece, po neuspehu
+    najvec enkrat na minuto (ze namescen model CLI sam preskoci).
 
 ## Povezi telefon: zdruzen QR v1 (14. 11. 2026; asistent-telefon.server.ts, openline-povabilo.server.ts, qr.ts) - POGODBA
 - Lastnik (14. 11. 2026): en QR in ena potrditev na racunalniku nastavita obe poti - klice (streznik OpenLine) in asistentko. Locitev
@@ -1224,6 +1247,209 @@ uporabnik vklopil ter zapisoval pogovor, izklopil se bo samo ko ga bo uporabnik 
   »prava/ziva oseba« sprozi prevezavo samo s prosnjo (»dajte mi«, »rabim«, »govoril bi s«), ne vprasanje »Ste vi prava oseba?«.
   NI NAREJENO: pot Live (most.ts: prekinitev toka + Twilio REST preusmeritev klica) in pravi klic Twilio (preverjeno samo s preizkusi).
 
+- Prevezava le v delovnem casu (lastnik 23. 11. 2026, za poslovno in strezniko razlicico): »uporabnik lahko nastavi da je pod nujno in
+  ce klicatelj zeli govoriti z resnicno osebo to omogoceno le znotraj delovnega casa ko ga nastavi uporabnik privzeto od ponedeljka do
+  petka kadar ni praznika ali prostega dne od 7 zjutraj do 3 popoldan lahko pa to preusmeritev uporabnik tudi onemogoci ali doloci svoj
+  delovni cas«. -> nacin podjetje (namizje in streznik): prevezava (prosnja za osebo IN nujnost) samo v delovnem casu; privzeto pon-pet
+  07:00-15:00 (Europe/Ljubljana), brez slovenskih praznikov (zakonski dela prosti dnevi, tudi velikonocni ponedeljek) in brez prostih
+  dni, ki jih vpise uporabnik; uporabnik lahko urnik spremeni ali prevezavo izklopi. Izven delovnega casa Lina pove, da je izven
+  delovnega casa, in zapise sporocilo (nujno ostane oznaceno). Osebna tajnica: ta omejitev NE velja (ni zahtevano).
+  V KODI (23. 11. 2026; urnik.ts, vrata v voice.server.ts, preizkus naloga-urnik-dostava.test.ts): Pravila.prevezavaUrnikVklop (privzeto vklopljeno),
+  prevezavaUrnik (oblika kot delovni cas podjetja, »pon-pet 07.00-15.00«; prazno = privzeto; ura v Ljubljani prek Intl, ne ura procesa),
+  prevezavaProstiDnevi (LLLL-MM-DD z vejico). Prazniki: zakonski dela prosti dnevi z izracunom velike noci (velikonocni ponedeljek, binkosti);
+  23. 11. in drugi prazniki, ki niso dela prosti, NE. Nerazumljiv urnik (rocno popravljena datoteka) = nikoli delovni cas (klic ostane pri Lini).
+  Velja za OBE poti prevezave (prosnja po osebi in »Prevezi nujni klic name«) samo, ce bi cilj sicer obstajal; zunaj urnika: brez Diala, brez
+  kvote, brez dogodka prevezave; enkrat na klic »Zdaj je zunaj delovnega časa, zato vas ne morem povezati.« + vprasanje po sporocilu ali
+  naslednje vprasanje (kot po neuspeli prevezavi). PREDLOG IZVAJALCA (caka potrditev lastnika): NUJNO samo, ce je klicatelj nujnost povedal
+  (prosnja po osebi sama NI nujna, ker poskusa ni bilo).
+  Ob povedani nujnosti doda »Zapisala sem, da je zadeva nujna.«. Stavek NI stalni (preklop sloga glasu): enkrat na klic (/incoming ali
+  /turn) zunaj urnika se pripravi kot posnetek klica (strosek: dve sintezi na klic zunaj urnika, ce sta prevezava in stevilka nastavljeni). PREDLOG IZVAJALCA (caka potrditev
+  lastnika): SMS »Obvesti me o nujnem klicu« in zacetni prevzem (Dial pred Lino, nacin »izven«) urnik NE omejuje; dogodka »izven« v nujniDogodki ni.
+  PREGLED 0.2.10 (odlocitev vodje 23. 11. 2026): urnik ostane tudi za nujnost (zahteva lastnika). Namestitev iz izdaje pred urnikom (v pravila.json
+  ni kljuca prevezavaUrnikVklop) dobi Pravila.urnikObvestilo=true; vmesnik ENKRAT pokaze obvestilo (samo ce je »Prevezi nujni klic name« vklopljen,
+  nacin podjetje; nujni.server.ts pravilaZaVmesnik), »Zapri« zapise false. Stikalo urnika je tudi v razdelku Nujni klici (isto polje). Prosti dnevi:
+  vec kot 60 = zavrnitev ob shranjevanju (ne tiho zavrzeno). Urnik se ob shranjevanju preveri v normirani obliki z istim razclenjevalnikom kot v klicu
+  (urnik.ts razlogUrnika/normirajUrnik). Preizkusi prevezave tecejo z vklopljenim urnikom in vbrizgano uro v delovnem casu (ne z izklopom).
+- Osebna tajnica: dostava paketa (lastnik 23. 11. 2026): »ce uporabnik na primer pricakuje paket in da se klicatelj predstavi kot na
+  primer posta, dpd, gls naj ima uporabnik moznost da naroci Lini da odgovori da je trenutno nedosegljiv in kje naj dostavljalec pusti
+  paket«. -> v osebni tajnici navodilo za dostavo (vklop + besedilo kje pustiti paket, npr. »pri sosedu na st. 5«, neobvezno do
+  datuma); ko se klicatelj predstavi kot dostavna sluzba (Posta Slovenije, DPD, GLS, DHL, UPS, Express One, InPost ...), Lina pove,
+  da lastnik trenutno ni dosegljiv, in posreduje navodilo. Navodilo dobi SAMO klicatelj, ki se predstavi kot dostava (lastnik naj v
+  besedilo ne pise kode za dostop; namig v vmesniku). Klic se zapise. Lastnik naroci tudi z glasom/klepetom (»Lina, pricakujem paket,
+  naj ga pustijo pri sosedu«). Privzeto izklopljeno, dokler lastnik ne vpise navodila (brez besedila ni kaj povedati).
+  V KODI (23. 11. 2026; paket.ts, service.server.ts veja osebna, preizkus naloga-urnik-dostava.test.ts): Pravila.paketNavodilo (najvec 160 znakov,
+  ena vrstica; zavrnjeno: denarni signal, beseda koda/geslo/PIN/sifra, stiri ali vec zaporednih stevk) in paketDo (LLLL-MM-DD, velja vkljucno s
+  tem dnem v Ljubljani). Zaznava je seznam DOVOLJENEGA (predstavitev + sluzba ali vloga, »imam paket za vas«); izreki O paketu (»poslal sem vam
+  paket ponudb po pošti«, »kličem glede paketa«, »Ups, halo?«, »Jaz sem ga dobil od DPD«) niso dostava; »ups« in »pošta« na zacetku samo z
+  dostavnim nadaljevanjem; vloga samo kot samostalnik (»dostavljalec«, ne »dostavljal«). Odgovor iz kode pred modelom, najvec enkrat na klic:
+  »Oseba, ki jo kličete, trenutno ne more odgovoriti na klic. Navodilo za dostavo paketa: ...« - BREZ imena lastnika (pregled 0.2.10, odlocitev
+  vodje: »tukaj DPD« lahko rece kdorkoli); izrek dostavljalca je sporocilo klica (ne nujno). Namig v vmesniku pove, da navodilo slisi VSAK, ki se
+  predstavi kot dostava. Zavrnjeno (0.2.10) tudi: besede kljuc, odklenjen, odprt (cele besede; »vključno«, »zaključek« ne), stiri ali vec
+  zaporednih stevk tudi z besedami (»štiri osem dva ena«, »ena dva 3 4«); postna stevilka pred krajem (»1000 Ljubljana«) je dovoljena, a samo na koncu navodila ali pred locilom in nikoli, ce navodilo omenja vrata, vhod, tipkovnico, kombinacijo, domofon ali vpis (drugi pregled 0.2.10, N8). Prej shranjeno
+  navodilo, ki ga strozja preverba zavrne, se v klicu ne pove in ne podre shranjevanja drugih nastavitev (preveri se samo ob spremembi).
+  Navodilo ni v pozdravu, stalnih stavkih ali dejstvih modela. Nastavitev iz klepeta z Lino NI narejena: poti ni (avtonomija ima
+  »sprememba-pravil« med prepovedanimi, asistentka pravila samo bere) - samo vmesnik.
+
+- Povprasevanje tudi po e-posti (lastnik 23. 11. 2026, nacin podjetje, namizje in streznik): »mora obvezno prositi ce lahko
+  povprasevanje se oddajo na elektronsko posto ki jo vnese uporabnik v nasem primeru info@mvm.si«. -> nastavitev »E-posta za
+  povprasevanja« (uporabnik jo vnese; predlog iz kontakta na strani podjetja, velja sele po potrditvi). V VSAKEM klicu s
+  povprasevanjem Lina klicatelja vljudno prosi, ali lahko povprasevanje poslje se na ta naslov, in naslov razlocno izgovori
+  (»info afna mvm pika si«). Povprasevanje iz klica se zapise kot doslej. Brez vnesenega naslova Lina tega ne rece. Privzeto vklopljeno
+  (ideja lastnika), stikalo za izklop. SE NI V KODI.
+- Ucenje o podjetju s strani (lastnik 23. 11. 2026): »lina naj prebere stvari ki so kljucne od podjetja in ki klicatelja najbolj
+  zanimajo«. -> splet.ts bere kazalo strani (sitemap) in najprej izbere kljucne strani (o nas, storitve, izdelki, cenik, kontakt,
+  delovni cas, FAQ, lokacija/dostava), novice in reference zadnje; meja 20 strani ostane. Izmerjeno 23. 11. 2026 na mvm.si: lastno
+  branje 0,27 s in celo besedilo menija, TinyFish 1,36 s brez seznamov iz menija -> lastno branje ostane prvo, TinyFish samo za
+  strani brez besedila. SE NI V KODI.
+
+- Znanje iz datotek podjetja (lastnik 23. 11. 2026, strezniska razlicica in namizje): »Podjetje bi lahko v strezniski razlicici tudi samo
+  vneslo podatke o storitvah in izdelkih ki jih mogoce nima na spletni strani in se bo lina ucila iz te datoteke na primer pdf«.
+  Danes (znanje-besedilo.ts) vmesnik sprejme samo .txt/.md do 1 MB. -> dodati PDF, DOCX, ODT (in XLSX/CSV cenike): besedilo se izvlece
+  LOKALNO (knjiznica v Node, brez sistemskih orodij, deluje na Ubuntu Server in Windows), brez poslanih dokumentov v oblak. PDF brez
+  besedila (skeniran): Lina to pove; prepis prek modela samo z izrecno potrditvijo uporabnika (dokument gre k ponudniku modela).
+  Iz besedila Lina predlaga izdelke/storitve v katalog po istem vzorcu kot predlog s spletne strani (velja sele po potrditvi), ostalo gre
+  v znanje podjetja. Besedilo iz datoteke je PODATEK, nikoli navodilo (oznaciZnanje). Datoteka se hrani v podatkih Line (izbrisljiva),
+  pri vsakem viru znanja je vidno, iz katere datoteke je.
+  V KODI (dokument-izvlecek.server.ts, znanje-viri.server.ts, znanje-datoteke.tsx; preizkus znanje-datoteke.test.ts). PREGLED 0.2.10 (odlocitve vodje):
+  razclemba VSEH vrst (tudi PDF prek unpdf) tece v worker_threads delavcu z resourceLimits (512 MB kopice) in terminate() ob roku; rast RSS nad
+  kopico + 512 MB = »bomba«; meja znakov SPROTI, celica najvec 10 000 znakov, vrstica najvec 1000 celic (vec = »bomba«), rok po vsaki celici in
+  vrstici; locilo CSV se steje zunaj narekovajev. Skrito besedilo ni znanje: DOCX w:vanish/w:webHidden/w:specVanish in bela pisava, ODT skriti
+  odstavki/besedilo/sekcije, PDF pisava pod 1 pt (bele pisave in nacina izrisa Tr 3 pdf.js getTextContent ne vrne - NI pokrito). Streznik doda
+  blok vira v SHRANJENO znanje ob nalaganju (simetricno izbrisiVir; poln = zavrnitev »polno«), vmesnik ga s funkcijsko posodobitvijo doda se v
+  svoje stanje. Spremembe seznama virov, znanja in kataloga istega korena so zaporedne (socasna nalaganja, meja 50). Izbris: najprej znanje,
+  potem vnos in izvirnik; predlog izbrisanega vira se zavrze, novo nalaganje brez predloga zastarelega ne pusti; potrditev brez vrstic trenutnega
+  predloga je zavrnjena. NEPREVERJENO: delavec (eval koda iz Function.toString) v zgrajenem paketu .output.
+  DRUGI PREGLED 0.2.10 (odlocitve vodje 24. 11. 2026; nadomesti zgornje, kjer se razlikuje):
+  - Razclemba tece v LOCENEM PROCESU (isti izvrsljivi z ELECTRON_RUN_AS_NODE, brez okolja streznika, IPC), ne v worker_threads: --max-old-space-size
+    (512 MB) + straza RSS otroka (Linux /proc, kopica + 512 MB + osnova) + SIGKILL ob roku; preseganje = »bomba«, streznik zivi (zunanji
+    pomnilnik delavca bi lahko sesul ves streznik). Najvec ENA razclemba hkrati (vrsta). Otrok poslje najvec mejo znakov + 1. Na Windows je
+    meja samo kopica V8 in izolacija procesa (ni /proc). Atributi XML v obeh narekovajih, imenski prostori po URI (DOCX/ODT/XLSX z drugo predpono).
+    Meja znakov tabele steje izrisano besedilo.
+  - N9 (vodja): besedilo dokumenta gre v klice SELE po lastnikovem »Dodaj v znanje« (objaviVir); po nalaganju je vir »se ni v znanju«, lastnik
+    ga prebere s »Pregled«; izbris nepotrjenega vira se znanja ne dotakne. Predlog izdelkov se zapise v vrsti in samo za vir, ki se obstaja, in za zadnje nalaganje; potrditev predloga
+    (branje, preverba, poraba) je v isti vrsti.
+  - Glavna nit: znanje iz besedila po kosih (setImmediate ~10 ms), vbrizg samo v izseku za model (7000 znakov) in samo s kljucem; izmerjeno
+    pri 80 000 vrsticah 42-62 ms najdaljsega zastoja (prej 431 ms ponavljajoce, 6786 ms raznolike vrstice).
+  - NEPREVERJENO: otrok v zgrajenem paketu (.output, Electron z ELECTRON_RUN_AS_NODE) - pred izdajo nalozi PDF, DOCX, XLSX v zgrajeno Lino.
+
+- Izbira telefonske stevilke in ponudnika (lastnik 23. 11. 2026, strezniska razlicica): »Podjetje na strezniski razlicici naj ima na
+  voljo te moznosti da doloci Lini telefonsko stevilko na katero se oglasi« (moznosti s posnetka: Telekom Slovenije Govorni dostop,
+  A1 PBX, T-2 IP centrala, Telemach SIP trunk; tuji DIDWW, Telnyx, Zadarma, Twilio). -> v nastavitvah streznika izbira ponudnika:
+  (1) SIP trunk (vsi slovenski operaterji in DIDWW/Telnyx/Zadarma) - registracija z uporabnikom/geslom ali po IP, G.711 A-law, DTMF;
+  (2) Twilio (API, ze v kodi). Za vsakega ponudnika predloga (ime, znane nastavitve, kratka navodila »kaj vprasati operaterja«) - vrednosti
+  SAMO iz uradne dokumentacije ponudnika ali iz pogodbe podjetja, nikoli izmisljene; neznano = polje prazno z namigom. Podjetje vnese
+  stevilko(e), na katere se Lina oglasi; vec stevilk = vec linij. Gumb »Preizkusi povezavo« (REGISTER + preizkusni klic).
+  Stanje kode 23. 11.: src/lib/lina/sip/ ima odjemalca SIP (digest, G.711, RTP, DTMF, nastavitve sip.json sifrirano), a NI povezan
+  z zaslonom nastavitev in zagonom klica. Twilio: slovenske lokalne stevilke zahtevajo regulativni paket (dokazilo lokalnega naslova
+  v obmocju predpone, twilio.com/guidelines/si/regulatory) - pred obljubo preveriti zalogo v konzoli. SE NI V KODI (streznik).
+  Lastnik 23. 11. 2026 izrecno: »Tudi DIDWW (virtualne stevilke in SIP trunk), Telnyx (SIP, API, programabilna telefonija), Zadarma
+  (virtualne stevilke in SIP) naj bo na voljo« -> vsi trije so LOCENE predloge v izbiri ponudnika (pot SIP trunk); Telnyx dodatno
+  lahko prek svojega API (Call Control / TeXML, podobno Twiliu) - najprej SIP, API kot naslednji korak, ce SIP ne zadosca.
+
+- PREPROSTOST (lastnik 23. 11. 2026, strezniska razlicica): »Streznik bo moral biti zelo enostaven za uporabo kolikor je mogoce
+  plug&play in uporabnik hitro in enostavno doloci vse kar potrebuje in enostaven privlacen in razumljiv uporabniski vmesnik«.
+  -> Merilo: podjetje brez IT znanja pride od vklopa do prvega preizkusnega klica v ~15 minutah, brez terminala.
+  * Namestitev: ena slika/en ukaz za Ubuntu Server; po zagonu streznik sam pokaze naslov in QR (na zaslonu prenosnika in kot lina.local
+    prek mDNS), brez iskanja IP naslova.
+  * Carovnik ob prvem zagonu, en korak na zaslon, vsak s preverbo: (1) geslo, (2) podjetje - vnese spletno stran, Lina sama prebere
+    kljucne podatke in pokaze predlog v potrditev, (3) telefonija - izbira ponudnika s logotipi, samo polja, ki jih ta ponudnik zahteva,
+    gumb »Preizkusi povezavo«, (4) e-posta za povprasevanja, delovni cas (predizpolnjeno pon-pet 7-15), osebni telefon za prevezavo,
+    (5) slovenski model (vklop z razlago RAM), (6) preizkusni klic. Vsak korak preskocljiv in kasneje urejljiv.
+  * Vmesnik: pregledna nadzorna plosca (stanje linije, danasnji klici, sporocila, opozorila v navadnem jeziku z gumbom za resitev),
+    slovenscina in anglescina, deluje na telefonu in racunalniku; skil safeer-ui-brez-sluzi, preizkus s panelom uporabnikov
+    (safeer-uporabniski-panel) in na zaslonu pred izdajo.
+  * Napake se razlozijo kot dejanje (»Operater ni sprejel gesla - preverite geslo SIP«), nikoli tehnicna koda brez razlage.
+
+- Blokada klicev iz tujine (lastnik 23. 11. 2026, osebna IN poslovna raba, vse razlicice): »Za osebno uporabo in poslovno uporabo naj ima
+  uporabnik moznost blokirati stevilke iz tujine«. -> stikalo »Zavrni klice iz tujine«: klic s stevilko, ki ni +386 (po E.164), Lina
+  zavrne PRED sprejemom (Twilio <Reject>, SIP 603/486, Android CallScreeningService), brez pogovora in brez stroska modela; v dnevniku
+  klicev ostane zapis »zavrnjen: tujina« (stevilka, cas). Izjeme: seznam dovoljenih drzav (npr. +385, +43, +39) in posameznih stevilk;
+  stevilke iz imenika/zaupani klicatelji niso blokirani. Skrite/neznane stevilke: locena izbira (ne meša z tujino).
+  Privzeto: VKLOPLJENO (pravilo lastnika: njegove ideje privzeto vklopljene), z jasnim stikalom in seznamom izjem; v carovniku
+  podjetja vprasanje »Ali imate stranke v tujini?« -> ce da, predlaga izjeme. Opozorilo v namigu: prevaranti pogosto ponaredijo
+  slovensko stevilko, zato blokada tujine ne ustavi vseh prevar. SE NI V KODI (namizje, streznik, Android).
+  Primer iz prakse (lastnik 23. 11. 2026): avstrijska mobilna stevilka je klicala, 10 s molcala (prepis prazen), lastnik: »Ta stevilka
+  je bila danes prevarant«. -> tudi gumb »Blokiraj to stevilko« (in »Oznaci kot prevaro«) neposredno v podrobnostih klica na telefonu
+  in racunalniku, seznam blokiranih skupen prek povezave telefon-racunalnik; blokirane stevilke Lina zavrne pred sprejemom. Konkretnih
+  stevilk prevarantov NIKOLI v javni repozitorij (tudi ne v preizkuse) - samo v podatke uporabnika.
+
+- Ime lastnika v pozdravu SAMO znanim klicateljem (lastnik 23. 11. 2026, po klicu prevaranta iz tujine: »Ja lahko naredimo da lina pove
+  ime samo klicateljem ki jih pozna«). Osebna tajnica: »Poklicali ste <ime v tozilniku>« samo, ce je klicatelj znan - v imeniku telefona,
+  med zaupanimi/znanimi klicatelji Line ali je ze kdaj pustil sporocilo z imenom, ki ga lastnik ni oznacil kot prevaro. Neznan, skrit ali
+  blokiran/oznacen klicatelj dobi pozdrav brez imena (npr. »Dober dan. Tukaj Lina, umetna inteligenca. Pogovor se zapisuje. Kaj naj
+  sporocim?«). Velja na telefonu (samostojni klic) in racunalniku; stalni stavki za glas morajo imeti obe razlicici (priprava sloga).
+  Privzeto vklopljeno, stikalo »Ime povej samo znanim klicateljem«. SE NI V KODI.
+- Lina sama odpre Claude Code na racunalniku (lastnik 23. 11. 2026): »zelim da zna lina sama odpreti claude code na racunalniku« in
+  »lina bo dala claude code novo nalogo kjer vidimo moznost izboljsave«. -> namizna Lina zna zagnati Claude Code (ukaz `claude`) v
+  terminalu v izbrani projektni mapi z nalogo (besedilo naloge v datoteki, ne v ukazni vrstici), po potrditvi lastnika (odobritev
+  na telefonu/racunalniku), samo na lastnikovem racunalniku; izid (porocilo) Lina prebere in pokaze v zavihku Racunalnik.
+  Brez sudo, brez brisanja (pravila safeer-brez-brisanja veljajo tudi za naloge, ki jih da Lina).
+  V KODI (23. 11. 2026): claude-naloge.ts (cista logika), claude-naloge.server.ts, zavihek Racunalnik (components/lina2/racunalnik.tsx),
+  platforma.server.ts ukazTerminala. Predlog da lastnik v zavihku ali Lina z oznako [[claude-code: mapa | naloga]] v pogovoru (samo
+  predlog, pri priponkah se oznaka le odstrani); lastnik vidi mapo in celo besedilo, potrditev je vezana na SHA-256 (mapa+besedilo),
+  enkratna, predlog ugasne v 15 min, najvec 5 cakajocih in 2 hkratni (naloga brez porocila steje 2 h). Mapa: obstojeca podmapa doma
+  ali nastavljene mape (realpath, brez .., brez skritih delov, ne v podatkih Line); NALOGA.md v novi mapi .lina-naloge/<id>/ (nikoli
+  prepis), terminal z argv [predpona, claude, stalen poziv z id] brez lupine; porocilo .lina-naloge/<id>/POROCILO.md se bere brez
+  sledenja povezavam, najvec 64 KB, prikaz kot besedilo. Brez gesla Line priprava in zagon zavrnjena. Windows: »ni na voljo«.
+  SE NI: potrditev na telefonu (samo v programu na racunalniku), preizkus s pravim terminalom in Claude Code (samo nadomestek),
+  Windows. Preizkusi: claude-naloge.test.ts.
+  DRUGI PREGLED 0.2.10 (24. 11. 2026): pred zagonom terminala se zapise rezervacija »zaganja« (ce zapis po zagonu ne uspe, ni drugega zagona in
+  mesto je zasedeno); terminal, ki se v 1,5 s konca z napako (brez zaslona), je »napaka«, ne »tece«; zivi PID terminala zaseda mesto tudi s
+  porocilom; dejavne naloge niso del omejitve 50 zapisov. Porocilo: O_NONBLOCK (cev ne zablokira), samo navadna datoteka z eno povezavo in
+  istim lastnikom, mapa naloge ista kot ob zagonu (dev:ino). Dovoljene mape: preverba na KANONICNI poti (alias se shrani kot prava pot), ne koren,
+  ne dom ali nad njim, ne sistemske (/etc, /usr/local, /opt ...). Agent dobi samo DOVOLJENE spremenljivke okolja (PATH, HOME, jezik, zaslon,
+  XDG_*), brez ANTHROPIC_*, OPENAI_*, GITHUB_TOKEN, SSH_AUTH_SOCK. x-terminal-emulator samo, ce kaze na xterm/konsole/xfce4-terminal.
+  Lina (izvor »lina«): samo z geslom lastnika, besedilo najvec 1500 znakov, najvec 2 cakajoca (lastnik ima svojih 5); zavihek pokaze celo
+  besedilo brez drsnika in opozorilo, da lahko vsebuje podatke iz datotek/spleta/klicev. Odgovori na priponke so v zgodovini oznaceni kot
+  podatek in ne gredo v trajni povzetek; oznaka [[claude-code: iz zgodovine, povzetka in spomina se pred vhodom nevtralizira.
+  Ocena izida (cilj-naloge): izid gre k ponudniku modela za pogovor SAMO s stikalom »Lina oceni izid Claude Code« (Poveži telefon; privzeto
+  vklopljeno po odlocitvi vodje - Lina vodi agente), gesla, kljuci in zetoni se prej zakrijejo, pri absolutnih poteh tudi mape (ostane ime datoteke kot dokaz).
+- Domov: klici, ki jih je sprejela Lina, vidni BREZ drsenja (lastnik 23. 11. 2026: »domaco stran Line moramo izboljsati, da bodo klici,
+  ki jih je prevzela Lina, dosegljivi brez scrolling dol«) - na telefonu in racunalniku: kartica zadnjih sprejetih klicev (3-5, z imenom
+  iz imenika) v vidnem delu zaslona Domov, s povezavo na vse klice.
+  V KODI (23. 11. 2026, racunalnik): kartica »Zadnji klici« (najvec 4) je prva v desnem stolpcu scene Domov, ni v izbiri oken (stara
+  shranjena izbira je ne skrije), povezava »Vsi klici« odpre Klici; domov-izbira.ts zadnjiKliciDomov, preizkus naloga-domov-zadnji-klici.test.ts.
+  SE NI: kartica na telefonu (aplikacija Android).
+
+- Lina na telefonu pozablja pogovor in ne bere svojih zapiskov (lastnik 23. 11. 2026: »lina na telefonu je pozabljala najin pogovor in
+  ceprav je dala v zapisnik dolocene naloge, sem ji moral jaz povedati in kopirati iz zapisnika, kaj mora sporociti Claude Code«).
+  Vzrok v kodi (preverjeno): zgodovina seje (Asistent.zgodovina, najvec 40 sporocil) je SAMO v pomnilniku - izgubi se ob ponovnem zagonu
+  aplikacije (tudi ob namestitvi nove razlicice), ob novem dnevu (trenutniAsistent ustvari novega) in ob menjavi ponudnika; trajni spomin
+  prikliče najvec 6 sorodnih obratov po 300 znakov; zapiski ([[zapisek:...]]) se Lini NIKOLI ne dajo nazaj v kontekst.
+  -> (1) zgodovina seje trajno v zasebni mapi aplikacije (zadnjih ~40 obratov), obnova ob zagonu in ob novem dnevu (starejse kot povzetek);
+  (2) odprti zapiski/naloge kot PODATEK v kontekstu (ali orodje »beri_zapiske«), zlasti ob pripravi naloge za racunalnik/Claude Code:
+  Lina sama vzame ustrezne zapiske in jih priloze nalogi; (3) vecji priklic za ta namen. Skrivnosti se se vedno ne shranijo. V KODI na
+  telefonu 24. 11. 2026 (ZgodovinaSeje: 80 sporocil v zgodovina_seje.json, povzetek starejsih dni; zapiski brez skrivnosti v navodilu;
+  priklic 15x800 znakov za nalogo in odgovor Claude Code) - modul app NI preveden, na napravi NEPREVERJENO.
+- Naloge Line za Claude Code morajo biti SAMOSTOJNE (23. 11. 2026, dokaz iz seje): Lina je poslala »uporabi LearnHarness ... po mojem
+  tehnicnem nacrtu«, nacrta in povezave (github.com/amosblomqvist/learnharness, ki je bila v njenem pogovoru z lastnikom) pa ni prilozila;
+  Claude Code je zato vprasal in cakal, lastnik je moral sam ukazati. -> Lina ob vsaki nalogi priloze: celoten nacrt ali korak nacrta
+  (besedilo), vse povezave, ki jih omenja, ciljno mapo/projekt, merilo konca in omejitve (pravila AGENTS.md, brez brisanja/push/sudo).
+  Nalogo pred posiljanjem preveri: ali se sklicuje na nekaj, cesar v sporocilu ni (»moj nacrt«, »kot dogovorjeno«) -> priloze ali vprasa lastnika.
+  V KODI na telefonu 24. 11. 2026 (SamostojnaNaloga.pripravi: nacrt, povezave tudi brez https, zapiski, omejitve; sklic brez vira = vprasanje lastniku).
+- Stanje naloge v Lini (23. 11. 2026, lastnik: »Claude Code izvaja nalogo, v aplikaciji Lina pa mi kaze, da je koncana in da caka
+  moja navodila«): Lina zdaj vzame PRVI odgovor Claude Code (reply) kot konec naloge. -> odgovor nosi vrsto (vprasanje / vmesno /
+  koncano) v protokolu kanala (orodje reply dobi polje »vrsta«, navodilo kanala Claude Code pove, kdaj kaj uporabiti); naloga ostane »v
+  teku«, dokler ne pride »koncano«, rok naloge ali ustavitev. Ce lastnik Claude Code ukaze neposredno v terminalu, kanal ob naslednjem
+  reply v isti seji nalogo vrne v »v teku«. Zavihek Racunalnik kaze zadnje vmesno sporocilo in cas. V KODI 24. 11. 2026 (reply vrsta,
+  brez polja = vmesno; ustavljena naloga se ne odpre znova; telefon: vsako sporocilo z uro). Program kanala spremenjen: lastnik po
+  posodobitvi potrdi nov odtis (potrdiOdtisKanala).
+  Pregled 0225 A (24. 11. 2026, V KODI): ponovno odprtje z reply NE ponastavi roka naloge (rok tece od prvotnega zacetka, v kanalu in
+  v Lini); nov rok zacne samo podpisano nadaljevanje naprave. Naloga, ki jo lastnik v terminalu odpre po izteku roka, se ob naslednji
+  preverbi ustavi. Lastnik lahko ustavi tudi nalogo, ki jo je Claude Code ze koncal (potem je reply vmesno ne odpre vec). Zavrnitev
+  enega nadaljevanja ne konca naloge, ki ze tece po drugem. Ocena izida (stikalo v Povezi telefon): neberljiva ali pokvarjena
+  nastavitev = izid NE gre k ponudniku modela (fail-closed). Telefon ne dobi notranjega besedila napake izvajalca (samo dnevnik).
+- Lina sama odgovori Claude Code (lastnik 23. 11. 2026): »ko claude code nekaj vprasa lino, more lina zaznati, da jo vprasa, in mu sama
+  dati nadaljnja navodila, ne da jo moram jaz spomniti kot sedaj«. -> odgovor Claude Code (orodje reply prek kanala) Lina razvrsti:
+  (a) VPRASANJE ali »cakam na navodila« -> Lina sama odgovori z nadaljnjim navodilom iz svojega nacrta, pravil projekta (AGENTS.md) in
+  lastnikovih odlocitev; podpise in poslje TELEFON (zasebni kljuc naprave je samo tam; racunalnik po pravilu kanala ne sme podpisovati);
+  (b) PROSNJA ZA ODOBRITEV dejanja (claude/channel/permission) -> po odlocitvi 14. 11. ostane gumb lastnika na napravi, Lina takoj poslje
+  obvestilo; (c) KONEC/IZID -> Lina pregleda in po potrebi da naslednji korak nacrta. Meje: najvec N samodejnih odgovorov na nalogo
+  (npr. 10) brez lastnika, nikoli odobritev v lastnikovem imenu, nikoli brisanje/push/sudo v navodilu, vsak samodejni odgovor viden v
+  zavihku Racunalnik (lastnik ga lahko ustavi). Ce Lina ne ve, vprasa lastnika. V KODI 24. 11. 2026: POST /nadaljuj (podpis naprave
+  nizNadaljevanja, samo naprava naloge, nikoli ustavljena naloga, besedilna odobritev zavrnjena) -> kanal v isti chat_id
+  (nadaljevanje="da"); telefon SamodejniOdgovor (meja 10, samo zadnje vprasanje, varovala v kodi, pregled izida, gumb Ustavi).
+  OMEJITEV: samo dokler je aplikacija odprta; modul app NI preveden, na napravi NEPREVERJENO.
 ## Sedanja aplikacija Lina: slovenski model RSDO (lastnik 23. 11. 2026)
 Tudi v sedanji aplikaciji (ne samo na strezniku) se RSDO nalozi v pomnilnik ob vklopu stikala »slovenski« in ostane nalozen, dokler
 ga uporabnik na stikalu ne izklopi (izbira lastnika: »Kot na strezniku«). Brez sproscanja ob nedejavnosti.
@@ -1248,3 +1474,190 @@ blokira novega zagona), po koncani namestitvi se model nalozi takoj, poizvedba D
 proces samo za prijavljenega lastnika. Poti pythona in modela iz `cli-anything-linuxmint --json
 model slovenski-stanje`. Skripta v paketu: /opt/Lina/resources/lina/rsdo-streznik.py (extraResources). Preizkusi: rsdo-streznik.test.ts.
 Izmerjeno (pomocnik, pravi model prek procesa): nalaganje 6,3 s, kratek posnetek ~0,2 s, RSS 1,62 GB. NEPREVERJENO: Windows.
+
+## Funkcije privzeto za oba nacina; kontekst, cas, ocena cilja (lastnik 23. 11. 2026)
+- Lastnik: »kaj recem da je za podjetja naj bo samo za podjetja ostalo je splosno za oboje tudi za osebno uporabo pri asistentki«.
+  Nova funkcija velja za nacin podjetja, osebni nacin in asistentko, razen ce jo lastnik izrecno oznaci »za podjetja«.
+- Izrazi iz kataloga (imena izdelkov in materialov) gredo v Twilio hints v OBEH nacinih, za lastnikovimi namigi, brez podvojenih,
+  samo ob izbranem modelu prepoznave (govor-model.ts izraziKataloga, voice.server.ts). To nadomesti »hints ne dodajamo« iz G4g za ta
+  primer; ucinek za sl-SI je NEPREVERJEN. Meritev brez njih: `izrazeKatalogaIzklop: true` v pravila.json (samo datoteka).
+  Preizkus: naloga-govor-prepoznava.test.ts, naloga-izrazi-prepoznava.test.ts.
+- Pogovor z Lino (asistent-pogovor.server.ts): vsak obrat dobi ljubljanski cas iz sistema (spremenljivi del, ne system); zgodovina
+  se polni od najnovejsega v mejo 4000 znakov (prej je pri dolgi zgodovini izpadlo novo sporocilo); izpadla sporocila v ozadju po
+  odgovoru povzame model (asistent-povzetek.json, najvec 800 znakov, podatek; izbris spomina pogovorov izbrise tudi povzetek).
+  Preizkus: naloga-kontekst-cas.test.ts. Cena in kakovost povzetka NISTA izmerjeni.
+- Ocena cilja naloge agenta (cilj-naloge.ts, cilj-naloge.server.ts; zamisel DeerFlow MIT in LearnHarness AGPL, koda NI prevzeta):
+  ob uspelem izidu Claude Code model za pogovor oceni izid; na telefon gre stalno besedilo ocene pred izidom (rok 8 s, ob napaki izid
+  brez ocene). Nadaljevanje Lina NE sprozi: nova naloga potrebuje podpis naprave. Izid agenta gre k ponudniku modela za pogovor.
+- LearnHarness (github.com/amosblomqvist/learnharness) je AGPL-3.0: kode ne kopiramo in ga ne dodamo kot odvisnost (Lina je placljiva).
+
+## Lina gradi APK in deb na GitHubu (lastnik 24. 11. 2026)
+Lastnik: »Naj lina zna tudi graditi apk na githube«. Privzeto VKLOPLJENO (njegova ideja), s stikalom za izklop v Nastavitvah.
+- Samo dovoljeni tokovi: repozitorij safeerOS/Lina, `gradnja.yml` (APK za telefon) in `racunalnik.yml` (deb za racunalnik). Veja samo
+  iz seznama obstojecih vej na GitHubu (gh api); nikoli poljuben repozitorij, tok, vhod ali ukaz iz besedila modela, klicatelja, spleta.
+- Prek ze prijavljenega `gh` (argv, brez lupine, cwd = podatkovna mapa). Zetona Lina nikoli ne bere, ne izpise, ne poslje modelu.
+- Lina zagon PREDLAGA (oznaka v pogovoru na racunalniku ali s telefona); vsak zagon lastnik potrdi (podpisan gumb, enako kot dejanja
+  Claude Code). Tajnica (klici) te kode ne uvaza.
+- Spremljanje: `gh run view <id> --json status,conclusion` na 30-60 s, stanje v zavihku Racunalnik in na telefonu; ob koncu prebere tudi
+  opozorila (anotacije) - zelen tek ni dovolj (skil safeer-ci-opozorila). Izid in uro konca sporoci lastniku.
+- Lastnik (24. 11. 2026): »In mi povedati kam ga shrani ter namestiti na moje naprave prav tako programe«.
+- Artefakt shrani v VIDNO mapo `<mapa Prejemi (xdg-user-dir DOWNLOAD)>/Lina gradnje/<datum ura>-<tok>-<veja>/` (vedno nova mapa,
+  nikoli prepis) in lastniku pove POLNO pot (v pogovoru, v zavihku Racunalnik, na telefonu) ter sha256. Za APK preveri podpis
+  (apksigner; SHA-256 certifikata se mora ujemati z namescenim, 166efb0a...); neujemanje = opozorilo in brez namestitve.
+- Namestitev na lastnikove naprave (po gradnji Lina ponudi gumb »Namesti«, lastnik potrdi):
+  - racunalnik (deb): obstojeca vgrajena posodobitev (posodobitev.server.ts, posodobi.sh, pkexec - geslo vpise lastnik), samo novejsa
+    razlicica, preverjena vsota;
+  - telefon (APK): telefonska Lina prenese APK z racunalnika po obstojeci podpisani LAN poti, preveri, da je podpis enak njenemu, in
+    namesti prek Android PackageInstaller (sistemsko okno »Posodobi« potrdi lastnik); brez adb, brez roota.
+  - drugi programi: enako, samo za tokove s seznama dovoljenih (privzeto Lina APK in deb; lastnik lahko v Nastavitvah doda Safeer
+    repozitorij/tok), vsak s svojim imenom paketa in pricakovanim podpisom.
+- Lina NIKOLI ne potisne kode na GitHub (potisk dela samo vodja po pregledu skrivnosti); gradi samo veje, ki so ze na GitHubu.
+- Najvec en hkraten tek na tok; GitHub Actions samo za razvoj in preizkuse, nikoli za tek Line.
+- V KODI (24. 11. 2026): gradnje-github.ts (cista logika: zaprt seznam tokov, oblika in seznam vej, ime mape po lokalnem casu, oznaka
+  [[gradnja: tok | veja]], apksigner, anotacije, sporocilo izida), gradnje-github.server.ts (gh prek execFile z absolutno potjo, argv,
+  cwd = podatki, okolje brez TWILIO_/LINA_/NITRO_; predlog -> potrditev z zgostitvijo repozitorij+tok+veja -> workflow run -> tek =
+  prvi id, visji od zadnjega pred zagonom -> run view na 45 s -> anotacije opravil (jobs) -> run download v novo mapo -> pregled brez
+  povezav in poti zunaj -> sha256 -> apksigner (odtis 166efb0a...47bd, en podpisnik) -> Lina pove izid v pogovoru), stikalo
+  gradnje-github-nastavitve.json (privzeto vklopljeno), deb prek posodobitev.server.ts zacniPosodobitevIzGradnje (ista varovala, samo
+  novejsa, tocno datoteka in sha256 gradnje), telefon: GET /gradnje, POST /gradnja/predlog, POST /gradnja/potrdi, GET /gradnja/apk (samo domace omrezje; pogodba v
+  POROCILO naloge agent-lina-gradnja-gh), kartica »Gradnje na GitHubu« v zavihku Racunalnik, stikalo v Nastavitvah.
+  Preizkusi: gradnje-github.test.ts, gradnje-github.server.test.ts, gradnje-telefon.test.ts, posodobitev.server.test.ts.
+- Pregled 0225 A (odlocitve vodje 24. 11. 2026), V KODI:
+  - Potrditev gradnje veze tudi SHA commita vrha veje (prebran ob predlogu, prikazan v zavihku Racunalnik in v stanju za telefon;
+    zgostitev repozitorij+tok+veja+commit). Ob potrditvi se vrh veje prebere znova (premaknjena veja = razlog »commit«); tek se vzame
+    samo, ce je novejsi od zadnjega pred zagonom, ustvarjen najvec 2 min pred potrditvijo in PRAV potrjenega commita (headSha).
+  - Deb iz gradnje se namesti SAMO iz veje, ki jo je lastnik oznacil za namestitev (privzeto privzeta veja repozitorija; gumb
+    »Dovoli namestitev iz te veje«; seznam v gradnje-github-nastavitve.json, pokvarjena datoteka = noben). Pred namestitvijo (pkexec)
+    vmesnik pokaze vejo, commit in sha256, lastnik potrdi se enkrat, streznik primerja vrnjena sha256 in commit. Deb se pred preverbo
+    vsote kopira v <podatki>/posodobitev (0700) brez sledenja povezavi; skripta dobi kopijo.
+  - Meja prenosa in razpakiranja 600 MB skupaj (velikost artefaktov pred prenosom in nadzor skrite mape med razpakiranjem - gh se
+    prekine); prenos gre v skrito zacasno mapo, v vidno sele po pregledu; neuspel prenos se pobrise in ne pusti poti. Imena datotek
+    v artefaktu samo iz varnih znakov ([A-Za-z0-9._+-]). Prenos tece zunaj vrste stanja (pogovor in telefon med njim ne cakata).
+  - Stikalo »gradnje izklopljene« velja za VSE: predlog, zagon, spremljanje teka (aktiven tek dobi razlog »izklopljeno«), prenos,
+    namestitev deb, odpiranje mape in APK telefonu.
+  - Kotlin (telefon): prikaz commita pred potrditvijo na telefonu se NI (polje commit je v stanju /gradnje).
+  SE NI: telefonski del (zaslon Gradnje, PackageInstaller), oznaka v pogovoru na telefonu (telefon ima pot /gradnja/predlog), zivi
+  preizkus s pravim gh (ali imata oba tokova workflow_dispatch, prava imena artefaktov, anotacije po id opravila), dodatni tokovi v
+  Nastavitvah (»drugi programi«), Windows.
+- Lastnik (24. 11. 2026): »Uporabnik more v nastavitvah line se sam enostavno prijaviti na githube ali ji dolociti dostop do ključa kot
+  imamo mi ter ji določiti represetori v katerem bo delala (za mene v nasem primeru lahko nastaviš ti) ampak govorim na splošno«.
+  Zato je funkcija SPLOSNA (za vsakega uporabnika), ne vezana na safeerOS/Lina:
+  - Nastavitve > GitHub, tri poti, najenostavnejsa prva: (1) »Prijava z GitHubom« (OAuth device flow: Lina pokaze kodo in odpre
+    github.com/login/device, uporabnik potrdi; client id Safeer OAuth App je javen, skrivnosti ni); (2) »Uporabi obstojeco prijavo na
+    tem racunalniku« (zazna prijavljen `gh`); (3) »Vnesi kljuc« (fine-grained token, navodilo katere pravice: Actions read/write,
+    Contents read, samo izbrani repozitoriji). Kljuc se shrani kot drugi kljuci Line (keys.server.ts, sifrirano, 0600), nikoli modelu,
+    v dnevnik, na telefon ali v izvoz. Gumb »Odjava/Pozabi kljuc«.
+  - Izbira repozitorijev: Lina pokaze uporabnikove repozitorije, uporabnik izbere, v katerih dela; za vsakega Lina prebere tokove z
+    `workflow_dispatch` in uporabnik obkljuka dovoljene ter vrsto izdelka (APK, deb, drugo). Brez izbire Lina ne gradi nicesar.
+  - Za lastnika vodja prednastavi: obstojeca prijava gh, repozitorij safeerOS/Lina, tokova gradnja.yml (APK) in racunalnik.yml (deb).
+  - Vmesnik preprost (plug&play), sl in en; stanje »Povezano kot <racun>« brez izpisa kljuca.
+
+## Lina vodi vse agente na racunalniku in izvede vnaprej dodeljene naloge (lastnik 24. 11. 2026)
+Lastnik: »lina bo torej ... znala dati ukaz tudi ostalim agentom na računalniku in jih odpreti, tudi tebe? Ter dati nalogo katero ji
+prej jaz dodelim?«. Nadgradnja razdelka »Lina sama odpre Claude Code na racunalniku« (isti mehanizem, ista varovala):
+- Agenti s seznama dovoljenih, ki jih Lina zazna na racunalniku (absolutna pot): Claude Code (`claude`), Antigravity (`agy`),
+  opencode (Gemini), Kimi (`kimi`), Pi (`pi`). Freebuff NI na seznamu (24. 11. 2026: namizni program Electron v /opt/Freebuff
+  brez ukazne vrstice; `freebuff --help` je obvisel in ga timeout ni ustavil - Lina mu naloge ne more dati). Za vsakega znan nacin zagona z nalogo (argv, brez lupine,
+  preverjeno z --help), brez --dangerously-*/yolo nacinov; okolje brez TWILIO_/LINA_/NITRO_.
+- Pravilo lastnika o kodi: Gemini (opencode) in Freebuff NIKOLI ne dobita map s kodo Scita, YouTube ali Google prijave/obvoda;
+  Lina to preveri po mapi (seznam prepovedanih map za te agente v nastavitvah) in zavrne z razlogom.
+- Uporabnik v Nastavitvah vidi zaznane agente, vklopi dovoljene, za vsakega dovoljene mape. Privzeto vklopljeno (lastnikova ideja).
+- Vnaprej dodeljena naloga: lastnik (na racunalniku ali s telefona, podpisano) dodeli nalogo z besedilom, mapo, agentom in pogojem
+  zagona (»zdaj«, »ob uri HH:MM«, »ko <agent/naloga> konca«). Lastnikova dodelitev JE potrditev za tisti en zagon (zgostitev besedila,
+  mape in agenta se ob zagonu preveri - sprememba = nova potrditev). Lina jo ob pogoju sama odpre, spremlja (stanje, ocena konca),
+  ob vprasanju agenta odgovori po razdelku »Lina sama odgovori«, in porocilo pokaze lastniku. Vrsta je vidna in preklicljiva.
+- »Tudi tebe«: Lina odpre Claude Code na racunalniku (isti model kot vodja); pogovora vodje v oblaku (claude.ai) ne more odpreti.
+- Vodja 24. 11. 03:15: Freebuff ODSTRANJEN (namizni program Electron brez ukazne vrstice; --help obvisi v oknu). »Ne ponujamo, kar ne deluje«:
+  agent se pokaze v izbiri samo po uspesni preverbi zagona brez okna (--version brez DISPLAY, rok, ubita cela skupina procesov).
+  Lastnik 03:25: dodan Grok Build (`grok`, interaktivno `grok "<poziv>"`); neprijavljen (izpis »Not signed in« pri kodi 0) ni v izbiri.
+  V KODI (24. 11. 2026): claude-naloge.ts/.server.ts (AGENTI claude, agy, opencode, kimi, pi, grok; argv po --help; kimi brez zacetnega
+  poziva = ni za dodeljene naloge; prepovedane mape za opencode IN agy (Antigravity je Googlov), privzeto prazne, realpath + predpona v obe
+  smeri, neobstojeca ostane dobesedno; vrsta »dodeljeno«/»zamujeno«/»preklicano«, razporejevalnik vsakih 30 s iz zagon.server.ts, pogoj
+  zdaj | ura (najvec 7 dni) | ko konca <id>; zamujeno = ura pred zagonom Line ali vec kot 5 min (spanje) -> potrdi znova; meja hkratnih
+  skupna s potrditvijo), telefon: GET /agent-naloge, POST /agent-naloga/dodeli (podpis veze zgostitevDodelitve), /agent-naloga/preklici;
+  zavihek Racunalnik: kartica »Agenti na racunalniku« (stikala, prepovedane mape, Dodeli nalogo); oznaka [[agent-naloga: agent | mapa |
+  zdaj/HH:MM/po <id> | naloga]] (samo predlog). Kanal in samodejni odgovor samo Claude Code. Preizkusi: agenti-naloge.test.ts,
+  agenti-telefon.test.ts, agenti-ui.spec.ts. SE NI: prikaz in dodelitev v aplikaciji Android (strezniske poti so), dovoljene mape
+  posebej po agentu (velja skupni seznam dovoljenih map), preizkus s pravim terminalom in pravimi agenti, Windows.
+
+## Lina kot vodja: ocena trajanja, lasten opomnik, pregled in zdruzitev dela vec agentov (lastnik 24. 11. 2026)
+Lastnik: »Ali si bo Lina že znala nastaviti opomnik ter ocenila približno kako dolgo bo delo trajalo ter prebrsti in dopolnito kodo,
+jo združiti če bo na primer na enem projektu delalo več agentov«. Enako, kot dela vodja (Claude) - skili safeer-delo-ko-lastnik-pociva,
+safeer-pregled-kot-coderabbit, safeer-vodja-projektov:
+- Ocena trajanja: ob vsakem zagonu Lina oceni konec iz zgodovine (trajanje preteklih nalog istega agenta in podobne velikosti besedila/
+  mape; brez zgodovine privzeto in oznaka »groba ocena«). Ocena in ura konca se pokazeta lastniku (racunalnik in telefon) v ljubljanskem casu.
+- Lasten opomnik: ob vsakem zagonu Lina nastavi notranji opomnik na oceno konca; ob opomniku preveri stanje (tece/vprasanje/konec/
+  zastoj brez izpisa N min), ce ni konca, nastavi novega in lastniku pove novo uro in razlog. Opomnik je viden v vrsti.
+  V KODI (24. 11. 2026, prvi dve tocki): ocenaTrajanja (mediana koncanih nalog istega agenta, podobna velikost = pol do dvakratna dolzina,
+  manj kot 3 vzorci ali brez zgodovine = »groba ocena«, privzeto 30 min); ob zagonu ocena in opomnik, razporejevalnik ob opomniku nastavi
+  novega (polovica ocene, najmanj 10 min) z razlogom »agent se dela« / »terminal zaprt«; prikaz v vrsti (ljubljanski cas) in na telefonu
+  (GET /agent-naloge). Konec = cas spremembe POROCILO.md; dogodek obNalogaKoncana({id, agent, mapa, kopija}) natanko enkrat - za pregled
+  in zdruzitev (naslednji agent). Zastoj »brez izpisa N min« in vprasanje agenta brez kanala Lina ne vidi (samo Claude Code ima kanal).
+- Pregled: ko agent konca, Lina NE zaupa porocilu agenta. Diff (samo diff, brez sporocil in porocila - slepi pregled) da DRUGEMU agentu
+  (privzeto Claude Code) v pregled po kontrolnem seznamu; najdbe vrne prvemu agentu ali novemu v popravek (dopolnitev kode), nato
+  znova pregled; najvec 3 krogi, potem lastniku. Gemini/Freebuff ne dobita kode Scita/YouTube/Google (prepovedane mape).
+- Vec agentov na enem projektu: vsak agent dela v SVOJI kopiji (git worktree ali kopija mape, nikoli ista mapa); Lina zdruzi po vrsti
+  (git merge/patch --forward), spor razresi agent v locenem koraku, po vsaki zdruzitvi preizkusi z mejo pomnilnika in tsc; neuspeh =
+  zdruzitev se razveljavi v kopiji, izvirnik nedotaknjen. Brez brisanja, brez potiska (potisk samo vodja/lastnik po pregledu skrivnosti),
+  pred zdruzitvijo varnostna kopija. Izid in polne poti lastniku.
+
+## Objava Line na safeer.si in opozorilo uporabniku (lastnik 24. 11. 2026)
+Lastnik: »ga boš objavil na spletni strani od Safeer.si v odelku Lina kjer boš dal screnshote računalniske različnice in android ter
+delujoče namestitvene povezave ter seveda more pisati da je za osebno rabo in da je Lina Ai ki lahko dela napake ter da je uporaba na
+lastno odgovornost ter da Safeer ne prevzema odgovornosti za delo ki ga Lina opravi ter da je uporabnik sam dolžan za njen nadzor ter
+ter da ji more sam omejiti obseg dela«.
+- Isto opozorilo (sl/en, besedilo: outputs/prenova-strani/lina-besedilo-osnutek.md) pokaze tudi Lina sama: ob PRVEM zagonu na
+  racunalniku in telefonu (uporabnik potrdi »Razumem«, brez potrditve Lina ne sprejema klicev in ne zaganja agentov) in vedno
+  dosegljivo v Nastavitve > O Lini. Potrditev se shrani z razlicico besedila; ob spremembi besedila znova.
+- Namestitvene povezave = GitHub Releases safeerOS/Lina (deb, APK, SHA256SUMS); isti vir uporablja vgrajena posodobitev.
+- Posnetki zaslona samo z demo podatki (skil safeer-posnetki-naprav), brez lastnikovih imen, stevilk, klicev.
+
+## OmniRoute kot ponudnik mozganov (lastnik 24. 11. 2026)
+Lastnik: »OmniRoute ponuja več brezplacbih modelov zato kot ponudnika pri možganih tako kot si openrouter.ai«.
+- Nov ponudnik `omniroute` v Mozganih (enakovreden openrouter): OmniRoute (MIT, github.com/cheaper-inference/OmniRoute, prej
+  diegosouzapw) je LOKALNI prehod, OpenAI-zdruzljiv: privzeti naslov http://127.0.0.1:20128/v1, kljuc iz OmniRoute nadzorne plosce
+  (Dashboard -> Endpoints), model privzeto `auto`, seznam modelov iz /v1/models (izbira v vmesniku).
+- Naslov: http samo za 127.0.0.1/localhost; vse drugo samo https (npr. lasten streznik). Kljuc shranjen kot drugi kljuci (keys.server.ts).
+- Opozorilo v vmesniku: brezplacni modeli prek OmniRoute so storitve tretjih ponudnikov s svojimi pogoji in lahko uporabljajo poslane
+  podatke; za klice (tajnica, osebni podatki klicateljev) Lina OmniRoute ponudi sele, ko uporabnik to izrecno izbere za klice.
+- Velja tudi za rezervni ponudnik (razdelek iz orodij lastnika): OmniRoute je lahko na seznamu rezervnih.
+- Namestitev samega OmniRoute na racunalnik uporabnika ni del Line (tuj program); vodja ga za lastnika namesti po varnostnem pregledu,
+  samo na 127.0.0.1.
+- Dopolnitev 24. 11. 02:35 (lastnikova NALOGA-LINA-MODELI-KLICI-IN-ASISTENTKA.md, B9): Lina NIKOLI samodejno ne poslje vsebine drugemu
+  ponudniku, ki ga uporabnik ni izrecno dolocil za to vlogo; rezervni ponudnik obstaja samo, ce ga uporabnik izrecno doda na seznam
+  rezervnih (privzeto prazen - soglasje za osebne podatke). Znotraj OpenRouter velja C6.
+- Lastnik 24. 11. 2026: »Če ga ne moremo uporabiti ga odstranimo ne ponujamo kar ne deluje«. Lina pokaze agenta SAMO, ce je preverjen
+  zagon z nalogo brez okna (preverba ob zaznavi z rokom, npr. --version v 10 s); ce preverba ne uspe, ga ne ponudi (ne kot »ne dela«).
+- Grok Build (`grok`, xAI, preverjeno 24. 11. 2026: grok 1.0.13, neinteraktivno `grok -p "<poziv>"` ali podukaz `agent`) je na seznamu
+  agentov. POZOR: brez prijave vrne izhodno kodo 0 in besedilo »Not signed in« - preverba zagona mora brati IZPIS, ne samo kode. Neprijavljen
+  agent ni v izbiri nalog; v Nastavitvah je viden kot »zaznan, potrebna prijava« z navodilom (`grok login`).
+
+## Lina nacrtuje z diagramom (lastnik 24. 11. 2026)
+Lastnik: »Diagram naj uporabiti tudi lina ki bo nalogo načrtovala da bo lažje našla arhitekturne rešitve določene naloge ali problema
+ki ga bo morala rešiti«. Privzeto VKLOPLJENO, stikalo v Nastavitvah.
+- Skil asistentke lina-vodja-projektov (razlicica 2): pri vecji ali arhitekturni nalogi najprej nacrt z diagramom, koda po potrjenem nacrtu.
+- Naloga agentu (claude-naloge / samostojna naloga): ko je naloga oznacena kot nacrtovanje ali je vecja (vec datotek/vec delov), prvi
+  korak naloge je NACRT: agent nariše diagram (skil diagram-design, ce ga agent ima - Claude Code; pisave system, brez skript in omreznih
+  zahtev) trenutnega stanja, 2-3 moznih resitev in priporocila, shrani `<mapa>/.lina-naloge/<id>/nacrt.html` in ustavi z vrsta="vprasanje".
+  Lina nacrt pregleda (najmanj: ali odgovarja na nalogo, tveganja) in ga pokaze lastniku; po lastnikovi potrditvi (ali po pravilu
+  samostojnega dela, ki ga je lastnik dovolil) Lina agentu odgovori »nadaljuj po moznosti X«.
+- Prikaz nacrt.html v Lini: samo v izoliranem okvirju (iframe sandbox brez allow-scripts, CSP default-src 'none'; style-src 'unsafe-inline';
+  img-src data:), datoteko bere streznik po isti varni poti kot POROCILO.md (O_NOFOLLOW, uid, en link, meja velikosti). Na telefonu kot slika
+  ali besedilni povzetek (ne izvaja HTML).
+- Agent brez skila diagram-design dobi navodilo za preprost SVG v HTML po istih pravilih.
+
+## Model, ki ga ponudnik ne pozna (lastnik 24. 11. 2026, posnetek telefona)
+Telefon je ob kljucu Claude odgovoril »Lina ni mogla odgovoriti: model: claude-sonnet-4-5« (Anthropic 404 not_found: privzeti model ni na
+voljo). Lastnik je kljuc zato opustil. Pravila:
+- Privzeti modeli morajo biti zivi: claude -> claude-sonnet-5-5 (racunalnik popravljen 24. 11., telefon DrugiPonudniki.kt CLAUDE).
+- Lastnik (24. 11. 2026): »že pri api pri tem ponudniku more izbrati delujoč model, ker po tem kar si ti napisal uporabnik misli da ponudnik
+  pac ne dela«. Zato: ob shranjevanju kljuca Lina SAMA izbere delujoc model - prebere seznam modelov ponudnika (Anthropic GET /v1/models z
+  x-api-key, OpenAI/OpenRouter/xAI /v1/models), izbere priporocenega (najnovejsi primerni za pogovor; vrstni red priporocil v kodi, ki ga
+  preveri seznam), naredi kratek preizkusni klic in shrani SAMO model, ki je odgovoril. Uporabnik modela ne izbira, ce noce (izbira ostane
+  pod »Napredno«). Ce noben model ne odgovori, Lina pove pravi vzrok (kljuc neveljaven, ni dobroimetja, omejitev) - nikoli »model ne obstaja«.
+- Med delovanjem: ce ponudnik vrne »model ne obstaja/ni na voljo« (404 not_found, model_not_found), Lina SAMA preklopi na delujoc model
+  ISTEGA ponudnika (isti kljuc, isti ponudnik - ni drugega ponudnika, B9 velja), ponovi zahtevo, shrani nov model in lastniku v eni vrstici
+  pove, da je model zamenjala. Surovega sporocila »model: <ime>« uporabnik nikoli ne vidi.
+- Preizkus: lazni ponudnik vrne 404 not_found -> sporocilo; seznam modelov brez privzetega -> zamenjava. Racunalnik in telefon.
+- Dopolnitev 24. 11. 04:05, VZROK najden 04:10 (izmerjeno): `grok -p` z --permission-mode acceptEdits po prvem odgovoru konca BREZ izvedbe orodij (Bash caka odobritev, ki je v nacinu brez okna ni); z bypassPermissions + --deny pravili dela in deny velja (preizkus: datoteka ustvarjena, brisanje zavrnjeno). Lina ga zazene tako, z istimi prepovedmi kot ostale agente - dve nalogi nista naredili nic. Preverba agenta mora zato vsebovati pravo dejanje (npr. ustvari datoteko v zacasni mapi in preveri, da obstaja); »DELA« v izpisu ni dovolj. Grok ni v izbiri, dokler preverba z dejanjem ne uspe.
+- Lastnik 24. 11. 2026: »Bo gumb na telefonu?« - DA: na telefonu (zavihek Racunalnik) gumb »Odpri agenta z nalogo« / »Dodeli nalogo«: izbira agenta, mape (s seznama dovoljenih), besedilo, kdaj; podpisan s kljucem naprave = lastnikova potrditev za ta zagon (racunalnik preveri podpis, zgostitev, ozji krog). Stanje, ura konca, vprasanja agenta in gumba Dovoli/Zavrni na telefonu. Racunalniski del je v nalogi agent-lina-vec-agentov, telefonski del sledi.

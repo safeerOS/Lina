@@ -1262,7 +1262,7 @@ describe("naloga G3 C: potrditev povprasevanja po e-posti", { concurrency: 1 }, 
     assert.equal(lina.filter((besedilo) => besedilo.includes("afna")).length, 1);
     // Lina s tem narocila ne potrdi.
     assert.doesNotMatch(stavek, /potrjen|potrjujem/i);
-    assert.match(t("potrditevOznaka"), /naprošen za potrditev po e-pošti/);
+    assert.match(t("potrditevOznaka"), /naprošen, naj povpraševanje pošlje še po e-pošti/);
 
     // Slovo klicatelja sredi zbiranja: prosnja se vedno pred zahvalo, enkrat.
     const sid = novSid();

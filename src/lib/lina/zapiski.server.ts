@@ -11,7 +11,7 @@ import { lstat, mkdir, open, readdir, realpath, rename, rmdir, stat, unlink, rea
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { t } from "./besedila.ts";
-import { loadPravila, normalizePravila } from "./pravila.server.ts";
+import { loadPravila, normalizePravila, vVrstiPravil } from "./pravila.server.ts";
 import { resolveDataDir, writeJson } from "./store.server.ts";
 import type { CallSession } from "./types.ts";
 import { KONCNICA, NAJVEC_VELIKOST, NAJVEC_ZDRUZENIH, casIzVsebine, jeNujenZapisek, imeDatoteke, jeZdruzen, naslovZapiska, vsebinaZapiska, zdruziVsebine, type Zapisek, type ZapisekVsebina, klicateljIzVsebine, klicateljIzNaslova } from "./zapiski.ts";
@@ -360,8 +360,11 @@ export async function izberiMapoZapiskov(vnos: unknown, token: string | null, di
   await requireOwner(token, root);
   const preverjena = await preveriMapoZapiskov(vnos, root, { ustvari: true });
   if (!preverjena.ok) return preverjena;
-  const prej = await loadPravila(root);
-  await writeJson(root, "pravila.json", normalizePravila({ ...prej, mapaZapiskov: preverjena.jePrivzeta ? "" : preverjena.mapa }));
+  // Ista vrsta kot ostali pisci pravila.json (drugi pregled 0.2.10, CR12/N1).
+  await vVrstiPravil(root, async () => {
+    const prej = await loadPravila(root);
+    await writeJson(root, "pravila.json", normalizePravila({ ...prej, mapaZapiskov: preverjena.jePrivzeta ? "" : preverjena.mapa }));
+  });
   return preverjena;
 }
 
@@ -443,7 +446,8 @@ export async function povzetekKlicatelja(
     "",
     ...vsebine.map((v) => `--- ${v.naslov} ---\n${v.vsebina.replace(/^<!--\s*lina-[a-z]+:.*-->\n?/gm, "").slice(0, NAJVEC_ZNAKOV_ZAPISKA)}`),
   ].join("\n");
-  const izid = await callProvider({ ...brain, text: poziv, najvecVhoda: 100_000, maxTokens: 1200, najvecZnakov: 4000, timeoutMs: 25_000 });
+  // B4 (24. 11. 2026): sporocila klicateljev so vsebina klica - brezplacen model (samo asistentka) to pot zavrne v callProvider.
+  const izid = await callProvider({ ...brain, text: poziv, najvecVhoda: 100_000, maxTokens: 1200, najvecZnakov: 4000, timeoutMs: 25_000, vsebinaKlica: true });
   if (!izid.ok) return { ok: false, naslov, besedilo: izid.sporocilo, stevilo: vsi.length };
   return { ok: true, naslov, besedilo: hideSecret(izid.text, brain.key).trim(), stevilo: vsi.length };
 }

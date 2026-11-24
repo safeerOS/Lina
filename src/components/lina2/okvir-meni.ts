@@ -10,7 +10,7 @@ import { jeOsebniNacin, razdelekViden, type NacinKlica } from "../../lib/lina/os
 import type { RazdelekLine } from "../../lib/lina/ui-videz.ts";
 import { t2, type Beseda2 } from "./besedila.ts";
 
-export type Stran = "domov" | "pogovor" | "koledar" | "imenik" | "novice" | "mediji" | RazdelekLine;
+export type Stran = "domov" | "pogovor" | "koledar" | "imenik" | "novice" | "mediji" | "racunalnik" | RazdelekLine;
 
 export type VnosMenija = { id: Stran; ikona: string; oznaka: string };
 
@@ -28,6 +28,7 @@ const OSNOVNI_MENI: ReadonlyArray<{ id: Stran; ikona: string; oznaka: Beseda2 }>
   { id: "zapiski", ikona: "zapiski", oznaka: "navZapiski" },
   { id: "telefon", ikona: "telefon", oznaka: "navTelefon" },
   { id: "linija", ikona: "linija", oznaka: "navLinija" },
+  { id: "racunalnik", ikona: "racunalnik", oznaka: "navRacunalnik" },
   { id: "nastavitve", ikona: "nastavitve", oznaka: "navNastavitve" },
 ];
 

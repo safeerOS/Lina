@@ -91,6 +91,17 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
           />
           {t("telVklop")}
         </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={s.ocenaIzida}
+            disabled={zaposlen}
+            aria-describedby="pt-ocena-namig"
+            onChange={(e) => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { ocenaIzida: e.target.checked } })))}
+          />
+          {t("telOcenaIzida")}
+        </label>
+        <p id="pt-ocena-namig" className="text-xs text-[var(--color-moss)]">{t("telOcenaIzidaNamig")}</p>
         <label htmlFor="pt-naslov-rac">
           {t("telNaslovRac")}
           <select id="pt-naslov-rac" value={naslov} onChange={(e) => setNaslov(e.target.value)} className={polje}>

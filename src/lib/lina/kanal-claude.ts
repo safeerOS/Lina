@@ -94,6 +94,23 @@ export function zgostitevPrikaza(orodje: string, predogled: string, opis: string
   return createHash("sha256").update(`safeer-lina-zgostitev-v3\n${polje(orodje)}${polje(predogled)}${polje(opis)}`, "utf8").digest("hex");
 }
 
+/**
+ * Kar podpise naprava za NADALJEVANJE obstojece naloge (lastnik 23. 11. 2026: »Lina sama odgovori Claude Code«): odgovor na
+ * vprasanje ali nadaljnje navodilo gre v ISTI pogovor (chat_id = id naloge), ne v novo nalogo. Lastna predpona: podpis naloge ali
+ * ustavitve ni prenosljiv sem in obratno; enkratni niz se steje skupaj z ostalimi.
+ */
+export function nizNadaljevanja(id: string, posiljatelj: string, besedilo: string, cas: number, enkratni: string): string {
+  return `safeer-lina-nadaljuj-v1\n${id}\n${posiljatelj}\n${cas}\n${enkratni}\n${besedilo}`;
+}
+
+/**
+ * Vrsta odgovora Claude Code (orodje reply, polje »vrsta«; lastnik 23. 11. 2026 »Stanje naloge v Lini«): samo »koncano« konca
+ * nalogo; »vprasanje« pomeni, da Claude Code caka navodilo (Lina na telefonu odgovori sama ali vprasa lastnika). Brez polja =
+ * »vmesno« (prej je bil prvi odgovor brez polja napacno konec naloge).
+ */
+export const VRSTE_ODGOVORA = ["vprasanje", "vmesno", "koncano"] as const;
+export type VrstaOdgovora = (typeof VRSTE_ODGOVORA)[number];
+
 /** Kar podpise naprava, ki nalogo ustavi (N-E: ustavitev brez podpisa bi lahko poslal vsak z zetonom). */
 export function nizUstavitve(id: string, posiljatelj: string, cas: number, enkratni: string): string {
   return `safeer-lina-ustavi-v1\n${id}\n${posiljatelj}\n${cas}\n${enkratni}`;
@@ -130,6 +147,74 @@ export function zgostitevSinhron(vsebina: string): string {
 /** Kar podpise telefon za sinhronizacijo klicev, pogovora in navodil (20. 11. 2026): podpis pokriva zgostitev celotne vsebine. */
 export function nizSinhron(posiljatelj: string, cas: number, enkratni: string, zgostitev: string): string {
   return `safeer-lina-sinhron-v1\n${posiljatelj}\n${cas}\n${enkratni}\n${zgostitev}`;
+}
+
+/** Dodatki na racunalniku, ki jih sme naprava ozjega kroga videti in preklopiti (lastnik 23. 11. 2026); zaprt seznam. */
+export const DODATKI_TELEFONA = ["paperclip", "n8n", "affine", "slovenski"] as const;
+export type DodatekTelefona = (typeof DODATKI_TELEFONA)[number];
+export function jeDodatekTelefona(x: unknown): x is DodatekTelefona {
+  return typeof x === "string" && (DODATKI_TELEFONA as readonly string[]).includes(x);
+}
+
+/** Kar podpise telefon za branje stanja dodatkov na racunalniku (GET /dodatki). */
+export function nizStanjaDodatkov(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-dodatki-stanje-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+
+/** Kar podpise telefon za vklop ali izklop enega dodatka (POST /dodatek): podpis veze dodatek in smer. */
+export function nizDodatka(posiljatelj: string, dodatek: DodatekTelefona, vklop: boolean, cas: number, enkratni: string): string {
+  return `safeer-lina-dodatek-v1\n${posiljatelj}\n${dodatek}\n${vklop ? "vklopi" : "izklopi"}\n${cas}\n${enkratni}`;
+}
+
+/** Gradnje na GitHubu (24. 11. 2026, gradnje-github.server.ts): branje stanja (GET /gradnje). */
+export function nizStanjaGradenj(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-gradnje-stanje-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+/** Predlog gradnje s telefona (POST /gradnja/predlog): podpis veze tok in vejo; zagon se vedno potrdi posebej. */
+export function nizPredlogaGradnje(posiljatelj: string, tok: string, veja: string, cas: number, enkratni: string): string {
+  return `safeer-lina-gradnja-predlog-v1\n${posiljatelj}\n${tok}\n${veja}\n${cas}\n${enkratni}`;
+}
+/** Potrditev zagona s telefona (POST /gradnja/potrdi): podpis veze id predloga in zgostitev (repozitorij, tok, veja). */
+export function nizPotrditveGradnje(posiljatelj: string, id: string, zgostitev: string, cas: number, enkratni: string): string {
+  return `safeer-lina-gradnja-potrdi-v1\n${posiljatelj}\n${id}\n${zgostitev}\n${cas}\n${enkratni}`;
+}
+/** Naloge agentov s telefona (24. 11. 2026, claude-naloge.server.ts): branje vrste (GET /agent-naloge). */
+export function nizStanjaAgentNalog(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-agenti-stanje-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+/**
+ * Zgostitev dodelitve (agent, mapa, besedilo, pogoj) kot JSON polje: besedilo lahko vsebuje nove vrstice, zato podpis veze zgostitev
+ * (kot nizSinhron), ne surovih polj, in meje polj ne morejo zdrsniti.
+ */
+export function zgostitevDodelitve(agent: string, mapa: string, besedilo: string, pogoj: string): string {
+  return createHash("sha256").update(JSON.stringify([agent, mapa, besedilo, pogoj]), "utf8").digest("hex");
+}
+/** Dodelitev naloge agentu s telefona (POST /agent-naloga/dodeli): dodelitev lastnika je potrditev za en zagon. */
+export function nizDodelitveAgentNaloge(posiljatelj: string, zgostitev: string, cas: number, enkratni: string): string {
+  return `safeer-lina-agent-dodeli-v1\n${posiljatelj}\n${zgostitev}\n${cas}\n${enkratni}`;
+}
+/** Preklic dodeljene naloge s telefona (POST /agent-naloga/preklici): podpis veze id. */
+export function nizPreklicaAgentNaloge(posiljatelj: string, id: string, cas: number, enkratni: string): string {
+  return `safeer-lina-agent-preklici-v1\n${posiljatelj}\n${id}\n${cas}\n${enkratni}`;
+}
+/** Prenos APK zadnje potrjene gradnje (GET /gradnja/apk). */
+export function nizApkGradnje(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-gradnja-apk-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+
+/** Orodje Claude Code za dodatke (kanal lina); to ime nosi zahteva za odobritev na telefonu. */
+export const ORODJE_DODATKI = "mcp__lina__dodatki";
+export type DejanjeDodatkov = "stanje" | "vklopi" | "izklopi";
+/** Predogled na telefonu: dejanje in dodatek, ki ju podpis odobritve veze (prek zgostitevPrikaza). */
+export function predogledDodatka(dodatek: DodatekTelefona, vklop: boolean): string {
+  return `${vklop ? "vklopi" : "izklopi"} ${dodatek}`;
+}
+/** Opis zahteve pise koda, ne model: lastnik ve, kaj odobri (Docker, prenos modela). */
+export function opisDodatka(dodatek: DodatekTelefona, vklop: boolean): string {
+  if (!vklop) return `Izklop dodatka ${dodatek} na racunalniku (podatki ostanejo).`;
+  return dodatek === "slovenski"
+    ? "Vklop slovenskega modela na racunalniku: prvi vklop prenese in namesti priblizno 1,6 GB in zasede pomnilnik."
+    : `Vklop dodatka ${dodatek} na racunalniku: zazene vsebnik Docker (samo 127.0.0.1).`;
 }
 
 /** Besedilo brez osamljenih nadomestnih znakov (N-G); tako besedilo se zavrne, ne popravi. */
@@ -222,17 +307,25 @@ export type ZaKanal =
   | { vrsta: "prijava"; dokaz: string }
   | { vrsta: "naloga"; naloga: { id: string; besedilo: string; posiljatelj: string; izvor: string; dokaz?: Dokaz } }
   | { vrsta: "odobritev"; zahtevaId: string; dovoli: boolean; posiljatelj: string; dokaz?: Dokaz }
-  | { vrsta: "ustavi"; id: string; posiljatelj: string; dokaz?: Dokaz };
+  | { vrsta: "ustavi"; id: string; posiljatelj: string; dokaz?: Dokaz }
+  | { vrsta: "nadaljuj"; id: string; besedilo: string; posiljatelj: string; dokaz?: Dokaz }
+  /** Izid orodja dodatki (Lina izvede, kanal vrne Claude Code). */
+  | { vrsta: "dodatkiIzid"; zahteva: string; ok: boolean; besedilo: string };
 
-/** Sporocila kanal -> Lina. */
+/** Sporocila kanal -> Lina. `tip` je vrsta odgovora (VRSTE_ODGOVORA); `koncano` ostane za starejso Lino (koncano = tip »koncano«). */
 export type IzKanala =
   | { vrsta: "izziv"; s: string; dokaz: string }
   | { vrsta: "pozdravljen"; seja: boolean; apiKljuc: boolean; aktivne: string[]; opozorila?: string[] }
-  | { vrsta: "odgovor"; chatId: string; besedilo: string; koncano: boolean }
+  | { vrsta: "odgovor"; chatId: string; besedilo: string; koncano: boolean; tip?: VrstaOdgovora }
   | { vrsta: "odobritev"; chatId: string; zahtevaId: string; orodje: string; opis: string; predogled: string; zgostitev: string }
   | { vrsta: "umaknjeno"; id: string }
-  | { vrsta: "zavrnjeno"; id: string; razlog?: string }
+  /** Orodje dodatki: stanje brez odobritve; vklopi/izklopi samo po podpisani odobritvi naprave, ki je dala nalogo (zahteva = ID odobritve). */
+  | { vrsta: "dodatki"; zahteva: string; chatId: string; dejanje: DejanjeDodatkov; dodatek?: DodatekTelefona }
+  /** `nadaljevanje`: zavrnjen je bil odgovor v obstojeco nalogo - naloga sama tece naprej (Lina je ne konca). */
+  | { vrsta: "zavrnjeno"; id: string; razlog?: string; nadaljevanje?: boolean }
   | { vrsta: "napaka"; razlog: string };
+
+export const SPOROCILO_NADALJEVANJE_ZAVRNJENO = "Odgovor ni bil sprejet (naloga je ustavljena, podpis ali naprava ne ustreza ali prevec sporocil). Naloga tece naprej.";
 
 /** Vec hkratnih nalog z razlicnih naprav: odobritev ne sme dobiti naprava, ki morda ni dala te naloge (CodeRabbit C5). */
 export const SPOROCILO_ODOBRITEV_TERMINAL =
@@ -261,9 +354,14 @@ export const ROK_NALOGE_KANAL_MS = 2 * 60 * 60_000;
 export const NAVODILO_KANALA =
   'Sporocila iz Line pridejo kot <channel source="lina" chat_id="..." naprava="...">. Vsako je podpisala naprava ozjega ' +
   "kroga Safeer Linka (lastnik), kanal je podpis preveril. Znaka < in > sta v besedilu zamenjana s ‹ in ›. Nalogo izvedi na " +
-  "tem racunalniku po obicajnih pravilih projekta. Izid sporoci z orodjem reply: chat_id iz oznake, kratko besedilo v " +
-  "slovenscini, koncano=false za vmesno stanje in koncano=true, ko je naloga koncana ali je ne mores narediti. Oznaka " +
-  'ustavi="da" pomeni, da je naloga ustavljena (lastnik, rok ali umik naprave): prenehaj z delom na njej in poslji reply s koncano=true.';
+  "tem racunalniku po obicajnih pravilih projekta. Lini odgovarjaj z orodjem reply: chat_id iz oznake, kratko besedilo v " +
+  'slovenscini in VEDNO polje vrsta: vrsta="vprasanje", ko potrebujes odgovor, odlocitev ali nadaljnje navodilo (tudi ko cakas ' +
+  'navodila) - Lina ali lastnik odgovori v istem chat_id; vrsta="vmesno" za sprotno porocilo, ko delas naprej; vrsta="koncano" ' +
+  "SAMO, ko je naloga v celoti koncana ali je ne mores narediti (takrat napisi izid). Brez polja vrsta Lina odgovor steje kot " +
+  'vmesno in caka naprej. Oznaka nadaljevanje="da" je odgovor Line ali lastnika na tvoje vprasanje v isti nalogi. Oznaka ' +
+  'ustavi="da" pomeni, da je naloga ustavljena (lastnik, rok ali umik naprave): prenehaj z delom na njej in poslji reply z vrsta="koncano". ' +
+  "Dodatke na tem racunalniku (paperclip, n8n, affine, slovenski) upravljaj z orodjem dodatki (stanje, vklopi, izklopi), ne z Dockerjem " +
+  "ali datotekami: vklop in izklop izvede Lina sele, ko ga lastnik odobri na napravi.";
 
 /** Razcleni eno vrstico JSON; neveljavna ali predolga vrstica je null (nikoli izjema). */
 export function razcleniVrstico(vrstica: string): Record<string, unknown> | null {

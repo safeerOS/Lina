@@ -6,6 +6,7 @@
  * Varovalke kot pot Twilio (L-04): linija odprta, nacin prevzema in ura, »en klic naenkrat« (sprejemKlicaTelefona).
  */
 import { nastaviPrikljucekTelefona } from "../glas-telefon.server.ts";
+import { opozoriloPotrjeno } from "../opozorilo.server.ts";
 import { loadPravila } from "../pravila.server.ts";
 import { loadLine } from "../service.server.ts";
 import { resolveDataDir } from "../store.server.ts";
@@ -32,6 +33,11 @@ export async function sprejemKlicaTelefona(root: string, sid: string, zdaj: () =
   return (await prevzemiLinijo(root, sid)) ? null : "zasedeno";
 }
 
+/** Opozorilo ob prvem zagonu (lastnik 24. 11. 2026): brez potrditve »Razumem« Lina klica telefona ne sprejme. */
+export async function sprejemTelefonaZOpozorilom(root: string, sid: string, zdaj: () => Date = () => new Date()): Promise<IzidSprejema | null> {
+  return (await opozoriloPotrjeno(root)) ? sprejemKlicaTelefona(root, sid, zdaj) : "zaprto";
+}
+
 export function registrirajPrikljucekTelefona(dir?: string): void {
   const root = resolveDataDir(dir);
   const dnevnik = (koda: string) => console.info(`[lina] glas telefona: ${koda}`);
@@ -39,7 +45,7 @@ export function registrirajPrikljucekTelefona(dir?: string): void {
     odvisnosti: () => pravaOdvisnost(root, { osvezi: (sid) => osveziAktivniKlic(root, sid), sprosti: (sid) => sprostiAktivniKlic(root, sid) }, dnevnik),
     posnetekPcm16: posnetekPcm16(root),
     dnevnik,
-    sprejem: (sid) => sprejemKlicaTelefona(root, sid),
+    sprejem: (sid) => sprejemTelefonaZOpozorilom(root, sid),
     sprosti: (sid) => sprostiAktivniKlic(root, sid),
   }));
 }

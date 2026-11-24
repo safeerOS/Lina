@@ -4,6 +4,7 @@ import { asistentFn, asistentZgodovinaFn, govorFn, koledarSeznamFn, koledarSprem
 import { PRIVZETE_NASTAVITVE_OBVESTIL, odlociObvestilo } from "@/lib/lina/obvestila-odlocitev.ts";
 import { datumBesedilo, pregledDneva, razberiCas, uraBesedilo, type ZapisKoledar } from "@/lib/lina/koledar.ts";
 import type { BrainPublic } from "@/lib/lina/types.ts";
+import { UcenjePopravkovKartica } from "./ucenje-popravkov-kartica.tsx";
 
 /** Prva stran programa: pogovor z Lino (tipkanje ali govor) in pregled dneva. Videz: styles.css (.zar, .lina-*). */
 export const DOGODEK_KOLEDAR = "lina-koledar";
@@ -585,6 +586,7 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
       </div>
 
       <DanesPregled
+        osveziPopravke={sporocila.length}
         onPredlog={(b) => {
           setBesedilo(b);
           polje.current?.focus();
@@ -622,7 +624,7 @@ function useDanes() {
   return { zdaj, pregled, vrstice, opravljeno };
 }
 
-export function DanesPregled({ onPredlog }: { onPredlog: (besedilo: string) => void }) {
+export function DanesPregled({ onPredlog, osveziPopravke }: { onPredlog: (besedilo: string) => void; osveziPopravke?: number }) {
   const { zdaj, pregled, vrstice, opravljeno } = useDanes();
 
   return (
@@ -682,6 +684,8 @@ export function DanesPregled({ onPredlog }: { onPredlog: (besedilo: string) => v
           ))}
         </div>
       </div>
+
+      <UcenjePopravkovKartica osveziZnak={osveziPopravke} />
     </aside>
   );
 }

@@ -129,6 +129,8 @@ const POLJA_NASTAVITVE: Record<string, string[]> = {
   dodatki: ['id="nast-dodatki"', 'id="om-naslov-polje"', 'id="om-kljuc"'],
   strani: ['id="nast-strani"'],
   posodobitev: ['id="nast-posodobitev"', sl.posGumb, sl.posPojasnilo],
+  github: ['id="nast-github"', 'id="ghd-kljuc"', sl.ghdPotKljuc],
+  olini: ['id="nast-o-lini"', sl.opozNaslov, sl.opozT3],
 };
 const POLJA_ZNANJE: Record<string, string[]> = {
   podjetje: ["Dejavnost", "Telefon", "O delavnici", 'id="znanje-besedilo"'],

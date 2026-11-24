@@ -25,6 +25,8 @@ import { writeJson } from "./store.server.ts";
 import { dokaz, linija, ms, OD, voice } from "./preverba-skupno.ts";
 
 let sidSt = 0;
+/** Torek 24. 11. 2026 ob 10.00 v Ljubljani: znotraj privzetega urnika prevezave (pon-pet 07.00-15.00). */
+const DELOVNI = new Date("2026-11-24T10:00:00+01:00");
 const novSid = () => `CA${(++sidSt).toString(16).padStart(32, "0")}`;
 const delta = (f: () => Promise<unknown>) => async () => {
   ponastavi();
@@ -153,18 +155,19 @@ describe("H5 uspesna prevezava ne zakljuci zapisa", { concurrency: 1 }, () => {
   const NUJNO = ["Ana Primer, nisem iz podjetja.", "Sporočite direktorju, da je nujno, rabim odgovor danes."];
   const OSEBNA = "+1 202 555 0100";
   async function doNujnega(dir: string, sid: string) {
-    await voice(dir, { CallSid: sid, From: OD, To: "+38615550123" }, "/api/voice/incoming");
-    await voice(dir, { CallSid: sid, From: OD, To: "+38615550123", SpeechResult: NUJNO[0] }, "/api/voice/turn?obr=1");
-    return voice(dir, { CallSid: sid, From: OD, To: "+38615550123", SpeechResult: NUJNO[1] }, "/api/voice/turn?obr=2");
+    await voice(dir, { CallSid: sid, From: OD, To: "+38615550123" }, "/api/voice/incoming", DELOVNI);
+    await voice(dir, { CallSid: sid, From: OD, To: "+38615550123", SpeechResult: NUJNO[0] }, "/api/voice/turn?obr=1", DELOVNI);
+    return voice(dir, { CallSid: sid, From: OD, To: "+38615550123", SpeechResult: NUJNO[1] }, "/api/voice/turn?obr=2", DELOVNI);
   }
 
   it("funkcija prevezavaIzid sama ne zakljuci (trditev drzi na ravni funkcije), a webhook (action URL Dial) takoj pozove zakljuciKlic", async () => {
     const { dir, token } = await linija();
+    // Pregled 0.2.10 (najdba 12): privzeti urnik ostane VKLOPLJEN (kot pri uporabniku); ura klica je vbrizgana v delovni cas (DELOVNI).
     await shraniNujne({ prevezi: true, stevilka: OSEBNA }, token, dir);
     // a) samo funkcija
     const a = "CA-H5-A";
     await doNujnega(dir, a);
-    await voice(dir, { CallSid: "NOGA-A", Digits: "1" }, `/api/voice/potrdi-tipka?sid=${a}`);
+    await voice(dir, { CallSid: "NOGA-A", Digits: "1" }, `/api/voice/potrdi-tipka?sid=${a}`, DELOVNI);
     const izid = await prevezavaIzid(a, true, dir);
     const poFunkciji = (await preberiKlic(a, dir))?.status;
     dokaz(`H5 po prevezavaIzid(oglasil): konec=${izid?.konec} oglasil=${izid?.oglasil} status=${poFunkciji}`);
@@ -178,8 +181,8 @@ describe("H5 uspesna prevezava ne zakljuci zapisa", { concurrency: 1 }, () => {
     await shraniNujne({ prevezi: true, stevilka: OSEBNA }, tokenB, dirB);
     await doNujnega(dirB, b);
     const o = (await preberiKlic(b, dirB))?.obrat;
-    await voice(dirB, { CallSid: "NOGA-B", Digits: "1" }, `/api/voice/potrdi-tipka?sid=${b}`);
-    const twiml = await voice(dirB, { CallSid: b, From: OD, To: "+38615550123", DialCallStatus: "completed" }, `/api/voice/turn?nujni=1&obr=${o}`);
+    await voice(dirB, { CallSid: "NOGA-B", Digits: "1" }, `/api/voice/potrdi-tipka?sid=${b}`, DELOVNI);
+    const twiml = await voice(dirB, { CallSid: b, From: OD, To: "+38615550123", DialCallStatus: "completed" }, `/api/voice/turn?nujni=1&obr=${o}`, DELOVNI);
     const zapis = await preberiKlic(b, dirB);
     dokaz(`H5 webhook completed: twiml=${twiml.replace(/<\?xml[^>]*>/, "").slice(0, 60)} status=${zapis?.status} izid=${zapis?.nujniDogodki?.[0]?.izid} zapisek=${zapis?.zapisek ? "da" : "ne"}`);
     assert.equal(zapis?.status, "zakljucen");

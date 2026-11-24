@@ -5,6 +5,8 @@
  * modela (isti za vse ponudnike). Klici tajnice ga ne dobijo (seja »asistent«). Napaka spomina nikoli ne podre pogovora.
  * V dnevnik gredo samo stevila. Komentarji so brez sumnikov.
  */
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { isci, izbrisiVse, jeSpominBazeVklopljen, nastaviSpominBaze, zapisiObrat, type ObratZapis } from "./spomin-baza.server.ts";
 import { resolveDataDir } from "./store.server.ts";
@@ -67,9 +69,19 @@ export async function nastaviSpominPogovorov(vklop: unknown, token: string | nul
   return { vklopljen: await nastaviSpominBaze(vklop, root) };
 }
 
+/** Stevec izbrisov spomina na koren: povzemanje v ozadju (asistent-pogovor.server.ts) po izbrisu ne zapise starega povzetka (N10). */
+const izbrisi = new Map<string, number>();
+export function stevecIzbrisaSpomina(root: string): number {
+  return izbrisi.get(root) ?? 0;
+}
+
 /** »Izbriši vse pogovore iz spomina« (gumb uporabnika v Nastavitvah, s potrditvijo v vmesniku). Stikalo ostane, kot je. */
 export async function izbrisiSpominPogovorov(token: string | null, dir?: string): Promise<{ izbrisanih: number }> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  return { izbrisanih: (await izbrisiVse({ dir: root })).izbrisanihDatotek };
+  izbrisi.set(root, stevecIzbrisaSpomina(root) + 1);
+  const izbrisanih = (await izbrisiVse({ dir: root })).izbrisanihDatotek;
+  // povzetek starejsega pogovora (asistent-pogovor.server.ts) je izpeljan iz pogovorov: ob izbrisu spomina gre tudi on
+  await rm(path.join(root, "asistent-povzetek.json"), { force: true });
+  return { izbrisanih };
 }

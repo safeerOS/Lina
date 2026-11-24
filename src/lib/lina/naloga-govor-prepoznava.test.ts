@@ -68,6 +68,21 @@ describe("model prepoznave govora v Gather", () => {
     assert.doesNotMatch(napacen, /speechModel|hints=/);
   });
 
+  it("izrazi kataloga gredo v hints na poti klica (oba nacina); izrazeKatalogaIzklop jih izklopi", async () => {
+    const zKatalogom = async (pravila: Record<string, unknown>) => {
+      const dir = await nov(pravila);
+      const k: Catalog = { ...katalog, products: [{ id: "p1", name: "Tampotisk", kind: "", summary: "", materialIds: [] }], materials: [{ id: "m1", name: "Folija", note: "" }] };
+      await writeJson(dir, "line.json", { open: true, catalog: k, updatedAt: null });
+      return dir;
+    };
+    for (const nacinKlica of ["podjetje", "osebna"]) {
+      const z = await klic(await zKatalogom({ nacinKlica, govorModel: "googlev2_telephony", hintsGovor: "Ana" }), "/api/voice/incoming", { CallSid: `CA-GM-K-${nacinKlica}`, From: "+38640000000" });
+      assert.match(z, /hints="Ana, Tampotisk, Folija"/, nacinKlica);
+    }
+    const izkl = await klic(await zKatalogom({ govorModel: "googlev2_telephony", hintsGovor: "Ana", izrazeKatalogaIzklop: true }), "/api/voice/incoming", { CallSid: "CA-GM-K-izkl", From: "+38640000000" });
+    assert.match(izkl, /hints="Ana"/);
+  });
+
   it("normalizacija: neznan model je prazen, namigi samo ob modelu, meje 500 x 100 znakov, brez znakov XML", () => {
     assert.equal(normalizePravila({ govorModel: "xyz" as never }).govorModel, "");
     assert.equal(normalizePravila({ hintsGovor: "a, b" }).hintsGovor, "", "namigi brez modela se zavrzejo");

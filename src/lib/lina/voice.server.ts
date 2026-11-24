@@ -1,6 +1,7 @@
 import path from "node:path";
 import { loadLine, prevezavaIzid, preberiKlic, recordCaller, zabeleziCasGlasu, zabeleziPrenosZvoka, zabeleziSprejem, zakljuciKlic, zapisiDelIzreka, type ModelOsnutka } from "./service.server.ts";
 import { nujnaPrevezava, prevezavaNaZahtevo } from "./nujni.server.ts";
+import { prevezavaIzvenCasa } from "./urnik.ts";
 import { kljucIzPoti, potZvoka, stalniStavki } from "./glas.ts";
 import {
   glasNaVoljo,
@@ -38,7 +39,7 @@ import { t } from "./besedila.ts";
 import { istaStevilka } from "./guards.ts";
 import { vE164 } from "./plast.ts";
 import { jeNedovoljenaPreusmeritev } from "./preusmeritev.ts";
-import { atributiGovora } from "./govor-model.ts";
+import { atributiGovora, izraziKataloga } from "./govor-model.ts";
 import { loadPravila } from "./pravila.server.ts";
 import { CAKAJ_NADALJEVANJE_SEK, jeNedokoncan, TIMEOUT_OSEBNA_PO_SPOROCILU_SEK, TIMEOUT_OSEBNA_PO_VPRASANJU_SEK, TISINA_OSEBNA_PO_SPOROCILU_SEK, TISINA_PRIVZETO_SEK, tisinaIzNastavitve, tisinaPoGovoru, zdruziIzrek, type CakaPodatek } from "./tisina.ts";
 import { rokZbira } from "./trajanje.ts";
@@ -243,6 +244,8 @@ export async function pocakajOzadjeKlicev(): Promise<void> {
  * zato je izrek, ki pride prej, govor MED pozdravom in ne odgovor na vprasanje. Kljuc: root + CallSid.
  */
 const oknaPozdrava = new Map<string, number>();
+/** Klici, za katere se je stavek »zunaj delovnega casa« ze zacel pripravljati (en poskus na klic: napaka sinteze, npr. 429, se ne ponavlja na vsaki zahtevi). */
+const izvenCasaPripravljen = new Set<string>();
 /** Ocena trajanja govora brez posnetka (izmerjeno: 106 znakov = 12,1 s, torej ~9 znakov na sekundo). */
 const ZNAKOV_NA_SEKUNDO = 9;
 
@@ -395,6 +398,7 @@ function zazeniObrat(
   razumevanje?: ModelRazumevanja,
   nadSt = 0,
   prevezavaZahteva?: "cilj" | "brez",
+  izvenCasa = false,
 ): Opravilo {
   const zacetek = ura();
   pocistiOpravila(zacetek);
@@ -419,7 +423,7 @@ function zazeniObrat(
     izrek: vhod.text,
     nadSt,
   };
-  const obrat = recordCaller(vhod, root, model, { ...(nujniPrevezava ? { nujniPrevezava: true } : {}), ...(prevezavaZahteva ? { prevezavaZahteva } : {}), ...(razumevanje ? { razumevanje } : {}) });
+  const obrat = recordCaller(vhod, root, model, { ...(nujniPrevezava ? { nujniPrevezava: true } : {}), ...(prevezavaZahteva ? { prevezavaZahteva } : {}), ...(izvenCasa ? { prevezavaIzvenCasa: true } : {}), ...(razumevanje ? { razumevanje } : {}) });
   opravilo.besedilo = obrat.then(
     (izid) => {
       opravilo.izid = izid;
@@ -745,7 +749,9 @@ async function obdelajVoiceZahtevo(
     if (callSid) zahteveKlica.set(kljucZahtev, { n: zahteva, at: ura() });
     const line = await loadLine(root);
     const pravila = await loadPravila(root);
-    govorAtributi = atributiGovora(pravila);
+    // Izrazi kataloga v obeh nacinih (lastnik 23. 11. 2026: privzeto vse za podjetje in osebno; samo za podjetja je le, kar izrecno
+    // narocim). izrazeKatalogaIzklop = meritev brez njih (samo pravila.json).
+    govorAtributi = atributiGovora(pravila, pravila.izrazeKatalogaIzklop ? [] : izraziKataloga(line.catalog));
     // Action URL je nastavitev. X-Forwarded-* ne sme prepisati gostitelja.
     const origin = javniIzvor(request, pravila.javniNaslov ?? "");
     const action = `${origin}/api/voice/turn`;
@@ -767,16 +773,38 @@ async function obdelajVoiceZahtevo(
     // Izracun za vsak obrat klicatelja (tudi skoke po vmesnem stavku), ker izid obrata lahko pride sele v skoku.
     // Zanka: nikoli na klicano (Linino) stevilko, na stevilko, s katere je bil klic preusmerjen, ali na klicatelja.
     const kljuciZanke = [params.To ?? "", params.ForwardedFrom ?? "", params.From ?? ""];
-    const prevezavaNujna =
+    const ciljNujne =
       isTurn && callSid && !dialStatus
         ? await nujnaPrevezava(root, kljuciZanke).catch(() => null)
         : null;
     // Prevezava na zahtevo klicatelja (»prava oseba« ali nujno; lastnik 23. 11. 2026): stevilka za preusmeritev. "brez" = stikalo vklopljeno, a
     // prevezave ni (Lina samo oznaci nujno). Osebni telefon nujnih ima prednost, ce je nastavljen.
-    const naZahtevo =
+    const ciljZahteve =
       isTurn && callSid && !dialStatus
         ? await prevezavaNaZahtevo(root, pravila, kljuciZanke).catch(() => null)
         : null;
+    // Delovni cas prevezave (nacin podjetje, lastnik 23. 11. 2026; urnik.ts): zunaj urnika ni Diala na nobeni poti (nujni klic in zahteva); obrat dobi
+    // samo podatek, da bi prevezava bila mogoca, in Lina pove, da je zunaj delovnega casa. Ura je `now` zahteve (preizkusi jo vbrizgajo).
+    const izvenCasa = Boolean(ciljNujne || (ciljZahteve && ciljZahteve !== "brez")) && prevezavaIzvenCasa(pravila, now);
+    const prevezavaNujna = izvenCasa ? null : ciljNujne;
+    const naZahtevo = izvenCasa ? null : ciljZahteve;
+    // Stavek »zunaj delovnega casa« ni stalen (nov stalni stavek bi ustavil preklop sloga glasu): ob zahtevah klica zunaj urnika se pripravi kot
+    // posnetek klica, skupaj z vprasanjem po sporocilu (v podjetju ni stalno). Enkrat na klic, ob prvi zahtevi /incoming ali /turn (pri privzetem prevzemu
+    // »neodgovorjeni« je to ze zahteva pred Dialom, Lina govori sele po vrnitvi); nikoli na poteh druge noge (/potrdi, /potrdi-tipka, /delni).
+    const kljucIzven = `${root}\n${callSid}`;
+    if (
+      callSid &&
+      (isTurn || url.pathname.endsWith("/incoming")) &&
+      !izvenCasaPripravljen.has(kljucIzven) &&
+      pravila.prevezaNaZahtevo !== false &&
+      pravila.preusmeritev &&
+      prevezavaIzvenCasa(pravila, now) &&
+      (await glasNaVoljo(root))
+    ) {
+      if (izvenCasaPripravljen.size > 200) izvenCasaPripravljen.clear();
+      izvenCasaPripravljen.add(kljucIzven);
+      for (const stavek of [t("prevezavaIzvenCasa"), t("osebnaSporocilo")]) void predpripraviOdgovor(stavek, root, callSid);
+    }
     const prevezava = prevezavaNujna ?? (naZahtevo && naZahtevo !== "brez" ? naZahtevo : null);
     const zRezervo = async (razlog: KodaGlasu, status: number | null, kje: MestoGlasu): Promise<void> => {
       // Vsak odgovor, ki konca v <Say>, pusti zapis z razlogom (vodja 10. 11. 2026); vsebine pogovora v njem ni.
@@ -1129,6 +1157,7 @@ async function obdelajVoiceZahtevo(
       moznosti.razumevanje,
       nadSt,
       naZahtevo === null ? undefined : naZahtevo === "brez" ? "brez" : "cilj",
+      izvenCasa,
     );
     return oddaj(opravilo, kljuc, prvi);
   }

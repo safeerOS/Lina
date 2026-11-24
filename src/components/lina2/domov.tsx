@@ -8,7 +8,7 @@ import { AsistentPanel, DanesKartica } from "@/components/lina2/pogovor.tsx";
 import { MotivacijaBesedilo } from "./mediji.tsx";
 import {
   KLJUC_IZBIRE, NAJVEC_PLOSCIC, STRAN_PLOSCICE, izbirnePloscice, jeOknoVidno, preklopiOkno, preklopiPloscico, privzetaIzbira,
-  razberiIzbiro, serializirajIzbiro, vidnePloscice, type IdOkna, type IdPloscice, type IzbiraDomov,
+  razberiIzbiro, serializirajIzbiro, vidnePloscice, zadnjiKliciDomov, type IdOkna, type IdPloscice, type IzbiraDomov,
 } from "./domov-izbira.ts";
 
 const OGLED = "lina-klici-ogled";
@@ -28,6 +28,7 @@ export const IKONE: Record<string, ReactNode> = {
   linija: <path d="M4 12h3l2-6 4 12 2-6h5" />,
   nastavitve: <path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 12l2-.6.6-1.6-1-1.8 1.8-1.8 1.8 1 1.6-.6L12 4l.2 2.6 1.6.6 1.8-1 1.8 1.8-1 1.8.6 1.6L20 12l-2.6.2-.6 1.6 1 1.8-1.8 1.8-1.8-1-1.6.6L12 20l-.2-2.6-1.6-.6-1.8 1-1.8-1.8 1-1.8-.6-1.6z" />,
   mediji: <path d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01" />,
+  racunalnik: <path d="M3 5h18v11H3zM8 20h8M12 16v4" />,
   mik: <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v4" />,
 };
 
@@ -267,6 +268,7 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
 
   const klici = kliciZaPrikaz(calls, imenik, 6);
   const novih = steviloNovih(klici, ogled);
+  const zadnji = zadnjiKliciDomov(klici);
 
   async function shrani(telefon: string) {
     setNapaka("");
@@ -344,6 +346,31 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
         </div>
         <AsistentPanel kompakt brain={brain} ukaz={ukaz} glas={glas} onPrevzeto={onPrevzeto} onOdpriPogovor={() => onOdpri("pogovor")} />
         <div className="lina-scena-desno">
+          {/* Vedno prva in vedno vidna (ni v izbiri oken): sprejeti klici brez drsenja pri 1366x768 in 1920x1080. */}
+          <section className="lina-karta lina-zadnji-klici" aria-labelledby="lina-zadnji-klici-naslov">
+            <h3 className="lina-karta-naslov" id="lina-zadnji-klici-naslov">
+              <span className="lina-naslov-z-ikono"><Ikona ime="klic" /> {t("d2ZadnjiKlici")}</span>
+              <button type="button" className="lina-karta-vec" onClick={() => onOdpri("klic")}>{t("d2VsiKlici")}</button>
+            </h3>
+            {zadnji.length === 0 ? (
+              <p className="lina-karta-prazno">{t("d2KliciPrazno")}</p>
+            ) : (
+              <ul className="lina-zadnji-seznam">
+                {zadnji.map((k) => (
+                  <li key={k.sid}>
+                    <button type="button" className="lina-zadnji-klic" onClick={() => onOdpri("klic")}>
+                      <span className="lina-zadnji-vrh">
+                        <span className="lina-zadnji-ime">{k.ime || oblikujTelefon(k.telefon) || t("d2NeznanKlicatelj")}</span>
+                        <span className="lina-zadnji-cas">{zdaj ? kdajBesedilo(k.kdaj, zdaj) : ""}{k.zakljucen ? "" : ` · ${t("d2VTeku")}`}</span>
+                      </span>
+                      {k.ime && k.telefon ? <span className="lina-zadnji-tel">{oblikujTelefon(k.telefon)}</span> : null}
+                      <span className="lina-zadnji-kaj">{k.kaj || t("d2BrezPovzetka")}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           {jeOknoVidno(izbira, "danes") ? <DanesKartica onVec={() => onOdpri("koledar")} /> : null}
           {jeOknoVidno(izbira, "hitre") ? (
           <section className="lina-karta" aria-label={t("d2Hitre")}>

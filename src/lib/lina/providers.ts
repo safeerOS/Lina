@@ -7,7 +7,7 @@ import {
   type Kategorija,
 } from "./izhodni-filter.ts";
 import { zapisiDnevnikFiltra } from "./izhodni-filter.server.ts";
-import { DEFAULT_BRAIN_MODELS, DEFAULT_VERTEX_LOCATION, type BrainProvider } from "./types.ts";
+import { BREZPLACNI_SAMO_ASISTENTKA, DEFAULT_BRAIN_MODELS, DEFAULT_VERTEX_LOCATION, IME_PONUDNIKA, jeBrezplacenModel, jeTocnoBrezplacen, type BrainProvider } from "./types.ts";
 import { zabeleziOdgovor } from "./meritve.server.ts";
 import { topliFetch } from "./povezave.server.ts";
 import { naslovKlica, smePrekPrehoda, type PrehodNastavitve } from "./omniroute.ts";
@@ -55,6 +55,12 @@ export type ProviderCall = {
   priponke?: ReadonlyArray<{ ime: string; mime: string; podatki: string; vrsta: string }>;
   /** Najvec znakov vhoda (privzeto 4000, zgornja meja NAJVEC_ZNAKOV_VHODA). */
   najvecVhoda?: number;
+  /** Stikalo »brezplacni modeli (samo asistentka)« (pogovorBrain). Deny izpade SAMO z vsebinaKlica === false in modelom :free. */
+  brezplacniDovoljeni?: boolean;
+  /** C6: brezplacni model OpenRouter, ki enkrat odgovori, ce placljiv vrne 402 (samo asistentka, samo s stikalom). */
+  rezervniBrezplacni?: string;
+  /** Brez samodejne zamenjave modela (preizkusni klic, preverba kljuca): napaka »model ni na voljo« se samo vrne. */
+  brezZamenjave?: boolean;
 };
 
 export const PRIVZETA_MEJA_ZNAKOV = 500;
@@ -66,7 +72,54 @@ export function mejaZnakov(vrednost: number | undefined): number {
   return Math.min(NAJVEC_ZNAKOV, Math.max(1, Math.floor(vrednost)));
 }
 
-export type RezultatPonudnika = { ok: true; text: string; opozorilo?: string } | { ok: false; sporocilo: string };
+/** povratek (C6): odgovoril je rezervni brezplacni model istega ponudnika - uporabnik mora to izvedeti. */
+export type RezultatPonudnika =
+  | { ok: true; text: string; opozorilo?: string; povratek?: string }
+  | { ok: false; sporocilo: string; vzrok?: VzrokNapake };
+
+/** Pravi vzrok zavrnitve ponudnika (lastnik 24. 11. 2026: uporabnik mora izvedeti pravi vzrok, ne »model: <ime>«). */
+export type VzrokNapake = "model" | "kljuc" | "dobroimetje" | "omejitev";
+
+/**
+ * Vzrok iz statusa IN telesa napake (nikoli samo iz 404: pri OpenRouter in Vertex 404 pomeni tudi drugo).
+ * Oblike: Anthropic {error:{type:"not_found_error",message:"model: x"}}, OpenAI {error:{code:"model_not_found"}},
+ * Google {error:{status:"NOT_FOUND"}}, OpenRouter/xAI sporocilo o neveljavnem modelu.
+ */
+export function vzrokNapake(status: number, surovo: string): VzrokNapake | null {
+  let e: Record<string, unknown> = {};
+  try {
+    const j = JSON.parse(surovo) as unknown;
+    const x = (Array.isArray(j) ? (j[0] as { error?: unknown } | undefined)?.error : (j as { error?: unknown } | null)?.error) ?? null;
+    if (typeof x === "string") e = { message: x };
+    else if (x && typeof x === "object") e = x as Record<string, unknown>;
+  } catch {
+    /* telo ni JSON */
+  }
+  const niz = (v: unknown): string => (typeof v === "string" ? v : "");
+  const tip = niz(e.type);
+  const koda = niz(e.code);
+  const sporocilo = niz(e.message).slice(0, 500);
+  if (status === 401 || status === 403) return "kljuc";
+  if (status === 402 || koda === "insufficient_quota" || /credit balance|insufficient (credit|fund|balance)|billing/i.test(sporocilo)) return "dobroimetje";
+  if (status === 429) return "omejitev";
+  if (status !== 400 && status !== 404) return null;
+  if (tip === "not_found_error" || koda === "model_not_found") return "model";
+  if (status === 404 && niz(e.status) === "NOT_FOUND") return "model";
+  // Ozko: napaka parametra (»'max_tokens' is not supported with this model«) NI »model ne obstaja«.
+  if (/not a valid model|invalid model|model\b[^\n]{0,80}\b(does not exist|not found|no longer available|has been retired)|(does not exist|not found)[^\n]{0,40}\bmodel/i.test(sporocilo)) {
+    return "model";
+  }
+  return null;
+}
+
+/** Razumljivo besedilo za vzrok (brez imena modela iz telesa napake). */
+export function razlogVzroka(provider: BrainProvider, vzrok: VzrokNapake): string {
+  const ime = IME_PONUDNIKA[provider];
+  if (vzrok === "kljuc") return `${ime}: ključ ni veljaven ali nima dovoljenja.`;
+  if (vzrok === "dobroimetje") return `${ime}: na računu ni dobroimetja.`;
+  if (vzrok === "omejitev") return `${ime}: dosežena omejitev zahtevkov, poskusite čez trenutek.`;
+  return `${ime}: izbrani model ni na voljo; ob shranjevanju ključa Lina sama izbere delujočega.`;
+}
 
 function jeOpenRouterPrehod(input: ProviderCall, url: string): boolean {
   if (input.provider === "openrouter") return true;
@@ -222,7 +275,7 @@ export function providerRequest(input: ProviderCall): { url: string; init: Reque
       max_tokens: maxTokens,
       temperature: 0,
       messages,
-      ...(input.provider === "openrouter" ? { provider: { data_collection: "deny" } } : {}),
+      ...(input.provider === "openrouter" && !smeBrezDeny(input, model) ? { provider: { data_collection: "deny" } } : {}),
     };
   } else {
     url = "https://api.anthropic.com/v1/messages";
@@ -298,7 +351,21 @@ function readText(json: {
   ).trim();
 }
 
+/** B2: deny izpade samo, ce so izpolnjeni VSI pogoji: OpenRouter, stikalo, izrecno pogovor z asistentko, tocen brezplacen model. */
+function smeBrezDeny(input: ProviderCall, model: string): boolean {
+  return input.provider === "openrouter" && input.brezplacniDovoljeni === true && input.vsebinaKlica === false && !input.audio && jeTocnoBrezplacen(model);
+}
+
 export async function callProvider(input: ProviderCall): Promise<RezultatPonudnika> {
+  const modelKlica = cleanModel(input.model, input.provider);
+  // B3 (lastnik 24. 11. 2026): brezplacen model (lahko uci na pozivih) nikoli ne dobi vsebine klica, ne glede na ponudnika ali prehod.
+  if (jeBrezplacenModel(modelKlica) && (input.vsebinaKlica !== false || input.audio)) {
+    return { ok: false, sporocilo: BREZPLACNI_SAMO_ASISTENTKA };
+  }
+  // Brez stikala brezplacni model ne gre v omrezje, tudi ko vsebinaKlica === false.
+  if (jeBrezplacenModel(modelKlica) && input.brezplacniDovoljeni !== true) {
+    return { ok: false, sporocilo: "OpenRouter: vklopite stikalo za brezplačne modele." };
+  }
   // Lastnik 21. 11. 2026: tajnica (klici) ne dobi lastnega streznika; velja samo za pogovor z asistentko (vsebinaKlica izrecno false).
   if (input.provider === "custom" && (input.vsebinaKlica !== false || input.audio)) {
     return { ok: false, sporocilo: "Lasten strežnik je dovoljen samo za pogovor z asistentko, ne za klice." };
@@ -355,7 +422,8 @@ export async function callProvider(input: ProviderCall): Promise<RezultatPonudni
   const izidPonudnika = await callProviderNeposredno(filtriranVhod);
   if (!izidPonudnika.ok) return izidPonudnika;
   const obnovljeno = obnovi(izidPonudnika.text);
-  return opozorilo ? { ok: true, text: obnovljeno, opozorilo } : { ok: true, text: obnovljeno };
+  const povratek = izidPonudnika.povratek ? { povratek: izidPonudnika.povratek } : {};
+  return opozorilo ? { ok: true, text: obnovljeno, opozorilo, ...povratek } : { ok: true, text: obnovljeno, ...povratek };
 }
 
 /**
@@ -363,8 +431,23 @@ export async function callProvider(input: ProviderCall): Promise<RezultatPonudni
  * ostali statusi so po dokumentaciji OpenRouter (errors-and-debugging): 402 premalo dobroimetja, 429 omejitev,
  * 404 in 503 pa ob »data_collection: deny« najpogosteje pomenita, da model nima ponudnika brez zbiranja podatkov.
  */
-export function razlogOpenRouter(status: number): string | null {
+export function razlogOpenRouter(status: number, kontekst?: { model: string; brezplacniDovoljeni?: boolean; asistentka?: boolean }): string | null {
   if (status === 401) return "OpenRouter: ključ ni veljaven.";
+  // B6 in C8 (24. 11. 2026): sporocila za brezplacne modele in stanje racuna; brez konteksta ostanejo stara besedila.
+  if (kontekst) {
+    const brezplacen = jeBrezplacenModel(kontekst.model);
+    if (status === 402 && (brezplacen || kontekst.asistentka)) {
+      return "OpenRouter: na računu OpenRouter ni dobroimetja ali je negativen; izberite brezplačen model ali dodajte kredit.";
+    }
+    if (brezplacen && status === 429) {
+      return "OpenRouter: dosežena omejitev brezplačnih modelov (20 zahtevkov na minuto; 50 na dan, z vsaj 10 kupljenimi krediti 1000).";
+    }
+    if (brezplacen && (status === 404 || status === 503)) {
+      return kontekst.brezplacniDovoljeni
+        ? "OpenRouter: vklopite brezplačne modele v računu OpenRouter (Privacy) ali izberite drug model."
+        : "OpenRouter: vklopite stikalo za brezplačne modele.";
+    }
+  }
   if (status === 402) return "OpenRouter: na računu ni dovolj dobroimetja.";
   if (status === 429) return "OpenRouter: preveč zahtevkov, poskusite čez trenutek.";
   if (status === 404 || status === 503) {
@@ -416,8 +499,95 @@ async function callLastni(input: ProviderCall): Promise<RezultatPonudnika> {
   }
 }
 
-async function callProviderNeposredno(input: ProviderCall): Promise<RezultatPonudnika> {
-  if (input.provider === "custom") return callLastni(input);
+/**
+ * Napaka OpenRouter. C6: placljiv model z 402 enkrat poskusi izbrani brezplacni model (samo asistentka, samo s stikalom), nikoli
+ * drugega ponudnika (B9). C8: pri 429 brezplacnega modela pove, koliko zahtevkov je danes se ostalo (GET /api/v1/key).
+ */
+async function napakaOpenRouter(input: ProviderCall, status: number, secret: string): Promise<RezultatPonudnika> {
+  const model = cleanModel(input.model, input.provider);
+  const rezerva = input.rezervniBrezplacni?.trim() ?? "";
+  if (status === 402 && !jeBrezplacenModel(model) && input.vsebinaKlica === false && input.brezplacniDovoljeni === true && jeTocnoBrezplacen(rezerva)) {
+    const izid = await callProviderNeposredno({ ...input, model: rezerva, rezervniBrezplacni: undefined });
+    if (izid.ok) return { ...izid, povratek: `Na računu OpenRouter ni dobroimetja, zato je odgovoril brezplačni model ${rezerva}.` };
+    return izid;
+  }
+  const kontekst = { model, brezplacniDovoljeni: input.brezplacniDovoljeni === true, asistentka: input.vsebinaKlica === false };
+  let sporocilo = razlogOpenRouter(status, kontekst) ?? `Ponudnik je zavrnil klic (${status}).`;
+  if (status === 429 && jeBrezplacenModel(model)) {
+    const { stanjeOpenRouter } = await import("./openrouter.server.ts");
+    const st = await stanjeOpenRouter(input.key).catch(() => null);
+    const d = st?.ok ? st.stanje.dnevno : null;
+    if (d && d.preostalo !== null) sporocilo += ` Danes še ${d.preostalo}${d.meja !== null ? ` od ${d.meja}` : ""}.`;
+  }
+  return { ok: false, sporocilo: hideSecret(sporocilo, secret) };
+}
+
+/**
+ * Model, ki ga ponudnik ne pozna vec -> delujoc model istega ponudnika (v tem procesu; trajno ga zapise keys.server.ts).
+ * shortcut: kljuc je ponudnik+model, ne kljuc racuna; ce bi dva kljuca istega ponudnika videla razlicne modele, dodaj odtis kljuca.
+ */
+const zamenjaniModeli = new Map<string, string>();
+const izbireVTeku = new Map<string, Promise<{ ok: true; model: string } | { ok: false; sporocilo: string; vzrok?: VzrokNapake }>>();
+
+/** Samo za preizkuse: pozabi zamenjave modelov v tem procesu. */
+export function pozabiZamenjaveModelov(): void {
+  zamenjaniModeli.clear();
+  izbireVTeku.clear();
+}
+
+/** Preizkusni klic za samodejno izbiro: neposredno na uradni naslov (brez prehoda), brez zamenjave, brezplacen model ne za klice. */
+export async function preizkusiModel(input: ProviderCall): Promise<RezultatPonudnika> {
+  if (input.provider === "custom") return { ok: false, sporocilo: "Lasten strežnik nima samodejne izbire modela." };
+  const modelKlica = cleanModel(input.model, input.provider);
+  if (jeBrezplacenModel(modelKlica) && (input.vsebinaKlica !== false || input.audio)) {
+    return { ok: false, sporocilo: BREZPLACNI_SAMO_ASISTENTKA };
+  }
+  if (jeBrezplacenModel(modelKlica) && input.brezplacniDovoljeni !== true) {
+    return { ok: false, sporocilo: "OpenRouter: vklopite stikalo za brezplačne modele." };
+  }
+  return callProviderNeposredno({ ...input, brezZamenjave: true, prehod: undefined });
+}
+
+/**
+ * Lastnik 24. 11. 2026: ce ponudnik vrne »model ne obstaja/ni na voljo«, Lina SAMA preklopi na delujoc model ISTEGA ponudnika
+ * (isti kljuc; nikoli drug ponudnik, B9), ponovi zahtevo, shrani nov model in lastniku v eni vrstici pove, da ga je zamenjala.
+ */
+async function poZamenjaviModela(input: ProviderCall, model: string, secret: string, status: number): Promise<RezultatPonudnika> {
+  if (input.brezZamenjave) return { ok: false, sporocilo: razlogVzroka(input.provider, "model"), vzrok: "model" };
+  // Samo shranjen model (klici, ponudnik, izbira asistentke); klicatelj s stalnim, izmerjenim modelom (npr. razumevanje) ga obdrzi.
+  const kljuci = await import("./keys.server.ts");
+  if (!(await kljuci.jeShranjenModel(input.provider, model).catch(() => false))) {
+    return { ok: false, sporocilo: hideSecret(`Ponudnik je zavrnil klic (${status}).`, secret), vzrok: "model" };
+  }
+  const kljucZamenjave = `${input.provider}|${model}`;
+  let izbira = izbireVTeku.get(kljucZamenjave);
+  if (!izbira) {
+    const { izberiDelujocModel } = await import("./samodejni-model.server.ts");
+    izbira = izberiDelujocModel({
+      provider: input.provider,
+      key: input.key,
+      ...(input.project !== undefined ? { project: input.project } : {}),
+      ...(input.location !== undefined ? { location: input.location } : {}),
+      zaKlice: input.vsebinaKlica !== false,
+      izkljuci: [model],
+    }).finally(() => izbireVTeku.delete(kljucZamenjave));
+    izbireVTeku.set(kljucZamenjave, izbira);
+  }
+  const izid = await izbira;
+  if (!izid.ok) return { ok: false, sporocilo: hideSecret(izid.sporocilo, secret), ...(izid.vzrok ? { vzrok: izid.vzrok } : {}) };
+  zamenjaniModeli.set(kljucZamenjave, izid.model);
+  const ponovno = await callProviderNeposredno({ ...input, model: izid.model, brezZamenjave: true });
+  if (!ponovno.ok) return ponovno;
+  const obvestilo = `Model ${model} pri ponudniku ${IME_PONUDNIKA[input.provider]} ni več na voljo, zato je Lina preklopila na ${izid.model}.`;
+  await kljuci.zamenjajModel(input.provider, model, izid.model, obvestilo).catch(() => undefined);
+  return { ...ponovno, povratek: obvestilo };
+}
+
+async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonudnika> {
+  if (vhod.provider === "custom") return callLastni(vhod);
+  // Model, ki ga je ponudnik ze zavrnil: takoj nadomestni (tekoci klic ima stari model v pomnilniku).
+  const nadomestni = vhod.brezZamenjave ? undefined : zamenjaniModeli.get(`${vhod.provider}|${cleanModel(vhod.model, vhod.provider)}`);
+  const input = nadomestni ? { ...vhod, model: nadomestni } : vhod;
   let secret = input.key;
   try {
     if (input.provider === "vertex") {
@@ -432,8 +602,15 @@ async function callProviderNeposredno(input: ProviderCall): Promise<RezultatPonu
     }
     const raw = await response.text();
     if (!response.ok) {
-      const razlog = input.provider === "openrouter" ? razlogOpenRouter(response.status) : null;
-      return { ok: false, sporocilo: hideSecret(razlog ?? `Ponudnik je zavrnil klic (${response.status}).`, secret) };
+      const vzrok = vzrokNapake(response.status, raw);
+      const model = cleanModel(input.model, input.provider);
+      // Brezplacni modeli OpenRouter imajo svoja sporocila (B6); zamenjava samo za placljive.
+      if (vzrok === "model" && !(input.provider === "openrouter" && jeBrezplacenModel(model))) return poZamenjaviModela(input, model, secret, response.status);
+      if (input.provider === "openrouter") {
+        const r = await napakaOpenRouter(input, response.status, secret);
+        return !r.ok && vzrok ? { ...r, vzrok } : r;
+      }
+      return { ok: false, sporocilo: hideSecret(`Ponudnik je zavrnil klic (${response.status}).`, secret), ...(vzrok ? { vzrok } : {}) };
     }
     let text = raw.trim();
     try {

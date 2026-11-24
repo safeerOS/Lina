@@ -3,10 +3,19 @@ import { chmod, link, mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
-import { callProvider, gcpLocation, gcpProject } from "./providers.ts";
+import { callProvider, gcpLocation, gcpProject, hideSecret, razlogVzroka } from "./providers.ts";
 import { normirajNaslov } from "./lastni-streznik.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
-import { DEFAULT_BRAIN_MODELS, type BrainProvider, type BrainPublic, type ShranjenPonudnik } from "./types.ts";
+import {
+  BREZPLACNI_SAMO_ASISTENTKA,
+  DEFAULT_BRAIN_MODELS,
+  jeBrezplacenModel,
+  jeTocnoBrezplacen,
+  PRIVZETI_BREZPLACNI,
+  type BrainProvider,
+  type BrainPublic,
+  type ShranjenPonudnik,
+} from "./types.ts";
 
 const PROVIDERS = new Set<BrainProvider>(["gemini", "openai", "claude", "grok", "vertex", "openrouter", "custom"]);
 
@@ -157,11 +166,20 @@ type PonudnikZapis = {
   location?: string;
   /** Naslov lastnega streznika (samo ponudnik »custom«). */
   naslov?: string;
+  /** Kljuc za asistentko (lastnik 24. 11. 2026, C1): samo v ponudniki.json, klici ga nikoli ne dobijo (ne prek saveBrain). */
+  samoAsistentka?: boolean;
 };
 
 type PonudnikiFile = {
   ponudniki?: Partial<Record<BrainProvider, PonudnikZapis>>;
   pogovor?: { provider: BrainProvider; model: string } | null;
+  /** B1: stikalo »brezplacni modeli (samo asistentka)«, privzeto izklopljeno. NIKOLI v kljuci.json. */
+  brezplacniModeli?: boolean;
+  /**
+   * Zadnja samodejna zamenjava modela (ena vrstica za lastnika).
+   * shortcut: izgine ob naslednjem zapisu ponudnikov (ne podajo ga), ce bi lastnik zelel zgodovino zamenjav - dnevnik.
+   */
+  zamenjavaModela?: string;
 };
 
 const PONUDNIKI_DATOTEKA = "ponudniki.json";
@@ -182,6 +200,8 @@ function modeliZapisa(provider: BrainProvider, zapis: PonudnikZapis): string[] {
 async function preberiPonudnike(root: string): Promise<{
   ponudniki: Partial<Record<BrainProvider, PonudnikZapis>>;
   pogovor: { provider: BrainProvider; model: string } | null;
+  brezplacniModeli: boolean;
+  zamenjavaModela?: string;
 }> {
   const datoteka = (await readJsonFile<PonudnikiFile>(root, PONUDNIKI_DATOTEKA).catch(() => null)) ?? {};
   const ponudniki = { ...(datoteka.ponudniki ?? {}) };
@@ -192,11 +212,14 @@ async function preberiPonudnike(root: string): Promise<{
   }
   const p = datoteka.pogovor;
   const pogovor = p && isProvider(String(p.provider)) && typeof p.model === "string" ? { provider: p.provider, model: p.model } : null;
-  return { ponudniki, pogovor };
+  const zamenjava = typeof datoteka.zamenjavaModela === "string" ? { zamenjavaModela: datoteka.zamenjavaModela.slice(0, 300) } : {};
+  return { ponudniki, pogovor, brezplacniModeli: datoteka.brezplacniModeli === true, ...zamenjava };
 }
 
 async function zapisiPonudnike(root: string, datoteka: PonudnikiFile): Promise<void> {
-  await writeJson(root, PONUDNIKI_DATOTEKA, datoteka);
+  // Klicatelji sestavijo samo {ponudniki, pogovor}: stikalo brezplacnih modelov se ohrani z diska, ce ga ne podajo izrecno.
+  const brezplacniModeli = datoteka.brezplacniModeli ?? (await preberiPonudnike(root)).brezplacniModeli;
+  await writeJson(root, PONUDNIKI_DATOTEKA, { ...datoteka, brezplacniModeli });
   await lock(path.join(root, PONUDNIKI_DATOTEKA));
 }
 
@@ -216,8 +239,10 @@ async function vpisiPonudnika(root: string, provider: BrainProvider, zapis: Ponu
 async function pogledPonudnikov(root: string): Promise<{
   shranjeni: ShranjenPonudnik[];
   pogovor: { provider: BrainProvider; model: string } | null;
+  brezplacniModeli: boolean;
+  zamenjavaModela?: string;
 }> {
-  const { ponudniki, pogovor } = await preberiPonudnike(root);
+  const { ponudniki, pogovor, brezplacniModeli, zamenjavaModela } = await preberiPonudnike(root);
   const kljuc = await masterKey(root);
   const shranjeni: ShranjenPonudnik[] = [];
   for (const provider of RED_PONUDNIKOV) {
@@ -236,10 +261,53 @@ async function pogledPonudnikov(root: string): Promise<{
       continue;
     }
     const skrivnost = skrivnostZapisa(provider, zapis, kljuc);
-    if (skrivnost) shranjeni.push({ provider, namig: hint(skrivnost), model, modeli });
+    if (skrivnost) shranjeni.push({ provider, namig: hint(skrivnost), model, modeli, ...(zapis.samoAsistentka ? { samoAsistentka: true } : {}) });
   }
   const veljavna = pogovor && shranjeni.some((p) => p.provider === pogovor.provider && p.modeli.includes(pogovor.model)) ? pogovor : null;
-  return { shranjeni, pogovor: veljavna };
+  return { shranjeni, pogovor: veljavna, brezplacniModeli, ...(zamenjavaModela ? { zamenjavaModela } : {}) };
+}
+
+/**
+ * Lastnik 24. 11. 2026: model, ki ga ponudnik ne pozna vec, Lina med delovanjem zamenja z delujocim ISTEGA ponudnika in ga shrani.
+ * Zamenja samo zapise, ki se uporabljajo model »staro« (klici v kljuci.json, ponudnik in izbira asistentke v ponudniki.json).
+ * Brezplacen model nikoli v kljuci.json (B3). Klicatelj je strezniski del (callProvider), zato brez preverbe lastnika.
+ */
+/** Ali je model shranjen za klice, kot model ponudnika ali kot izbira asistentke (samo take Lina sama zamenja). */
+export async function jeShranjenModel(provider: BrainProvider, model: string, dir?: string): Promise<boolean> {
+  const root = resolveDataDir(dir);
+  const saved = await readFileState(root);
+  if (saved && saved.provider === provider && (saved.model || DEFAULT_BRAIN_MODELS[provider]) === model) return true;
+  const t = await preberiPonudnike(root);
+  const z = t.ponudniki[provider];
+  if (z && (z.model || DEFAULT_BRAIN_MODELS[provider]) === model) return true;
+  return t.pogovor?.provider === provider && t.pogovor.model === model;
+}
+
+export async function zamenjajModel(provider: BrainProvider, staro: string, novo: string, obvestilo: string, dir?: string): Promise<boolean> {
+  if (provider === "custom" || !VELJAVEN_MODEL.test(novo) || staro === novo) return false;
+  const root = resolveDataDir(dir);
+  const saved = await readFileState(root);
+  let spremenjeno = false;
+  if (saved && saved.provider === provider && (saved.model || DEFAULT_BRAIN_MODELS[provider]) === staro && !jeBrezplacenModel(novo)) {
+    await writeJson(root, "kljuci.json", { ...saved, model: novo });
+    await lock(path.join(root, "kljuci.json"));
+    spremenjeno = true;
+  }
+  const t = await preberiPonudnike(root);
+  const zapis = t.ponudniki[provider];
+  const pogovorStar = t.pogovor?.provider === provider && t.pogovor.model === staro;
+  let ponudniki = t.ponudniki;
+  if (zapis && ((zapis.model || DEFAULT_BRAIN_MODELS[provider]) === staro || pogovorStar)) {
+    const prej = modeliZapisa(provider, zapis);
+    const modeli = (prej.includes(staro) ? prej.map((m) => (m === staro ? novo : m)) : [novo, ...prej]).filter((m) => VELJAVEN_MODEL.test(m));
+    const model = (zapis.model || DEFAULT_BRAIN_MODELS[provider]) === staro ? novo : zapis.model;
+    ponudniki = { ...ponudniki, [provider]: { ...zapis, model, modeli: [...new Set(modeli)].slice(0, NAJVEC_MODELOV) } };
+    spremenjeno = true;
+  }
+  const pogovor = pogovorStar ? { provider, model: novo } : t.pogovor;
+  // Obvestilo samo, ce je bil res zamenjan shranjen zapis.
+  if (spremenjeno || pogovorStar) await zapisiPonudnike(root, { ponudniki, pogovor, zamenjavaModela: obvestilo.slice(0, 300) });
+  return spremenjeno || pogovorStar;
 }
 
 /** Samo kljuc, ki ga je lastnik shranil. Kljuc iz okolja se ne uporabi. */
@@ -258,10 +326,16 @@ export function emptyBrain(): BrainPublic {
   return { provider: null, model: "", nastavljen: false, namig: null, projekt: null, lokacija: null };
 }
 
+/** Zaslon kaze placljivi privzeti model, ce je v zapisu shranjen brezplacni (klici ga ne uporabljajo). */
+function modelZaZaslon(provider: BrainProvider, model: string | undefined): string {
+  const izbran = model || DEFAULT_BRAIN_MODELS[provider];
+  return jeBrezplacenModel(izbran) ? DEFAULT_BRAIN_MODELS[provider] : izbran;
+}
+
 function publicVertex(saved: KeyFile): BrainPublic {
   return {
     provider: "vertex",
-    model: saved.model || DEFAULT_BRAIN_MODELS.vertex,
+    model: modelZaZaslon("vertex", saved.model),
     nastavljen: Boolean(saved.project),
     namig: null,
     projekt: saved.project ?? null,
@@ -283,7 +357,7 @@ async function readBrainOsnova(root: string): Promise<BrainPublic> {
   const secret = decrypt(saved, await masterKey(root));
   return {
     provider: saved.provider,
-    model: saved.model || DEFAULT_BRAIN_MODELS[saved.provider],
+    model: modelZaZaslon(saved.provider, saved.model),
     nastavljen: Boolean(secret),
     namig: hint(secret),
     projekt: null,
@@ -296,8 +370,21 @@ function parseProvider(value: unknown): BrainProvider {
   return value;
 }
 
+/**
+ * Samodejna izbira ob shranjevanju (lastnik 24. 11. 2026). Odlocitev: kljuc, ki ga ponudnik zavrne (kljuc, dobroimetje, omejitev,
+ * noben model), se NE shrani - prejsnja delujoca nastavitev klicev ostane, uporabnik vidi pravi vzrok. Ce ponudnik ni dosegljiv
+ * (omrezje), se shrani privzeti model z opozorilom; med delovanjem ga Lina po potrebi zamenja sama (callProvider).
+ */
+async function samodejniModel(o: { provider: BrainProvider; key: string; project?: string; location?: string }): Promise<{ model: string; sporocilo: string } | null> {
+  const { izberiDelujocModel } = await import("./samodejni-model.server.ts");
+  const izid = await izberiDelujocModel({ ...o, zaKlice: true });
+  if (izid.ok) return { model: izid.model, sporocilo: `Lina je izbrala model ${izid.model} (preizkusni klic je uspel).` };
+  if (izid.vzrok) throw new Error(izid.sporocilo);
+  return { model: DEFAULT_BRAIN_MODELS[o.provider], sporocilo: `Modela ni bilo mogoče preveriti (${izid.sporocilo.slice(0, 120)}); shranjen je privzeti ${DEFAULT_BRAIN_MODELS[o.provider]}.` };
+}
+
 export async function saveBrain(
-  input: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown },
+  input: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown; samodejno?: unknown },
   token: string | null,
   dir?: string,
 ): Promise<BrainPublic> {
@@ -309,25 +396,43 @@ export async function saveBrain(
   const provider = parseProvider(input.provider);
   // Lastnik 21. 11. 2026: lasten streznik je samo za pogovor; kljuci.json (mozgani za klice) ga ne sme vsebovati.
   if (provider === "custom") throw new Error("Lasten strežnik se nastavi v svojem razdelku (samo za pogovor).");
-  const model = typeof input.model === "string" && input.model.trim() ? input.model.trim().slice(0, 80) : DEFAULT_BRAIN_MODELS[provider];
+  const rocni = typeof input.model === "string" && input.model.trim() ? input.model.trim().slice(0, 80) : "";
+  // Samodejno samo, ce uporabnik modela ni vpisal sam (Napredno); saveBrain brez zastavice ostane brez omrezja.
+  const samodejno = input.samodejno === true && !rocni;
+  let model = rocni || DEFAULT_BRAIN_MODELS[provider];
+  // B3 (lastnik 24. 11. 2026): kljuci.json doloca mozgane za KLICE; brezplacen model (lahko uci na pozivih) tja ne sme.
+  if (jeBrezplacenModel(model)) throw new Error(BREZPLACNI_SAMO_ASISTENTKA);
+  let sporociloModela: string | undefined;
   if (provider === "vertex") {
     const project = gcpProject(input.project);
     if (!project) throw new Error("Vpišite ID projekta Google Cloud.");
     const location = gcpLocation(input.location);
+    // Vertex: samodejne izbire ob shranjevanju NI (prijava Google shrani projekt tudi, ce API se ni vklopljen); med delovanjem velja zamenjava.
     const next: KeyFile = { provider, model, project, location };
     await writeJson(root, "kljuci.json", next);
     await lock(path.join(root, "kljuci.json"));
     await vpisiPonudnika(root, provider, { model, project, location });
-    return { ...publicVertex(next), ...(await pogledPonudnikov(root)) };
+    return { ...publicVertex(next), ...(await pogledPonudnikov(root)), ...(sporociloModela ? { sporociloModela } : {}) };
   }
   // Kljuc velja samo za ponudnika, ki mu pripada: stari kljuc drugega ponudnika se NE prenese (xAI kljuc ne sme k OpenAI).
+  // Kljuc za asistentko (samoAsistentka) se za klice NIKOLI ne podeduje iz praznega polja: velja kljuc klicev iz kljuci.json.
   const prejsnji = (await preberiPonudnike(root)).ponudniki[provider];
-  const previous = prejsnji ? skrivnostZapisa(provider, prejsnji, await masterKey(root)) : null;
+  const zaKlice = await readFileState(root);
+  const previous =
+    prejsnji && !prejsnji.samoAsistentka
+      ? skrivnostZapisa(provider, prejsnji, await masterKey(root))
+      : zaKlice && zaKlice.provider === provider
+        ? decrypt(zaKlice, await masterKey(root))
+        : null;
   const typed = typeof input.key === "string" ? input.key.trim() : "";
   if (typed && (typed.length < 8 || typed.length > 400)) {
     throw new Error("Ključ mora imeti med 8 in 400 znakov.");
   }
   const secret = typed || previous;
+  if (samodejno && secret) {
+    const izbira = await samodejniModel({ provider, key: secret });
+    if (izbira) ({ model, sporocilo: sporociloModela } = izbira);
+  }
   const next: KeyFile = {
     provider,
     model,
@@ -335,7 +440,8 @@ export async function saveBrain(
   };
   await writeJson(root, "kljuci.json", next);
   await lock(path.join(root, "kljuci.json"));
-  if (next.ciphertext) await vpisiPonudnika(root, provider, { model, iv: next.iv, tag: next.tag, ciphertext: next.ciphertext });
+  // Zapis asistentke ostane nedotaknjen (svoj kljuc); kljuc klicev je v kljuci.json.
+  if (next.ciphertext && !prejsnji?.samoAsistentka) await vpisiPonudnika(root, provider, { model, iv: next.iv, tag: next.tag, ciphertext: next.ciphertext });
   return {
     provider,
     model,
@@ -344,6 +450,7 @@ export async function saveBrain(
     projekt: null,
     lokacija: null,
     ...(await pogledPonudnikov(root)),
+    ...(sporociloModela ? { sporociloModela } : {}),
   };
 }
 
@@ -369,7 +476,27 @@ export async function activeBrain(
 ): Promise<{ provider: BrainProvider; model: string; key: string; project?: string; location?: string } | null> {
   const root = resolveDataDir(dir);
   const saved = await readFileState(root);
-  if (saved && isProvider(saved.provider) && saved.provider !== "custom") {
+  // B9: custom (lasten streznik) je samo za asistentko; izbran v kljuci.json (rocno) = brez mozganov za klice, ne ponudnik iz okolja.
+  if (saved && isProvider(saved.provider) && saved.provider === "custom") return null;
+  if (saved && isProvider(saved.provider)) {
+    // Brezplacen zapis: samo kljuc istega ponudnika in placljivi privzeti model. Tuj kljuc iz okolja ne pride v postev.
+    if (jeBrezplacenModel(saved.model || "")) {
+      if (saved.provider === "vertex") {
+        const project = saved.project ? gcpProject(saved.project) : "";
+        if (!project) return null;
+        return {
+          provider: "vertex",
+          model: DEFAULT_BRAIN_MODELS.vertex,
+          key: "",
+          project,
+          location: gcpLocation(saved.location),
+        };
+      }
+      const stored = decrypt(saved, await masterKey(root));
+      const key = stored || envKey(saved.provider);
+      if (!key) return null;
+      return { provider: saved.provider, model: DEFAULT_BRAIN_MODELS[saved.provider], key };
+    }
     if (saved.provider === "vertex") {
       const project = saved.project ? gcpProject(saved.project) : "";
       if (!project) return null;
@@ -383,8 +510,10 @@ export async function activeBrain(
     }
     const stored = decrypt(saved, await masterKey(root));
     const key = stored || envKey(saved.provider);
-    if (key) return { provider: saved.provider, model: saved.model || DEFAULT_BRAIN_MODELS[saved.provider], key };
+    // B9: lastnik je izbral ponudnika za klice; brez njegovega kljuca ni mozganov (nikoli drug ponudnik iz okolja).
+    return key ? { provider: saved.provider, model: saved.model || DEFAULT_BRAIN_MODELS[saved.provider], key } : null;
   }
+  // Zanka po okolju samo, ce lastnik v kljuci.json ni izbral ponudnika.
   const order: BrainProvider[] = ["grok", "openai", "claude", "gemini", "openrouter"];
   for (const provider of order) {
     const key = envKey(provider);
@@ -418,6 +547,7 @@ export async function checkBrain(
       location,
       text: "Odgovori samo z besedo: da.",
       maxTokens: 8,
+      brezZamenjave: true,
     });
     if (!result.ok) return { ok: false, sporocilo: result.sporocilo };
     return { ok: true, sporocilo: "Prijava Google Cloud deluje." };
@@ -432,8 +562,11 @@ export async function checkBrain(
     key,
     text: "Odgovori samo z besedo: da.",
     maxTokens: 8,
+    // Preverba ne zamenja shranjenega modela; vzrok pove razumljivo (model, kljuc, dobroimetje, omejitev).
+    brezZamenjave: true,
   });
-  if (!result.ok) return { ok: false, sporocilo: result.sporocilo };
+  // Samo »model ni na voljo« dobi novo besedilo; ostala sporocila (in podrobna OpenRouter) ostanejo kot prej.
+  if (!result.ok) return { ok: false, sporocilo: result.vzrok === "model" ? razlogVzroka(provider, "model") : result.sporocilo };
   return { ok: true, sporocilo: "Ključ deluje." };
 }
 
@@ -463,33 +596,68 @@ export async function izberiModelPogovora(
   return readBrain(token, dir);
 }
 
-/** Možgani za pogovor z asistentko: izbrani model, ce je izbran in uporaben, sicer aktivni ponudnik (kot za klice). */
+/**
+ * Možgani za pogovor z asistentko. B9: ce je asistentka izrecno izbrana (ponudniki.json -> pogovor), samo ta ponudnik; ce ni
+ * uporaben (brez placljivega modela po izklopu stikala, neberljiv kljuc, neveljaven naslov ali projekt) null, nikoli drug ponudnik.
+ * Na mozgane za klice (activeBrain) pade SAMO, ce asistentka ni posebej izbrana (privzeto = isti kot klici).
+ */
 export async function pogovorBrain(
   dir?: string,
-): Promise<{ provider: BrainProvider; model: string; key: string; project?: string; location?: string; naslov?: string } | null> {
+): Promise<{
+  provider: BrainProvider;
+  model: string;
+  key: string;
+  project?: string;
+  location?: string;
+  naslov?: string;
+  brezplacniDovoljeni?: boolean;
+  rezervniBrezplacni?: string;
+} | null> {
   const root = resolveDataDir(dir);
-  const { ponudniki, pogovor } = await preberiPonudnike(root);
-  const zapis = pogovor ? ponudniki[pogovor.provider] : undefined;
-  if (pogovor && zapis && modeliZapisa(pogovor.provider, zapis).includes(pogovor.model)) {
-    try {
-      if (pogovor.provider === "vertex") {
-        const project = zapis.project ? gcpProject(zapis.project) : "";
-        if (project) return { provider: "vertex", model: pogovor.model, key: "", project, location: gcpLocation(zapis.location) };
-      } else if (pogovor.provider === "custom") {
-        const n = normirajNaslov(zapis.naslov);
-        if (n.ok) {
-          const kljuc = skrivnostZapisa("custom", zapis, await masterKey(root)) ?? "";
-          return { provider: "custom", model: pogovor.model, key: kljuc, naslov: n.naslov };
-        }
-      } else {
-        const key = skrivnostZapisa(pogovor.provider, zapis, await masterKey(root));
-        if (key) return { provider: pogovor.provider, model: pogovor.model, key };
-      }
-    } catch {
-      /* neveljaven projekt ali shramba: nazaj na aktivnega ponudnika */
-    }
+  const { ponudniki, pogovor, brezplacniModeli } = await preberiPonudnike(root);
+  // B2 in C6: stikalo brezplacnih modelov velja samo za OpenRouter in samo prek te poti (asistentka); klici (activeBrain) ga ne dobijo.
+  const zastavice = (provider: BrainProvider): { brezplacniDovoljeni?: boolean; rezervniBrezplacni?: string } => {
+    if (provider !== "openrouter" || !brezplacniModeli) return {};
+    const z = ponudniki.openrouter;
+    const rezerva = (z ? modeliZapisa("openrouter", z) : []).find(jeTocnoBrezplacen) ?? PRIVZETI_BREZPLACNI;
+    return { brezplacniDovoljeni: true, rezervniBrezplacni: rezerva };
+  };
+  if (!pogovor) {
+    const aktivni = await activeBrain(root);
+    return aktivni ? { ...aktivni, ...zastavice(aktivni.provider) } : null;
   }
-  return activeBrain(root);
+  const zapis = ponudniki[pogovor.provider];
+  if (!zapis || !modeliZapisa(pogovor.provider, zapis).includes(pogovor.model)) return null;
+  // Izklop stikala: ne vrni :free. Prejsnji placljivi model istega ponudnika, sicer null (B9).
+  const prostoInIzklopljeno = jeBrezplacenModel(pogovor.model) && !brezplacniModeli;
+  const model = prostoInIzklopljeno ? modeliZapisa(pogovor.provider, zapis).find((m) => !jeBrezplacenModel(m)) : pogovor.model;
+  if (!model) return null;
+  try {
+    if (pogovor.provider === "vertex") {
+      const project = zapis.project ? gcpProject(zapis.project) : "";
+      return project ? { provider: "vertex", model, key: "", project, location: gcpLocation(zapis.location) } : null;
+    }
+    if (pogovor.provider === "custom") {
+      const n = normirajNaslov(zapis.naslov);
+      if (!n.ok) return null;
+      const kljuc = skrivnostZapisa("custom", zapis, await masterKey(root)) ?? "";
+      return { provider: "custom", model, key: kljuc, naslov: n.naslov };
+    }
+    const key = skrivnostZapisa(pogovor.provider, zapis, await masterKey(root));
+    return key ? { provider: pogovor.provider, model, key, ...zastavice(pogovor.provider) } : null;
+  } catch {
+    return null; // neveljaven projekt ali shramba: izbran ponudnik ni na voljo (B9: brez padca na drugega)
+  }
+}
+
+/** Razlog, zakaj asistentka nima mozganov (pogovorBrain je vrnil null), v besedilu za lastnika. */
+export async function razlogBrezAsistentke(dir?: string): Promise<string> {
+  const stanje = await preberiPonudnike(resolveDataDir(dir));
+  if (!stanje.pogovor) return "Lina še nima možganov. Izberite ponudnika v Nastavitve → Računalnik in ključi.";
+  if (jeBrezplacenModel(stanje.pogovor.model) && !stanje.brezplacniModeli) {
+    return "OpenRouter: vklopite stikalo za brezplačne modele.";
+  }
+  return "Izbrani ponudnik asistentke ni na voljo (ključ ali nastavitev ni veljavna). Shranite ključ znova ali izberite drug model v Nastavitve → Računalnik in ključi.";
 }
 
 // ---- Lasten OpenAI-zdruzljiv streznik (freellmapi, LM Studio, Ollama): SAMO pogovor z asistentko (naloga #43, 21. 11. 2026) -----
@@ -570,4 +738,111 @@ export async function odstraniLastniStreznik(token: string | null, dir?: string)
   const { custom: _stari, ...drugi } = trenutno.ponudniki;
   await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "custom" ? null : trenutno.pogovor });
   return readBrain(token, dir);
+}
+
+// ---- Kljuc OpenRouter SAMO za asistentko (lastnik 24. 11. 2026, naloga C) ---------------------------------------------------------
+// Zapis je samo v ponudniki.json z oznako samoAsistentka, nikoli v kljuci.json: ponudnik za klice ostane, kot ga je izbral uporabnik.
+
+export const SOGLASJE_BREZPLACNI = "Za brezplačne modele potrdite obvestilo (ponudnik lahko sporočila uporabi za učenje).";
+
+/**
+ * C1, C2, C4: shrani kljuc za asistentko in nastavi pogovor na OpenRouter (privzeto prvi preverjeni brezplacni model).
+ * Prazen kljuc ohrani ze shranjen kljuc asistentke (menjava modela). Brezplacen model brez potrditve (ali prej dane) ni sprejet;
+ * potrditev vklopi stikalo brezplacnih modelov (B1). Placljiv model deluje tudi brez potrditve, vedno z deny.
+ */
+export async function shraniKljucAsistentke(
+  input: { key?: unknown; model?: unknown; soglasje?: unknown },
+  token: string | null,
+  dir?: string,
+): Promise<BrainPublic> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  const model = typeof input.model === "string" && input.model.trim() ? input.model.trim().slice(0, 80) : PRIVZETI_BREZPLACNI;
+  if (!VELJAVEN_MODEL.test(model)) throw new Error("Ime modela ni veljavno.");
+  const trenutno = await preberiPonudnike(root);
+  const prejsnji = trenutno.ponudniki.openrouter;
+  const typed = typeof input.key === "string" ? input.key.trim() : "";
+  if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
+  // Prazno polje: ze shranjen kljuc OpenRouter (asistentke ali, ce ga ni, klicev) - uporabnik z obstojecim kljucem ga ne vpisuje znova.
+  // kljuci.json se ne spremeni; zapis za asistentko dobi svojo kopijo (samoAsistentka), klici ostanejo na svojem.
+  const zaKlice = await readFileState(root);
+  const previous =
+    (prejsnji ? skrivnostZapisa("openrouter", prejsnji, await masterKey(root)) : null) ??
+    (zaKlice?.provider === "openrouter" ? decrypt(zaKlice, await masterKey(root)) : null);
+  const secret = typed || previous;
+  if (!secret) throw new Error("Vpišite ključ OpenRouter.");
+  const soglasje = input.soglasje === true;
+  if (jeBrezplacenModel(model) && !soglasje && !trenutno.brezplacniModeli) throw new Error(SOGLASJE_BREZPLACNI);
+  await vpisiPonudnika(root, "openrouter", { model, samoAsistentka: true, ...encrypt(secret, await masterKey(root)) });
+  const po = await preberiPonudnike(root);
+  await zapisiPonudnike(root, {
+    ponudniki: po.ponudniki,
+    pogovor: { provider: "openrouter", model },
+    brezplacniModeli: soglasje || po.brezplacniModeli,
+  });
+  return readBrain(token, dir);
+}
+
+/** A3, C2: odstranitev kljuca za asistentko vrne asistentko na privzeto (isti kot klici). Klicev ne spremeni. */
+export async function odstraniKljucAsistentke(token: string | null, dir?: string): Promise<BrainPublic> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  const trenutno = await preberiPonudnike(root);
+  if (trenutno.ponudniki.openrouter?.samoAsistentka) {
+    const { openrouter: _asistentka, ...drugi } = trenutno.ponudniki;
+    await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "openrouter" ? null : trenutno.pogovor });
+  }
+  return readBrain(token, dir);
+}
+
+/** B1, B5: stikalo »Dovoli brezplacne modele (samo asistentka)«. Hrani se v ponudniki.json, nikoli v kljuci.json. */
+export async function nastaviBrezplacneModele(vklop: unknown, token: string | null, dir?: string): Promise<BrainPublic> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  if (typeof vklop !== "boolean") throw new Error("Neveljavna nastavitev.");
+  const trenutno = await preberiPonudnike(root);
+  await zapisiPonudnike(root, { ponudniki: trenutno.ponudniki, pogovor: trenutno.pogovor, brezplacniModeli: vklop });
+  return readBrain(token, dir);
+}
+
+/** Preverba asistentke (pot pogovora, vsebinaKlica false): kot checkBrain, a z modelom in kljucem asistentke. */
+export async function preveriAsistentko(token: string | null, dir?: string): Promise<{ ok: boolean; sporocilo: string; opozorilo?: string }> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  const brain = await pogovorBrain(root);
+  if (!brain) {
+    const stanje = await preberiPonudnike(root);
+    return { ok: false, sporocilo: stanje.pogovor ? await razlogBrezAsistentke(root) : "Ključ ni nastavljen." };
+  }
+  const result = await callProvider({ ...brain, text: "Odgovori samo z besedo: da.", maxTokens: 8, vsebinaKlica: false, timeoutMs: 20_000 });
+  if (!result.ok) return { ok: false, sporocilo: hideSecret(result.sporocilo, brain.key) };
+  return { ok: true, sporocilo: `Asistentka deluje (${brain.model}).`, ...(result.povratek ? { opozorilo: result.povratek } : {}) };
+}
+
+/**
+ * C3, C8: stanje racuna za kljuc asistentke (GET /api/v1/key) in seznam modelov: brez dobroimetja samo brezplacni z orodji,
+ * z dobroimetjem vsi (javni GET /api/v1/models). Kljuc ostane na strezniku.
+ */
+export async function stanjeAsistentkeOpenRouter(
+  token: string | null,
+  dir?: string,
+): Promise<{ ok: boolean; sporocilo: string; brezplacniRacun: boolean | null; dnevnoPreostalo: number | null; dnevnoMeja: number | null; modeli: string[] }> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  const { stanjeOpenRouter, modeliOpenRouter } = await import("./openrouter.server.ts");
+  const zapis = (await preberiPonudnike(root)).ponudniki.openrouter;
+  const kljuc = zapis ? skrivnostZapisa("openrouter", zapis, await masterKey(root)) : null;
+  if (!kljuc) return { ok: false, sporocilo: "Ključ ni nastavljen.", brezplacniRacun: null, dnevnoPreostalo: null, dnevnoMeja: null, modeli: [] };
+  const st = await stanjeOpenRouter(kljuc);
+  const brezplacniRacun = st.ok ? st.stanje.brezplacniRacun : null;
+  // Neznano stanje = previdno: samo brezplacni (placljiv model brez dobroimetja vrne 402).
+  const seznam = await modeliOpenRouter(brezplacniRacun !== false);
+  return {
+    ok: st.ok,
+    sporocilo: hideSecret(st.ok ? "" : st.sporocilo, kljuc),
+    brezplacniRacun,
+    dnevnoPreostalo: st.ok ? (st.stanje.dnevno?.preostalo ?? null) : null,
+    dnevnoMeja: st.ok ? (st.stanje.dnevno?.meja ?? null) : null,
+    modeli: seznam.ok ? seznam.modeli : [],
+  };
 }

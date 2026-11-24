@@ -32,10 +32,22 @@ export function normirajHints(vrednost: unknown): string {
   return vnosi.join(", ");
 }
 
-/** Atributi za <Gather input="speech">: samo ob podprtem modelu (speechTimeout je ze celo stevilo). */
-export function atributiGovora(pravila: { govorModel?: string; hintsGovor?: string }): string {
+/** Strokovni izrazi podjetja (imena izdelkov in materialov) za namige prepoznave. */
+export function izraziKataloga(katalog: { products?: { name: string }[]; materials?: { name: string }[] }): string[] {
+  return [...(katalog.products ?? []), ...(katalog.materials ?? [])].map((x) => x.name);
+}
+
+/**
+ * Atributi za <Gather input="speech">: samo ob podprtem modelu (speechTimeout je ze celo stevilo). Izrazi kataloga (23. 11. 2026)
+ * pridejo za lastnikovimi namigi, brez podvojenih; ucinek za sl-SI je NEPREVERJEN (meritev s pravimi klici).
+ */
+export function atributiGovora(pravila: { govorModel?: string; hintsGovor?: string }, izrazi: readonly string[] = []): string {
   const model = veljavenGovorModel(pravila.govorModel);
   if (!model) return "";
-  const hints = normirajHints(pravila.hintsGovor);
+  const videno = new Set<string>();
+  const hints = normirajHints([pravila.hintsGovor ?? "", ...izrazi].join(","))
+    .split(", ")
+    .filter((h) => h && !videno.has(h.toLowerCase()) && videno.add(h.toLowerCase()))
+    .join(", ");
   return `speechModel="${model}"${hints ? ` hints="${hints}"` : ""}`;
 }

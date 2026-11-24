@@ -689,11 +689,13 @@ export function stalniStavki(
     zRazkritjem(pravila, t("oprostiteSlovo")),
     // Kratek zakljucek po povprasevanju (en stavek = ena sinteza), z e-posto podjetja in brez nje.
     [stavekPotrditve(pravila), t("kratekZakljucek"), t("lepDan")].filter(Boolean).join(" "),
+    [stavekPotrditve(pravila, true), t("kratekZakljucek"), t("lepDan")].filter(Boolean).join(" "),
     [t("kratekZakljucek"), t("lepDan")].join(" "),
     t("kratekZakljucek"),
     pravila.povprasevanje ?? "",
     pravila.temaOdgovor ?? "",
     stavekPotrditve(pravila),
+    stavekPotrditve(pravila, true),
     // Znani odgovori iz kataloga (G4a): pripravljeni vnaprej, da se predvajajo brez cakanja.
     ...(katalog ? stavkiIzKataloga(katalog) : []),
   ];

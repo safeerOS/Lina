@@ -37,6 +37,8 @@ export const NASTAVITVE = {
     { id: "dodatki", oznaka: "uiDodatkiNaslov", razdelki: ["nast-dodatki"] },
     { id: "strani", oznaka: "nastPodStrani", razdelki: ["nast-strani"] },
     { id: "posodobitev", oznaka: "posNaslov", razdelki: ["nast-posodobitev"] },
+    { id: "github", oznaka: "nastPodGithub", razdelki: ["nast-github"] },
+    { id: "olini", oznaka: "nastPodOLini", razdelki: ["nast-o-lini"] },
   ],
 } as const satisfies DefinicijaPodoken;
 

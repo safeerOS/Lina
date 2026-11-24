@@ -37,6 +37,8 @@ import { CAKANJE_PRIVZETO_SEK, cakanjePredPrevzemom } from "./ure.ts";
 import { normirajHints, veljavenGovorModel } from "./govor-model.ts";
 import type { NacinPrevzema } from "./ure.ts";
 import { ureSoRazumljive } from "./ure.ts";
+import { normirajUrnik, razberiProsteDneve, razlogUrnika, URNIK_NAJVEC_ZNAKOV } from "./urnik.ts";
+import { normirajPaket, normirajPaketDo, paketDoNeveljaven, razlogPaketa } from "./paket.ts";
 import { besediloVrzel } from "./znanje.ts";
 
 export type { Pravila, Vrzel };
@@ -77,6 +79,12 @@ export function defaultPravila(): Pravila {
     potrditevEposta: false,
     toplePovezave: true,
     prevezaNaZahtevo: true,
+    prevezavaUrnikVklop: true,
+    prevezavaUrnik: "",
+    prevezavaProstiDnevi: "",
+    urnikObvestilo: false,
+    paketNavodilo: "",
+    paketDo: "",
     potrditevNaslov: "",
     // Lastnik 22. 11. 2026: snemanje v nacinu podjetje privzeto vklopljeno (s stikalom); osebni nacin nikoli ne snema.
     snemanjeVklop: true,
@@ -232,7 +240,17 @@ export function normalizePravila(raw: Partial<Pravila> | null): Pravila {
     toplePovezave: raw.toplePovezave !== false,
     // Ideja lastnika (23. 11. 2026) = privzeto vklopljeno; samo izrecen false izklopi. Velja v obeh nacinih.
     prevezaNaZahtevo: raw.prevezaNaZahtevo !== false,
+    // Delovni cas prevezave (lastnik 23. 11. 2026): privzeto vklopljeno; nerazumljiv urnik ostane zapisan (vmesnik ga pokaze), velja kot »nikoli« (urnik.ts).
+    prevezavaUrnikVklop: raw.prevezavaUrnikVklop !== false,
+    prevezavaUrnik: normirajUrnik(raw.prevezavaUrnik).slice(0, URNIK_NAJVEC_ZNAKOV),
+    prevezavaProstiDnevi: razberiProsteDneve(raw.prevezavaProstiDnevi).dnevi.join(", "),
+    // Namestitev iz izdaje pred urnikom (ni ne stikala ne oznake): obvestilo caka na potrditev (pregled 0.2.10, najdba 3).
+    urnikObvestilo: raw.urnikObvestilo === true || (jeStaraNamestitev(raw) && raw.urnikObvestilo === undefined),
+    // Navodilo za dostavo paketa (osebna tajnica): pove ga samo paket.ts klicatelju, ki se predstavi kot dostava.
+    paketNavodilo: normirajPaket(raw.paketNavodilo),
+    paketDo: normirajPaketDo(raw.paketDo),
     merjenjeDelnih: raw.merjenjeDelnih === true,
+    izrazeKatalogaIzklop: raw.izrazeKatalogaIzklop === true,
     // Privzeto vklopljeno (ideja lastnika = privzeto vklop, s stikalom); samo izrecen false izklopi. Osebni nacin: vedno izklopljeno.
     snemanjeVklop: SNEMANJE_NA_VOLJO && raw.nacinKlica !== "osebna" && raw.snemanjeVklop !== false,
     snemanjeZavrnitev: Boolean(raw.snemanjeZavrnitev),
@@ -268,6 +286,11 @@ export function normalizePravila(raw: Partial<Pravila> | null): Pravila {
 
 export type ShranjenaPravila = Pravila & { opozorila: string[] };
 
+/** pravila.json iz izdaje pred urnikom prevezave: datoteka obstaja (ima vsaj prevzem), kljuca prevezavaUrnikVklop pa ni. */
+function jeStaraNamestitev(raw: Partial<Pravila>): boolean {
+  return Object.keys(raw).length > 0 && !("prevezavaUrnikVklop" in raw);
+}
+
 export async function loadPravila(dir?: string): Promise<Pravila> {
   const saved = await readJsonFile<Partial<Pravila>>(resolveDataDir(dir), "pravila.json");
   return normalizePravila(saved);
@@ -282,16 +305,91 @@ export async function nastaviNavodilaIzTelefona(besedilo: string, dir?: string):
   const novo = besedilo.trim().slice(0, 1500);
   const razlog = razlogPolja("navodila", novo);
   if (razlog) return false;
-  const prej = await loadPravila(root);
-  // Veljavna, a nespremenjena navodila: uspeh brez prepisa pravila.json (klicatelj si zapomni revizijo).
-  if (prej.navodila !== novo) await writeJson(root, "pravila.json", normalizePravila({ ...prej, navodila: novo }));
-  return true;
+  return vVrstiPravil(root, async () => {
+    const prej = await loadPravila(root);
+    // Veljavna, a nespremenjena navodila: uspeh brez prepisa pravila.json (klicatelj si zapomni revizijo).
+    if (prej.navodila !== novo) await writeJson(root, "pravila.json", normalizePravila({ ...prej, navodila: novo }));
+    return true;
+  });
+}
+
+/** Kaj se zgodi po zapisu spremenjenih stikal dodatkov; preizkusi podajo svoje (pravi Docker, namestitev in RSDO se ne zazenejo). */
+export type UskladitevDodatkov = {
+  namestiSlovenskega: (obKoncu: (uspeh: boolean) => void) => void;
+  uskladiRsdo: (vklop: boolean) => Promise<unknown>;
+  uskladiDodatke: (dodatki: Pravila["dodatki"]) => Promise<unknown>;
+};
+
+/** Isti potek za namizje (savePravila) in telefon (nastaviDodatekIzTelefona); klice se SAMO po zapisu pravila.json. */
+export function poSpremembiDodatkov(prej: Pravila, next: Pravila, root: string, u?: UskladitevDodatkov): void {
+  // Brez podanih odvisnosti preizkusi (node --test nastavi NODE_TEST_CONTEXT) pravega Dockerja in namestitve ne dosezejo:
+  // 23. 11. 2026 je preizkus, ki shrani zacasna pravila, ustavil in odstranil lastnikova tekoca vsebnika.
+  const vPreizkusu = !u && !!process.env.NODE_TEST_CONTEXT;
+  const x: UskladitevDodatkov = u ?? {
+    namestiSlovenskega: (obKoncu) => { zazeniNamestitevSlovenskega(undefined, obKoncu); },
+    uskladiRsdo: (vklop) => uskladiRsdo(vklop),
+    uskladiDodatke: (d) => uskladiDodatke(d),
+  };
+  // Slovenski pomocnik za razumevanje (RSDO, samo zapisuje, ne govori): namestitev SAMO po izrecnem vklopu (uporabnik je prebral pojasnilo v Dodatkih), enkrat ob preklopu false -> true.
+  if (next.dodatki?.slovenski === true && prej.dodatki?.slovenski !== true && !vPreizkusu) {
+    x.namestiSlovenskega((uspeh) => void poNamestitviSlovenskega(uspeh, root).catch(() => {}));
+  }
+  // Stalni proces RSDO (lastnik 23. 11. 2026): nalozi se ob vklopu, ustavi SAMO ob izklopu stikala (ali koncu Line).
+  // Pravega RSDO v preizkusih ne zazene privzeti ukaz sam (rsdo-streznik.server.ts, NODE_TEST_CONTEXT).
+  if ((next.dodatki?.slovenski === true) !== (prej.dodatki?.slovenski === true)) {
+    void x.uskladiRsdo(next.dodatki?.slovenski === true).catch(() => {});
+  }
+  // Paperclip, n8n, AFFiNE: vklop zazene dodatek (samo 127.0.0.1, telemetrija izklopljena), izklop ga ustavi; v ozadju, napaka ne podre shranjevanja.
+  const spremembaDodatkov = (["paperclip", "n8n", "affine"] as const).some((k) => (next.dodatki?.[k] === true) !== (prej.dodatki?.[k] === true));
+  if (spremembaDodatkov && !vPreizkusu) void x.uskladiDodatke(next.dodatki).catch(() => {});
+}
+
+/**
+ * Vsi zapisi pravila.json (namizje savePravila, telefon: dodatki in navodila) tecejo v ISTI vrsti na koren (drugi pregled 0.2.10, CodeRabbit
+ * in N1): branje in zapis sta v isti operaciji, zato zastarelo branje ene poti ne povozi spremembe druge.
+ */
+const vrstePravil = new Map<string, Promise<unknown>>();
+/** Vsak pisec pravila.json (tudi zapiski.server.ts in tunel.server.ts) bere in pise v tej vrsti. */
+export function vVrstiPravil<T>(root: string, delo: () => Promise<T>): Promise<T> {
+  const prej = vrstePravil.get(root) ?? Promise.resolve();
+  const zdaj = prej.then(delo, delo);
+  const rep = zdaj.catch(() => undefined);
+  vrstePravil.set(root, rep);
+  void rep.then(() => {
+    if (vrstePravil.get(root) === rep) vrstePravil.delete(root);
+  });
+  return zdaj;
+}
+
+/**
+ * Vklop ali izklop enega dodatka s telefona ozjega kroga (lastnik 23. 11. 2026). Klic je ze preverjen s podpisom naprave, zato zetona
+ * lastnika ne zahteva. Na disku se spremeni SAMO to stikalo; nato isti potek kot savePravila (uskladitev, namestitev slovenskega samo
+ * ob false -> true). Zapisi so zaporedni, da dva hkratna preklopa ne izgubita drug drugega.
+ */
+// Pot klica uvaza ta modul, zato tip ni uvozen iz kanal-claude.ts (preizkus 4.4: pot tajnice ne doseze modulov asistentke).
+export function nastaviDodatekIzTelefona(dodatek: "paperclip" | "n8n" | "affine" | "slovenski", vklop: boolean, dir?: string, u?: UskladitevDodatkov): Promise<void> {
+  const root = resolveDataDir(dir);
+  return vVrstiPravil(root, async () => {
+    const naDisku = await preberiSurovaPravila(root);
+    if (naDisku.obstaja && !jeObjekt(naDisku.vrednost)) throw new Error(t("pravilaDatotekaPoskodovana"));
+    const surova = (naDisku.vrednost ?? {}) as Record<string, unknown>;
+    const prej = normalizePravila(surova as Partial<Pravila>);
+    if ((prej.dodatki?.[dodatek] === true) === vklop) return;
+    const surovi = jeObjekt(surova.dodatki) ? surova.dodatki : {};
+    await writeJson(root, "pravila.json", { ...surova, dodatki: { ...surovi, [dodatek]: vklop } });
+    poSpremembiDodatkov(prej, normalizePravila({ ...prej, dodatki: { ...prej.dodatki, [dodatek]: vklop } } as Partial<Pravila>), root, u);
+  });
 }
 
 export async function savePravila(input: Partial<Pravila>, token: string | null, dir?: string): Promise<ShranjenaPravila> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
   if (!jeObjekt(input)) throw new Error(t("pravilaVnosOblika"));
+  return vVrstiPravil(root, () => shraniPravila(input, root));
+}
+
+/** Branje, preverba in zapis pravila.json; samo v vrsti vVrstiPravil (savePravila). */
+async function shraniPravila(input: Partial<Pravila>, root: string): Promise<ShranjenaPravila> {
   const preveriTip = (polje: string, vrednost: unknown, vrsta: "boolean" | "string") => {
     if (vrednost !== undefined && typeof vrednost !== vrsta) {
       throw new Error(t("pravilaVnosTip").replace("{polje}", () => polje));
@@ -305,10 +403,18 @@ export async function savePravila(input: Partial<Pravila>, token: string | null,
   preveriTip("imeLastnikaTozilnik", input.imeLastnikaTozilnik, "string");
   preveriTip("sonioxVklop", input.sonioxVklop, "boolean");
   preveriTip("prevezaNaZahtevo", input.prevezaNaZahtevo, "boolean");
+  preveriTip("prevezavaUrnikVklop", input.prevezavaUrnikVklop, "boolean");
+  preveriTip("prevezavaUrnik", input.prevezavaUrnik, "string");
+  preveriTip("prevezavaProstiDnevi", input.prevezavaProstiDnevi, "string");
+  preveriTip("urnikObvestilo", input.urnikObvestilo, "boolean");
+  preveriTip("paketNavodilo", input.paketNavodilo, "string");
+  preveriTip("paketDo", input.paketDo, "string");
   const naDisku = await preberiSurovaPravila(root);
   if (naDisku.obstaja && !jeObjekt(naDisku.vrednost)) throw new Error(t("pravilaDatotekaPoskodovana"));
   const prej = normalizePravila(naDisku.vrednost as Partial<Pravila> | null);
   const merged = { ...prej, ...input };
+  // Dodatki po kljucih (pregled 0225 B3): namizje poslje samo spremenjene, preklop s telefona na disku ostane.
+  if (jeObjekt(input.dodatki)) merged.dodatki = { ...prej.dodatki, ...input.dodatki };
   let odsotnostPretekla = false;
   if (merged.odsotnostVklop === true) {
     const pasPreverba = preveriPas(merged.odsotnostCasovniPas);
@@ -341,6 +447,17 @@ export async function savePravila(input: Partial<Pravila>, token: string | null,
   if (razlogDostave) throw new Error(razlogDostave);
   const razlogNavodil = razlogPolja("navodila", merged.navodila ?? "");
   if (razlogNavodil) throw new Error(razlogNavodil);
+  // Urnik prevezave in prosti dnevi: napacen vnos zavrnemo z razlago, ne popravimo tiho.
+  // Ista preverba kot v klicu (urnik.ts razlogUrnika, najdba 14); prosti dnevi nad mejo se zavrnejo, ne zavrzejo tiho (najdba 8).
+  if (razlogUrnika(merged.prevezavaUrnik)) throw new Error(t("prevezavaUrnikNeveljaven"));
+  const prosti = razberiProsteDneve(merged.prevezavaProstiDnevi);
+  if (prosti.napacni.length > 0) throw new Error(t("prevezavaProstiNeveljavni"));
+  if (prosti.prevec) throw new Error(t("prevezavaProstiPrevec"));
+  // Samo ob spremembi (pregled 0.2.10): prej shranjeno navodilo, ki ga strozja preverba zdaj zavrne, se v klicu ne pove (aktivnoNavodiloPaketa)
+  // in ne sme podreti shranjevanja drugih nastavitev.
+  const razlogNavodilaPaketa = normirajPaket(merged.paketNavodilo) !== prej.paketNavodilo ? razlogPaketa(merged.paketNavodilo) : null;
+  if (razlogNavodilaPaketa) throw new Error(razlogNavodilaPaketa);
+  if (paketDoNeveljaven(merged.paketDo)) throw new Error(t("paketDoNeveljaven"));
   const razlogTemeOdgovora = razlogPolja("tema", merged.temaOdgovor ?? "");
   if (razlogTemeOdgovora) throw new Error(razlogTemeOdgovora);
   // Vklop brez veljavnega naslova zavrnemo z razlago, ne tiho (lastnik 10. 11. 2026).
@@ -394,21 +511,7 @@ export async function savePravila(input: Partial<Pravila>, token: string | null,
       ? { ...next, tisinaPoGovoruSek: TISINA_PRIVZETO_SEK }
       : next;
   await writeJson(root, "pravila.json", zaDisk);
-  // Slovenski pomocnik za razumevanje (RSDO, samo zapisuje, ne govori): namestitev SAMO po izrecnem vklopu (uporabnik je prebral pojasnilo v Dodatkih), enkrat ob preklopu false -> true.
-  // Preizkusi namestitve ne zazenejo (prej jo je sprozil vsak preizkus, ki vklopi stikalo, z resnicnim HOME).
-  if (next.dodatki?.slovenski === true && prej.dodatki?.slovenski !== true && !process.env.NODE_TEST_CONTEXT) {
-    zazeniNamestitevSlovenskega(undefined, (uspeh) => void poNamestitviSlovenskega(uspeh, root).catch(() => {}));
-  }
-  // Stalni proces RSDO (lastnik 23. 11. 2026): nalozi se ob vklopu, ustavi SAMO ob izklopu stikala (ali koncu Line).
-  // Pravega RSDO v preizkusih ne zazene privzeti ukaz sam (rsdo-streznik.server.ts, NODE_TEST_CONTEXT).
-  if ((next.dodatki?.slovenski === true) !== (prej.dodatki?.slovenski === true)) {
-    void uskladiRsdo(next.dodatki?.slovenski === true).catch(() => {});
-  }
-  // Paperclip, n8n, AFFiNE: vklop zazene dodatek (samo 127.0.0.1, telemetrija izklopljena), izklop ga ustavi; v ozadju, napaka ne podre shranjevanja.
-  // Samo ob spremembi stikal teh treh dodatkov. Preizkusi se pravega Dockerja ne dotaknejo (node --test nastavi NODE_TEST_CONTEXT):
-  // 23. 11. 2026 je preizkus, ki shrani zacasna pravila, ustavil in odstranil lastnikova tekoca vsebnika.
-  const spremembaDodatkov = (["paperclip", "n8n", "affine"] as const).some((k) => (next.dodatki?.[k] === true) !== (prej.dodatki?.[k] === true));
-  if (spremembaDodatkov && !process.env.NODE_TEST_CONTEXT) void uskladiDodatke(next.dodatki).catch(() => {});
+  poSpremembiDodatkov(prej, next, root);
   // Pozdrav je del stalnih stavkov: po spremembi jih glas pripravi znova, v ozadju in brez vpliva na shranjevanje.
   const veljavna = line?.catalog?.company ? line : defaultLine();
   // Zaprta linija, ki ne caka na odprtje, sinteze ne trosi: stavki se pripravijo pred odprtjem.

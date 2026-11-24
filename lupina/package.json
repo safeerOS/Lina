@@ -1,7 +1,7 @@
 {
   "name": "lina-lupina",
   "productName": "Lina",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Lina - AI telefonska tajnica",
   "author": "Safeer <info@safeer.si>",
   "homepage": "https://safeer.si",
@@ -30,6 +30,10 @@
       {
         "from": "../openline-paket",
         "to": "lina/openline"
+      },
+      {
+        "from": "../openline-paket/node_modules",
+        "to": "lina/openline/node_modules"
       },
       {
         "from": "../jazz-paket/node_modules",

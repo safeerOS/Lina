@@ -219,8 +219,9 @@ describe("naloga G3b: zakljucek klica je samo iz stalnih stavkov", { concurrency
     await pripraviGlasObZagonu(dir);
     await pocakajGlas(dir);
     const stalni = stalniStavki({ ...defaultPravila(), ...naslov }, "FORMA", formaCatalog());
-    assert.equal(stalni.length, 67);
-    assert.equal(glas.klici.length, 67);
+    // 69: +2 za prosnjo za e-posto, ko je klicatelj e-posto ze omenil (sama in v kratkem zakljucku; 23. 11. 2026).
+    assert.equal(stalni.length, 69);
+    assert.equal(glas.klici.length, 69);
     // Tok danes (izmerjeno 21. 11. 2026): izdelek -> kolicina -> rok -> povzetek in vprasanje »Ali potrjujete naročilo?« -> »da« zakljuci klic.
     // Oblike roka so zato predzadnji odgovor, zakljucek sledi potrditvi.
     for (const [sid, rok] of [

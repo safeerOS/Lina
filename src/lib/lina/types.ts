@@ -83,8 +83,25 @@ export type Pravila = Omit<NastavitveOdsotnosti, "nacinKlica" | "imeLastnika"> &
   toplePovezave?: boolean;
   /** Prevezava klica na stevilko za preusmeritev, ko klicatelj zeli pravo osebo ali pove nujnost (lastnik 23. 11. 2026). Privzeto vklopljeno. */
   prevezaNaZahtevo?: boolean;
+  /** Prevezava med klicem samo v delovnem casu (nacin podjetje, lastnik 23. 11. 2026; urnik.ts). Privzeto vklopljeno; izklopi samo izrecen false. */
+  prevezavaUrnikVklop?: boolean;
+  /** Delovni cas prevezave (»pon-pet 07.00-15.00«, ura v Ljubljani); prazno = privzeto. */
+  prevezavaUrnik?: string;
+  /** Prosti dnevi uporabnika (LLLL-MM-DD, loceni z vejico). */
+  prevezavaProstiDnevi?: string;
+  /**
+   * Enkratno obvestilo po posodobitvi na urnik prevezave (pregled 0.2.10, najdba 3): namestitev iz izdaje pred urnikom (v pravila.json ni
+   * kljuca prevezavaUrnikVklop). Vmesnik ga pokaze samo ob vklopljeni nujni prevezavi (pravilaZaVmesnik); potrditev zapise false.
+   */
+  urnikObvestilo?: boolean;
+  /** Osebna tajnica: navodilo za dostavo paketa (paket.ts); prazno = izklopljeno. Pove se SAMO klicatelju, ki se predstavi kot dostava. */
+  paketNavodilo?: string;
+  /** Navodilo za dostavo velja do vkljucno tega dne (LLLL-MM-DD); prazno = brez konca. */
+  paketDo?: string;
   /** Meritev partialResultCallback (Fable 4, 14. 11. 2026): na Gather pozdrava osebnega nacina; privzeto izklopljeno. Samo stetje, brez odgovora. */
   merjenjeDelnih?: boolean;
+  /** Meritev prepoznave (23. 11. 2026): izrazi kataloga NE gredo v namige; samo v pravila.json, privzeto izklopljeno. */
+  izrazeKatalogaIzklop?: boolean;
   /** Pred slovesom prosi klicatelja za potrditev povprasevanja po e-posti. Privzeto izklopljeno. */
   potrditevEposta: boolean;
   /** Naslov podjetja za povprasevanja. Brez veljavnega naslova se moznost ne vklopi. */
@@ -371,6 +388,8 @@ export type CallSession = {
   nujniDogodki?: NujniDogodek[];
   /** Prevezava nujnega klica je bila ze poskusena (najvec enkrat na klic). */
   nujnoPrevezano?: boolean;
+  /** Navodilo za dostavo paketa je bilo v tem klicu ze povedano (najvec enkrat na klic). */
+  paketPovedan?: boolean;
   /**
    * Oznaka NUJNO je samo posledica neuspele prevezave na zahtevo (klicatelj nujnosti ni povedal): SMS o nujnem klicu se ne poslje in kvota
    * nujnih se ne porabi (vodja, pregled 029). Pocisti se, ko klicatelj nujnost pove.
@@ -448,17 +467,63 @@ export type AuthView = {
 
 export type BrainProvider = "gemini" | "vertex" | "openai" | "claude" | "grok" | "openrouter" | "custom";
 
+/**
+ * Privzeti modeli, preverjeni proti javni dokumentaciji ponudnikov 24. 11. 2026: gemini-2.0-flash ugasnjen (1. 6. 2026),
+ * gpt-4.1-mini zastarel (nadomestek gpt-6-luna), claude-sonnet-4-5 se umakne 30. 11. 2026 (lastnik: claude-sonnet-5-5).
+ * Ce ponudnik model kljub temu ne pozna, Lina sama izbere delujocega (samodejni-model.server.ts).
+ */
 export const DEFAULT_BRAIN_MODELS: Record<BrainProvider, string> = {
-  gemini: "gemini-2.0-flash",
+  gemini: "gemini-3.8-flash",
   vertex: "gemini-3-flash-preview",
-  openai: "gpt-4.1-mini",
-  claude: "claude-sonnet-4-5",
+  openai: "gpt-6-luna",
+  claude: "claude-sonnet-5-5",
   grok: "grok-4.5",
   /** ID modela ima predpono ponudnika, kot v dokumentaciji OpenRouter (npr. openai/gpt-4o). */
   openrouter: "openai/gpt-4o",
   /** Lasten OpenAI-zdruzljiv streznik (freellmapi, LM Studio, Ollama): »auto« prepusti izbiro strezniku. Samo za pogovor. */
   custom: "auto",
 };
+
+/**
+ * Vrstni red priporocil za samodejno izbiro modela (lastnik 24. 11. 2026: ob shranjevanju kljuca Lina sama izbere delujoc model).
+ * Prvi je privzeti; seznam modelov ponudnika odloci, kateri od teh so na voljo. Imena iz javne dokumentacije 24. 11. 2026.
+ */
+export const PRIPOROCENI_MODELI: Record<Exclude<BrainProvider, "custom">, readonly string[]> = {
+  gemini: [DEFAULT_BRAIN_MODELS.gemini, "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+  vertex: [DEFAULT_BRAIN_MODELS.vertex, "gemini-3.8-flash", "gemini-3.6-flash"],
+  openai: [DEFAULT_BRAIN_MODELS.openai, "gpt-6.1-terra", "gpt-6.2-sol"],
+  claude: [DEFAULT_BRAIN_MODELS.claude, "claude-haiku-5-5", "claude-sonnet-5", "claude-opus-5-5"],
+  grok: [DEFAULT_BRAIN_MODELS.grok, "grok-4.7", "grok-4.6"],
+  // Imena OpenRouter niso preverjena v dokumentaciji: drugi kandidati pridejo samo iz seznama modelov (samodejni-model.server.ts).
+  openrouter: [DEFAULT_BRAIN_MODELS.openrouter],
+};
+
+/**
+ * Brezplacni modeli OpenRouter (lastnik 24. 11. 2026): ponudnik lahko pozive uporabi za ucenje, zato so SAMO za asistentko.
+ * Siroko za zaporo klicev: vse, kar je videti brezplacno (":free" kjerkoli, openrouter/free...), velja za brezplacno.
+ */
+export function jeBrezplacenModel(model: string): boolean {
+  const m = model.trim().toLowerCase();
+  return m.includes(":free") || m.startsWith("openrouter/free");
+}
+
+/** Ozko za izpust »data_collection: deny«: samo tocen ID ponudnik/model:free ali openrouter/free. */
+export function jeTocnoBrezplacen(model: string): boolean {
+  return model === "openrouter/free" || /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*:free$/.test(model);
+}
+
+/**
+ * Predlogi brezplacnih modelov z orodji (javni seznam openrouter.ai/api/v1/models, pricing 0, preverjeno 24. 11. 2026).
+ * Seznam se hitro spreminja: rocni vnos ostane. Prvi je privzeti; kakovost slovenscine in oznak za agenta NI izmerjena (meritev C7).
+ */
+export const PREDLOGI_BREZPLACNIH = [
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "inclusionai/ling-3.2-flash:free",
+  "openrouter/free",
+] as const;
+export const PRIVZETI_BREZPLACNI = PREDLOGI_BREZPLACNIH[0];
+export const BREZPLACNI_SAMO_ASISTENTKA = "Brezplačni modeli so samo za asistentko.";
 
 /** Privzeta lokacija Vertex AI. global deluje za gemini-3-flash-preview. */
 export const DEFAULT_VERTEX_LOCATION = "global";
@@ -472,6 +537,8 @@ export type ShranjenPonudnik = {
   projekt?: string | null;
   /** Naslov lastnega streznika (samo ponudnik »custom«). */
   naslov?: string | null;
+  /** Kljuc velja samo za asistentko (Kljuc za asistentko); klici ga nikoli ne dobijo. */
+  samoAsistentka?: boolean;
 };
 
 /** Imena ponudnikov za izbirnik modela in seznam v nastavitvah. */
@@ -498,6 +565,12 @@ export type BrainPublic = {
   shranjeni?: ShranjenPonudnik[];
   /** Izbrani model za pogovor z asistentko; null = privzeto (kot za klice). */
   pogovor?: { provider: BrainProvider; model: string } | null;
+  /** Stikalo »Dovoli brezplacne modele (samo asistentka)«; privzeto izklopljeno. */
+  brezplacniModeli?: boolean;
+  /** Samodejna izbira ob shranjevanju: katerega je Lina izbrala ali zakaj ni preverila (ena vrstica za lastnika). */
+  sporociloModela?: string;
+  /** Zadnja samodejna zamenjava modela med delovanjem (model ni bil vec na voljo), ena vrstica za lastnika. */
+  zamenjavaModela?: string;
 };
 
 /** Trenutna mapa. Opozorilo ne pomeni zavrnitve. */
@@ -535,6 +608,13 @@ export type PredlogZnanje = {
   besedilo: string;
 };
 
+/** Naslov s strani podjetja (mailto ali JSON-LD); izbran samo, ce je na domeni strani (lastnik 23. 11. 2026). */
+export type PredlogEposta = {
+  id: string;
+  izbrano: boolean;
+  naslov: string;
+};
+
 export type Predlog = {
   /** Samo gostitelj, brez poti. */
   gostitelj: string;
@@ -545,4 +625,6 @@ export type Predlog = {
   vrstice: PredlogVrstica[];
   /** Besedilo strani za polje znanje; brez cen. Ni v starih predlogih. */
   znanje?: PredlogZnanje;
+  /** E-posta za povprasevanja iz kontakta na strani; v pravila gre sele po potrditvi. Ni v starih predlogih. */
+  eposta?: PredlogEposta;
 };

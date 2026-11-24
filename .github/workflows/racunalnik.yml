@@ -41,9 +41,9 @@ jobs:
       NITRO_PRESET: node-server
       CI: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -120,6 +120,9 @@ jobs:
           grep -q 'resources/lina/.output/server/index.mjs' vsebina-deb.txt
           grep -q 'resources/lina/.output/public/favicon.svg' vsebina-deb.txt
           grep -q 'resources/lina/openline/dist/index.js' vsebina-deb.txt
+          # 23. 11. 2026: electron-builder je izpustil openline/node_modules (OpenLine se ni zagnal: »Pot klicev ni pripravljena«)
+          grep -q 'resources/lina/openline/node_modules/express/package.json' vsebina-deb.txt
+          grep -q 'resources/lina/openline/node_modules/ws/package.json' vsebina-deb.txt
           grep -q 'resources/lina/node_modules/jazz-tools/package.json' vsebina-deb.txt
           grep -q 'resources/lina/rsdo-streznik.py' vsebina-deb.txt
           grep -E 'resources/lina/posodobi.sh$' vsebina-deb.txt | grep -q '^-rwx'
@@ -131,7 +134,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lina-deb
@@ -151,9 +154,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -186,7 +189,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit $KODA
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lina-preizkusi

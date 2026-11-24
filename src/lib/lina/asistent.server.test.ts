@@ -372,7 +372,7 @@ test("od telefona do Claude Code: naloga v sejo, zahteva za odobritev na telefon
     assert.equal((await z("POST", `${POT}/odobritev`, odob)).status, 202);
     await caka(() => izhod.some((x) => x.method === "notifications/claude/channel/permission"));
     assert.deepEqual(izhod.find((x) => x.method === "notifications/claude/channel/permission")!.params, { request_id: "abcde", behavior: "allow" });
-    poslji({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Delovna kopija je cista." } } });
+    poslji({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Delovna kopija je cista.", vrsta: "koncano" } } });
     const k = await z("GET", dogodkiUrl(ANA, n.id, `&od=${o.st}&caka=10`));
     assert.deepEqual(k.telo, { dogodki: [{ vrsta: "izid", ok: true, besedilo: "Delovna kopija je cista.", st: o.st + 1 }], koncano: true });
   } finally {

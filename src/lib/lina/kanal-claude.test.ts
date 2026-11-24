@@ -16,8 +16,11 @@ import {
   KONFIG_KANALA,
   dokazPrijave,
   idIzKljuca,
+  nizNadaljevanja,
   nizNaloge,
   nizOdobritve,
+  NAVODILO_KANALA,
+  SPOROCILO_NADALJEVANJE_ZAVRNJENO,
   nizUstavitve,
   zgostitevPrikaza,
   SPOROCILO_ODOBRITEV_Z_GUMBOM,
@@ -64,6 +67,8 @@ const dokazOdobritve = (d: Naprava, zahtevaId: string, dovoli: boolean, chatId =
 const zgostitevIz = (dogodki: Dogodek[], zahtevaId: string) =>
   (dogodki.find((d) => d.vrsta === "odobritev" && d.zahtevaId === zahtevaId) as Extract<Dogodek, { vrsta: "odobritev" }>).zgostitev ?? "";
 const dokazUstavitve = (d: Naprava, id: string) => dokaz(d, (c, e) => nizUstavitve(id, d.id, c, e));
+const dokazNadaljevanja = (d: Naprava, id: string, besedilo: string, podpisal = d) =>
+  dokaz(podpisal, (c, e) => nizNadaljevanja(id, d.id, besedilo, c, e));
 
 async function caka(pogoj: () => boolean, ms = 5000): Promise<void> {
   const konec = Date.now() + ms;
@@ -200,7 +205,7 @@ test("kanal: zmoznosti MCP (claude/channel, permission, tools) in orodje reply",
     assert.match(init.result.instructions, /reply/);
     k.poslji({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     await caka(() => k.izhod.some((x) => x.id === 2));
-    assert.deepEqual(k.izhod.find((x) => x.id === 2)!.result.tools.map((t: { name: string }) => t.name), ["reply"]);
+    assert.deepEqual(k.izhod.find((x) => x.id === 2)!.result.tools.map((t: { name: string }) => t.name), ["reply", "dodatki"]);
   } finally {
     await k.pospravi();
   }
@@ -468,7 +473,7 @@ test("4.4 pot tajnice (vsi vhodi klica) nima nobene poti do kanala ali asistentk
 });
 
 /** Moduli poti telefona/asistentke in njuna vhoda (zagon in streznikske funkcije); pot klica ne sme doseci nobenega. */
-const PREPOVEDANO_ZA_KLIC = /src\/lib\/lina\/(kanal-claude[^/]*|asistent[.-][^/]*|openline-povabilo\.server\.ts|openline-(?:zagon|veza)[^/]*|oddaljeni-prehod\.server\.ts|koda-seznanitev\.ts|varovalka-kode\.ts|spake2\.ts|mdns-oglas\.server\.ts|qr\.ts|zagon\.server\.ts|functions\.ts)$|src\/routes\/api\/zagon\.ts$/;
+const PREPOVEDANO_ZA_KLIC = /src\/lib\/lina\/(kanal-claude[^/]*|claude-naloge[^/]*|asistent[.-][^/]*|openline-povabilo\.server\.ts|openline-(?:zagon|veza)[^/]*|oddaljeni-prehod\.server\.ts|koda-seznanitev\.ts|varovalka-kode\.ts|spake2\.ts|mdns-oglas\.server\.ts|qr\.ts|zagon\.server\.ts|functions\.ts)$|src\/routes\/api\/zagon\.ts$/;
 
 test("4.4 T1-S2: pot telefona ne uvaza poti klica, in poti klica v ISTEM procesu doseze samo vhodni tocki zagon.ts in functions.ts", () => {
   const telefon = dosegljive([
@@ -619,7 +624,7 @@ test("C5 socasni nalogi z dveh naprav: odobritev samo v terminalu; ena naprava: 
     assert.equal(k.obvestila(DOVOLJENJE).length, 0);
 
     // BOR konca; nova zahteva gre samo Ani (lastnici edine nekoncane naloge)
-    k.poslji({ jsonrpc: "2.0", id: 50, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-soc-bor1", text: "Petek." } } });
+    k.poslji({ jsonrpc: "2.0", id: 50, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-soc-bor1", text: "Petek.", vrsta: "koncano" } } });
     await caka(() => bor.length === 2);
     zahteva(k, "bcdef");
     await caka(() => ana.length === 2);
@@ -673,12 +678,12 @@ test("reply: izid samo za znan chat_id, predolgo besedilo je napaka (ne odreze),
     k.poslji({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "reply", arguments: { chat_id: "izmisljen-01", text: "x" } } });
     k.poslji({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-repl-01", text: "y".repeat(8001) } } });
     k.poslji({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-repl-01", text: "Delam ...", koncano: false } } });
-    k.poslji({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-repl-01", text: "Ni sprememb." } } });
+    k.poslji({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-repl-01", text: "Ni sprememb.", vrsta: "koncano" } } });
     await caka(() => k.izhod.some((x) => x.id === 12) && dogodki.length === 2);
     assert.equal(k.izhod.find((x) => x.id === 10)!.result.isError, true);
     assert.equal(k.izhod.find((x) => x.id === 13)!.result.isError, true);
     assert.equal(k.izhod.find((x) => x.id === 12)!.result.isError, false);
-    assert.deepEqual(dogodki, [{ vrsta: "stanje", besedilo: "Delam ..." }, { vrsta: "izid", ok: true, besedilo: "Ni sprememb." }]);
+    assert.deepEqual(dogodki, [{ vrsta: "stanje", besedilo: "Delam ...", tip: "vmesno" }, { vrsta: "izid", ok: true, besedilo: "Ni sprememb." }]);
 
     await l.zacni(naloga(ANA, "naloga-repl-02", "pozeni preizkuse"), () => {});
     await caka(() => k.obvestila(KANALSKO).length === 2);
@@ -742,7 +747,7 @@ test("N4 izgubljena povezava: naloga ni lazno koncana, Lina se poveze znova in i
     assert.deepEqual(dogodki[0], { vrsta: "stanje", besedilo: SPOROCILO_IZGUBLJENA });
     await caka(() => dogodki.length === 2);
     assert.deepEqual(dogodki[1], { vrsta: "stanje", besedilo: SPOROCILO_OBNOVLJENA });
-    k.poslji({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-pov-01", text: "Vsi preizkusi so zeleni." } } });
+    k.poslji({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: "reply", arguments: { chat_id: "naloga-pov-01", text: "Vsi preizkusi so zeleni.", vrsta: "koncano" } } });
     await caka(() => dogodki.length === 3);
     assert.deepEqual(dogodki[2], { vrsta: "izid", ok: true, besedilo: "Vsi preizkusi so zeleni." });
 
@@ -1043,4 +1048,364 @@ test("odtis: kanal ob zagonu zazna seznam, spremenjen mimo Line, in Lina opozori
     l.zapri();
     await k.pospravi();
   }
+});
+
+test("orodje dodatki: stanje prek Line; vklop odpre odobritev na napravi naloge; tuja naprava, napacna zgostitev in Zavrni ne preklopijo, podpisani Dovoli preklopi", async () => {
+  const k = await zazeniKanal();
+  const preklopi: Array<[string, boolean]> = [];
+  const l = new IzvajalecClaudeCode({
+    pot: k.pot, zeton: async () => (await preberiKanal(k.dir)).zeton, ozjiKrog: () => new Set([ANA.id, BOR.id]),
+    dodatki: { stanje: async () => "n8n: stikalo izklopljeno", nastavi: async (d, v) => { preklopi.push([d, v]); return "preklopljeno"; } },
+  });
+  const klic = (id: number, args: Record<string, unknown>) =>
+    k.poslji({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "dodatki", arguments: args } });
+  const izid = (id: number) => k.izhod.find((x) => x.id === id)?.result;
+  try {
+    const dogodki: Dogodek[] = [];
+    const chatId = "naloga-dodatki-0001";
+    await l.zacni(naloga(ANA, chatId, "vklopi n8n"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    klic(30, { chat_id: chatId, dejanje: "stanje" });
+    await caka(() => !!izid(30));
+    assert.deepEqual(izid(30), { content: [{ type: "text", text: "n8n: stikalo izklopljeno" }], isError: false });
+    klic(31, { chat_id: "neznan-chat-01", dejanje: "stanje" });
+    klic(32, { chat_id: chatId, dejanje: "vklopi", dodatek: "programi" });
+    await caka(() => !!izid(31) && !!izid(32));
+    assert.equal(izid(31).isError, true);
+    assert.equal(izid(32).isError, true);
+
+    klic(33, { chat_id: chatId, dejanje: "vklopi", dodatek: "n8n" });
+    await caka(() => dogodki.some((d) => d.vrsta === "odobritev"));
+    const od = dogodki.find((d) => d.vrsta === "odobritev") as Extract<Dogodek, { vrsta: "odobritev" }>;
+    assert.equal(od.orodje, "mcp__lina__dodatki");
+    assert.equal(od.predogled, "vklopi n8n");
+    assert.match(od.opis, /Docker/);
+    await l.odobri(chatId, od.zahtevaId, true, BOR.id, dokazOdobritve(BOR, od.zahtevaId, true, chatId, od.zgostitev!));     // druga naprava
+    await l.odobri(chatId, od.zahtevaId, true, ANA.id, dokazOdobritve(ANA, od.zahtevaId, true, chatId, "0".repeat(64)));    // druga vsebina
+    await premor(300);
+    assert.equal(izid(33), undefined);
+    assert.deepEqual(preklopi, []);
+    await l.odobri(chatId, od.zahtevaId, true, ANA.id, dokazOdobritve(ANA, od.zahtevaId, true, chatId, od.zgostitev!), od.zgostitev);
+    await caka(() => !!izid(33));
+    assert.deepEqual(izid(33), { content: [{ type: "text", text: "preklopljeno" }], isError: false });
+    assert.deepEqual(preklopi, [["n8n", true]]);
+    assert.equal(k.obvestila(DOVOLJENJE).length, 0);                                                    // ni dovoljenje seji Claude Code
+
+    klic(34, { chat_id: chatId, dejanje: "izklopi", dodatek: "paperclip" });
+    await caka(() => dogodki.filter((d) => d.vrsta === "odobritev").length === 2);
+    const od2 = dogodki.filter((d) => d.vrsta === "odobritev")[1] as Extract<Dogodek, { vrsta: "odobritev" }>;
+    await l.odobri(chatId, od2.zahtevaId, false, ANA.id, dokazOdobritve(ANA, od2.zahtevaId, false, chatId, od2.zgostitev!));
+    await caka(() => !!izid(34));
+    assert.equal(izid(34).isError, true);
+    assert.match(izid(34).content[0].text, /Lastnik je zavrnil/);                                      // kanal sam, ne sele Lina
+    assert.deepEqual(preklopi, [["n8n", true]]);
+
+    // konec naloge zapre odprto odobritev: Claude Code dobi resnico, preklopa ni
+    klic(35, { chat_id: chatId, dejanje: "vklopi", dodatek: "affine" });
+    await caka(() => dogodki.filter((d) => d.vrsta === "odobritev").length === 3);
+    k.poslji({ jsonrpc: "2.0", id: 36, method: "tools/call", params: { name: "reply", arguments: { chat_id: chatId, text: "koncano", vrsta: "koncano" } } });
+    await caka(() => !!izid(35), 8000);
+    assert.equal(izid(35).isError, true);
+    assert.deepEqual(preklopi, [["n8n", true]]);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("N2 (drugi pregled 0.2.10): orodje dodatki ima mejo na minuto; agent v zanki ne zasuje telefona", async () => {
+  const k = await zazeniKanal();
+  const l = new IzvajalecClaudeCode({
+    pot: k.pot, zeton: async () => (await preberiKanal(k.dir)).zeton, ozjiKrog: () => new Set([ANA.id]),
+    dodatki: { stanje: async () => "stanje", nastavi: async () => "preklopljeno" },
+  });
+  const izid = (id: number) => k.izhod.find((x) => x.id === id)?.result;
+  try {
+    const dogodki: Dogodek[] = [];
+    const chatId = "naloga-dodatki-0002";
+    await l.zacni(naloga(ANA, chatId, "dodatki"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    for (let i = 0; i < 15; i++) {
+      k.poslji({ jsonrpc: "2.0", id: 100 + i, method: "tools/call", params: { name: "dodatki", arguments: { chat_id: chatId, dejanje: "vklopi", dodatek: "n8n" } } });
+    }
+    await caka(() => dogodki.filter((d) => d.vrsta === "odobritev").length + [...Array(15).keys()].filter((i) => !!izid(100 + i)).length >= 15);
+    await premor(200);
+    const odprte = dogodki.filter((d) => d.vrsta === "odobritev").length;
+    assert.ok(odprte <= 10, `na telefon je slo ${odprte} zahtev v eni minuti`);
+    const zavrnjene = [...Array(15).keys()].map((i) => izid(100 + i)).filter((r) => r?.isError);
+    assert.ok(zavrnjene.length >= 5 && zavrnjene.every((r) => /^Prevec zahtev za dodatke v eni minuti/.test(r.content[0].text)));  // pregled 0225 A-18: /pozneje/ je ujel tudi drugo sporocilo
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+// ------------------------------------------------------------------ vrsta odgovora in nadaljevanje (lastnik 23. 11. 2026)
+
+const reply = (k: Kanal, id: number, chat_id: string, text: string, dodatno: Record<string, unknown> = {}) =>
+  k.poslji({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "reply", arguments: { chat_id, text, ...dodatno } } });
+
+test("reply vrsta: brez polja = vmesno (naloga tece), vprasanje, koncano; neznana vrsta je napaka; zastareli koncano=true", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    k.poslji({ jsonrpc: "2.0", id: 901, method: "tools/list" });
+    await caka(() => k.izhod.some((x) => x.id === 901));
+    const shema = k.izhod.find((x) => x.id === 901)!.result.tools[0].inputSchema;
+    assert.deepEqual(shema.properties.vrsta.enum, ["vprasanje", "vmesno", "koncano"]);
+    assert.match(NAVODILO_KANALA, /vrsta="vprasanje"/);
+    assert.match(NAVODILO_KANALA, /Brez polja vrsta Lina odgovor steje kot vmesno/);
+
+    const dogodki: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-vrst-01", "naredi nacrt"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    reply(k, 10, "naloga-vrst-01", "Berem kodo.");
+    reply(k, 11, "naloga-vrst-01", "Katero vejo naj uporabim?", { vrsta: "vprasanje" });
+    reply(k, 12, "naloga-vrst-01", "x", { vrsta: "mogoce" });
+    await caka(() => k.izhod.some((x) => x.id === 12) && dogodki.length === 2);
+    assert.equal(k.izhod.find((x) => x.id === 12)!.result.isError, true);
+    assert.deepEqual(dogodki, [
+      { vrsta: "stanje", besedilo: "Berem kodo.", tip: "vmesno" },
+      { vrsta: "stanje", besedilo: "Katero vejo naj uporabim?", tip: "vprasanje" },
+    ]);
+    // naloga je se v teku: odobritev gre na napravo (koncana naloga je ne bi dobila)
+    zahteva(k, "abcde");
+    await caka(() => dogodki.length === 3);
+    assert.equal(dogodki[2].vrsta, "odobritev");
+    reply(k, 13, "naloga-vrst-01", "Narejeno.", { koncano: true });                            // starejsi Claude Code
+    await caka(() => dogodki.length === 4);
+    assert.deepEqual(dogodki[3], { vrsta: "izid", ok: true, besedilo: "Narejeno." });
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("A5 reply ima mejo pogostosti na nalogo (20/min); prvi »koncano« je vedno dovoljen, ponovljen ne obide meje", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-mej-01", "zanka"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    for (let i = 0; i < 21; i++) reply(k, 3000 + i, "naloga-mej-01", `korak ${i}`);
+    await caka(() => k.izhod.some((x) => x.id === 3020));
+    assert.equal(k.izhod.filter((x) => x.id >= 3000 && x.id < 3020).every((x) => x.result.isError === false), true);
+    assert.equal(k.izhod.find((x) => x.id === 3020)!.result.isError, true, "21. odgovor v minuti je zavrnjen");
+    reply(k, 3021, "naloga-mej-01", "Koncano.", { vrsta: "koncano" });
+    await caka(() => k.izhod.some((x) => x.id === 3021));
+    assert.equal(k.izhod.find((x) => x.id === 3021)!.result.isError, false, "koncano je vedno dovoljen");
+    reply(k, 3022, "naloga-mej-01", "Spet koncano.", { vrsta: "koncano" });
+    await caka(() => k.izhod.some((x) => x.id === 3022));
+    assert.equal(k.izhod.find((x) => x.id === 3022)!.result.isError, true, "ponovljen koncano steje v mejo");
+    assert.equal(dogodki.filter((d) => d.vrsta === "stanje").length, 20);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("ponovno odprtje: reply po koncu nalogo vrne v tek (stare odobritve ostanejo zaprte); ustavljena naloga se NE odpre", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-odpr-01", "popravi preizkuse"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    zahteva(k, "abcde");
+    await caka(() => dogodki.length === 1);
+    const z = zgostitevIz(dogodki, "abcde");
+    reply(k, 20, "naloga-odpr-01", "Koncano.", { vrsta: "koncano" });
+    await caka(() => dogodki.length === 2);
+    assert.deepEqual(dogodki[1], { vrsta: "izid", ok: true, besedilo: "Koncano." });
+    // lastnik je Claude Code v terminalu ukazal naprej
+    reply(k, 21, "naloga-odpr-01", "Delam se popravek.", { vrsta: "vmesno" });
+    await caka(() => dogodki.length === 3);
+    assert.deepEqual(dogodki[2], { vrsta: "stanje", besedilo: "Delam se popravek.", tip: "vmesno" });
+    // odobritev, odprta pred koncem, ne velja vec
+    await l.odobri("naloga-odpr-01", "abcde", true, ANA.id, dokazOdobritve(ANA, "abcde", true, "naloga-odpr-01", z)).catch(() => {});
+    await premor(200);
+    assert.equal(k.obvestila(DOVOLJENJE).length, 0);
+    // nova zahteva gre spet napravi (naloga je v teku)
+    zahteva(k, "bcdef");
+    await caka(() => dogodki.length === 4);
+    assert.equal(dogodki[3].vrsta === "odobritev" && dogodki[3].zahtevaId, "bcdef");
+
+    // ustavljena naloga: reply je ne odpre (ne pri Lini ne v kanalu)
+    const d2: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-odpr-02", "dolga naloga"), (d) => d2.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 2);
+    await l.ustavi("naloga-odpr-02", dokazUstavitve(ANA, "naloga-odpr-02"));
+    await caka(() => k.obvestila(KANALSKO).length === 3);
+    reply(k, 22, "naloga-odpr-02", "Ustavljeno.", { vrsta: "koncano" });
+    await caka(() => d2.length === 1);
+    reply(k, 23, "naloga-odpr-02", "Vseeno nadaljujem.", { vrsta: "vmesno" });
+    await caka(() => k.izhod.some((x) => x.id === 23));
+    // ustavljena naloga sprejme samo se zakljucni reply: Claude Code dobi napako, ne »poslano«
+    assert.equal(k.izhod.find((x) => x.id === 23)!.result.isError, true);
+    await premor(200);
+    assert.equal(d2.length, 1);
+    await l.nadaljuj!("naloga-odpr-02", "nadaljuj", ANA.id, dokazNadaljevanja(ANA, "naloga-odpr-02", "nadaljuj")).catch(() => {});
+    await premor(300);
+    assert.equal(k.obvestila(KANALSKO).length, 3);
+    // umaknjena naprava (rok in umik koncata izid ok:false) - tudi stanje z tip ne odpre naloge
+    assert.ok(!d2.some((d) => d.vrsta === "stanje"));
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("nadaljuj: odgovor gre v ISTI chat_id z oznako nadaljevanje; tuja naprava, tuj podpis in besedilna odobritev ne gredo; zavrnitev ne konca naloge", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  try {
+    const dogodki: Dogodek[] = [];
+    await l.zacni(naloga(ANA, "naloga-nadl-01", "uredi nacrt"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    reply(k, 30, "naloga-nadl-01", "Kje je nacrt?", { vrsta: "vprasanje" });
+    await caka(() => dogodki.length === 1);
+    const odgovor = "Nacrt je v docs/nacrt.md, korak 2.";
+    await l.nadaljuj!("naloga-nadl-01", odgovor, ANA.id, dokazNadaljevanja(ANA, "naloga-nadl-01", odgovor));
+    await caka(() => k.obvestila(KANALSKO).length === 2);
+    assert.deepEqual(k.obvestila(KANALSKO)[1].params, {
+      content: odgovor, meta: { chat_id: "naloga-nadl-01", naprava: ANA.id, nadaljevanje: "da" },
+    });
+    // tuja naprava (BOR) za Anino nalogo: Lina zavrne ze sama
+    await assert.rejects(l.nadaljuj!("naloga-nadl-01", "x", BOR.id, dokazNadaljevanja(BOR, "naloga-nadl-01", "x")));
+    // podpis druge naprave za Anino ime: kanal zavrne, naloga tece naprej
+    await l.nadaljuj!("naloga-nadl-01", "rm vse", ANA.id, dokazNadaljevanja(ANA, "naloga-nadl-01", "rm vse", BOR));
+    await caka(() => dogodki.length === 2);
+    assert.deepEqual(dogodki[1], { vrsta: "stanje", besedilo: SPOROCILO_NADALJEVANJE_ZAVRNJENO });
+    // spremenjeno besedilo po podpisu
+    await l.nadaljuj!("naloga-nadl-01", "rm -rf .", ANA.id, dokazNadaljevanja(ANA, "naloga-nadl-01", "git status"));
+    await caka(() => dogodki.length === 3);
+    // besedilna odobritev ne gre v sejo
+    await l.nadaljuj!("naloga-nadl-01", "yes abcde", ANA.id, dokazNadaljevanja(ANA, "naloga-nadl-01", "yes abcde"));
+    await caka(() => dogodki.length === 4);
+    assert.equal(dogodki[3].vrsta === "stanje" && dogodki[3].besedilo, SPOROCILO_ODOBRITEV_Z_GUMBOM);
+    assert.equal(k.obvestila(KANALSKO).length, 2);
+    assert.ok(!dogodki.some((d) => d.vrsta === "izid"));
+    // koncana naloga (reply koncano) se z nadaljevanjem odpre znova
+    reply(k, 31, "naloga-nadl-01", "Koncano.", { vrsta: "koncano" });
+    await caka(() => dogodki.length === 5);
+    await l.nadaljuj!("naloga-nadl-01", "Se korak 3.", ANA.id, dokazNadaljevanja(ANA, "naloga-nadl-01", "Se korak 3."));
+    await caka(() => k.obvestila(KANALSKO).length === 3);
+    reply(k, 32, "naloga-nadl-01", "Delam korak 3.");
+    await caka(() => dogodki.length === 6);
+    assert.deepEqual(dogodki[5], { vrsta: "stanje", besedilo: "Delam korak 3.", tip: "vmesno" });
+    // nadaljevanje neznane naloge Lina zavrne
+    await assert.rejects(l.nadaljuj!("naloga-nima-01", "x", ANA.id, dokazNadaljevanja(ANA, "naloga-nima-01", "x")));
+
+    // kanal sam (mimo Line, napadalec z zetonom): tuj posiljatelj in ustavljena naloga ne gresta v sejo
+    l.zapri();
+    const r = surovo(k.pot);
+    await r.prijavi(await zetonOd(k));
+    const zavrnjena = () => r.prejeto.filter((x) => x.vrsta === "zavrnjeno" && x.nadaljevanje === true).length;
+    r.vrstica({ vrsta: "nadaljuj", id: "naloga-nadl-01", besedilo: "Korak 4.", posiljatelj: BOR.id, dokaz: dokazNadaljevanja(ANA, "naloga-nadl-01", "Korak 4.") });
+    await caka(() => zavrnjena() === 1);
+    r.vrstica({ vrsta: "ustavi", id: "naloga-nadl-01", posiljatelj: ANA.id, dokaz: dokazUstavitve(ANA, "naloga-nadl-01") });
+    await caka(() => k.obvestila(KANALSKO).length === 4);
+    r.vrstica({ vrsta: "nadaljuj", id: "naloga-nadl-01", besedilo: "Korak 5.", posiljatelj: ANA.id, dokaz: dokazNadaljevanja(ANA, "naloga-nadl-01", "Korak 5.") });
+    await caka(() => zavrnjena() === 2);
+    await premor(200);
+    assert.equal(k.obvestila(KANALSKO).length, 4);
+    r.s.destroy();
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});
+
+test("nizNadaljevanja: isti niz kot Kotlin NiziLine.nizNadaljevanja (vektor v NiziLineTest), lastna predpona", () => {
+  const niz = nizNadaljevanja("naloga-vektor-01", "n-5ef0fcb562008e97", "Načrt je v docs/nacrt.md.\nKorak 2 😀", 1763120000000, "enkratni-vektor-0010");
+  assert.equal(niz, "safeer-lina-nadaljuj-v1\nnaloga-vektor-01\nn-5ef0fcb562008e97\n1763120000000\nenkratni-vektor-0010\nNačrt je v docs/nacrt.md.\nKorak 2 😀");
+  assert.notEqual(niz.split("\n")[0], nizNaloge("a", "b", "c", 1, "e").split("\n")[0]);
+});
+
+// ---- Pregled A (zdruzitev 0225): A-5, A-6, A-8 (obrnjene sonde pregledovalca; vsak preizkus brez popravka pade) ----
+const ustavljenaV = (k: Kanal) => k.obvestila(KANALSKO).some((o: any) => o.params?.meta?.ustavi === "da");
+
+test("A-6: izmenjava reply koncano/vmesno ne obide roka naloge (kanal jo ustavi, Lina jo konca)", async () => {
+  const k = await zazeniKanal({ okolje: { LINA_KANAL_ROK_MS: "4000" } });
+  const l = lina(k, [ANA, BOR, TUJA], { rokNalogeMs: 4000 });
+  const dog: Dogodek[] = [];
+  try {
+    await l.zacni(naloga(ANA, "naloga-rok-cikel", "x"), (d) => dog.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    for (let i = 0; i < 12 && !ustavljenaV(k); i++) {
+      reply(k, 700 + 2 * i, "naloga-rok-cikel", "konec", { vrsta: "koncano" });
+      reply(k, 701 + 2 * i, "naloga-rok-cikel", "spet delam", { vrsta: "vmesno" });
+      await premor(1000);
+    }
+    // rok 4 s + preverba 3 s: brez obida je naloga ustavljena v ~7 s
+    assert.ok(ustavljenaV(k), "kanal naloge ni ustavil");
+    assert.ok(dog.some((d) => d.vrsta === "izid" && !d.ok && /ni koncana/.test(d.besedilo)), "Lina ni koncala naloge ob roku");
+  } finally { l.zapri(); await k.pospravi(); }
+});
+
+test("A-8: lastnikova ustavitev koncane naloge pride v kanal; reply vmesno je potem ne odpre ne v kanalu ne v Lini", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  const dog: Dogodek[] = [];
+  try {
+    await l.zacni(naloga(ANA, "naloga-ust-konc", "x"), (d) => dog.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    reply(k, 800, "naloga-ust-konc", "Koncano.", { vrsta: "koncano" });
+    await caka(() => dog.some((d) => d.vrsta === "izid"));
+    await l.ustavi("naloga-ust-konc", dokazUstavitve(ANA, "naloga-ust-konc"));
+    await caka(() => ustavljenaV(k));
+    const pred = dog.length;
+    reply(k, 801, "naloga-ust-konc", "Vseeno nadaljujem.", { vrsta: "vmesno" });
+    await caka(() => k.izhod.some((x) => x.id === 801));
+    assert.equal(k.izhod.find((x) => x.id === 801)!.result.isError, true, "kanal sprejme vmesni odgovor ustavljene naloge");
+    await premor(200);
+    assert.equal(dog.length, pred, "Lina nalogo spet spremlja");
+    // tudi nadaljevanje ustavljene naloge ne odpre
+    await assert.rejects(l.nadaljuj!("naloga-ust-konc", "x", ANA.id, dokazNadaljevanja(ANA, "naloga-ust-konc", "x")));
+  } finally { l.zapri(); await k.pospravi(); }
+});
+
+test("A-5: zavrnitev DRUGEGA nadaljevanja ne konca naloge, ki tece po PRVEM; pravi izid pride do telefona", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k);
+  const dog: Dogodek[] = [];
+  try {
+    await l.zacni(naloga(ANA, "naloga-dve-nadl", "x"), (d) => dog.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    reply(k, 900, "naloga-dve-nadl", "Koncano.", { vrsta: "koncano" });
+    await caka(() => dog.some((d) => d.vrsta === "izid"));
+    await l.nadaljuj!("naloga-dve-nadl", "Korak A.", ANA.id, dokazNadaljevanja(ANA, "naloga-dve-nadl", "Korak A."));
+    await caka(() => k.obvestila(KANALSKO).length === 2);
+    // drugo nadaljevanje kanal zavrne (besedilna odobritev), preden Claude Code odgovori na prvo
+    await l.nadaljuj!("naloga-dve-nadl", "yes abcde", ANA.id, dokazNadaljevanja(ANA, "naloga-dve-nadl", "yes abcde"));
+    await caka(() => dog.some((d) => d.vrsta === "stanje" && d.besedilo === SPOROCILO_ODOBRITEV_Z_GUMBOM));
+    assert.equal(dog.filter((d) => d.vrsta === "izid").length, 1, "zavrnitev drugega je koncala nalogo prvega");
+    reply(k, 901, "naloga-dve-nadl", "Korak A narejen.", { vrsta: "koncano" });
+    await caka(() => dog.filter((d) => d.vrsta === "izid").length === 2, 2000);
+    assert.deepEqual(dog.filter((d) => d.vrsta === "izid").at(-1), { vrsta: "izid", ok: true, besedilo: "Korak A narejen." });
+    // kontrola: eno samo zavrnjeno nadaljevanje koncane naloge jo zapre znova (kot doslej)
+    await l.nadaljuj!("naloga-dve-nadl", "yes fghij", ANA.id, dokazNadaljevanja(ANA, "naloga-dve-nadl", "yes fghij"));
+    await caka(() => dog.filter((d) => d.vrsta === "izid").length === 3);
+    const zadnji = dog.at(-1)!;
+    assert.ok(zadnji.vrsta === "izid" && !zadnji.ok);
+  } finally { l.zapri(); await k.pospravi(); }
+});
+
+test("A-6: zavrnjeno nadaljevanje koncane naloge ne podaljsa roka v Lini (kanal ga tudi ne)", async () => {
+  const k = await zazeniKanal();
+  const l = lina(k, [ANA, BOR, TUJA], { rokNalogeMs: 1500 });
+  const dog: Dogodek[] = [];
+  try {
+    await l.zacni(naloga(ANA, "naloga-rok-zavr", "x"), (d) => dog.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    reply(k, 950, "naloga-rok-zavr", "Koncano.", { vrsta: "koncano" });
+    await caka(() => dog.some((d) => d.vrsta === "izid"));
+    await premor(1700);
+    await l.nadaljuj!("naloga-rok-zavr", "yes abcde", ANA.id, dokazNadaljevanja(ANA, "naloga-rok-zavr", "yes abcde"));
+    await caka(() => dog.filter((d) => d.vrsta === "izid").length === 2);
+    // lastnik v terminalu: reply vmesno po izteku prvotnega roka -> Lina nalogo takoj konca z rokom
+    reply(k, 951, "naloga-rok-zavr", "Delam dalje.", { vrsta: "vmesno" });
+    await caka(() => dog.some((d) => d.vrsta === "izid" && /ni koncana/.test(d.besedilo)), 800);
+  } finally { l.zapri(); await k.pospravi(); }
 });

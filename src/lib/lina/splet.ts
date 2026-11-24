@@ -6,7 +6,8 @@
 import { brezZneska, fold } from "./guards.ts";
 import { razlogPolja } from "./plast.ts";
 import { t } from "./besedila.ts";
-import type { Catalog, Predlog, PredlogPodjetje, PredlogVrstica } from "./types.ts";
+import { jeVeljavenEnaslov, naslovNaDomeni } from "./eposta.ts";
+import type { Catalog, Predlog, PredlogEposta, PredlogPodjetje, PredlogVrstica } from "./types.ts";
 import { parsePublish } from "./validate.ts";
 import { zabeleziVbrizg, zaznajVbrizg } from "./vbrizg.ts";
 import { normirajZnanje } from "./znanje-besedilo.ts";
@@ -18,6 +19,12 @@ export const MEJA_HKRATI = 2;
 export const ROK_ZAHTEVE_MS = 10_000;
 export const ROK_SKUPAJ_MS = 60_000;
 export const LINA_AGENT = "Lina/1.0 (ucenje kataloga iz strani podjetja)";
+/** Kazalo strani (sitemap): najvec toliko datotek (z indeksom vred), bajtov na datoteko in naslovov skupaj. */
+export const MEJA_KAZALO_DATOTEK = 3;
+export const MEJA_KAZALO_BAJTOV = 1_000_000;
+export const MEJA_KAZALO_NASLOVOV = 2000;
+/** Kazalo ima svoj proracun casa (CodeRabbit 0.2.10): pocasna kazala ne smejo porabiti roka za branje strani. */
+export const ROK_KAZALA_MS = 15_000;
 
 export type SpletZahteva = {
   ip: string;
@@ -55,6 +62,8 @@ type IzHtml = {
   naslovi: { nivo: number; besedilo: string }[];
   jsonld: unknown[];
   povezave: string[];
+  /** Naslovi iz povezav mailto: (kontakt podjetja). */
+  eposte?: string[];
 };
 
 const PRAZEN_PODJETJE = (): PredlogPodjetje => ({
@@ -305,7 +314,8 @@ async function prenesi(
   url: URL,
   izvirni: string,
   odv: SpletOdv,
-  dovoljeniTip: "html" | "robots",
+  dovoljeniTip: "html" | "robots" | "kazalo",
+  rokMs: number = ROK_ZAHTEVE_MS,
 ): Promise<Prenos> {
   let trenutni = url;
   for (let skok = 0; skok <= MEJA_SKOKOV; skok++) {
@@ -315,8 +325,9 @@ async function prenesi(
       vrata: 443,
       gostitelj: trenutni.hostname,
       pot: `${trenutni.pathname}${trenutni.search}` || "/",
-      rokMs: ROK_ZAHTEVE_MS,
+      rokMs,
       agent: LINA_AGENT,
+      ...(dovoljeniTip === "kazalo" ? { sprejmi: "application/xml, text/xml;q=0.9" } : {}),
     });
     const glave = maleGlave(odg.glave);
     const status = odg.status;
@@ -341,7 +352,7 @@ async function prenesi(
       odg.prekini();
       return { status, glave, telo: Buffer.alloc(0), url: trenutni };
     }
-    const telo = await preberiTelo(odg, dovoljeniTip === "robots" ? 512 * 1024 : MEJA_BAJTOV);
+    const telo = await preberiTelo(odg, dovoljeniTip === "robots" ? 512 * 1024 : dovoljeniTip === "kazalo" ? MEJA_KAZALO_BAJTOV : MEJA_BAJTOV);
     return { status, glave, telo, url: trenutni };
   }
   throw new Error(t("spletTuj"));
@@ -436,8 +447,18 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
     if (besedilo) seznami.push(besedilo);
   }
   const povezave: string[] = [];
+  const eposte: string[] = [];
   for (const m of brez.matchAll(/<a\b[^>]*href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
     const href = (m[1] || m[2] || m[3] || "").trim();
+    if (/^mailto:/i.test(href) && eposte.length < 20) {
+      let naslov = entitete(href.slice(7)).split("?")[0];
+      try {
+        naslov = decodeURIComponent(naslov);
+      } catch {
+        /* Pokvarjen zapis: preverba oblike ga zavrne. */
+      }
+      eposte.push(naslov.trim().toLowerCase());
+    }
     if (!href || /^(?:mailto:|tel:|javascript:|data:)/i.test(href)) continue;
     let cilj: URL;
     try {
@@ -451,7 +472,20 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
     const kljuc = `${cilj.hostname.toLowerCase()}${pot}`;
     if (!povezave.includes(kljuc)) povezave.push(kljuc);
   }
-  return { naslov, odstavki, seznami, naslovi, jsonld, povezave };
+  return { naslov, odstavki, seznami, naslovi, jsonld, povezave, eposte };
+}
+
+/**
+ * E-posta za povprasevanja iz strani: naslovi iz kontakta (JSON-LD) in povezav mailto:. Prednost ima naslov na domeni strani
+ * (info@podjetje.si za podjetje.si); samo tak je predizbran. Tuj naslov (npr. izdelovalec strani v nogi) je ponujen neizbran.
+ */
+export function epostaIzStrani(strani: IzHtml[], stik: string, gostitelj: string): PredlogEposta | undefined {
+  const kandidati = [...(stik.match(/[^\s,;<>()]+@[^\s,;<>()]+/g) ?? []), ...strani.flatMap((s) => s.eposte ?? [])]
+    .map((n) => n.trim().toLowerCase().replace(/^mailto:/, ""))
+    .filter((n) => jeVeljavenEnaslov(n) && !jeVrinjenoNavodilo(n));
+  if (!kandidati.length) return undefined;
+  const svoj = kandidati.find((n) => naslovNaDomeni(n, gostitelj));
+  return { id: "eposta", izbrano: Boolean(svoj), naslov: svoj ?? kandidati[0] };
 }
 
 function tipiOd(raw: unknown): string[] {
@@ -872,15 +906,40 @@ export function jeVrinjenoNavodilo(vrstica: string): boolean {
 }
 
 export function znanjeIzStrani(strani: IzHtml[]): string {
-  const videno = new Set<string>();
   const vrstice: string[] = [];
+  for (const v of vrsticeZnanja(strani)) if (v !== null) vrstice.push(v);
+  return normirajZnanje(vrstice.join("\n"));
+}
+
+/** Vsak kos strani: ocisceno vrstico ali null (izpuscen kos). Ena logika za znanjeIzStrani in razlicico po kosih. */
+function* vrsticeZnanja(strani: IzHtml[]): Generator<string | null> {
+  const videno = new Set<string>();
   for (const stran of strani) {
     const kosi = [stran.naslov, ...stran.naslovi.map((n) => n.besedilo), ...stran.odstavki, ...stran.seznami];
     for (const kos of kosi) {
       const cisto = pocistiPolje("znanje", kos.replace(/\s+/g, " ").trim());
-      if (cisto.length < 2 || videno.has(cisto) || jeVrinjenoNavodilo(cisto)) continue;
+      if (cisto.length < 2 || videno.has(cisto) || jeVrinjenoNavodilo(cisto)) {
+        yield null;
+        continue;
+      }
       videno.add(cisto);
-      vrstice.push(cisto);
+      yield cisto;
+    }
+  }
+}
+
+/**
+ * Isto kot znanjeIzStrani, a vsakih ~10 ms sprosti zanko dogodkov (drugi pregled 0.2.10, dodatno: 38 000 vrstic sprejete tabele je drzalo
+ * glavno nit ~430 ms, med tem streznik ni odgovarjal klicem).
+ */
+export async function znanjeIzStraniPoKoscih(strani: IzHtml[]): Promise<string> {
+  const vrstice: string[] = [];
+  let zacetek = performance.now();
+  for (const v of vrsticeZnanja(strani)) {
+    if (v !== null) vrstice.push(v);
+    if (performance.now() - zacetek > 10) {
+      await new Promise((r) => setImmediate(r));
+      zacetek = performance.now();
     }
   }
   return normirajZnanje(vrstice.join("\n"));
@@ -912,6 +971,106 @@ function urlIzKljuca(kljuc: string, izvirni: URL): URL {
   return new URL(`https://${host}${pot}`);
 }
 
+/** Strani, ki klicatelja najbolj zanimajo (lastnik 23. 11. 2026): o nas, storitve, izdelki, cenik, kontakt, ure, FAQ, lokacija, dostava. */
+const KLJUCNE_POTI =
+  /(?:^|[/_-])(?:o-?nas|about(?:-us)?|podjetje|company|storitv\w*|services?|izdelk\w*|products?|produkt\w*|ponudb\w*|cenik\w*|pricing|prices?|kontakt\w*|contacts?|delovni-cas|odpiralni-cas|urnik|hours|faq|pogosta-vprasanja|vprasanja|lokacij\w*|locations?|kje-smo|dostav\w*|delivery|shipping|poslovalnic\w*)(?=$|[/_.-])/;
+/** Novice, reference, blog in arhivi pridejo zadnji (tudi »/novice/nov-cenik« je novica). */
+const ZADNJE_POTI =
+  /(?:^|\/)(?:novic\w*|news|blog\w*|referenc\w*|references?|aktualn\w*|clank\w*|articles?|tags?|category|kategorij\w*|author|avtor\w*|arhiv\w*|archives?|page|20\d\d)(?=$|\/)/;
+
+function utezPoti(pot: string): number {
+  let p = pot;
+  try {
+    p = decodeURIComponent(pot);
+  } catch {
+    /* Pokvarjen zapis ostane, kot je. */
+  }
+  const f = fold(p);
+  if (ZADNJE_POTI.test(f)) return 2;
+  return KLJUCNE_POTI.test(f) ? 0 : 1;
+}
+
+/** Kljuci strani (gostitelj + pot), razvrsceni po pomembnosti za klicatelja; pri isti utezi plitvejsa pot, nato vrstni red kazala. */
+export function razvrstiPoPomembnosti(kljuci: string[]): string[] {
+  return kljuci
+    .map((kljuc, i) => {
+      const pot = kljuc.slice(kljuc.indexOf("/") < 0 ? kljuc.length : kljuc.indexOf("/")).replace(/\?.*$/, "");
+      return { kljuc, i, utez: utezPoti(pot), globina: pot.split("/").filter(Boolean).length };
+    })
+    .sort((a, b) => a.utez - b.utez || a.globina - b.globina || a.i - b.i)
+    .map((x) => x.kljuc);
+}
+
+/** Podkazala v indeksu: strani in izdelki pred prispevki in novicami (WordPress: page-sitemap pred post-sitemap). */
+function utezPodkazala(url: URL): number {
+  const ime = fold(url.pathname);
+  if (/post|news|novic|blog|tag|categor|author/.test(ime)) return 2;
+  return /page|stran|product|izdel|storit|service/.test(ime) ? 0 : 1;
+}
+
+function naslovIzKazala(raw: string, izvirni: string): URL | null {
+  let url: URL;
+  try {
+    url = new URL(entitete(raw).trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || (url.port && url.port !== "443") || url.username || url.password) return null;
+  return istiGostitelj(url.hostname, izvirni) ? url : null;
+}
+
+/**
+ * Kazalo strani (sitemap): vrstice »Sitemap:« iz robots.txt (samo isti gostitelj), sicer /sitemap.xml. Indeks se odpre en nivo
+ * globoko. Vsaka napaka (tuj gostitelj, preusmeritev drugam, zasebni naslov, rok) samo izpusti kazalo: branje gre naprej po
+ * povezavah kot doslej. Vrne kljuce strani istega gostitelja v vrstnem redu kazala.
+ */
+async function preberiKazalo(zacetni: URL, izvirni: string, odv: SpletOdv, robotsBesedilo: string, potekel: () => boolean, ura: () => number): Promise<string[]> {
+  const konec = ura() + ROK_KAZALA_MS;
+  const preostanek = () => Math.min(ROK_ZAHTEVE_MS, konec - ura());
+  const vrsta: { url: URL; globina: number }[] = [];
+  for (const m of robotsBesedilo.matchAll(/^[ \t]*sitemap[ \t]*:[ \t]*(\S+)/gim)) {
+    const url = naslovIzKazala(m[1], izvirni);
+    if (url && vrsta.length < MEJA_KAZALO_DATOTEK) vrsta.push({ url, globina: 0 });
+  }
+  if (!vrsta.length) vrsta.push({ url: new URL("/sitemap.xml", zacetni), globina: 0 });
+  const videni = new Set<string>();
+  const strani: string[] = [];
+  let datotek = 0;
+  while (vrsta.length && datotek < MEJA_KAZALO_DATOTEK && strani.length < MEJA_KAZALO_NASLOVOV && !potekel() && preostanek() > 0) {
+    const { url, globina } = vrsta.shift() as { url: URL; globina: number };
+    if (videni.has(url.href) || /\.gz$/i.test(url.pathname)) continue;
+    videni.add(url.href);
+    datotek += 1;
+    let xml: string;
+    try {
+      const odg = await prenesi(url, izvirni, odv, "kazalo", preostanek());
+      if (odg.status < 200 || odg.status >= 300) continue;
+      xml = odg.telo.toString("utf8");
+    } catch {
+      continue;
+    }
+    const lokacije = [...xml.matchAll(/<loc>([^<]{1,2048})<\/loc>/gi)].map((m) => m[1]);
+    if (/<sitemapindex[\s>]/i.test(xml)) {
+      if (globina > 0) continue;
+      const pod = lokacije
+        .slice(0, MEJA_KAZALO_NASLOVOV)
+        .map((l) => naslovIzKazala(l, izvirni))
+        .filter((u): u is URL => u !== null)
+        .map((u, i) => ({ u, i }))
+        .sort((a, b) => utezPodkazala(a.u) - utezPodkazala(b.u) || a.i - b.i);
+      for (const { u } of pod) vrsta.push({ url: u, globina: 1 });
+    } else if (/<urlset[\s>]/i.test(xml)) {
+      for (const l of lokacije) {
+        if (strani.length >= MEJA_KAZALO_NASLOVOV) break;
+        const u = naslovIzKazala(l, izvirni);
+        const kljuc = u ? kljucStrani(u) : "";
+        if (kljuc && !strani.includes(kljuc)) strani.push(kljuc);
+      }
+    }
+  }
+  return strani;
+}
+
 /**
  * Prebere najvec 20 strani istega gostitelja.
  * Povezava mora iti na ze preverjen javni IP. Klicatelj jo poda (preizkus ali https).
@@ -924,11 +1083,15 @@ export async function preberiStran(naslov: string, odv: SpletOdv): Promise<Branj
   const potekel = () => ura() - zacetek >= ROK_SKUPAJ_MS;
 
   let robots = (_pot: string) => true;
+  let robotsBesedilo = "";
   if (!potekel()) {
     try {
       const robUrl = new URL("/robots.txt", zacetni);
       const rob = await prenesi(robUrl, izvirni, odv, "robots");
-      if (rob.status >= 200 && rob.status < 300) robots = (pot) => dovoliRobots(rob.telo.toString("utf8"), pot);
+      if (rob.status >= 200 && rob.status < 300) {
+        robotsBesedilo = rob.telo.toString("utf8");
+        robots = (pot) => dovoliRobots(robotsBesedilo, pot);
+      }
     } catch (error) {
       if (error instanceof Error && (error.message === t("spletZasebno") || error.message === t("spletHttps") || error.message === t("spletTuj"))) {
         throw error;
@@ -943,6 +1106,16 @@ export async function preberiStran(naslov: string, odv: SpletOdv): Promise<Branj
   let stevilo = 0;
   const startKljuc = kljucStrani(zacetni);
   if (robots(zacetni.pathname || "/")) vrsta.push(startKljuc);
+  // Kazalo razvrsti strani po pomembnosti; brez kazala ostane branje po povezavah. Uvrsti se sele, ko je zacetna stran koncana:
+  // ime in opis podjetja vzame sestaviSurovo iz prve prebrane strani, ki mora ostati zacetna.
+  const kazalo = potekel() ? [] : razvrstiPoPomembnosti(await preberiKazalo(zacetni, izvirni, odv, robotsBesedilo, potekel, ura));
+  let kazaloUvrsceno = false;
+  const uvrstiKazalo = (): void => {
+    if (kazaloUvrsceno) return;
+    kazaloUvrsceno = true;
+    for (const k of kazalo) if (!videno.has(k) && !vrsta.includes(k)) vrsta.push(k);
+  };
+  if (!vrsta.length) uvrstiKazalo();
 
   let napaka: Error | null = null;
   await new Promise<void>((resolve) => {
@@ -970,6 +1143,7 @@ export async function preberiStran(naslov: string, odv: SpletOdv): Promise<Branj
               const iz = izHtml(html, odg.url, izvirni);
               zbrano.push(iz);
               odv.napredek?.(zbrano.length);
+              uvrstiKazalo();
               for (const p of iz.povezave) {
                 if (!videno.has(p)) vrsta.push(p);
               }
@@ -978,6 +1152,7 @@ export async function preberiStran(naslov: string, odv: SpletOdv): Promise<Branj
             if (zbrano.length === 0) napaka = error instanceof Error ? error : new Error(t("spletNapaka"));
           } finally {
             aktivni -= 1;
+            uvrstiKazalo();
             zazeni();
           }
         })();
@@ -996,6 +1171,8 @@ export async function preberiStran(naslov: string, odv: SpletOdv): Promise<Branj
   if (!robots(zacetni.pathname || "/") && zbrano.length === 0) predlog.sporocilo = t("spletRobots");
   const znanje = prazno ? "" : znanjeIzStrani(zbrano);
   if (znanje) predlog.znanje = { id: "znanje", izbrano: true, besedilo: znanje };
+  const eposta = epostaIzStrani(zbrano, surovo.stik, gostitelj);
+  if (eposta) predlog.eposta = eposta;
   const besedilo = zbrano
     .flatMap((s) => [s.naslov, ...s.naslovi.map((n) => n.besedilo), ...s.odstavki, ...s.seznami])
     .filter(Boolean)

@@ -10,6 +10,7 @@ import { KoledarPanel } from "./koledar.tsx";
 import { ImeKartica } from "./ime-kartica.tsx";
 import { MedijiPanel } from "./mediji.tsx";
 import { NovicePanel } from "./novice.tsx";
+import { RacunalnikPanel } from "./racunalnik.tsx";
 import { AsistentPanel } from "./pogovor.tsx";
 import { t2 } from "./besedila.ts";
 import { jeStran, menijStrani, najdiStran, veljavnaStran, type Stran } from "./okvir-meni.ts";
@@ -21,7 +22,7 @@ import { jeStran, menijStrani, najdiStran, veljavnaStran, type Stran } from "./o
  */
 type Props = Parameters<typeof LinaDesk>[0];
 
-const LASTNI: ReadonlyArray<Stran> = ["domov", "pogovor", "koledar", "imenik", "novice", "mediji"];
+const LASTNI: ReadonlyArray<Stran> = ["domov", "pogovor", "koledar", "imenik", "novice", "mediji", "racunalnik"];
 const KLJUC_MENIJA = "lina2-menu-zmanjsan";
 const KLJUC_OGLED = "lina-klici-ogled";
 
@@ -220,6 +221,7 @@ export function Lina2Okvir(props: Props) {
             {aktivnaStran === "imenik" ? <ImenikPanel calls={props.calls} /> : null}
             {aktivnaStran === "novice" ? <NovicePanel /> : null}
             {aktivnaStran === "mediji" ? <MedijiPanel /> : null}
+            {aktivnaStran === "racunalnik" ? <RacunalnikPanel /> : null}
             {LASTNI.includes(aktivnaStran) ? null : <LinaDesk {...props} zacetniZavihek={aktivnaStran as RazdelekLine} vdelan />}
           </div>
 

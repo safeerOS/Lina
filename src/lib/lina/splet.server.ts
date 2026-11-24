@@ -13,6 +13,8 @@ import { kljucLastnika } from "./keys.server.ts";
 import { callProvider } from "./providers.ts";
 import { loadLine, publishLine } from "./service.server.ts";
 import { zapisiRevizijo } from "./revizija.server.ts";
+import { jeVeljavenEnaslov } from "./eposta.ts";
+import { loadPravila, savePravila } from "./pravila.server.ts";
 import {
   LINA_AGENT,
   oznaciPodatke,
@@ -194,9 +196,21 @@ export async function potrdiPredlog(ids: string[], token: string | null, dir?: s
   if (!ids.length) throw new Error(t("spletIzbor"));
   const predlog = await readJsonFile<Predlog>(root, PREDLOG_DATOTEKA);
   if (!predlog?.podjetje) throw new Error(t("spletNiPredloga"));
+  // E-posta za povprasevanja s strani: samo ob izrecni izbiri in samo, ce uporabnik naslova se nima (vpisanega ne prepise).
+  // savePravila ga preveri in ob prvem veljavnem naslovu vklopi stikalo.
   const line = await loadLine(root);
   const catalog = zdruziKatalog(line.catalog, predlog, ids);
   const saved = await publishLine({ catalog }, { token }, root);
+  // Pregled 0.2.10 (najdba 10, CodeRabbit): e-posta SELE po objavi kataloga; napaka pri njej (npr. nepovezana pokvarjena nastavitev) potrditve
+  // kataloga ne ustavi in ga ne prehiti; uporabnik naslov v tem primeru vpise rocno.
+  const eposta = predlog.eposta?.naslov?.trim().toLowerCase() ?? "";
+  if (predlog.eposta && ids.includes(predlog.eposta.id) && jeVeljavenEnaslov(eposta)) {
+    try {
+      if (!jeVeljavenEnaslov((await loadPravila(root)).potrditevNaslov)) await savePravila({ potrditevNaslov: eposta }, token, root);
+    } catch {
+      // namerno tiho: katalog je ze objavljen
+    }
+  }
   // Revizija (naloga #44): od kod je znanje (samo gostitelj, ki je ze bil preverjen pri branju, in stevilo potrjenih vrstic).
   const gostitelj = /^[a-z0-9.-]{1,120}$/i.test(predlog.gostitelj) ? predlog.gostitelj.toLowerCase() : "nepravilen";
   await zapisiRevizijo(root, {
@@ -267,7 +281,7 @@ export async function preberiStranPodjetja(
       zavrnjenaPolja = preverjeno?.zavrnjeno.length ?? 0;
       const izModela = preverjeno && (preverjeno.predlog.podjetje.ime || preverjeno.predlog.vrstice.length > 0) ? preverjeno.predlog : null;
       // Ime, ki ga model ni mogel dobesedno potrditi, ostane tisto, ki ga je iz strani prebrala koda.
-      if (izModela) predlog = { ...izModela, podjetje: { ...izModela.podjetje, ime: izModela.podjetje.ime || predlog.podjetje.ime }, prazno: predlog.prazno, sporocilo: predlog.sporocilo, znanje: predlog.znanje };
+      if (izModela) predlog = { ...izModela, podjetje: { ...izModela.podjetje, ime: izModela.podjetje.ime || predlog.podjetje.ime }, prazno: predlog.prazno, sporocilo: predlog.sporocilo, znanje: predlog.znanje, eposta: predlog.eposta };
     }
   }
 

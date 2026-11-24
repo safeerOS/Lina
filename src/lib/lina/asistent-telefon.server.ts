@@ -12,7 +12,11 @@
  * Namesto QR lahko lastnik klikne »Povezi s kodo« (koda-seznanitev.ts, SPAKE2 kot v Safeer Linku): izid je isti - prijava
  * caka na »Dodaj«, telefon dobi isti razdelek poti klicev kot iz QR.
  */
+import { oceniZModelom, ovijCilj } from "./cilj-naloge.server.ts";
+import { pogovorBrain } from "./keys.server.ts";
 import { randomBytes } from "node:crypto";
+import { lstat } from "node:fs/promises";
+import path from "node:path";
 import { IzvajalecClaudeCode } from "./asistent.server.ts";
 import { AsistentStreznik, zasebenNaslov, type Seznanitve, type StanjeSeznanitve } from "./asistent-streznik.server.ts";
 import { zasebniNaslovi } from "./zasebno-omrezje.server.ts";
@@ -27,6 +31,9 @@ import { OglasMdns, type MoznostiOglasa } from "./mdns-oglas.server.ts";
 import { kodaQr, svgQr } from "./qr.ts";
 import { VarovalkaKode } from "./varovalka-kode.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
+import { nastaviDodatekZaTelefon, opisStanjaDodatkov, stanjeDodatkovZaTelefon } from "./dodatki-telefon.server.ts";
+import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gradnje-github.server.ts";
+import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
 
 export const NASTAVITVE_ASISTENTA = "asistent-telefon.json";
 export const PRIVZETA_VRATA_ASISTENTA = 8446;
@@ -37,18 +44,40 @@ export const SHEMA_QR = "httpgateway://pair";
 /** Stanje varovalke kode (prezivi ponovni zagon, kot hub-varovalka.json v Linku). */
 export const VAROVALKA_KODE = "koda-varovalka.json";
 
-type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string> };
+/** ocenaIzida: izid Claude Code gre k ponudniku modela za pogovor v oceno cilja (S1, drugi pregled 0.2.10); privzeto vklopljeno (odlocitev vodje). */
+type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean };
 
 function cisteNastavitve(n: Partial<Nastavitve> | null): Nastavitve {
   const vrata = Number.isInteger(n?.vrata) && (n!.vrata as number) >= 1024 && (n!.vrata as number) <= 65535 ? (n!.vrata as number) : PRIVZETA_VRATA_ASISTENTA;
   const naslov = typeof n?.naslov === "string" && zasebenNaslov(n.naslov) ? n.naslov : "127.0.0.1";
   const imena: Record<string, string> = {};
   for (const [id, ime] of Object.entries(n?.imena ?? {})) if (ID_NAPRAVE.test(id) && typeof ime === "string") imena[id] = ime.slice(0, 60);
-  return { vklop: n?.vklop === true, naslov, vrata, imena };
+  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false };
 }
 
+/**
+ * Datoteke ni = privzeto (ocena izida vklopljena). Datoteka je, a je neberljiva, ni JSON objekt ali ima ocenaIzida, ki ni true/false:
+ * ocena izida je IZKLOPLJENA (pregled 0225 A-12, odlocitev vodje: fail-closed - izid Claude Code ne gre k ponudniku modela, ce
+ * lastnikovega izklopa ni mogoce prebrati). Ostale nastavitve ostanejo varne privzete (telefon izklopljen).
+ */
 async function preberiNastavitve(root: string): Promise<Nastavitve> {
-  return cisteNastavitve(await readJsonFile<Partial<Nastavitve>>(root, NASTAVITVE_ASISTENTA).catch(() => null));
+  let n: unknown;
+  try {
+    n = await readJsonFile<unknown>(root, NASTAVITVE_ASISTENTA);
+  } catch {
+    return { ...cisteNastavitve(null), ocenaIzida: false };
+  }
+  // readJsonFile da null tudi za vsebino »null«: privzeto samo, ce datoteke res ni
+  if (n === null) return (await lstat(path.join(root, NASTAVITVE_ASISTENTA)).then(() => true, () => false)) ? { ...cisteNastavitve(null), ocenaIzida: false } : cisteNastavitve(null);
+  if (typeof n !== "object" || Array.isArray(n)) return { ...cisteNastavitve(null), ocenaIzida: false };
+  const c = cisteNastavitve(n as Partial<Nastavitve>);
+  const ocena = (n as { ocenaIzida?: unknown }).ocenaIzida;
+  return ocena === undefined || typeof ocena === "boolean" ? c : { ...c, ocenaIzida: false };
+}
+
+/** Ali sme izid Claude Code k ponudniku modela (ocena cilja); prebere se ob vsakem izidu, zato izklop velja takoj. */
+export async function dovoliOcenoIzida(dir?: string): Promise<boolean> {
+  return (await preberiNastavitve(resolveDataDir(dir))).ocenaIzida;
 }
 
 // zasebniNaslovi je v zasebno-omrezje.server.ts (uporablja ga tudi glas telefona); izvoz ostaja tu zaradi obstojecih uvozov
@@ -236,6 +265,11 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         pot: potVticnice(root, process.platform, k.imeCevi),
         zeton: async () => (await preberiKanal(root)).zeton,
         ozjiKrog: () => krog,
+        // orodje dodatki v Claude Code: stanje takoj, preklop samo po podpisani odobritvi naprave (asistent.server.ts)
+        dodatki: {
+          stanje: async () => opisStanjaDodatkov(await stanjeDodatkovZaTelefon(root)),
+          nastavi: async (d, v) => opisStanjaDodatkov(await nastaviDodatekZaTelefon(d, v, root)),
+        },
       });
       const osvezi = setInterval(() => { void preberiKanal(root).then((x) => { krog = new Set(x.dovoljene.keys()); }).catch(() => undefined); }, 3000);
       osvezi.unref?.();
@@ -248,7 +282,24 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       const koda = new SeznanitevSKodo({ varovalka, odtis: () => streznik?.odtis ?? "" });
       koda.obOdprtju = () => zacniOglas(n.naslov, n.vrata);
       koda.obZaprtju = ustaviOglas;
-      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec, seznanitve, koda });
+      // ocena cilja ob izidu agenta: samo predlog na telefon, nadaljevanje podpise naprava (cilj-naloge.server.ts)
+      const sCiljem = ovijCilj(izvajalec, oceniZModelom(() => pogovorBrain(root), undefined, () => dovoliOcenoIzida(root)));
+      // Dodatki na racunalniku za napravo ozjega kroga (23. 11. 2026): stanje in preklop s podpisom naprave
+      const dodatki = { stanje: () => stanjeDodatkovZaTelefon(root), nastavi: (d: Parameters<typeof nastaviDodatekZaTelefon>[0], v: boolean) => nastaviDodatekZaTelefon(d, v, root) };
+      // Gradnje na GitHubu (24. 11. 2026): stanje, predlog, potrditev in APK zadnje potrjene gradnje s podpisom naprave
+      const gradnje = {
+        stanje: () => telefonStanje(root),
+        predlog: async (tok: unknown, veja: unknown) => telefonPredlog(root, tok, veja),
+        potrdi: (id: unknown, z: unknown) => telefonPotrdi(root, id, z),
+        apk: () => apkZaTelefon(root),
+      };
+      // Naloge agentov na racunalniku (24. 11. 2026): vrsta, dodelitev (= potrditev za en zagon) in preklic s podpisom naprave
+      const agentiNaloge = {
+        stanje: () => telefonStanjeNalog(root),
+        dodeli: (agent: string, mapa: string, besedilo: string, pogoj: string) => telefonDodeli(root, agent, mapa, besedilo, pogoj),
+        preklici: (id: string) => telefonPreklici(root, id),
+      };
+      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje, agentiNaloge });
       try {
         const { naslov, vrata, odtis } = await streznik.zazeni();
         stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka };
@@ -268,6 +319,8 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
 
 export type StanjeAsistenta = {
   vklop: boolean;
+  /** Izid Claude Code gre k ponudniku modela v oceno (S1). */
+  ocenaIzida: boolean;
   naslov: string;
   vrata: number;
   naslovi: string[];
@@ -299,7 +352,7 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
   const ozjiKrog: string[] = [];
   for (const [koda, p] of stanje().prijave) if (p.stanje === "caka" && p.naprava && await jeClanKroga(p.naprava.kljuc, p.naprava.id)) ozjiKrog.push(koda);
   return {
-    vklop: n.vklop, naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t, napaka: stanje().napaka, odtis: t?.odtis ?? "",
+    vklop: n.vklop, ocenaIzida: n.ocenaIzida, naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t, napaka: stanje().napaka, odtis: t?.odtis ?? "",
     claudeCode: t ? await t.izvajalec.razpolozljiv().catch(() => false) : false,
     cakajo,
     ozjiKrog,
@@ -312,16 +365,20 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
 }
 
 /** Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. */
-export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown }, dir?: string): Promise<StanjeAsistenta> {
+export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown }, dir?: string): Promise<StanjeAsistenta> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  const n = await preberiNastavitve(root);
   if (typeof vnos.naslov === "string" && !zasebniNaslovi().includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
-  const vrata = vnos.vrata === undefined ? n.vrata : Number(vnos.vrata);
-  if (!Number.isInteger(vrata) || vrata < 1024 || vrata > 65535) throw new Error("Vrata morajo biti celo stevilo od 1024 do 65535.");
-  await writeJson(root, NASTAVITVE_ASISTENTA, {
-    ...n, vklop: vnos.vklop === undefined ? n.vklop : vnos.vklop === true, naslov: typeof vnos.naslov === "string" ? vnos.naslov : n.naslov, vrata,
-  } satisfies Nastavitve);
+  // isti zaklep kot seznam naprav (A-12): branje-sprememba-zapis se ne prepleta z odlociSeznanitev ali odstraniNapravo
+  await naSeznamu(async () => {
+    const n = await preberiNastavitve(root);
+    const vrata = vnos.vrata === undefined ? n.vrata : Number(vnos.vrata);
+    if (!Number.isInteger(vrata) || vrata < 1024 || vrata > 65535) throw new Error("Vrata morajo biti celo stevilo od 1024 do 65535.");
+    await writeJson(root, NASTAVITVE_ASISTENTA, {
+      ...n, vklop: vnos.vklop === undefined ? n.vklop : vnos.vklop === true, naslov: typeof vnos.naslov === "string" ? vnos.naslov : n.naslov, vrata,
+      ocenaIzida: typeof vnos.ocenaIzida === "boolean" ? vnos.ocenaIzida : n.ocenaIzida,
+    } satisfies Nastavitve);
+  });
   await uskladiAsistenta(root);
   return stanjeAsistenta(token, root);
 }

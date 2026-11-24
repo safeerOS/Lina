@@ -12,6 +12,10 @@ import { spawn as nodeSpawn } from "node:child_process";
 import net from "node:net";
 import { randomBytes } from "node:crypto";
 import {
+  ORODJE_DODATKI,
+  jeDodatekTelefona,
+  predogledDodatka,
+  type DodatekTelefona,
   ID_ODOBRITVE,
   IME_ORODJA,
   IZZIV,
@@ -21,7 +25,9 @@ import {
   ocistiZaTelefon,
   razcleniVrstico,
   zgostitevPrikaza,
+  VRSTE_ODGOVORA,
   type Dokaz,
+  type VrstaOdgovora,
   type ZaKanal,
 } from "./kanal-claude.ts";
 
@@ -34,7 +40,8 @@ export type Izvor = "asistent" | "tajnica";
 export type Naloga = { id: string; besedilo: string; posiljatelj: string; izvor: Izvor; dokaz?: Dokaz };
 
 export type Dogodek =
-  | { vrsta: "stanje"; besedilo: string }
+  /** `tip` (od 23. 11. 2026): odgovor Claude Code - »vprasanje« = caka navodilo (telefon odgovori sam ali vprasa lastnika). */
+  | { vrsta: "stanje"; besedilo: string; tip?: Exclude<VrstaOdgovora, "koncano"> }
   /** orodje in predogled (argumenti) sta od Claude Code; opis je besedilo MODELA - na telefonu loceno in kot nezaupljivo. */
   | { vrsta: "odobritev"; zahtevaId: string; orodje: string; opis: string; predogled: string; zgostitev?: string }
   | { vrsta: "izid"; ok: boolean; besedilo: string };
@@ -47,9 +54,15 @@ export interface Izvajalec {
    * `posiljatelj` je naprava, ki je odobrila, `dokaz` njen podpis (kanal-claude.ts nizOdobritve). Odobritev s tuje naprave ali
    * brez podpisa nima ucinka.
    */
-  odobri(nalogaId: string, zahtevaId: string, dovoli: boolean, posiljatelj: string, dokaz?: Dokaz): Promise<void>;
+  /** zgostitev: zgostitev prikaza, ki ga je naprava podpisala (preverjena); dovoljenje velja samo, ce je shranjeni prikaz se isti. */
+  odobri(nalogaId: string, zahtevaId: string, dovoli: boolean, posiljatelj: string, dokaz?: Dokaz, zgostitev?: string): Promise<void>;
   /** `dokaz` je podpis naprave, ki je nalogo dala (kanal-claude.ts nizUstavitve); rok in umik ustavi kanal sam. */
   ustavi(nalogaId: string, dokaz?: Dokaz): Promise<void>;
+  /**
+   * Odgovor ali nadaljnje navodilo v ISTO nalogo (lastnik 23. 11. 2026). `dokaz` je podpis naprave, ki je nalogo dala
+   * (kanal-claude.ts nizNadaljevanja). Izvajalec brez te zmoznosti ga nima (telefon dobi 501).
+   */
+  nadaljuj?(nalogaId: string, besedilo: string, posiljatelj: string, dokaz?: Dokaz): Promise<void>;
 }
 
 /** Najdaljse navodilo, ki ga sprejmemo (glas ali besedilo); daljse je napaka ali zloraba. */
@@ -236,6 +249,8 @@ export type MoznostiClaudeCode = {
   naOpozorilo?: (besedilo: string) => void;
   /** Imena nameščenih cli-anything-<program> (samo ce je dodatek Programi vklopljen; sicer prazen seznam). */
   programi?: () => Promise<string[]>;
+  /** Orodje dodatki (dodatki-telefon.server.ts): stanje in preklop; vrne kratko besedilo za Claude Code. Brez njega orodje vrne napako. */
+  dodatki?: { stanje(): Promise<string>; nastavi(dodatek: DodatekTelefona, vklop: boolean): Promise<string> };
 };
 
 type Aktivna = {
@@ -243,7 +258,14 @@ type Aktivna = {
   posiljatelj: string;
   rok: ReturnType<typeof setTimeout>;
   povezana: boolean;
+  /** Zacetek roka naloge (ms): ponovno odprtje z reply ga NE ponastavi, samo podpisano nadaljevanje (pregled 0225 A-6). */
+  zacel: number;
+  /** Zacetek pred odprtjem z nadaljevanjem: ce kanal nadaljevanje zavrne, velja spet prvotni rok (kot v kanalu). */
+  prejZacel?: number;
 };
+
+/** Koliko nalog, ki jih je Claude Code koncal z reply, si Lina zapomni za ponovno odprtje (nadaljevanje ali nov reply). */
+export const NAJVEC_KONCANIH = 100;
 
 export const SPOROCILO_IZGUBLJENA = "Povezava s Claude Code je izgubljena; naloga morda tece naprej. Poskusam znova.";
 export const SPOROCILO_OBNOVLJENA = "Povezava s Claude Code je spet vzpostavljena.";
@@ -263,10 +285,23 @@ export class IzvajalecClaudeCode implements Izvajalec {
   /** Socket, ki se se prijavlja: zapri() ga unici, da ga cakajoca prijava pozneje ne nastavi (CodeRabbit C4). */
   private vPrijavi: net.Socket | null = null;
   private aktivne = new Map<string, Aktivna>();
+  /** Naloge, ki jih je Claude Code koncal z reply (ne rok, umik, seja): lahko se odprejo znova (lastnik v terminalu, nadaljevanje). */
+  private koncane = new Map<string, { naDogodek: (d: Dogodek) => void; posiljatelj: string; zacel: number }>();
+  /**
+   * Odprte samo zaradi nadaljevanj, ki jih kanal se ni sprejel ali zavrnil: stevilo poslanih in se nerazresenih. Zavrnitev zapre
+   * nalogo znova SAMO, ce ni nobenega drugega nerazresenega nadaljevanja (pregled 0225 A-5: prej je zavrnitev drugega koncala
+   * nalogo, ki je ze tekla po prvem). Odgovor Claude Code (reply) pomeni, da je naloga spet v teku - stevec se pobrise.
+   */
+  private odprteZaNadaljevanje = new Map<string, number>();
+  /** Naloge, ki jih je ustavila naprava: koncni reply jih ne sme pustiti odprljivih. */
+  private ustavljene = new Set<string>();
   private ponovno: ReturnType<typeof setTimeout> | null = null;
   private zaprto = false;
   /** Opozorila kanala, ki jih je Lina ze javila (vsako enkrat na izvajalca). */
   private javljena = new Set<string>();
+  /** Zahteve za odobritev, ki jih je Lina poslala na napravo (ID -> naloga, orodje, predogled), in tiste, ki jih je naprava s podpisom dovolila. */
+  private prikazane = new Map<string, { chatId: string; orodje: string; predogled: string; zgostitev: string }>();
+  private dovoljene = new Map<string, { nalogaId: string; posiljatelj: string; prikazano?: { chatId: string; orodje: string; predogled: string } }>();
   /** Zadnje stanje seje iz kanala (seja odprta, ali je nastavljen ANTHROPIC_API_KEY). */
   stanje: { seja: boolean; apiKljuc: boolean } = { seja: false, apiKljuc: false };
   private readonly m: MoznostiClaudeCode;
@@ -381,12 +416,44 @@ export class IzvajalecClaudeCode implements Izvajalec {
     this.ponovno.unref?.();
   }
 
-  private koncaj(id: string, d: Dogodek): void {
+  private koncaj(id: string, d: Dogodek, odpreSe = false): void {
     const a = this.aktivne.get(id);
+    this.koncane.delete(id);
+    if (!odpreSe) this.odprteZaNadaljevanje.delete(id);
     if (!a) return;
     clearTimeout(a.rok);
     this.aktivne.delete(id);
+    if (odpreSe && !this.ustavljene.has(id)) {
+      this.koncane.set(id, { naDogodek: a.naDogodek, posiljatelj: a.posiljatelj, zacel: a.zacel });
+      while (this.koncane.size > NAJVEC_KONCANIH) this.koncane.delete(this.koncane.keys().next().value as string);
+    }
     a.naDogodek(d);
+  }
+
+  /** Rok naloge, ki se meri od `zacel` (ne od zdaj): ponovno odprtje ne podaljsa roka (A-6). */
+  private nastaviRok(id: string, zacel: number): ReturnType<typeof setTimeout> {
+    const rokMs = this.m.rokNalogeMs ?? ROK_NALOGE_MS;
+    const rok = setTimeout(() => {
+      const minut = Math.max(1, Math.round(rokMs / 60_000));
+      // kanal ima enak rok in nalogo v seji ustavi sam (ustavitev brez podpisa naprave ne velja)
+      this.koncaj(id, { vrsta: "izid", ok: false, besedilo: `Naloga ni koncana v ${minut} min; ustavljena je.` });
+    }, Math.max(0, zacel + rokMs - Date.now()));
+    rok.unref?.();
+    return rok;
+  }
+
+  /**
+   * Naloga, ki jo je Claude Code koncal z reply, je spet v teku (samo naprava, ki je se v ozjem krogu; nikoli ustavljena). `svezRok`:
+   * samo podpisano nadaljevanje naprave zacne nov rok; reply modela tece v prvotnem roku (A-6: izmenjava koncano/vmesno ga ne obide).
+   */
+  private ponovnoOdpri(id: string, svezRok = false): Aktivna | null {
+    const k = this.koncane.get(id);
+    if (!k || this.ustavljene.has(id) || !this.m.ozjiKrog().has(k.posiljatelj)) return null;
+    this.koncane.delete(id);
+    const zacel = svezRok ? Date.now() : k.zacel;
+    const a: Aktivna = { naDogodek: k.naDogodek, posiljatelj: k.posiljatelj, rok: this.nastaviRok(id, zacel), povezana: true, zacel, ...(svezRok ? { prejZacel: k.zacel } : {}) };
+    this.aktivne.set(id, a);
+    return a;
   }
 
   /** Naloga naprave, ki ni vec v ozjem krogu, se konca (kanal jo v seji ustavi sam). */
@@ -403,10 +470,15 @@ export class IzvajalecClaudeCode implements Izvajalec {
 
   private izKanala(sp: Record<string, unknown>): void {
     if (sp.vrsta === "odgovor" && typeof sp.chatId === "string" && typeof sp.besedilo === "string") {
-      const a = this.veljavna(sp.chatId);
+      // tip ima samo odgovor Claude Code (reply, kanal od 23. 11. 2026); sistemska sporocila kanala in starejsi kanal ga nimajo -
+      // ti nikoli ne odprejo koncane naloge (starejsi kanal: koncano je bil privzetek)
+      const tip: VrstaOdgovora | undefined = (VRSTE_ODGOVORA as readonly unknown[]).includes(sp.tip)
+        ? sp.tip as VrstaOdgovora : sp.koncano === false ? undefined : "koncano";
+      const a = this.veljavna(sp.chatId) ?? (tip === "koncano" || tip === undefined ? null : this.ponovnoOdpri(sp.chatId));
       if (!a) return;
-      if (sp.koncano === false) a.naDogodek({ vrsta: "stanje", besedilo: sp.besedilo });
-      else this.koncaj(sp.chatId, { vrsta: "izid", ok: true, besedilo: sp.besedilo });
+      this.odprteZaNadaljevanje.delete(sp.chatId);
+      if (tip === "koncano") this.koncaj(sp.chatId, { vrsta: "izid", ok: true, besedilo: sp.besedilo }, true);
+      else a.naDogodek(tip ? { vrsta: "stanje", besedilo: sp.besedilo, tip } : { vrsta: "stanje", besedilo: sp.besedilo });
       return;
     }
     if (sp.vrsta === "odobritev" && typeof sp.chatId === "string" && typeof sp.zahtevaId === "string" && ID_ODOBRITVE.test(sp.zahtevaId)) {
@@ -423,16 +495,68 @@ export class IzvajalecClaudeCode implements Izvajalec {
         return;
       }
       // telefon podpise to zgostitev prikazanega (kanal-claude.ts zgostitevPrikaza, nizOdobritve)
+      this.prikazane.set(sp.zahtevaId, { chatId: sp.chatId, orodje, predogled, zgostitev });
+      while (this.prikazane.size > 200) this.prikazane.delete(this.prikazane.keys().next().value as string);
       a.naDogodek({ vrsta: "odobritev", zahtevaId: sp.zahtevaId, orodje, opis, predogled, zgostitev });
+      return;
+    }
+    if (sp.vrsta === "dodatki" && typeof sp.zahteva === "string" && typeof sp.chatId === "string") {
+      void this.dodatki(sp.zahteva, sp.chatId, sp.dejanje, sp.dodatek).catch(() => undefined);
       return;
     }
     if (sp.vrsta === "umaknjeno" && typeof sp.id === "string") {
       this.koncaj(sp.id, { vrsta: "izid", ok: false, besedilo: SPOROCILO_UMAKNJENA });
       return;
     }
+    if (sp.vrsta === "zavrnjeno" && typeof sp.id === "string" && sp.nadaljevanje === true) {
+      // zavrnjen odgovor v nalogo: naloga tece naprej, telefon izve razlog; nalogo, odprto samo zaradi nadaljevanj, zapre sele
+      // zavrnitev ZADNJEGA nerazresenega (A-5; kanal odgovarja po vrsti)
+      const razlog = typeof sp.razlog === "string" && sp.razlog ? sp.razlog.slice(0, 300) : "Odgovor ni bil sprejet.";
+      const cakajocih = this.odprteZaNadaljevanje.get(sp.id);
+      if (cakajocih === 1) {
+        this.odprteZaNadaljevanje.delete(sp.id);
+        // kanal nadaljevanja ni sprejel in roka ni ponastavil: tudi Lina ohrani prvotni rok
+        const a = this.aktivne.get(sp.id);
+        if (a?.prejZacel !== undefined) a.zacel = a.prejZacel;
+        this.koncaj(sp.id, { vrsta: "izid", ok: false, besedilo: razlog }, true);
+      }
+      else {
+        if (cakajocih !== undefined) this.odprteZaNadaljevanje.set(sp.id, cakajocih - 1);
+        (this.aktivne.get(sp.id) ?? this.koncane.get(sp.id))?.naDogodek({ vrsta: "stanje", besedilo: razlog });
+      }
+      return;
+    }
     if (sp.vrsta === "zavrnjeno" && typeof sp.id === "string") {
       const razlog = typeof sp.razlog === "string" && sp.razlog ? sp.razlog.slice(0, 300) : "Claude Code naloge ni sprejel.";
       this.koncaj(sp.id, { vrsta: "izid", ok: false, besedilo: razlog });
+    }
+  }
+
+  /**
+   * Orodje dodatki: stanje brez odobritve; vklop ali izklop SAMO, ce je Lina to zahtevo sama poslala na napravo kot orodje dodatki s tem
+   * predogledom (dodatek in smer) in jo je ista naprava, ki je dala nalogo, s podpisom dovolila (odobri). Kanal sam preklopa ne more sprozit.
+   */
+  private async dodatki(zahteva: string, chatId: string, dejanje: unknown, dodatek: unknown): Promise<void> {
+    const sock = this.sock;
+    const vrni = (ok: boolean, besedilo: string) => { if (sock && !sock.destroyed) this.poslji(sock, { vrsta: "dodatkiIzid", zahteva, ok, besedilo }); };
+    // vsebina, ki je bila na napravi V TRENUTKU »Dovoli« (posnetek v odobri), ne morda kasneje zamenjana
+    const od = this.dovoljene.get(zahteva);
+    const pr = od?.prikazano;
+    this.prikazane.delete(zahteva);
+    this.dovoljene.delete(zahteva);
+    const a = this.veljavna(chatId);
+    if (!a || !this.m.dodatki) return vrni(false, "Dodatkov ta Lina ne upravlja ali naloga ni vec aktivna; nic ni spremenjeno.");
+    try {
+      if (dejanje === "stanje") return vrni(true, await this.m.dodatki.stanje());
+      if ((dejanje !== "vklopi" && dejanje !== "izklopi") || !jeDodatekTelefona(dodatek)) return vrni(false, "Neveljavna zahteva; nic ni spremenjeno.");
+      const vklop = dejanje === "vklopi";
+      if (!pr || !od || pr.chatId !== chatId || od.nalogaId !== chatId || od.posiljatelj !== a.posiljatelj
+        || pr.orodje !== ORODJE_DODATKI || pr.predogled !== predogledDodatka(dodatek, vklop)) {
+        return vrni(false, "Ni podpisane odobritve lastnika za to dejanje; nic ni spremenjeno.");
+      }
+      return vrni(true, await this.m.dodatki.nastavi(dodatek, vklop));
+    } catch (e) {
+      return vrni(false, `Dodatkov ni bilo mogoce prebrati ali preklopiti: ${(e as Error).message.slice(0, 200)}`);
     }
   }
 
@@ -454,14 +578,8 @@ export class IzvajalecClaudeCode implements Izvajalec {
     if (!dovoljenaNaloga(naloga, this.m.ozjiKrog())) throw new Error("Naloga ni dovoljena.");
     if (this.aktivne.has(naloga.id)) throw new Error("Naloga s tem ID ze tece.");
     const s = await this.povezi();
-    const rokMs = this.m.rokNalogeMs ?? ROK_NALOGE_MS;
-    const rok = setTimeout(() => {
-      const minut = Math.max(1, Math.round(rokMs / 60_000));
-      // kanal ima enak rok in nalogo v seji ustavi sam (ustavitev brez podpisa naprave ne velja)
-      this.koncaj(naloga.id, { vrsta: "izid", ok: false, besedilo: `Naloga ni koncana v ${minut} min; ustavljena je.` });
-    }, rokMs);
-    rok.unref?.();
-    this.aktivne.set(naloga.id, { naDogodek, posiljatelj: naloga.posiljatelj, rok, povezana: true });
+    const zacel = Date.now();
+    this.aktivne.set(naloga.id, { naDogodek, posiljatelj: naloga.posiljatelj, rok: this.nastaviRok(naloga.id, zacel), povezana: true, zacel });
     const programi = await this.m.programi?.().catch(() => [] as string[]) ?? [];
     this.poslji(s, {
       vrsta: "naloga",
@@ -469,25 +587,62 @@ export class IzvajalecClaudeCode implements Izvajalec {
     });
   }
 
-  async odobri(_nalogaId: string, zahtevaId: string, dovoli: boolean, posiljatelj: string, dokaz?: Dokaz): Promise<void> {
+  async odobri(_nalogaId: string, zahtevaId: string, dovoli: boolean, posiljatelj: string, dokaz?: Dokaz, zgostitev?: string): Promise<void> {
     if (!this.m.ozjiKrog().has(posiljatelj) || !ID_ODOBRITVE.test(zahtevaId)) throw new Error("Odobritev ni dovoljena.");
     const s = await this.povezi();
+    // klicatelj (AsistentStreznik.odobritev) je podpis naprave ze preveril; preklop dodatka velja samo za to dovoljeno zahtevo
+    if (dovoli) {
+      // CodeRabbit (drugi pregled 0.2.10): kanal lahko med preverjanjem podpisa isti ID pokaze z drugo vsebino; dovoljenje se veze samo na
+      // prikaz, katerega zgostitev je naprava podpisala (nespremenjen prikaz ostane dovoljen).
+      const p = this.prikazane.get(zahtevaId);
+      const prikazano = p && typeof zgostitev === "string" && p.zgostitev === zgostitev ? { chatId: p.chatId, orodje: p.orodje, predogled: p.predogled } : undefined;
+      this.dovoljene.set(zahtevaId, { nalogaId: _nalogaId, posiljatelj, ...(prikazano ? { prikazano } : {}) });
+      while (this.dovoljene.size > 200) this.dovoljene.delete(this.dovoljene.keys().next().value as string);
+    } else this.dovoljene.delete(zahtevaId);
     this.poslji(s, { vrsta: "odobritev", zahtevaId, dovoli, posiljatelj, dokaz });
   }
 
-  /** Ustavitev gre v sejo tudi po izgubljeni povezavi (ponovna povezava); ce seje ni, napaka pove resnico. */
+  /**
+   * Ustavitev gre v sejo tudi po izgubljeni povezavi (ponovna povezava); ce seje ni, napaka pove resnico. Velja tudi za nalogo, ki
+   * jo je Claude Code ze koncal z reply (pregled 0225 A-8): prej se je izgubila in naslednji reply vmesno jo je odprl znova.
+   */
   async ustavi(nalogaId: string, dokaz?: Dokaz): Promise<void> {
-    const a = this.aktivne.get(nalogaId);
+    const a = this.aktivne.get(nalogaId) ?? this.koncane.get(nalogaId);
     if (!a) return;
     const s = await this.povezi().catch(() => {
       throw new Error("Ustavitve ni bilo mogoce poslati: seja Claude Code ni dosegljiva.");
     });
     // Claude Code sporocilo dobi ob naslednjem obratu (dogodki cakajo v vrsti); trenutnega orodja ne prekine
+    this.ustavljene.add(nalogaId);
+    this.koncane.delete(nalogaId);
+    if (this.ustavljene.size > NAJVEC_KONCANIH * 10) this.ustavljene.delete(this.ustavljene.values().next().value as string);
     this.poslji(s, { vrsta: "ustavi", id: nalogaId, posiljatelj: a.posiljatelj, dokaz });
+  }
+
+  /**
+   * Odgovor v isto nalogo (vprasanje Claude Code): samo naprava, ki je nalogo dala; koncana z reply se odpre znova. Podpis preveri
+   * kanal (nizNadaljevanja) - Lina ga samo posreduje.
+   */
+  async nadaljuj(nalogaId: string, besedilo: string, posiljatelj: string, dokaz?: Dokaz): Promise<void> {
+    const znana = this.aktivne.get(nalogaId) ?? this.koncane.get(nalogaId);
+    if (!znana || znana.posiljatelj !== posiljatelj || !dovoljenaNaloga({ id: nalogaId, besedilo, posiljatelj, izvor: "asistent" }, this.m.ozjiKrog())) {
+      throw new Error("Nadaljevanje ni dovoljeno.");
+    }
+    const s = await this.povezi();
+    if (!this.aktivne.has(nalogaId)) {
+      // podpisano nadaljevanje naprave zacne nov rok (A-6)
+      if (!this.ponovnoOdpri(nalogaId, true)) throw new Error("Nadaljevanje ni dovoljeno.");
+      this.odprteZaNadaljevanje.set(nalogaId, 1);
+    } else {
+      const n = this.odprteZaNadaljevanje.get(nalogaId);
+      if (n !== undefined) this.odprteZaNadaljevanje.set(nalogaId, n + 1);
+    }
+    this.poslji(s, { vrsta: "nadaljuj", id: nalogaId, besedilo, posiljatelj, dokaz });
   }
 
   zapri(): void {
     this.zaprto = true;
+    this.koncane.clear();
     this.vPrijavi?.destroy();
     this.vPrijavi = null;
     if (this.ponovno) clearTimeout(this.ponovno);

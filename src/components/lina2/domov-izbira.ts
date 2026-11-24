@@ -110,3 +110,26 @@ export function vidnePloscice(i: IzbiraDomov, strani: readonly string[] | undefi
 export function serializirajIzbiro(i: IzbiraDomov): string {
   return JSON.stringify({ v: 1, ploscice: i.ploscice, okna: i.okna });
 }
+
+/**
+ * Kartica »Zadnji klici« na Domovu (lastnik 23. 11. 2026: klici, ki jih je prevzela Lina, vidni BREZ drsenja). Vrstice so ze
+ * urejene od najnovejse (kliciZaPrikaz); kartica pokaze najvec NAJVEC_ZADNJIH_KLICEV, povzetek v eni kratki vrstici.
+ */
+export const NAJVEC_ZADNJIH_KLICEV = 4;
+export const NAJVEC_ZNAKOV_POVZETKA = 70;
+
+export type VrsticaKlica = { sid: string; kdaj: string; ime: string; telefon: string; kaj: string; zakljucen: boolean };
+
+export function zadnjiKliciDomov<T extends VrsticaKlica>(klici: readonly T[], najvec = NAJVEC_ZADNJIH_KLICEV): VrsticaKlica[] {
+  return klici.slice(0, Math.max(0, najvec)).map((k) => {
+    const kaj = (k.kaj ?? "").replace(/\s+/g, " ").trim();
+    return {
+      sid: k.sid,
+      kdaj: k.kdaj,
+      ime: k.ime,
+      telefon: k.telefon,
+      kaj: kaj.length > NAJVEC_ZNAKOV_POVZETKA ? `${kaj.slice(0, NAJVEC_ZNAKOV_POVZETKA - 1).trimEnd()}…` : kaj,
+      zakljucen: k.zakljucen,
+    };
+  });
+}

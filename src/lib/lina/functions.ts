@@ -11,7 +11,17 @@ import {
   sessionIsValid,
   setupOwner,
 } from "./auth.server.ts";
-import { checkBrain, izberiModelPogovora, readBrain, saveBrain } from "./keys.server.ts";
+import {
+  checkBrain,
+  izberiModelPogovora,
+  nastaviBrezplacneModele,
+  odstraniKljucAsistentke,
+  preveriAsistentko,
+  readBrain,
+  saveBrain,
+  shraniKljucAsistentke,
+  stanjeAsistentkeOpenRouter,
+} from "./keys.server.ts";
 import {
   namestiGcloudPoDovoljenju,
   pozabiGoogleRacun,
@@ -24,14 +34,31 @@ import {
 import { poveziTinyFish, pozabiTinyFish, stanjeTinyFish } from "./tinyfish.server.ts";
 import { nastaviMejoBrave, poveziBrave, pozabiBrave, stanjeBrave } from "./brave.server.ts";
 import { daSoglasje, soglasjeDano } from "./soglasje.server.ts";
+import { opozoriloPotrjeno, potrdiOpozorilo } from "./opozorilo.server.ts";
+import {
+  odjavaGithub,
+  preberiIzbiroGithub,
+  preveriPrijavoGithub,
+  seznamRepozitorijev,
+  shraniIzbiroGithub,
+  shraniKljucGithub,
+  stanjeGithub,
+  tokoviRepozitorija,
+  uporabiGh,
+  zacniPrijavoGithub,
+} from "./github-dostop.server.ts";
 import { stanjaDodatkov, uskladiEnkrat } from "./dodatki.server.ts";
-import { stanjeRsdo } from "./rsdo-streznik.server.ts";
+import { stanjeSlovenskega } from "./dodatki-telefon.server.ts";
 import { pozabiOmniroute, shraniOmniroute, stanjeOmniroute, type VnosOmniroute } from "./omniroute.server.ts";
 import {
   odkleniPovezovanje, odlociSeznanitev, potrdiIdSeznanitve, odstraniNapravo, shraniAsistenta, stanjeAsistenta, vnesiKodoTelefona, zacniSeznanitev, zacniSeznanitevSKodo, zapriSeznanitevSKodo,
 } from "./asistent-telefon.server.ts";
 import { dnevnikAvtonomije, stanjeAvtonomije, ukazAvtonomije } from "./avtonomija.server.ts";
-import { preberiNujne, shraniNujne } from "./nujni.server.ts";
+import { stanjeClaudeNalog, ukazClaudeNalog } from "./claude-naloge.server.ts";
+import { ClaudeNalogaNapaka } from "./claude-naloge.ts";
+import { stanjeGradenj, ukazGradenj } from "./gradnje-github.server.ts";
+import { GradnjaNapaka } from "./gradnje-github.ts";
+import { pravilaZaVmesnik, preberiNujne, shraniNujne } from "./nujni.server.ts";
 import { pridobiStanjeNapak, pridobiZetonNapake, shraniNastavitveNapak } from "./napake.server.ts";
 import { dodajDejstvo, izbrisiDejstvo, izbrisiVsaDejstva, izvoziSpomin, nastaviSpomin, preberiSpomin, urediDejstvo } from "./spomin.server.ts";
 import { pozabiPodpisSharedKey, sharedKeyLine, vklopiPodpisSharedKey } from "./twilio-podpis.server.ts";
@@ -48,8 +75,8 @@ import { koledarDodaj, koledarIzbrisi, koledarSeznam, koledarSpremeni } from "./
 import { imenikSeznam, imenikShrani, imenikIzbrisi } from "./imenik.server.ts";
 import { noviceBeri, noviceDodajVir, noviceOceni, noviceOdstraniVir, noviceOsvezi, noviceShrani } from "./novice.server.ts";
 import { dodajVrzel, listVrzeli, loadPravila, preizkusniOdgovor, savePravila, uskladiRsdoObPoizvedbi } from "./pravila.server.ts";
-import { stanjeNamestitveSlovenskega } from "./slovenski-modul.server.ts";
 import { potrdiPredlog, preberiPotek, preberiPredlog, preberiStranPodjetja, zavrziPredlog } from "./splet.server.ts";
+import { izbrisiVir, naloziVir, objaviVir, potrdiPredlogDatoteke, pregledVira, seznamVirov, zavrziPredlogDatoteke } from "./znanje-viri.server.ts";
 import { chooseStorage, readStorage } from "./storage.server.ts";
 import { resolveDataDir } from "./store.server.ts";
 import { izberiMapoZapiskov, odpriMapoZapiskov, pogledMapeZapiskov, preberiZapisek, seznamZapiskov, zdruziZapiske } from "./zapiski.server.ts";
@@ -213,7 +240,7 @@ export const readBrainFn = createServerFn({ method: "GET" }).handler(async () =>
 });
 
 export const saveBrainFn = createServerFn({ method: "POST" })
-  .validator((data: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown }) => data)
+  .validator((data: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown; samodejno?: unknown }) => data)
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
@@ -227,6 +254,41 @@ export const izberiModelFn = createServerFn({ method: "POST" })
     clearLegacyCookie();
     return izberiModelPogovora(data, await sessionToken());
   });
+
+/** Kljuc OpenRouter samo za asistentko (lastnik 24. 11. 2026, naloga C): nikoli v kljuci.json (klici). */
+export const shraniKljucAsistentkeFn = createServerFn({ method: "POST" })
+  .validator((data: { key?: unknown; model?: unknown; soglasje?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return shraniKljucAsistentke(data, await sessionToken());
+  });
+
+export const odstraniKljucAsistentkeFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return odstraniKljucAsistentke(await sessionToken());
+});
+
+export const nastaviBrezplacneFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return nastaviBrezplacneModele(data.vklop, await sessionToken());
+  });
+
+export const preveriAsistentkoFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return preveriAsistentko(await sessionToken());
+});
+
+export const stanjeOpenRouterFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return stanjeAsistentkeOpenRouter(await sessionToken());
+});
 
 export const checkBrainFn = createServerFn({ method: "POST" })
   .validator((data: { provider?: unknown; model?: unknown; key?: unknown; project?: unknown; location?: unknown }) => data)
@@ -255,7 +317,7 @@ export const readPravilaFn = createServerFn({ method: "GET" }).handler(async () 
   clearLegacyCookie();
   const root = resolveDataDir();
   await requireOwner(await sessionToken(), root);
-  return loadPravila(root);
+  return pravilaZaVmesnik(root);
 });
 
 export const savePravilaFn = createServerFn({ method: "POST" })
@@ -263,7 +325,7 @@ export const savePravilaFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
-    return savePravila(data, await sessionToken());
+    return pravilaZaVmesnik(undefined, await savePravila(data, await sessionToken()));
   });
 
 export const listVrzeliFn = createServerFn({ method: "GET" }).handler(async () => {
@@ -716,6 +778,86 @@ export const daSoglasjeFn = createServerFn({ method: "POST" }).handler(async () 
   return { dano: true as const };
 });
 
+/** Opozorilo ob prvem zagonu (lastnik 24. 11. 2026): »Razumem« z razlicico besedila; brez potrditve ni klicev in ne agentov. Samo na tem racunalniku. */
+export const opozoriloFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  return { potrjeno: await opozoriloPotrjeno() };
+});
+
+export const potrdiOpozoriloFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  assertLocalSetup(setupOrigin());
+  await potrdiOpozorilo();
+  return { potrjeno: true as const };
+});
+
+/** Nastavitve > GitHub (lastnik 24. 11. 2026): prijava, gh ali kljuc; izbira repozitorijev in tokov. Kljuc nikoli nazaj odjemalcu. */
+export const stanjeGithubFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return stanjeGithub(await sessionToken());
+});
+
+export const zacniPrijavoGithubFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return zacniPrijavoGithub(await sessionToken());
+});
+
+export const preveriPrijavoGithubFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return preveriPrijavoGithub(await sessionToken());
+});
+
+export const uporabiGhFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return uporabiGh(await sessionToken());
+});
+
+export const shraniKljucGithubFn = createServerFn({ method: "POST" })
+  .validator((data: { kljuc?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return shraniKljucGithub(await sessionToken(), typeof data?.kljuc === "string" ? data.kljuc : "");
+  });
+
+export const odjavaGithubFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return odjavaGithub(await sessionToken());
+});
+
+export const repozitorijiGithubFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return seznamRepozitorijev(await sessionToken());
+});
+
+export const tokoviGithubFn = createServerFn({ method: "POST" })
+  .validator((data: { repozitorij?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return tokoviRepozitorija(await sessionToken(), data?.repozitorij);
+  });
+
+export const izbiraGithubFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return preberiIzbiroGithub(await sessionToken());
+});
+
+export const shraniIzbiroGithubFn = createServerFn({ method: "POST" })
+  .validator((data: { izbira?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return shraniIzbiroGithub(await sessionToken(), data?.izbira);
+  });
+
 /** Telefon za asistentko (zaslon »Poveži telefon«): privzeto izklopljeno; QR in potrditev lastnika (asistent-telefon.server.ts). */
 export const stanjeAsistentaFn = createServerFn({ method: "GET" }).handler(async () => {
   noStore();
@@ -724,11 +866,11 @@ export const stanjeAsistentaFn = createServerFn({ method: "GET" }).handler(async
 });
 
 export const shraniAsistentaFn = createServerFn({ method: "POST" })
-  .validator((data: { vklop?: unknown; naslov?: unknown; vrata?: unknown }) => data)
+  .validator((data: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown }) => data)
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
-    return shraniAsistenta(await sessionToken(), { vklop: data?.vklop, naslov: data?.naslov, vrata: data?.vrata });
+    return shraniAsistenta(await sessionToken(), { vklop: data?.vklop, naslov: data?.naslov, vrata: data?.vrata, ocenaIzida: data?.ocenaIzida });
   });
 
 export const zacniSeznanitevFn = createServerFn({ method: "POST" }).handler(async () => {
@@ -1024,6 +1166,51 @@ export const ukazAvtonomijeFn = createServerFn({ method: "POST" })
   });
 
 /**
+ * Zavihek Racunalnik: naloge za Claude Code (claude-naloge.server.ts). Zagon samo po potrditvi lastnika; razlog zavrnitve je stalna koda.
+ */
+export const stanjeClaudeNalogFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return stanjeClaudeNalog(await sessionToken());
+});
+
+export const ukazClaudeNalogFn = createServerFn({ method: "POST" })
+  .validator((data: { ukaz?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    try {
+      return { ok: true as const, stanje: await ukazClaudeNalog(await sessionToken(), data?.ukaz) };
+    } catch (e) {
+      if (e instanceof ClaudeNalogaNapaka) return { ok: false as const, razlog: e.razlog };
+      throw e;
+    }
+  });
+
+/**
+ * Zavihek Racunalnik: gradnje na GitHubu (gradnje-github.server.ts, lastnik 24. 11. 2026). Zagon samo po potrditvi lastnika;
+ * pot namestitve in mapo izbere streznik iz stanja; razlog zavrnitve je stalna koda.
+ */
+export const stanjeGradenjFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return stanjeGradenj(await sessionToken());
+});
+
+export const ukazGradenjFn = createServerFn({ method: "POST" })
+  .validator((data: { ukaz?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    try {
+      return { ok: true as const, stanje: await ukazGradenj(await sessionToken(), data?.ukaz) };
+    } catch (e) {
+      if (e instanceof GradnjaNapaka) return { ok: false as const, razlog: e.razlog };
+      throw e;
+    }
+  });
+
+/**
  * Izbirni dodatek Soniox (dobeseden zapis govora): stanje, shranjevanje in pozabljanje lastnikovega kljuca. Vklop je pravilo
  * `sonioxVklop` (savePravilaFn), privzeto izklopljeno. Kljuc nikoli ne gre nazaj v brskalnik: odgovor pove samo, ali je shranjen.
  */
@@ -1237,9 +1424,184 @@ export const stanjeDodatkovFn = createServerFn({ method: "GET" }).handler(async 
   // slovenski (stalni proces RSDO): stanje v istem prikazu; poizvedba prijavljenega lastnika tudi ponovno poskusi zagon, ce namestitev
   // se ni bila koncana (pregled 029, najdba 11: brez prijave brez zagona procesa)
   void uskladiRsdoObPoizvedbi(zeton).catch(() => {});
-  const rsdo = stanjeRsdo();
-  const slovenski = { izklopljen: "izklopljen", nalaga: "se_zaganja", pripravljen: "deluje", napaka: "napaka" }[rsdo.stanje];
-  // Neuspela namestitev je vidna (najdba 12): sicer bi vmesnik vedno kazal »se ni namescen; poskusim znova cez minuto«.
-  const slovenskiRazlog = rsdo.razlog === "ni-namescen" && stanjeNamestitveSlovenskega() === "napaka" ? "namestitev-ni-uspela" : (rsdo.razlog ?? "");
+  // Isti izracun kot za telefon (dodatki-telefon.server.ts); neuspela namestitev je vidna (najdba 12).
+  const { stanje: slovenski, razlog: slovenskiRazlog } = stanjeSlovenskega();
   return { ...(await stanjaDodatkov()), slovenski, slovenskiRazlog };
 });
+
+/** Znanje iz datotek podjetja: vse samo za prijavljenega lastnika; odjemalec poslje ime in vsebino (base64), nikoli poti. */
+const NAJVEC_B64_DOKUMENTA = Math.ceil((15 * 1024 * 1024) / 3) * 4 + 4;
+export const naloziVirFn = createServerFn({ method: "POST" })
+  .validator((data: { ime?: unknown; b64?: unknown }) => {
+    if (!data || typeof data.ime !== "string" || typeof data.b64 !== "string" || data.b64.length > NAJVEC_B64_DOKUMENTA) {
+      throw new Error("Dokument ni veljaven.");
+    }
+    return { ime: data.ime.slice(0, 255), b64: data.b64 };
+  })
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return naloziVir(data.ime, data.b64, await sessionToken());
+  });
+
+export const seznamVirovFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return seznamVirov(await sessionToken());
+});
+
+const idVira = (data: { id?: unknown }) => {
+  if (!data || typeof data.id !== "string" || !/^[0-9a-f-]{36}$/.test(data.id)) throw new Error("Dokument ni veljaven.");
+  return { id: data.id };
+};
+
+export const pregledViraFn = createServerFn({ method: "POST" })
+  .validator(idVira)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return pregledVira(data.id, await sessionToken());
+  });
+
+/** Lastnik potrdi besedilo vira za znanje (N9: v klice gre sele po tej potrditvi). */
+export const objaviVirFn = createServerFn({ method: "POST" })
+  .validator(idVira)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return objaviVir(data.id, await sessionToken());
+  });
+
+export const izbrisiVirFn = createServerFn({ method: "POST" })
+  .validator(idVira)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return izbrisiVir(data.id, await sessionToken());
+  });
+
+export const potrdiPredlogDatotekeFn = createServerFn({ method: "POST" })
+  .validator((data: { ids?: unknown }) => {
+    if (!data || !Array.isArray(data.ids) || data.ids.some((id) => typeof id !== "string")) throw new Error("Izbira manjka.");
+    return { ids: (data.ids as string[]).slice(0, 500) };
+  })
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    return potrdiPredlogDatoteke(data.ids, await sessionToken());
+  });
+
+export const zavrziPredlogDatotekeFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return zavrziPredlogDatoteke(await sessionToken());
+});
+
+// --- 24. 11. 2026: ucenje iz popravkov lastnika (Task Observer), spomin nalog agentov (claude-mem) in pregled projekta (claude-code-setup).
+export const stanjePopravkovFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const root = resolveDataDir();
+  await requireOwner(await sessionToken(), root);
+  const { preberiStanjePopravkov } = await import("./ucenje-popravkov.server.ts");
+  return preberiStanjePopravkov(root);
+});
+
+export const nastaviPopravkeFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.vklop !== "boolean") throw new Error("Neveljavna nastavitev.");
+    const { nastaviUcenjePopravkov } = await import("./ucenje-popravkov.server.ts");
+    return nastaviUcenjePopravkov(data.vklop, root);
+  });
+
+export const potrdiPopravekFn = createServerFn({ method: "POST" })
+  .validator((data: { id?: unknown; predlog?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.id !== "string") throw new Error("Manjka oznaka kandidata.");
+    const { shraniKandidata } = await import("./ucenje-popravkov.server.ts");
+    return shraniKandidata(data.id, typeof data.predlog === "string" ? data.predlog : undefined, root);
+  });
+
+export const zavrziPopravekFn = createServerFn({ method: "POST" })
+  .validator((data: { id?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.id !== "string") throw new Error("Manjka oznaka kandidata.");
+    const { zavrziKandidata } = await import("./ucenje-popravkov.server.ts");
+    return zavrziKandidata(data.id, root);
+  });
+
+export const izbrisiPraviloPopravkaFn = createServerFn({ method: "POST" })
+  .validator((data: { id?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.id !== "string") throw new Error("Manjka oznaka pravila.");
+    const { izbrisiPraviloPopravka } = await import("./ucenje-popravkov.server.ts");
+    return izbrisiPraviloPopravka(data.id, root);
+  });
+
+export const stanjeAgentPomociFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const root = resolveDataDir();
+  await requireOwner(await sessionToken(), root);
+  const [{ jeSpominNalogVklopljen }, { jePregledProjektaVklopljen }] = await Promise.all([
+    import("./spomin-nalog.server.ts"),
+    import("./pregled-projekta.server.ts"),
+  ]);
+  return {
+    spominNalog: await jeSpominNalogVklopljen(root),
+    pregledProjekta: await jePregledProjektaVklopljen(root),
+  };
+});
+
+export const nastaviSpominNalogFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.vklop !== "boolean") throw new Error("Neveljavna nastavitev.");
+    const { nastaviSpominNalog } = await import("./spomin-nalog.server.ts");
+    return { vklopljen: await nastaviSpominNalog(data.vklop, root) };
+  });
+
+export const nastaviPregledProjektaFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.vklop !== "boolean") throw new Error("Neveljavna nastavitev.");
+    const { nastaviPregledProjekta } = await import("./pregled-projekta.server.ts");
+    return { vklopljen: await nastaviPregledProjekta(data.vklop, root) };
+  });
+
+export const podrobnostiOpazanjaFn = createServerFn({ method: "POST" })
+  .validator((data: { nalogaId?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.nalogaId !== "string" && typeof data?.nalogaId !== "number") throw new Error("Manjka oznaka opazanja.");
+    const { podrobnostiOpazanja } = await import("./spomin-nalog.server.ts");
+    return podrobnostiOpazanja(root, data.nalogaId);
+  });

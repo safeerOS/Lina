@@ -14,10 +14,11 @@ import { fileURLToPath } from "node:url";
 import { IzvajalecClaudeCode, type Dogodek, type Izvajalec, type Naloga } from "./asistent.server.ts";
 import {
   AsistentStreznik, NAJVEC_NEZNANIH_NA_MINUTO, NAJVEC_POVEZAV_NA_NASLOV, NAJVEC_ZAHTEV_NA_MINUTO, NAJVEC_ZAVRNITEV_NA_MINUTO, POT, odtisPotrdila, potrdiloAsistenta, ustvariPotrdilo, zasebenNaslov, zasebenOdjemalec,
-  dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B,
+  dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO,
 } from "./asistent-streznik.server.ts";
-import { idIzKljuca, nizDogodkov, nizNaloge, nizOdobritve, nizSinhron, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
+import { idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
+import { ovijCilj } from "./cilj-naloge.server.ts";
 
 const KOREN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 /** Vektor 21. 11. 2026 (odobritev v3; prejsnji iz 14. 11. je bil v2): ustvaril ga je Kotlin (podpis: Podpisnik, NiziLine, NalogaLine; generator outputs/naloge/ui-racunalnik/kotlin-vektor-v3/GeneriraVektor.kt) z novim kljucem; prej: Kotlin (openline-gemini-linije @a54d304, modul podpis: Podpisnik, NiziLine, NalogaLine), JCA SHA256withECDSA. */
@@ -373,7 +374,7 @@ test("od telefona do Claude Code: naloga v sejo, zahteva za odobritev na telefon
     assert.equal((await z("POST", `${POT}/odobritev`, odob)).status, 202);
     await caka(() => izhod.some((x) => x.method === "notifications/claude/channel/permission"));
     assert.deepEqual(izhod.find((x) => x.method === "notifications/claude/channel/permission")!.params, { request_id: "abcde", behavior: "allow" });
-    poslji({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Delovna kopija je cista." } } });
+    poslji({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Delovna kopija je cista.", vrsta: "koncano" } } });
     const k = await z("GET", dogodkiUrl(ANA, n.id, `&od=${o.st}&caka=10`));
     assert.deepEqual(k.telo, { dogodki: [{ vrsta: "izid", ok: true, besedilo: "Delovna kopija je cista.", st: o.st + 1 }], koncano: true });
   } finally {
@@ -433,5 +434,154 @@ test("sinhronizacija: velik veljaven paket telefona (stotine kB zapisov klicev) 
     assert.ok(r.telo.klici.length > 0);
   } finally {
     await s.pospravi();
+  }
+});
+
+// ------------------------------------------------------------------ odgovor v nalogo (POST /nadaljuj) in stanje naloge (23. 11. 2026)
+
+const telefonNadaljuj = (d: Naprava, id: string, besedilo: string, podpisal = d) =>
+  ({ id, posiljatelj: d.id, besedilo, ...podpisi(podpisal, (c, e) => nizNadaljevanja(id, d.id, besedilo, c, e)) });
+
+test("POST /nadaljuj: samo naprava naloge s pravim podpisom; izvajalec dobi odgovor; brez zmoznosti 501; v POTI_ODDALJENO", async () => {
+  const s = await streznik({ krog: [ANA, BOR] });
+  try {
+    const n = telefonNaloga(ANA, idNaloge(), "uredi nacrt");
+    assert.equal((await s.z("POST", `${POT}/naloga`, n)).status, 202);
+    // lazni izvajalec brez nadaljuj
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "korak 2"))).status, 501);
+    const prejeto: unknown[][] = [];
+    s.l.iz.nadaljuj = async (...a) => { prejeto.push(a); };
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(BOR, n.id, "korak 2"))).status, 403);            // tuja naprava
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "korak 2", BOR))).status, 403);       // tuj podpis
+    const spremenjen = { ...telefonNadaljuj(ANA, n.id, "korak 2"), besedilo: "rm -rf ." };
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, spremenjen)).status, 403);                                       // besedilo po podpisu
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, idNaloge(), "korak 2"))).status, 403);     // neznana naloga
+    // podpis naloge ni prenosljiv na nadaljevanje (lastna predpona)
+    const izNaloge = { ...telefonNaloga(ANA, n.id, "korak 2") };
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, izNaloge)).status, 403);
+    const ok = telefonNadaljuj(ANA, n.id, "korak 2");
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, ok)).status, 202);
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, ok)).status, 403);                                               // ponovitev
+    assert.equal(prejeto.length, 1);
+    assert.deepEqual(prejeto[0].slice(0, 3), [n.id, "korak 2", ANA.id]);
+    assert.equal(POTI_ODDALJENO.get(`${POT}/nadaljuj`), "POST");
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("stanje naloge: vprasanje ni konec; koncano konca; vmesni odgovor po koncu jo odpre (telefon vidi koncano:false)", async () => {
+  const s = await streznik({ krog: [ANA] });
+  try {
+    const n = telefonNaloga(ANA, idNaloge(), "pozeni preizkuse");
+    assert.equal((await s.z("POST", `${POT}/naloga`, n)).status, 202);
+    s.l.dogodek(n.id, { vrsta: "stanje", besedilo: "Katero vejo?", tip: "vprasanje" });
+    let d = await s.z("GET", dogodkiUrl(ANA, n.id, "&od=0"));
+    assert.deepEqual(d.telo, { dogodki: [{ vrsta: "stanje", besedilo: "Katero vejo?", tip: "vprasanje", st: 1 }], koncano: false });
+    s.l.dogodek(n.id, { vrsta: "izid", ok: true, besedilo: "Koncano." });
+    d = await s.z("GET", dogodkiUrl(ANA, n.id, "&od=1"));
+    assert.equal(d.telo.koncano, true);
+    s.l.dogodek(n.id, { vrsta: "stanje", besedilo: "Lastnik je ukazal naprej.", tip: "vmesno" });
+    d = await s.z("GET", dogodkiUrl(ANA, n.id, "&od=2"));
+    assert.deepEqual(d.telo, { dogodki: [{ vrsta: "stanje", besedilo: "Lastnik je ukazal naprej.", tip: "vmesno", st: 3 }], koncano: false });
+    // sistemsko stanje brez tip (npr. izguba povezave) koncane naloge ne odpre
+    s.l.dogodek(n.id, { vrsta: "izid", ok: true, besedilo: "Spet koncano." });
+    s.l.dogodek(n.id, { vrsta: "stanje", besedilo: "sistem" });
+    d = await s.z("GET", dogodkiUrl(ANA, n.id, "&od=3"));
+    assert.equal(d.telo.koncano, true);
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("od telefona do Claude Code: vprasanje -> /nadaljuj v isti chat_id -> koncano -> /nadaljuj odpre znova", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "lk-"));
+  await pripraviKanal([ANA], dir);
+  const p: ChildProcess = zagonKanala(dir);
+  const izhod: Array<Record<string, any>> = [];
+  let ost = "";
+  p.stdout!.setEncoding("utf8");
+  p.stdout!.on("data", (k: string) => { ost += k; let i; while ((i = ost.indexOf("\n")) >= 0) { izhod.push(JSON.parse(ost.slice(0, i))); ost = ost.slice(i + 1); } });
+  const poslji = (x: unknown) => p.stdin!.write(JSON.stringify(x) + "\n");
+  const izv = new IzvajalecClaudeCode({ pot: potVticnice(dir), zeton: async () => (await preberiKanal(dir)).zeton, ozjiKrog: () => new Set([ANA.id]) });
+  const s = new AsistentStreznik({ root: dir, izvajalec: izv, dnevnik: () => {} });
+  const kanalska = () => izhod.filter((x) => x.method === "notifications/claude/channel");
+  try {
+    poslji({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "lazni-claude", version: "0" } } });
+    await caka(() => izhod.some((x) => x.id === 1), 15000);
+    poslji({ jsonrpc: "2.0", method: "notifications/initialized" });
+    await caka(() => existsSync(potVticnice(dir)));
+    const { vrata, odtis } = await s.zazeni();
+    const { cert } = await potrdiloAsistenta(dir);
+    const z = (m: string, pot: string, t?: unknown) => zahteva(vrata, cert, odtis, m, pot, t);
+    const n = telefonNaloga(ANA, idNaloge(), "uredi nacrt po korakih");
+    assert.equal((await z("POST", `${POT}/naloga`, n)).status, 202);
+    await caka(() => kanalska().length === 1);
+    poslji({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Kje je nacrt?", vrsta: "vprasanje" } } });
+    let d = await z("GET", dogodkiUrl(ANA, n.id, "&od=0&caka=10"));
+    assert.deepEqual(d.telo, { dogodki: [{ vrsta: "stanje", besedilo: "Kje je nacrt?", tip: "vprasanje", st: 1 }], koncano: false });
+    assert.equal((await z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "Nacrt je v docs/nacrt.md."))).status, 202);
+    await caka(() => kanalska().length === 2);
+    assert.deepEqual(kanalska()[1].params, { content: "Nacrt je v docs/nacrt.md.", meta: { chat_id: n.id, naprava: ANA.id, nadaljevanje: "da" } });
+    poslji({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Koncano.", vrsta: "koncano" } } });
+    d = await z("GET", dogodkiUrl(ANA, n.id, "&od=1&caka=10"));
+    assert.equal(d.telo.koncano, true);
+    assert.equal((await z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "Dodaj se korak 3."))).status, 202);
+    await caka(() => kanalska().length === 3);
+    d = await z("GET", dogodkiUrl(ANA, n.id, "&od=2"));
+    assert.equal(d.telo.koncano, false);
+    poslji({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "reply", arguments: { chat_id: n.id, text: "Delam korak 3." } } });
+    d = await z("GET", dogodkiUrl(ANA, n.id, "&od=2&caka=10"));
+    assert.deepEqual(d.telo, { dogodki: [{ vrsta: "stanje", besedilo: "Delam korak 3.", tip: "vmesno", st: 3 }], koncano: false });
+  } finally {
+    await s.ustavi();
+    izv.zapri();
+    p.stdin!.end();
+    await new Promise((r) => (p.exitCode !== null ? r(null) : p.on("exit", r)));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- Pregled A (zdruzitev 0225): A-1/A-18 (produkcijska veriga ovojev), A-17 ----
+test("A-1: POST /nadaljuj skozi ovijCilj (kot v produkciji, asistent-telefon.server.ts) pride do izvajalca, ne 501", async () => {
+  const l = lazni();
+  const prejeto: unknown[][] = [];
+  l.iz.nadaljuj = async (...a) => { prejeto.push(a); };
+  const s = await streznik({ krog: [ANA], izvajalec: ovijCilj(l.iz, async () => null) });
+  try {
+    const n = telefonNaloga(ANA, idNaloge(), "uredi nacrt");
+    assert.equal((await s.z("POST", `${POT}/naloga`, n)).status, 202);
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "korak 2"))).status, 202);
+    assert.deepEqual(prejeto.map((a) => a.slice(0, 3)), [[n.id, "korak 2", ANA.id]]);
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("A-17: notranje besedilo napake izvajalca (pot v domaci mapi) ne gre telefonu", async () => {
+  const skrito = "connect ENOENT /home/uporabnik/.local/share/lina/kanal-claude.sock";
+  const l = lazni();
+  const iz: Izvajalec = { ...l.iz, zacni: async () => { throw new Error(skrito); } };
+  const s = await streznik({ krog: [ANA], izvajalec: iz });
+  try {
+    const r = await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, idNaloge(), "uredi nacrt"));
+    assert.equal(r.status, 503);
+    assert.equal(r.telo.napaka, "claude-code-ni");
+    assert.ok(!JSON.stringify(r.telo).includes("/home/"), JSON.stringify(r.telo));
+  } finally {
+    await s.pospravi();
+  }
+  const l2 = lazni();
+  l2.iz.nadaljuj = async () => { throw new Error(skrito); };
+  const s2 = await streznik({ krog: [ANA], izvajalec: l2.iz });
+  try {
+    const n = telefonNaloga(ANA, idNaloge(), "uredi nacrt");
+    assert.equal((await s2.z("POST", `${POT}/naloga`, n)).status, 202);
+    const r = await s2.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "korak 2"));
+    assert.equal(r.status, 409);
+    assert.equal(r.telo.napaka, "ni-v-teku");
+    assert.ok(!JSON.stringify(r.telo).includes("/home/"), JSON.stringify(r.telo));
+  } finally {
+    await s2.pospravi();
   }
 });

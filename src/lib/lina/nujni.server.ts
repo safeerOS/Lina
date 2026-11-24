@@ -9,7 +9,7 @@ import { jeNedovoljenaPreusmeritev } from "./preusmeritev.ts";
 import { loadPravila } from "./pravila.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { glava, preberi, zahtevaTwilio, type ZahtevaTwilio } from "./twilio-racun.server.ts";
-import type { CallSession, LineState, NujniDogodek } from "./types.ts";
+import type { CallSession, LineState, NujniDogodek, Pravila } from "./types.ts";
 
 /**
  * Nujni klici na osebni telefon (lastnik 10. 11. 2026): DVE LOCENI STIKALI, obe privzeto IZKLOPLJENI.
@@ -109,6 +109,17 @@ function javno(s: Shranjeno): NujniNastavitve {
     stevilkaVpisana: Boolean(s.ciphertext),
     opozorilo: s.prevezi ? t("nujniPrevezaOpozorilo") : "",
   };
+}
+
+/**
+ * Pravila za vmesnik (pregled 0.2.10, najdba 3): enkratno obvestilo o urniku samo, ce je bila nujna prevezava ze vklopljena (sicer se
+ * zanj nic ne spremeni) in v nacinu podjetje. Brez preverbe lastnika: klicatelj (streznisna funkcija) jo opravi.
+ */
+export async function pravilaZaVmesnik<T extends Pravila = Pravila>(dir?: string, pravila?: T): Promise<T> {
+  const root = resolveDataDir(dir);
+  const p = (pravila ?? (await loadPravila(root))) as T;
+  const pokazi = p.urnikObvestilo === true && p.nacinKlica !== "osebna" && (await beri(root)).prevezi;
+  return { ...p, urnikObvestilo: pokazi };
 }
 
 export async function preberiNujne(token: string | null, dir?: string): Promise<NujniNastavitve> {

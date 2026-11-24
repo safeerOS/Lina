@@ -1132,6 +1132,74 @@
   font-weight: 600;
 }
 
+/* Zadnji klici na Domovu (lastnik 23. 11. 2026): kompaktno, vsak klic najvec tri kratke vrstice, da kartica ostane v vidnem delu. */
+.lina-zadnji-seznam {
+  list-style: none;
+  margin: .35rem 0 0;
+  padding: 0;
+  display: grid;
+}
+
+.lina-zadnji-seznam > li + li {
+  border-top: 1px solid var(--color-rule);
+}
+
+.lina-zadnji-klic {
+  display: grid;
+  gap: .1rem;
+  width: 100%;
+  padding: .4rem 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.lina-zadnji-klic:focus-visible {
+  outline: 2px solid var(--color-ink-fill);
+  outline-offset: 2px;
+  border-radius: .5rem;
+}
+
+.lina-zadnji-vrh {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.lina-zadnji-ime {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: .92rem;
+}
+
+.lina-zadnji-cas {
+  flex: none;
+  margin-left: auto;
+  color: var(--color-brass);
+  font-size: .75rem;
+}
+
+.lina-zadnji-tel {
+  color: var(--color-moss);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lina-zadnji-kaj {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-moss);
+  font-size: .82rem;
+}
+
 .lina-hitro {
   display: flex;
   align-items: center;

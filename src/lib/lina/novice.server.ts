@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import { requireOwner } from "./auth.server.ts";
 import { t } from "./besedila.ts";
-import { pogovorBrain } from "./keys.server.ts";
+import { pogovorBrain, razlogBrezAsistentke } from "./keys.server.ts";
 import {
   MEJA_HN,
   MEJA_POSTAVK,
@@ -486,7 +486,7 @@ export async function noviceOceni(token: string | null, dir?: string, odv?: Part
   const o = odvPrivzeto(odv);
   const zdaj = o.zdaj!();
   const brain = await pogovorBrain(root);
-  if (!brain) return { ok: false, sporocilo: "Lina še nima možganov. Izberite ponudnika v Nastavitve → Računalnik in ključi." };
+  if (!brain) return { ok: false, sporocilo: await razlogBrezAsistentke(root) };
   const shranjeno = await preberiShranjeno(root);
   const predpomnilnik = await preberiPredpomnilnik(root);
   const ocene = await preberiOcene(root);

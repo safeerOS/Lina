@@ -3,8 +3,8 @@
  * sorodnih obratov, izkljucitev ze vidnih, izrecni izklop, vezava v asistentPogovor in navodilo modelu. Podatki so izmisljeni.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -73,8 +73,10 @@ describe("spomin pogovorov asistentke", () => {
     await assert.rejects(() => nastaviSpominPogovorov("ne", token, dir));
     await zapisiIzmenjavo(dir, "Rok za ponudbo je ponedeljek.", "Zapisala sem.");
     assert.ok((await prikliciSpomin(dir, "ponudbo")).includes("ponedeljek"));
+    await writeFile(path.join(dir, "asistent-povzetek.json"), JSON.stringify({ do: "x", besedilo: "Rok je ponedeljek." }));
     assert.ok((await izbrisiSpominPogovorov(token, dir)).izbrisanih >= 1);
     assert.equal(await prikliciSpomin(dir, "ponudbo"), "");
+    assert.equal(existsSync(path.join(dir, "asistent-povzetek.json")), false, "povzetek pogovora gre z izbrisom spomina");
     assert.deepEqual(await stanjeSpominaPogovorov(token, dir), { vklopljen: true });
     assert.deepEqual(await nastaviSpominPogovorov(false, token, dir), { vklopljen: false });
     assert.equal(await zapisiIzmenjavo(dir, "Po izklopu.", "Ne zapisem."), 0);

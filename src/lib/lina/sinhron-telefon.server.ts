@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { MEJA_SPOROCIL, type SporociloAsistenta } from "./asistent-pogovor.server.ts";
+import { MEJA_SPOROCIL, vVrstiPogovora, type SporociloAsistenta } from "./asistent-pogovor.server.ts";
 import { nastaviNavodilaIzTelefona } from "./pravila.server.ts";
 import { praviUnicode } from "./kanal-claude.ts";
 import { MEJA_DOBESEDNO } from "./dobesedno-meja.ts";
@@ -187,36 +187,39 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string): Promise<
       return true;
     };
     // Pogovor na racunalniku (asistent.json) gre k telefonu, pogovor s telefona na racunalnik: skupen pogovor.
-    const lokalni = await readJsonFile<SporociloAsistenta[]>(root, "asistent.json");
-    for (const s of Array.isArray(lokalni) ? lokalni : []) {
-      try {
-        dodajPogovor(preveriPogovor({ vloga: s.vloga, besedilo: String(s.besedilo).slice(0, MEJA_BESEDILA), cas: s.cas }));
-      } catch {
-        // pokvarjen vnos na racunalniku se preskoci, sinhronizacija ne odpove
-      }
-    }
-    const najstarejsi = st.pogovor.length >= MEJA_SPOROCIL ? Math.min(...st.pogovor.map((x) => Date.parse(x.p.cas))) : -Infinity;
-    // Spomin pogovorov (22. 11. 2026: Lina dela tudi brez racunalnika): sporocila, ki so s telefona prisla NA NOVO, gredo tudi v spomin
-    // racunalnika (spomin.sqlite); racunalniska sporocila je zapisal ze asistentPogovor, zato jih tu ne podvajamo.
+    // Branje in zapis asistent.json v skupni vrsti pogovora (pregled 0225 B5): vmesni zapis pogovora ali sporocila o gradnji se ne izgubi.
     const noviIzTelefona: PogovorSinhron[] = [];
-    for (const p of zahteva.pogovor) if (Date.parse(p.cas) >= najstarejsi && dodajPogovor(p)) noviIzTelefona.push(p);
-    st.pogovor.sort((a, b) => Date.parse(a.p.cas) - Date.parse(b.p.cas) || a.rev - b.rev);
-    if (st.pogovor.length > MEJA_SPOROCIL) st.pogovor = st.pogovor.slice(-MEJA_SPOROCIL);
-
-    const n = zahteva.navodila;
-    if (n && (!st.navodila || n.cas > st.navodila.n.cas)) {
-      if (await nastaviNavodilaIzTelefona(n.besedilo, root)) {
-        st.rev += 1;
-        st.navodila = { rev: st.rev, n };
-        sprememba = true;
+    await vVrstiPogovora(root, async () => {
+      const lokalni = await readJsonFile<SporociloAsistenta[]>(root, "asistent.json");
+      for (const s of Array.isArray(lokalni) ? lokalni : []) {
+        try {
+          dodajPogovor(preveriPogovor({ vloga: s.vloga, besedilo: String(s.besedilo).slice(0, MEJA_BESEDILA), cas: s.cas }));
+        } catch {
+          // pokvarjen vnos na racunalniku se preskoci, sinhronizacija ne odpove
+        }
       }
-    }
+      const najstarejsi = st.pogovor.length >= MEJA_SPOROCIL ? Math.min(...st.pogovor.map((x) => Date.parse(x.p.cas))) : -Infinity;
+      // Spomin pogovorov (22. 11. 2026: Lina dela tudi brez racunalnika): sporocila, ki so s telefona prisla NA NOVO, gredo tudi v spomin
+      // racunalnika (spomin.sqlite); racunalniska sporocila je zapisal ze asistentPogovor, zato jih tu ne podvajamo.
+      for (const p of zahteva.pogovor) if (Date.parse(p.cas) >= najstarejsi && dodajPogovor(p)) noviIzTelefona.push(p);
+      st.pogovor.sort((a, b) => Date.parse(a.p.cas) - Date.parse(b.p.cas) || a.rev - b.rev);
+      if (st.pogovor.length > MEJA_SPOROCIL) st.pogovor = st.pogovor.slice(-MEJA_SPOROCIL);
 
-    if (sprememba) await writeJson(root, DATOTEKA_SINHRON, st);
-    // Racunalniski pogovor dobi sporocila s telefona (zadnjih MEJA_SPOROCIL, po casu). Preverimo tudi brez spremembe,
-    // da neuspel prejsnji zapis asistent.json ob ponovnem poskusu popravimo (brez nove revizije).
-    const zeljen = st.pogovor.map((x) => x.p);
-    if (sprememba || JSON.stringify(Array.isArray(lokalni) ? lokalni : []) !== JSON.stringify(zeljen)) await writeJson(root, "asistent.json", zeljen);
+      const n = zahteva.navodila;
+      if (n && (!st.navodila || n.cas > st.navodila.n.cas)) {
+        if (await nastaviNavodilaIzTelefona(n.besedilo, root)) {
+          st.rev += 1;
+          st.navodila = { rev: st.rev, n };
+          sprememba = true;
+        }
+      }
+
+      if (sprememba) await writeJson(root, DATOTEKA_SINHRON, st);
+      // Racunalniski pogovor dobi sporocila s telefona (zadnjih MEJA_SPOROCIL, po casu). Preverimo tudi brez spremembe,
+      // da neuspel prejsnji zapis asistent.json ob ponovnem poskusu popravimo (brez nove revizije).
+      const zeljen = st.pogovor.map((x) => x.p);
+      if (sprememba || JSON.stringify(Array.isArray(lokalni) ? lokalni : []) !== JSON.stringify(zeljen)) await writeJson(root, "asistent.json", zeljen);
+    });
     for (const p of noviIzTelefona) {
       try {
         await zapisiObrat({ seja: SEJA_ASISTENTA, vloga: p.vloga === "lina" ? "lina" : "uporabnik", besedilo: p.besedilo, cas: p.cas }, { dir: root });
