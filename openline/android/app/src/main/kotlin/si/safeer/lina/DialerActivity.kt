@@ -102,7 +102,6 @@ class DialerActivity : Activity() {
     private lateinit var deviceTokenInput: EditText
     private lateinit var certInput: EditText
     private lateinit var ringTimeoutInput: EditText
-    private var notificationAsked = false
     private lateinit var allowlistInput: EditText
     private lateinit var allowlistEnabled: CheckBox
     private lateinit var stopCleanButton: Button
@@ -184,7 +183,17 @@ class DialerActivity : Activity() {
     private var audioStatus: CallAudioBridge.Status? = null
     private var audioWasReady = false
     private var wifiDialog: AlertDialog? = null
-    private var wifiPromptShown = false
+    /**
+     * Okna ob zagonu (opozorilo, parjenje iz povezave, prosnja za obvestila, Wi-Fi) eno za drugim (lastnik 24. 11. 2026: opozorilo
+     * in Wi-Fi sta bila odprta hkrati). Logika in preizkusi: samostojna/VrstaOkenZagona. Stanje prezivi zasuk (onSaveInstanceState).
+     */
+    private var vrstaOken = si.safeer.lina.samostojna.VrstaOkenZagona()
+    /** Med onResume in onPause; okno, dodano zunaj tega (npr. iz onCreate ali po onPause), pocaka na naslednji onResume. */
+    private var oknaAktivna = false
+    /** Prvi onResume po zasuku ne pozabi zaprtega okna Wi-Fi (sicer bi se po »Ne zdaj« ob zasuku pokazalo znova). */
+    private var poZasuku = false
+    private var parDialog: AlertDialog? = null
+    private var cakajociPar: GatewayPairing.Invite? = null
     /** Last start attempt said Wi-Fi is needed (adbd not reachable on mobile data). */
     private var needsWifi = false
 
@@ -246,9 +255,74 @@ class DialerActivity : Activity() {
         linaSettings = LinaSettingsStore(this)
         controller = CallCommandController(this)
         setContentView(R.layout.activity_dialer)
+        if (savedInstanceState != null) {
+            poZasuku = true
+            // Okna aplikacije so umrla s staro Activity in spet cakajo; prosnja za obvestila (sistem) prezivi, izid pride sem.
+            vrstaOken = si.safeer.lina.samostojna.VrstaOkenZagona.izNiza(savedInstanceState.getString(STANJE_OKEN))
+                .poZasuku(setOf(si.safeer.lina.samostojna.OknoZagona.OBVESTILA))
+            val par = savedInstanceState.getStringArray(STANJE_PAR)
+            if (par != null && par.size == 3) cakajociPar = GatewayPairing.Invite(par[0], par[1], par[2])
+        }
         bindViews()
+        // T1 (pregled 1915): oznaka besedila iz Deli v osnutku prezivi zasuk in smrt procesa (osnutek EditText obnovi sam).
+        if (savedInstanceState?.getBoolean(STANJE_DELJENO) == true) samostojniPogled.deljenoVOsnutku = true
+        // Deli -> Lina: samo ob prvem zagonu za ta namen (ob vrtenju zaslona bi se priponke dodale znova; iz Nedavnih pride isti
+        // namen brez zacasnega dovoljenja za URI, zato ga ne obdelamo).
+        val izZgodovine = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (savedInstanceState == null && !izZgodovine && sprejmiDeljenje(intent)) return
         applyDialIntent(intent)
         applyPairingIntent(intent)
+    }
+
+    /** Deljenje iz druge aplikacije odpre Pogovor s priponkami; poslje lastnik sam (LinaPogovorPogled.sprejmiDeljenje). */
+    private fun sprejmiDeljenje(namen: Intent): Boolean {
+        if (namen.action != Intent.ACTION_SEND && namen.action != Intent.ACTION_SEND_MULTIPLE) return false
+        showTab(Zavihek.LINA)
+        samostojniPogled.sprejmiDeljenje(namen)
+        return true
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STANJE_OKEN, vrstaOken.vNiz())
+        if (::samostojniPogled.isInitialized) outState.putBoolean(STANJE_DELJENO, samostojniPogled.deljenoVOsnutku)
+        cakajociPar?.let { outState.putStringArray(STANJE_PAR, arrayOf(it.serverUrl, it.code, it.certSha256)) }
+    }
+
+    private fun dodajOkno(o: si.safeer.lina.samostojna.OknoZagona) {
+        vrstaOken = vrstaOken.dodaj(o)
+        pokaziNaslednjeOkno()
+    }
+
+    private fun zaprtoOkno(o: si.safeer.lina.samostojna.OknoZagona) {
+        vrstaOken = vrstaOken.zapri(o)
+        pokaziNaslednjeOkno()
+    }
+
+    /** Pokaze naslednje okno iz vrste, ce nobeno ni odprto. Okno, ki ni vec potrebno, se takoj zapre in pride naslednje. */
+    private fun pokaziNaslednjeOkno() {
+        if (!oknaAktivna || isFinishing || isDestroyed) return
+        val (o, nova) = vrstaOken.naslednje() ?: return
+        vrstaOken = nova
+        val pokazano = when (o) {
+            si.safeer.lina.samostojna.OknoZagona.OPOZORILO ->
+                opozorilo.trebaObOdprtju().also { if (it) opozorilo.pokazi { zaprtoOkno(o) } }
+            si.safeer.lina.samostojna.OknoZagona.PARJENJE ->
+                cakajociPar?.let { inv ->
+                    // Poslusalec dismiss tece kasneje (sporocilo): ce je medtem prislo novo vabilo, ga staro okno ne sme pobrisati.
+                    confirmAndPair(inv).setOnDismissListener { if (cakajociPar === inv) { cakajociPar = null; zaprtoOkno(o) } }
+                    true
+                } ?: false
+            si.safeer.lina.samostojna.OknoZagona.OBVESTILA -> {
+                // Izid (tudi preklic) pride v onRequestPermissionsResult, ki okno zapre.
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS_MISSED)
+                true
+            }
+            // V vrsto pride samo ob needsWifi (tudi iz shranjene vrste po zasuku, ko nova Activity se ni preverila zvoka);
+            // ce se je Wi-Fi medtem povezal, okna ne potrebujemo.
+            si.safeer.lina.samostojna.OknoZagona.WIFI -> !DeviceHealth.isOnWifi(this) && showWifiRequired()
+        }
+        if (!pokazano) zaprtoOkno(o)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -260,6 +334,7 @@ class DialerActivity : Activity() {
             samostojniPogled.obdelajPovezavo(intent.data.toString())
             return
         }
+        if (sprejmiDeljenje(intent)) return
         fillAdvancedFields()
         applyDialIntent(intent)
         applyPairingIntent(intent)
@@ -267,8 +342,10 @@ class DialerActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        wifiPromptShown = false
-        opozorilo.obOdprtju()
+        // Ob vsaki vrnitvi v aplikacijo se sme okno Wi-Fi spet pokazati (kot prej), razen ob zasuku zaslona.
+        if (poZasuku) poZasuku = false else vrstaOken = vrstaOken.pozabi(si.safeer.lina.samostojna.OknoZagona.WIFI)
+        // Opozorilo prvo v vrsti; enkrat na odprtje (»Pozneje« se ob vracanju iz nastavitev ali zasuku ne ponovi).
+        if (opozorilo.trebaObOdprtju()) vrstaOken = vrstaOken.dodaj(si.safeer.lina.samostojna.OknoZagona.OPOZORILO)
         si.safeer.lina.asistent.SinhronizacijaZLino.zazeni(this)
         notifyMissedWithoutPermission()
         renderSteps()
@@ -281,18 +358,27 @@ class DialerActivity : Activity() {
                 wifiCallback,
             )
         }
+        oknaAktivna = true
+        pokaziNaslednjeOkno()
     }
 
     override fun onDestroy() {
+        // Okna ob zagonu umrejo s to Activity (zasuk): zapremo jih, nova Activity jih pokaze iz shranjene vrste.
+        opozorilo.zapri()
+        parDialog?.dismiss()
+        wifiDialog?.dismiss()
         odkrivanje?.ustavi()
         if (::asistent.isInitialized) asistent.zapri()
         super.onDestroy()
     }
 
     override fun onPause() {
+        oknaAktivna = false
         handler.removeCallbacks(ticker)
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(wifiCallback) }
-        wifiDialog?.dismiss()
+        // Ob zasuku ga ne zapremo tu (zapisalo bi se kot zaprto); zapre ga onDestroy, nova Activity ga pokaze iz shranjene vrste.
+        if (!isChangingConfigurations) wifiDialog?.dismiss()
+        if (::samostojniPogled.isInitialized) samostojniPogled.ustaviMikrofon()
         super.onPause()
     }
 
@@ -730,12 +816,21 @@ class DialerActivity : Activity() {
             if (resultCode == RESULT_OK) samostojniPogled.dodajPriponke(data)
             return
         }
+        if (requestCode == si.safeer.lina.asistent.LinaPogovorPogled.ZAHTEVA_FOTO) {
+            samostojniPogled.dodajFotografijo(resultCode == RESULT_OK)
+            return
+        }
         if (requestCode == si.safeer.lina.asistent.LinaPogovorPogled.ZAHTEVA_GOVOR) {
             if (resultCode == RESULT_OK) data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { samostojniPogled.vstaviGovor(it) }
             return
         }
         if (requestCode == si.safeer.lina.asistent.ZapiskiIzvoz.ZAHTEVA_MAPA) {
             if (resultCode == RESULT_OK) data?.data?.let { samostojniPogled.obdelajMapo(it) }
+            return
+        }
+        // Mapa za lokalno iskanje po dokumentih (Nastavitve > Dokumenti, 23. 11. 2026).
+        if (requestCode == si.safeer.lina.asistent.DokumentiLokalno.ZAHTEVA_MAPA) {
+            if (resultCode == RESULT_OK) data?.data?.let { nastavitveMeni.dokumenti.obdelajMapo(it) }
             return
         }
         if (requestCode != OzjiKrogSafeerLepilo.ZAHTEVA) return
@@ -810,7 +905,7 @@ class DialerActivity : Activity() {
                 if (n == null) toast(getString(R.string.assistant_code_bad_address)) else naprejKoda(n.first, n.second, naTelefonu)
             }
             .setNegativeButton(getString(R.string.pair_cancel), null)
-            .show()
+            .pokaziVarno()
     }
 
     /** Nacin A: koda ni bila prava; nov krog gre na isti pair_id (brez novega iskanja Line). */
@@ -832,7 +927,7 @@ class DialerActivity : Activity() {
                 if (k == null) { toast(getString(R.string.assistant_code_bad_code)); kodoZnova() } else asistent.vnesiKodoZnova(k)
             }
             .setNegativeButton(getString(R.string.pair_cancel)) { _, _ -> ponovniVnosOdprt = false; asistent.vnesiKodoZnova(null) }
-            .show()
+            .pokaziVarno()
     }
 
     private fun naprejKoda(naslov: String, vrata: Int, naTelefonu: Boolean) {
@@ -851,7 +946,7 @@ class DialerActivity : Activity() {
                 else asistent.povezisKodo(naslov, vrata, vnos.text.toString())
             }
             .setNegativeButton(getString(R.string.pair_cancel), null)
-            .show()
+            .pokaziVarno()
     }
 
     private fun napakaNiz(n: SporociloNapake): Int = when (n) {
@@ -919,7 +1014,7 @@ class DialerActivity : Activity() {
                 showTab(Zavihek.RACUNALNIK)
             }
             .setNegativeButton(getString(R.string.pair_cancel), null)
-            .show()
+            .pokaziVarno()
     }
 
     /**
@@ -1008,7 +1103,7 @@ class DialerActivity : Activity() {
                     .setMessage(message)
                     .setPositiveButton(getString(R.string.open_wireless)) { _, _ -> openWirelessDebugging() }
                     .setNegativeButton(getString(R.string.close), null)
-                    .show()
+                    .pokaziVarno()
             }
         }.start()
     }
@@ -1128,15 +1223,19 @@ class DialerActivity : Activity() {
                 audioStatus = status
                 needsWifi = result == ShellLauncher.Result.NeedsWifi
                 renderAudioStep()
-                if (needsWifi && !wifiPromptShown) showWifiRequired()
+                // V vrsto: nikoli cez opozorilo ali drugo okno (najdba lastnika 24. 11. 2026).
+                if (needsWifi) dodajOkno(si.safeer.lina.samostojna.OknoZagona.WIFI)
             }
         }.start()
     }
 
-    /** Android can't switch Wi-Fi on for an app; this opens the Wi-Fi panel over the app instead. */
-    private fun showWifiRequired() {
-        if (isFinishing || wifiDialog?.isShowing == true) return
-        wifiPromptShown = true
+    /**
+     * Android can't switch Wi-Fi on for an app; this opens the Wi-Fi panel over the app instead. Ob zagonu jo klice samo vrsta oken
+     * (pokaziNaslednjeOkno); neposredno samo uporabnikov gumb. Vrne, ali je okno odprto.
+     */
+    private fun showWifiRequired(): Boolean {
+        if (isFinishing) return false
+        if (wifiDialog?.isShowing == true) return true
         val wifiOn = runCatching { getSystemService(WifiManager::class.java).isWifiEnabled }.getOrDefault(false)
         wifiDialog = AlertDialog.Builder(this, R.style.Gw_Dialog)
             .setTitle(getString(R.string.wifi_title))
@@ -1145,7 +1244,9 @@ class DialerActivity : Activity() {
             )
             .setPositiveButton(getString(R.string.open_wifi)) { _, _ -> openWifiSettings() }
             .setNegativeButton(getString(R.string.not_now), null)
-            .show()
+            .setOnDismissListener { zaprtoOkno(si.safeer.lina.samostojna.OknoZagona.WIFI) }
+            .pokaziVarno()
+        return true
     }
 
     private fun openWifiSettings() {
@@ -1161,7 +1262,8 @@ class DialerActivity : Activity() {
 
     private fun restartAudio() {
         stepAudio.status.text = getString(R.string.audio_starting)
-        wifiPromptShown = false
+        // Uporabnik je sam pritisnil Zazeni: okno Wi-Fi se sme spet pokazati (prej wifiPromptShown = false).
+        vrstaOken = vrstaOken.pozabi(si.safeer.lina.samostojna.OknoZagona.WIFI)
         CallAudioBridge.restart(this) { result ->
             runOnUiThread {
                 if (result == ShellLauncher.Result.NeedsWifi) {
@@ -1186,9 +1288,9 @@ class DialerActivity : Activity() {
         val unseen = MissedCallNotice.takeUnseen(this)
         if (unseen > 0) toast(getString(R.string.missed_unseen, unseen))
         val isDefaultDialer = getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_DIALER)
-        if (NoticePermission.shouldAsk(Build.VERSION.SDK_INT, granted, unseen, isDefaultDialer) && !notificationAsked) {
-            notificationAsked = true
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS_MISSED)
+        // Enkrat na odprtje zaslona (vrsta oken: zaprto okno se ne doda znova), za opozorilom.
+        if (NoticePermission.shouldAsk(Build.VERSION.SDK_INT, granted, unseen, isDefaultDialer)) {
+            dodajOkno(si.safeer.lina.samostojna.OknoZagona.OBVESTILA)
         }
     }
 
@@ -1238,7 +1340,9 @@ class DialerActivity : Activity() {
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         if (requestCode == REQUEST_CALL_PHONE && granted) pendingPermissionNumber?.let(::dialLocally)
         if (requestCode == REQUEST_CONTACTS) refreshContactSearch()
+        if (requestCode == si.safeer.lina.asistent.LinaPogovorPogled.KODA_MIKROFON && ::samostojniPogled.isInitialized) samostojniPogled.poDovoljenjuMikrofona(granted)
         if (requestCode == REQUEST_NOTIFICATIONS && granted) startAudioSetup()
+        if (requestCode == REQUEST_NOTIFICATIONS_MISSED) zaprtoOkno(si.safeer.lina.samostojna.OknoZagona.OBVESTILA)
         if (requestCode == REQUEST_PHONE_STATE) {
             // Prazen izid je preklic (okno se ni pokazalo), ne zavrnitev: zapis se spremeni samo ob pravem izidu.
             val prefs = getSharedPreferences(PREFS_UI, MODE_PRIVATE)
@@ -1470,17 +1574,25 @@ class DialerActivity : Activity() {
         val data = intent.data ?: return
         val invite = GatewayPairing.parse(data.toString())
         intent.data = null
-        if (invite != null) confirmAndPair(invite)
+        if (invite != null) {
+            // Ob zagonu prek povezave: v vrsto oken (za opozorilom), ne cez drugo okno. Vsaka nova povezava se sme pokazati
+            // (pozabi); odprto okno starega vabila se zapre in novo pride na vrsto.
+            if (parDialog?.isShowing == true) parDialog?.dismiss()
+            cakajociPar = invite
+            vrstaOken = vrstaOken.zapri(si.safeer.lina.samostojna.OknoZagona.PARJENJE).pozabi(si.safeer.lina.samostojna.OknoZagona.PARJENJE)
+            dodajOkno(si.safeer.lina.samostojna.OknoZagona.PARJENJE)
+        }
     }
 
-    private fun confirmAndPair(invite: GatewayPairing.Invite) {
+    private fun confirmAndPair(invite: GatewayPairing.Invite): AlertDialog {
         val host = Uri.parse(invite.serverUrl).host ?: invite.serverUrl
-        AlertDialog.Builder(this, R.style.Gw_Dialog)
+        return AlertDialog.Builder(this, R.style.Gw_Dialog)
             .setTitle(getString(R.string.pair_title))
             .setMessage(getString(R.string.pair_message, host, TlsPin.pretty(invite.certSha256)))
             .setPositiveButton(getString(R.string.pair_connect)) { _, _ -> pairWith(invite) }
             .setNegativeButton(getString(R.string.pair_cancel), null)
-            .show()
+            .pokaziVarno()
+            .also { parDialog = it }
     }
 
     private fun pairWith(invite: GatewayPairing.Invite) {
@@ -1572,6 +1684,9 @@ class DialerActivity : Activity() {
         const val REQUEST_NOTIFICATIONS = 1003
         const val REQUEST_NOTIFICATIONS_MISSED = 1004
         const val REQUEST_PHONE_STATE = 1005
+        const val STANJE_OKEN = "vrsta_oken_zagona"
+        const val STANJE_PAR = "cakajoci_par"
+        const val STANJE_DELJENO = "deljeno_v_osnutku"
         const val REQUEST_CONTACTS = 1006
         private const val PREFS_UI = "lina_ui"
         private const val KEY_PHONE_DENIED = "phone_permission_denied"

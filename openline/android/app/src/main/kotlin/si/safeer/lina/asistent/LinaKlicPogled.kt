@@ -1,6 +1,7 @@
 package si.safeer.lina.asistent
 
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -110,7 +111,7 @@ class LinaKlicPogled(
             .setMessage(besedilo)
             .setNegativeButton(R.string.close, null)
         if (s.klici.size > 1) d.setPositiveButton(R.string.lina_calls_summary) { _, _ -> povzemi(s) }
-        d.show()
+        d.pokaziVarno()
     }
 
     private fun povzemi(s: SkupinaKlicatelja) {
@@ -120,7 +121,7 @@ class LinaKlicPogled(
             .setTitle(R.string.lina_calls_summary)
             .setMessage(povzetekKlicateljaBrezModela(s))
             .setPositiveButton(android.R.string.ok, null)
-            .show()
+            .pokaziVarno()
     }
 
     /**
@@ -172,6 +173,6 @@ class LinaKlicPogled(
         AlertDialog.Builder(a)
             .setMessage(a.getString(R.string.lina_calls_open_fail_fmt, KlicIzvoz(a).opis()))
             .setPositiveButton(android.R.string.ok, null)
-            .show()
+            .pokaziVarno()
     }
 }

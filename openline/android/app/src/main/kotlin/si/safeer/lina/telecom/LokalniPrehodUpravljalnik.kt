@@ -80,7 +80,9 @@ object LokalniPrehodUpravljalnik {
             imeSamoZnanim = { si.safeer.lina.asistent.ImeUporabnika.samoZnanim(context) },
             casovniZapis = { android.util.Log.i("LinaPozdrav", "${System.currentTimeMillis() % 100000} ms: $it") },
             zajemIzhoda = ZajemIzhodaLine(context.filesDir)::zapisi,
-            obdelavaZvoka = context.getSharedPreferences("lina_zvok", Context.MODE_PRIVATE).getBoolean("obdelava_zvoka", true)
+            obdelavaZvokaNastavitev = { si.safeer.lina.asistent.ZmanjsanjeHrupa.vklopljeno(context) },
+            // Dostava paketa (lastnik 23. in 24. 11. 2026): nastavitev se prebere sele, ko se klicatelj predstavi kot dostava.
+            odgovorPaketa = { si.safeer.lina.asistent.PaketDostave.odgovorZaKlic(context) },
         ).apply {
             naNapako = { razlog ->
                 val manager = context.getSystemService(android.app.NotificationManager::class.java)

@@ -13,8 +13,8 @@ android {
         applicationId = "si.safeer.lina"
         minSdk = 29
         targetSdk = 35
-        versionCode = 210
-        versionName = "0.2.10"
+        versionCode = 211
+        versionName = "0.2.11"
 
         val defaultWsUrl = providers.gradleProperty("GATEWAY_WS_URL")
             .orElse("")
@@ -51,6 +51,9 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
     // QR pairing with the admin console (Google code scanner: no camera permission needed).
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    // OCR na telefonu za lokalni indeks dokumentov (23. 11. 2026): model prek storitev Google Play (APK ostane majhen),
+    // prepoznava tece na napravi. Ni bilo prevedeno lokalno - preveri pri gradnji na GitHubu.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }

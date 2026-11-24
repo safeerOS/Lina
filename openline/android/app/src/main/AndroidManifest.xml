@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Lina deluje tudi na napravi brez telefonije (zavihek Asistent, tablica); prevzem klicev takrat ni na voljo. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
@@ -25,10 +26,16 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <!-- Lastnik 18. 11. 2026: klicalnik Line mora iskati po imeniku (dovoljenje potrdi uporabnik sam). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Lastnik 24. 11. 2026: asistentka sama zajame govor z zmanjsanjem hrupa (stikalo »Zmanjsanje hrupa«); dovoljenje ob prvem dotiku mikrofona, brez njega sistemska prepoznava. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- Budilka v aplikaciji Ura po uporabnikovi potrditvi (AlarmClock.ACTION_SET_ALARM). -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Sistemski nadzor (24. 11. 2026): nacin »ne moti« (uporabnik dovoli v Posebni dostop aplikacij) in svetlost zaslona
+         (Spreminjanje sistemskih nastavitev); oba samo po uporabnikovi potrditvi v aplikaciji. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -93,7 +100,31 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tel" />
             </intent-filter>
+
+            <!-- Lina kot cilj »Deli« (24. 11. 2026): datoteke gredo med priponke Pogovora, poslje jih lastnik s tapom Poslji.
+                 Vrste enako kot sprejemljivaVrstaDeljenja (samostojna/Deljenje.kt); stikalo v Nastavitvah > Orodja. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
+
+        <!-- Gumb »Fotografiraj«: program za fotografiranje zapise eno sliko v cacheDir (zacasno dovoljenje iz namena, brez CAMERA). -->
+        <provider
+            android:name=".asistent.PosnetekPonudnik"
+            android:authorities="${applicationId}.posnetek"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
 
         <receiver
@@ -160,6 +191,13 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Prosojna plast predloge cez fotografijo majice (23. 11. 2026); odpre se samo iz Nastavitev > Orodja. -->
+        <activity
+            android:name=".asistent.ProsojnaPlastActivity"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+
     </application>
 
 </manifest>

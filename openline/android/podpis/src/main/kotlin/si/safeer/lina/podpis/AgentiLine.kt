@@ -27,11 +27,23 @@ data class AgentRacunalnika(val id: String, val ime: String, val stanje: String,
 data class PogojNaloge(val vrsta: String, val cas: String? = null, val id: String? = null)
 data class OpomnikNaloge(val cas: String, val razlog: String?, val krog: Long)
 
+/** Manjkajoca tocka: stevilka, besedilo iz NALOGE (NEZAUPANO, samo prikaz) in koda razloga (tocke-naloge.ts RAZLOGI_TOCKE). */
+data class TockaAgenta(val st: Int, val besedilo: String, val razlog: String)
+
+/** »[narejeno]/[skupaj] narejeno« in manjkajoce tocke (tocke-naloge.ts PovzetekTock). */
+data class TockeAgenta(val skupaj: Int, val narejeno: Int, val manjkajoce: List<TockaAgenta>) {
+    val popolno: Boolean get() = manjkajoce.isEmpty()
+}
+
 /** Ena naloga iz GET /agent-naloge (JavnaNaloga brez porocila in zgostitve). Besedilo in mapa sta NEZAUPANA (samo prikaz). */
 data class NalogaAgenta(
     val id: String, val izvor: String, val agent: String, val mapa: String, val besedilo: String, val stanje: String,
     val ustvarjeno: String, val potrjeno: String?, val razlog: String?, val pogoj: PogojNaloge?, val ocenaKonca: String?,
     val ocenaGroba: Boolean, val opomnik: OpomnikNaloge?, val koncano: String?,
+    /** Tocke s preverjenimi dokazi (24. 11. 2026); null = naloga brez tock, pred koncem ali starejsi racunalnik. */
+    val tocke: TockeAgenta? = null,
+    /** Predlog nove naloge za manjkajoce tocke: id predloga (caka na lastnikovo potrditev) ali »napaka«; null = ga ni. */
+    val predlogTock: String? = null,
 )
 
 /**
@@ -76,7 +88,13 @@ object AgentiLine {
 
     /** Ime iz odgovora se ujema s tabelo. Prazno ali drugo ime: dodelitve ne podpisi. */
     fun imeUjema(id: String, imeIzOdgovora: String): Boolean = IMENA[id] == imeIzOdgovora
-    val STANJA = setOf("caka", "zaganja", "tece", "koncano", "odklonjeno", "poteklo", "napaka", "dodeljeno", "zamujeno", "preklicano")
+    /** »nepopolno« (24. 11. 2026): agent je koncal, ni pa vsake tocke z dokazom (claude-naloge.server.ts stanjeKonca). */
+    val STANJA = setOf("caka", "zaganja", "tece", "koncano", "odklonjeno", "poteklo", "napaka", "dodeljeno", "zamujeno", "preklicano", "nepopolno")
+    /** tocke-naloge.ts RAZLOGI_TOCKE. */
+    val RAZLOGI_TOCKE = setOf("manjka", "ni-narejeno", "brez-dokaza", "dokaz-ni-najden")
+    /** tocke-naloge.ts NAJVEC_TOCK. */
+    const val NAJVEC_TOCK = 30
+    const val NAJVEC_BESEDILO_TOCKE = 300
     /** Naloge, na katere lahko caka »ko konca«: se niso koncne. */
     val NEKONCNA = setOf("caka", "zaganja", "tece", "dodeljeno", "zamujeno")
     /** Preklic sprejme racunalnik samo za ti stanji (claude-naloge.server.ts preklici). */
@@ -171,6 +189,22 @@ object AgentiLine {
         }
     }
 
+    private fun JsonObject.celo(k: String, od: Int, `do`: Int): Int =
+        ((this[k] as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toIntOrNull() ?: slabo()).also { if (it !in od..`do`) slabo() }
+
+    /** PovzetekTock: skupaj 1..30, narejeno = skupaj - manjkajocih, popolno se ujema, stevilke razlicne in v 1..skupaj. */
+    private fun tocke(o: JsonObject?): TockeAgenta? = o?.let {
+        val skupaj = it.celo("skupaj", 1, NAJVEC_TOCK)
+        val narejeno = it.celo("narejeno", 0, skupaj)
+        val manjkajoce = it.seznam("manjkajoce", NAJVEC_TOCK).map { e ->
+            val m = e.obj()
+            TockaAgenta(m.celo("st", 1, skupaj), GradnjeLine.cisto(m.niz("besedilo"), NAJVEC_BESEDILO_TOCKE), m.niz("razlog").vNaboru(RAZLOGI_TOCKE))
+        }
+        if (manjkajoce.size != skupaj - narejeno || manjkajoce.map { m -> m.st }.toSet().size != manjkajoce.size) slabo()
+        if (it.bool("popolno") != manjkajoce.isEmpty()) slabo()
+        TockeAgenta(skupaj, narejeno, manjkajoce)
+    }
+
     private fun naloga(e: JsonElement): NalogaAgenta {
         val o = e.obj()
         val ocena = o.objAliNull("ocena")
@@ -193,6 +227,8 @@ object AgentiLine {
             ocenaGroba = ocena?.bool("groba") ?: false,
             opomnik = opomnik,
             koncano = o.nizAliNull("koncano").ujemaAliNull(CAS),
+            tocke = tocke(o.objAliNull("tocke")),
+            predlogTock = o.nizAliNull("predlogTock")?.also { if (it != "napaka" && !ID.matches(it)) slabo() },
         )
     }
 

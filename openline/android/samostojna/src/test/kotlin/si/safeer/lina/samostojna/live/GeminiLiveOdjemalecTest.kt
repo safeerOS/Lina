@@ -19,6 +19,9 @@ import kotlin.test.assertTrue
 import java.io.InputStream
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 
 class LazniWs(val port: Int) {
     var running = AtomicBoolean(true)
@@ -643,5 +646,119 @@ class GeminiLiveOdjemalecTest {
         odj.konecKlica()
         val zapis = dn.seznam().single { it.stevilka == "+99955501002" }
         assertEquals("Ana Novak", zapis.imeImenik)
+    }
+
+    // Dostava paketa (lastnik 23. in 24. 11. 2026): koda zazna dostavljalca in modelu poslje dobesedni stavek, najvec enkrat na klic.
+    private val stavekPaketa = "Paket pričakujemo. Prosim, pustite ga pred hišo."
+
+    private fun klicPaketa(f: LaznaFabrika, stavek: String = stavekPaketa, dn: DnevnikKlicev = dnevnik): GeminiLiveOdjemalec {
+        val odj = GeminiLiveOdjemalec(
+            apiKljuc = object : ShranjevalnikKljuca {
+                override fun shrani(k: KljucGemini) {}
+                override fun preberi() = KljucGemini("k")
+                override fun izbrisi() {}
+            },
+            googleZeton = GoogleZeton { "z" },
+            projekt = { "p" },
+            dnevnik = dn,
+            izbiraPoti = IzbiraPotiLive(naVoljo = { it == PotLive.VERTEX }),
+            wsFabrika = f,
+            imeUporabnika = { "Tomaž" to "Tomaža" },
+            imeSamoZnanim = { false },
+            odgovorPaketa = { stavek },
+        )
+        odj.stevilkaNaslednjegaKlica = "+99955501003"
+        odj.pripraviKlic()
+        Thread.sleep(300)
+        f.poslusalec!!.onText("""{"setupComplete":{}}""")
+        odj.nastaviIzhod { }
+        f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""") // konec pozdrava
+        return odj
+    }
+
+    private fun LaznaFabrika.izrek(besedilo: String, konec: Boolean = true) {
+        poslusalec!!.onText(buildJsonObject { putJsonObject("serverContent") { putJsonObject("inputTranscription") { put("text", besedilo) } } }.toString())
+        if (konec) poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
+    }
+
+    private fun LaznaFabrika.stavkiPaketa() = poslano.filter { it.contains("realtimeInput") && it.contains("Paket pričakujemo") }
+
+    @Test
+    fun `dostavljalec - modelu gre dobesedni stavek enkrat na klic, brez imena lastnika, nikoli v setup`() {
+        val f = LaznaFabrika()
+        val odj = klicPaketa(f)
+        assertTrue(f.poslano.first { it.contains("\"setup\":") }.let { !it.contains("pričakujemo") && !it.contains("pred hišo") }, "stavek ni v sistemskem navodilu")
+        f.izrek("Dober dan, tukaj DPD, imam paket za vas.")
+        assertEquals(1, f.stavkiPaketa().size)
+        val sporocilo = Json.parseToJsonElement(f.stavkiPaketa().single()).jsonObject["realtimeInput"]!!.jsonObject["text"].toString()
+        assertTrue(sporocilo.contains("»$stavekPaketa«"), sporocilo)
+        assertTrue(!sporocilo.contains("Tomaž"), "kdorkoli rece »tukaj DPD«, ne izve imena lastnika")
+        f.izrek("Tukaj DPD, kje naj pustim?")
+        assertEquals(1, f.stavkiPaketa().size, "najvec enkrat na klic")
+        odj.konecKlica()
+    }
+
+    @Test
+    fun `nedostavni izreki, odlomki in izklop - stavka ni`() {
+        val f = LaznaFabrika()
+        val odj = klicPaketa(f)
+        for (s in listOf("Kje naj pustim?", "Poslal sem vam paket ponudb po pošti.", "Kličem glede paketa, ki sem ga naročil.")) f.izrek(s)
+        // Odlomki enega izreka: »Dostava« sama bi bila dostava, nadaljevanje jo spremeni v sporocilo.
+        f.izrek("Dostava", konec = false)
+        f.izrek(" paketa zamuja, prosim pokličite me.")
+        assertEquals(0, f.stavkiPaketa().size)
+        odj.konecKlica()
+
+        val g = LaznaFabrika()
+        val izklop = klicPaketa(g, stavek = "")
+        g.izrek("Dober dan, tukaj DPD, imam paket za vas.")
+        assertEquals(0, g.poslano.count { it.contains("realtimeInput") && it.contains("dostavljalec paketa") }, "izklopljeno: obicajen potek")
+        izklop.konecKlica()
+    }
+
+    @Test
+    fun `»Dostava!« kot cel izrek - stavek sele ob koncu obrata`() {
+        val f = LaznaFabrika()
+        val odj = klicPaketa(f)
+        f.izrek("Dostava!", konec = false)
+        assertEquals(0, f.stavkiPaketa().size, "med izrekom se caka")
+        f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
+        assertEquals(1, f.stavkiPaketa().size)
+        odj.konecKlica()
+    }
+
+    @Test
+    fun `prekrivanje govora - zvok ali prepis modela sredi izreka klicatelja ni konec izreka`() {
+        // Klicatelj skoci Lini v besedo: odlomek, kos zvoka in prepisa modela, nadaljevanje izreka (oba izreka sta na seznamu NE).
+        val b64 = java.util.Base64.getEncoder().encodeToString(ByteArray(960))
+        for ((zacetek, nadaljevanje) in listOf("Dostava" to " paketa zamuja, prosim pokličite me.", "DPD" to " paket je izgubljen, kaj naj naredim?")) {
+            val f = LaznaFabrika()
+            val odj = klicPaketa(f)
+            f.izrek(zacetek, konec = false)
+            f.poslusalec!!.onText("""{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"$b64"}}]}}}""")
+            f.poslusalec!!.onText("""{"serverContent":{"outputTranscription":{"text":"Oprostite"}}}""")
+            f.izrek(nadaljevanje)
+            assertEquals(0, f.stavkiPaketa().size, zacetek + nadaljevanje)
+            odj.konecKlica()
+        }
+    }
+
+    @Test
+    fun `po koncaj_klic ni stavka, zapis klica pove, da je klicala dostava`() {
+        val f = LaznaFabrika()
+        val odj = klicPaketa(f)
+        f.poslusalec!!.onText("""{"toolCall":{"functionCalls":[{"id":"k1","name":"koncaj_klic","args":{}}]}}""")
+        f.izrek("Tukaj DPD.")
+        assertEquals(0, f.stavkiPaketa().size)
+        odj.konecKlica()
+
+        val dn = DnevnikKlicev(si.safeer.lina.samostojna.PomnilniskaShramba())
+        val g = LaznaFabrika()
+        val drugi = klicPaketa(g, dn = dn)
+        g.izrek("Kličem iz Pošte Slovenije.")
+        drugi.konecKlica()
+        val zapis = dn.seznam().single { it.stevilka == "+99955501003" }
+        assertTrue(zapis.povzetek.contains("dostava paketa"), zapis.povzetek)
+        assertTrue(zapis.sporociloDobesedno.contains("Pošte Slovenije"))
     }
 }

@@ -18,12 +18,16 @@ class NastavitveMeni(
     /** Nastavitve > O Lini: opozorilo (osebna raba, odgovornost, nadzor), vedno dosegljivo (24. 11. 2026). */
     private val odpriOLini: () -> Unit,
 ) {
-    enum class Podmeni { IME, MOZGANI, SPOMIN, ORODJA, KLICI, ZAPISKI }
+    enum class Podmeni { IME, MOZGANI, SPOMIN, ORODJA, KLICI, ZAPISKI, DOVOLJENJA, DOKUMENTI }
 
     private val koren: LinearLayout = a.findViewById(R.id.tabSettings)
     private val meni = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
     private val plosce = mutableMapOf<Podmeni, LinearLayout>()
     private var odprt: Podmeni? = null
+    /** Nastavitve > Dovoljenja: sistemski nadzor in trajne potrditve (24. 11. 2026). */
+    private val dovoljenja = DovoljenjaPogled(a)
+    /** Nastavitve > Dokumenti (lokalni indeks in OCR, 23. 11. 2026); plosca je zgrajena v kodi, brez postavitve XML. */
+    lateinit var dokumenti: DokumentiPogled; private set
 
     private fun dp(v: Int) = (v * a.resources.displayMetrics.density).toInt()
 
@@ -55,8 +59,11 @@ class NastavitveMeni(
             koren.removeView(v)
             val plosca = novaPlosca(p, okvir = false)
             plosca.addView(v)
+            if (p == Podmeni.KLICI) dodajStikaloHrupa(plosca)
         }
+        novaPlosca(Podmeni.DOVOLJENJA).addView(dovoljenja.koren)
         koren.removeView(asist)
+        dokumenti = DokumentiPogled(a, novaPlosca(Podmeni.DOKUMENTI))
         zgradiMeni()
         koren.addView(meni, 0)
         for (p in Podmeni.entries) plosce[p]?.let { koren.addView(it) }
@@ -84,6 +91,19 @@ class NastavitveMeni(
         return plosca
     }
 
+    /** Stikalo »Zmanjsanje hrupa« (lastnik 24. 11. 2026: privzeto vklopljeno): klic in mikrofon asistentke; shrani se takoj. */
+    private fun dodajStikaloHrupa(plosca: LinearLayout) {
+        val lp = { zgoraj: Int -> LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(zgoraj) } }
+        plosca.addView(android.widget.CheckBox(a).apply {
+            setText(R.string.set_noise_reduction)
+            setTextAppearance(R.style.Gw_Body)
+            minimumHeight = dp(48)
+            isChecked = ZmanjsanjeHrupa.vklopljeno(a)
+            setOnCheckedChangeListener { _, vklop -> ZmanjsanjeHrupa.nastavi(a, vklop) }
+        }, lp(12))
+        plosca.addView(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.set_noise_reduction_note) }, lp(4))
+    }
+
     private fun naslovInOpis(p: Podmeni): Pair<Int, Int> = when (p) {
         Podmeni.IME -> R.string.set_menu_name to R.string.set_menu_name_desc
         Podmeni.MOZGANI -> R.string.set_menu_brain to R.string.set_menu_brain_desc
@@ -91,6 +111,8 @@ class NastavitveMeni(
         Podmeni.ORODJA -> R.string.set_menu_tools to R.string.set_menu_tools_desc
         Podmeni.KLICI -> R.string.set_menu_calls to R.string.set_menu_calls_desc
         Podmeni.ZAPISKI -> R.string.set_menu_notes to R.string.set_menu_notes_desc
+        Podmeni.DOVOLJENJA -> R.string.set_menu_permissions to R.string.set_menu_permissions_desc
+        Podmeni.DOKUMENTI -> R.string.set_menu_docs to R.string.set_menu_docs_desc
     }
 
     private fun vrstica(naslov: Int, opis: Int, klik: () -> Unit): View = LinearLayout(a).apply {
@@ -130,8 +152,10 @@ class NastavitveMeni(
 
     fun odpri(p: Podmeni) {
         odprt = p
+        if (p == Podmeni.DOVOLJENJA) dovoljenja.osvezi()
         meni.visibility = View.GONE
         for ((k, v) in plosce) v.visibility = if (k == p) View.VISIBLE else View.GONE
+        if (p == Podmeni.DOKUMENTI) dokumenti.osvezi()
         koren.rootView.findViewById<View>(R.id.root)?.scrollTo(0, 0)
     }
 

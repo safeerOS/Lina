@@ -886,6 +886,23 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />
 
+            <!-- Deli -> Lina (24. 11. 2026): privzeto vklopljeno; v podmeniju Orodja (NastavitveMeni: med assistantToolsTitle in assistantKeyForget). -->
+            <Switch
+                android:id="@+id/assistantShareSwitch"
+                style="@style/Gw.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:minHeight="48dp"
+                android:text="@string/share_switch" />
+
+            <TextView
+                style="@style/Gw.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/share_switch_note" />
+
             <Button
                 android:id="@+id/assistantKeyForget"
                 style="@style/Gw.Button"
@@ -1242,6 +1259,17 @@
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/chat_attach"
             android:src="@drawable/ic_attach"
+            android:tint="@color/muted" />
+
+        <!-- Fotografiraj (24. 11. 2026): program za fotografiranje, ki ga izbere sistem; slika gre med priponke. -->
+        <ImageButton
+            android:id="@+id/assistantChatPhoto"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/chat_photo"
+            android:src="@drawable/ic_camera"
             android:tint="@color/muted" />
 
         <View

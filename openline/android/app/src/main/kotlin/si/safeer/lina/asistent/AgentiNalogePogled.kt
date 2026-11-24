@@ -2,6 +2,7 @@ package si.safeer.lina.asistent
 
 import android.app.Activity
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import android.app.TimePickerDialog
 import android.os.Handler
 import android.os.Looper
@@ -67,6 +68,7 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
         "dodeljeno" -> R.string.agents_state_dodeljeno
         "zamujeno" -> R.string.agents_state_zamujeno
         "preklicano" -> R.string.agents_state_preklicano
+        "nepopolno" -> R.string.agents_state_nepopolno
         else -> R.string.agents_state_napaka
     })
 
@@ -180,10 +182,39 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
             })))
         }
         n.razlog?.let { addView(tiho(a.getString(R.string.builds_reason, it))) }
+        if (TockeNalog.vklopljeno(a)) tocke(n).forEach { addView(it) }
         if (n.stanje == "zamujeno") addView(tiho(a.getString(R.string.agents_missed)))
         if (n.stanje in AgentiLine.PREKLICLJIVA) addView(Button(a, null, 0, R.style.Gw_Button).apply {
             setText(R.string.agents_cancel); setOnClickListener { preklici(n) }
         })
+    }
+
+    private fun razlogTocke(r: String): String = a.getString(when (r) {
+        "ni-narejeno" -> R.string.agents_point_reason_not_done
+        "brez-dokaza" -> R.string.agents_point_reason_no_evidence
+        "dokaz-ni-najden" -> R.string.agents_point_reason_evidence_missing
+        else -> R.string.agents_point_reason_missing
+    })
+
+    /**
+     * Tocke naloge (24. 11. 2026): »3/5 narejeno«, manjkajoce z razlogom in predlog nove naloge. Predlog pripravi racunalnik in caka
+     * na lastnikovo potrditev; telefon tu nicesar ne spremeni. Besedilo tock je NEZAUPANO (samo setText).
+     */
+    private fun tocke(n: NalogaAgenta): List<View> {
+        val t = n.tocke ?: return emptyList()
+        val v = mutableListOf<View>(TextView(a, null, 0, R.style.Gw_Body).apply { text = a.getString(R.string.agents_points, t.narejeno, t.skupaj) })
+        if (t.manjkajoce.isNotEmpty()) {
+            v += tiho(a.getString(R.string.agents_points_missing))
+            t.manjkajoce.forEach { m -> v += tiho(a.getString(R.string.agents_point_item, m.st, m.besedilo, razlogTocke(m.razlog)), izbirno = true) }
+        }
+        when (n.predlogTock) {
+            null -> {}
+            "napaka" -> v += tiho(a.getString(R.string.agents_points_proposal_failed))
+            // stanje predloga iz iste vrste (potrjen, zavrnjen ...), da vrstica ne zastari; predloga ni v vrsti = samo id
+            else -> v += tiho(a.getString(R.string.agents_points_proposal,
+                zadnje?.naloge?.firstOrNull { it.id == n.predlogTock }?.let { "${it.id} · ${besediloStanja(it.stanje)}" } ?: n.predlogTock))
+        }
+        return v
     }
 
     private fun izberi(naslov: Int, imena: List<String>, naprej: (Int) -> Unit) {
@@ -226,7 +257,7 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 
     private fun izberiKdaj(s: StanjeAgentov, agent: String, mapa: String, besedilo: String) {
@@ -257,7 +288,7 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
             .setMessage(a.getString(R.string.agents_text_cleaned, cisto))
             .setPositiveButton(R.string.agents_text_cleaned_ok) { _, _ -> izberiKdaj(s, agent, mapa, cisto) }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 
     /** Pred podpisom lastnik vidi id in ime iz tabele, mapo, celo (ze ocisceno) besedilo in kdaj. Ime iz odgovora ni v stavku. */
@@ -273,7 +304,7 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
                 }) { glavna.post { osvezi(R.string.agents_assigned) } }
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 
     private fun preklici(n: NalogaAgenta) {
@@ -286,6 +317,6 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
                 }) { glavna.post { osvezi(R.string.agents_cancelled) } }
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 }

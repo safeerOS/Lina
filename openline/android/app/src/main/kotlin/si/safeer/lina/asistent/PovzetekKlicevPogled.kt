@@ -2,6 +2,7 @@ package si.safeer.lina.asistent
 
 import android.app.Activity
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
@@ -45,7 +46,7 @@ class PovzetekKlicevPogled(
                     .setTitle(R.string.summary_title)
                     .setMessage(povzetekVsehBrezModela(skupine))
                     .setPositiveButton(android.R.string.ok, null)
-                    .show()
+                    .pokaziVarno()
             }
         }
         val oblika = java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT)
@@ -106,6 +107,6 @@ class PovzetekKlicevPogled(
                 osvezi()
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 }

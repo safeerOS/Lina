@@ -2,6 +2,7 @@ package si.safeer.lina.asistent
 
 import android.app.Activity
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import android.content.pm.PackageInstaller
 import android.os.Handler
 import android.os.Looper
@@ -220,7 +221,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                 }) { glavna.post { osvezi(R.string.builds_proposed) } }
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 
     /** Lastnik pred podpisom vidi tok, vejo in commit (prvih 12 znakov). Brez commita se nic ne podpise. */
@@ -238,7 +239,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                 }) { glavna.post { osvezi(R.string.builds_started) } }
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .pokaziVarno()
     }
 
     private fun zavrnitev(z: ZavrnitevApk): Int = when (z) {
@@ -261,7 +262,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                 .setMessage(R.string.install_perm_needed)
                 .setPositiveButton(R.string.install_perm_open) { _, _ -> runCatching { NamestitevPaketa.odpriNastavitev(a) } }
                 .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                .pokaziVarno()
             return
         }
         stanje.setText(R.string.install_downloading)

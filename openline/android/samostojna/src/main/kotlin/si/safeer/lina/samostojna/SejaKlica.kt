@@ -18,12 +18,23 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
     private var podjetje = ""
     private var sporocilo = ""
     private var zvokSlisan = false
+    /** Izrek klicatelja v tem obratu (od zadnjega konca obrata Line); za zaznavo dostave paketa. */
+    private val obratKlicatelja = StringBuilder()
+    private var paketPovedan = false
 
     @Synchronized fun dodajVhod(besedilo: String) {
         if (besedilo.isEmpty()) return
         zvokSlisan = true
         dodajLocenoZaNovStavek(vhod, besedilo)
+        if (obratKlicatelja.length < MEJA_OBRATA) obratKlicatelja.append(besedilo)
     }
+
+    @Synchronized fun izrekObrata(): String = obratKlicatelja.toString()
+
+    /** Navodilo za paket najvec enkrat na klic: true samo ob prvem klicu. */
+    @Synchronized fun oznaciPaket(): Boolean = if (paketPovedan) false else { paketPovedan = true; true }
+
+    @Synchronized fun jePaketPovedan(): Boolean = paketPovedan
 
     @Synchronized fun dodajIzhod(besedilo: String) {
         if (besedilo.isEmpty()) return
@@ -43,6 +54,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
 
     /** Konec obrata (model je koncal): naslednji govor klicatelja gre v nov odstavek. */
     @Synchronized fun konecObrata() {
+        obratKlicatelja.setLength(0)
         if (vhod.isNotEmpty() && vhod.last() != '\n') vhod.append('\n')
         if (izhod.isNotEmpty() && izhod.last() != '\n') izhod.append('\n')
     }
@@ -64,6 +76,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
         val linaDobesedno = izhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MEJA_DOBESEDNO)
         val razlog = when {
             sporocilo.isNotEmpty() -> ""
+            paketPovedan -> "Klicala je dostava paketa; Lina je povedala, kje naj pusti paket."
             !zvokSlisan -> "Zvoka klicatelja ni bilo mogoče zapisati (prepis je prazen): klicatelj ni nič povedal ali zvok klica ni deloval."
             else -> "Lina sporočila ni zapisala. Spodaj je dobesedno, kar je povedal klicatelj."
         }
@@ -91,6 +104,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
         const val MEJA_IMENA = 120
         const val MEJA_SPOROCILA = 2000
         const val MEJA_DOBESEDNO = 6000
+        const val MEJA_OBRATA = 600
     }
 }
 

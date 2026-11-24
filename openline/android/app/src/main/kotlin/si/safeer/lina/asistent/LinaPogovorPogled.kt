@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import si.safeer.lina.R
+import si.safeer.lina.pokaziVarno
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -28,6 +29,10 @@ import si.safeer.lina.samostojna.IzbiraAsistentke
 import si.safeer.lina.samostojna.KljucGemini
 import si.safeer.lina.samostojna.Odgovor
 import si.safeer.lina.samostojna.SistemskoNavodilo
+import si.safeer.lina.samostojna.SistemskiNadzor
+import si.safeer.lina.samostojna.soglasja.Izvor
+import si.safeer.lina.samostojna.soglasja.VrstaDejanja
+import android.widget.CheckBox
 import si.safeer.lina.samostojna.dodajZapisek
 import si.safeer.lina.samostojna.izbrisiZapisek
 import si.safeer.lina.samostojna.vidniZapiski
@@ -38,6 +43,11 @@ import si.safeer.lina.samostojna.PRIVZETA_ZAHTEVA_PRIPONKE
 import si.safeer.lina.samostojna.PripravljenaPriponka
 import si.safeer.lina.samostojna.besediloZPriponkami
 import si.safeer.lina.samostojna.pripraviPriponko
+import si.safeer.lina.samostojna.poizvedbaFts
+import si.safeer.lina.samostojna.zahtevaIskanjaVDokumentih
+import si.safeer.lina.samostojna.OdlocitevDeljenja
+import si.safeer.lina.samostojna.ZavrnitevDeljenja
+import si.safeer.lina.samostojna.odlociDeljenje
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
@@ -58,6 +68,9 @@ class LinaPogovorPogled(
     private val googleShramba = GoogleShramba(a)
     private val prenos = AndroidPrenos()
     private val google = GoogleZetonOsvezevalnik(SkupniKljuci.shrambaZaPonudnika(a, Ponudnik.VERTEX), prenos)
+    /** Sistemski nadzor telefona in skupni modul soglasij (24. 11. 2026). */
+    private val sistem = SistemskiNadzorAndroid(a)
+    private val soglasja = SistemskiNadzorAndroid.soglasja(a)
     private var asistent: Asistent? = null
     private var asistentDan: LocalDate? = null
     private var caka = false
@@ -66,6 +79,8 @@ class LinaPogovorPogled(
     private var nalozeno = false
     /** Priponke za naslednje sporocilo (22. 11. 2026); prebrane in preverjene ob izbiri. */
     private val priponke = mutableListOf<PripravljenaPriponka>()
+    /** Besedila lokalnih rezultatov na zaslonu (pod njimi je gumb »Pošlji Lini«). */
+    private val lokalniRezultati = mutableSetOf<String>()
     private val vrsticaPriponk: LinearLayout by lazy { a.findViewById(R.id.assistantComposerAttachments) }
 
     private val info: TextView = a.findViewById(R.id.assistantLocalInfo)
@@ -103,6 +118,11 @@ class LinaPogovorPogled(
         klepetPosli.setOnClickListener { poslji() }
         a.findViewById<View>(R.id.assistantChatMic).setOnClickListener { govori() }
         a.findViewById<View>(R.id.assistantChatAttach).setOnClickListener { izberiPriponke() }
+        a.findViewById<View>(R.id.assistantChatPhoto).setOnClickListener { fotografiraj() }
+        a.findViewById<android.widget.Switch>(R.id.assistantShareSwitch).apply {
+            isChecked = sprejemaDeljenje(a)
+            setOnCheckedChangeListener { _, vklop -> nastaviDeljenje(a, vklop) }
+        }
         for (predlog in listOf(R.string.chat_chip_today, R.string.chat_chip_calls, R.string.chat_chip_remind)) {
             klepetPredlogi.addView(Button(a, null, 0, R.style.Gw_Button).apply {
                 setText(predlog)
@@ -141,11 +161,78 @@ class LinaPogovorPogled(
     companion object {
         const val ZAHTEVA_GOVOR = 7311
         const val ZAHTEVA_PRIPONKA = 7312
+        const val ZAHTEVA_FOTO = 7313
+        const val KODA_MIKROFON = 7314
         private const val NAJVEC_PRIKAZANIH = 40
+        private const val NASTAVITVE_VIDA = "lina_vid"
+        private const val KLJUC_DELJENJE = "sprejemaj_deljenje"
+
+        /** Stikalo »Sprejemaj slike iz drugih aplikacij« (lastnik 24. 11. 2026: privzeto vklopljeno). */
+        fun sprejemaDeljenje(c: android.content.Context) =
+            c.getSharedPreferences(NASTAVITVE_VIDA, android.content.Context.MODE_PRIVATE).getBoolean(KLJUC_DELJENJE, true)
+
+        fun nastaviDeljenje(c: android.content.Context, vklop: Boolean) =
+            c.getSharedPreferences(NASTAVITVE_VIDA, android.content.Context.MODE_PRIVATE).edit().putBoolean(KLJUC_DELJENJE, vklop).apply()
     }
 
-    /** Mikrofon: prepoznava govora sistema (slovenscina), besedilo gre v polje, da ga uporabnik pregleda pred posiljanjem. */
+    /**
+     * Mikrofon (lastnik 24. 11. 2026, hrupna tiskarna): s stikalom »Zmanjsanje hrupa« (privzeto vklopljeno) in ponudnikom, ki bere zvok,
+     * Lina zajame sama (VOICE_COMMUNICATION + NoiseSuppressor/AEC/AGC, konec govora odporen na hrup) in posnetek prepise isti ponudnik
+     * kot pogovor. Sicer (stikalo izklopljeno, drug ponudnik, brez dovoljenja) sistemska prepoznava kot prej. Drugi dotik konca posnetek.
+     * Besedilo gre v obeh primerih v polje, da ga uporabnik pregleda pred posiljanjem.
+     */
     private fun govori() {
+        zajem?.let { it.ustavi(); return }
+        val ponudnik = if (imaKljucAsistentke()) Ponudnik.OPENROUTER else SkupniKljuci.aktivniPonudnik(a)
+        if (imaDostop() && si.safeer.lina.samostojna.lastniZajemGovora(ZmanjsanjeHrupa.vklopljeno(a), ponudnik)) {
+            if (a.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) zacniZajem()
+            else a.requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), KODA_MIKROFON)
+            return
+        }
+        sistemskaPrepoznava()
+    }
+
+    /** Izid vprasanja za mikrofon (DialerActivity): brez dovoljenja sistemska prepoznava kot prej. */
+    fun poDovoljenjuMikrofona(dano: Boolean) = if (dano) zacniZajem() else sistemskaPrepoznava()
+
+    /** Aktivnost gre v ozadje: zajem se ustavi in zavrze (mikrofon ne tece v ozadju). */
+    fun ustaviMikrofon() { zajem?.ustavi(zavrzi = true); zajem = null }
+
+    private var zajem: ZajemMikrofona? = null
+
+    private fun zacniZajem() {
+        if (zajem != null) return
+        opozori(a.getString(R.string.chat_mic_listening))
+        val nov = ZajemMikrofona { pcm, govor ->
+            glavna.post {
+                zajem = null
+                if (a.isFinishing) return@post
+                if (govor) prepisi(pcm) else opozori(a.getString(R.string.chat_mic_no_speech))
+            }
+        }
+        zajem = nov
+        nov.zacni()
+    }
+
+    private fun prepisi(pcm: ByteArray) {
+        opozori(a.getString(R.string.chat_mic_transcribing))
+        val odjemalec = odjemalecAsistentke()
+        val wav = si.safeer.lina.samostojna.wavIzPcm(pcm)
+        val posnetek = si.safeer.lina.samostojna.Priponka("govor.wav", "audio/wav", java.util.Base64.getEncoder().encodeToString(wav), si.safeer.lina.samostojna.VrstaPriponke.ZVOK)
+        val mojRod = rod
+        nit.execute {
+            val prepis = try {
+                si.safeer.lina.samostojna.prepisIzRezultata(odjemalec.poslji(
+                    listOf(si.safeer.lina.samostojna.Sporocilo("user", "Prepiši posnetek.", listOf(posnetek))), si.safeer.lina.samostojna.NAVODILO_PREPISA))
+            } catch (e: Exception) { "" }
+            glavna.post {
+                if (a.isFinishing || mojRod != rod) return@post
+                if (prepis.isEmpty()) opozori(a.getString(R.string.chat_mic_fail)) else vstaviGovor(prepis)
+            }
+        }
+    }
+
+    private fun sistemskaPrepoznava() {
         val namen = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toLanguageTag())
@@ -175,6 +262,11 @@ class LinaPogovorPogled(
     private var napakaZaPonovitev: Triple<String, String, List<si.safeer.lina.samostojna.Priponka>>? = null
     /** Dodatek (npr. blok »Za klic nazaj«) neuspele prosnje: ob ponovitvi se pripne enako kot prvic. */
     private var dodatekZaPonovitev: String = ""
+    /** Neuspela prosnja je bila nezaupana (N2): ponovitev jo poslje enako oznaceno. */
+    private var nezaupanoZaPonovitev = false
+    /** V osnutku je besedilo iz Deli (druga aplikacija): naslednja poslana prosnja je nezaupana (N2). */
+    // T1 (pregled 1915): DialerActivity jo shrani v onSaveInstanceState (EditText osnutek obnovi sam, zastavice ne).
+    var deljenoVOsnutku = false
     private var prisilnoNaDno = true
 
     private fun jeNaDnu(): Boolean {
@@ -206,7 +298,7 @@ class LinaPogovorPogled(
         napakaZaPonovitev = null
         // Odstrani neuspelo prosnjo in napako; poslje se znova enako (tudi priponke).
         repeat(2) { odstraniZadnjo() }
-        posljiBesedilo(prikaz, vnos, binarne, dodatek = dodatekZaPonovitev)
+        posljiBesedilo(prikaz, vnos, binarne, dodatek = dodatekZaPonovitev, nezaupano = nezaupanoZaPonovitev)
     }
 
     private fun narisiSporocila() {
@@ -233,6 +325,10 @@ class LinaPogovorPogled(
             if (jeLina && besedilo != razmislja) {
                 val vrstica = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
                 vrstica.addView(dejanje(a.getString(R.string.chat_copy)) { kopiraj(besedilo) })
+                // Lokalni rezultat iskanja po dokumentih gre Lini (v oblak) samo, ce ga uporabnik poslje sam.
+                if (besedilo in lokalniRezultati) vrstica.addView(dejanje(a.getString(R.string.docs_chat_send)) {
+                    if (!caka) a.getString(R.string.docs_chat_send_prefix).let { posljiBesedilo(it + "\n\n" + besedilo, it + "\n\n" + besedilo, nezaupano = true) }
+                })
                 if (i == sporocila.lastIndex && napakaZaPonovitev != null) {
                     vrstica.addView(dejanje(a.getString(R.string.chat_retry)) { ponovi() })
                 }
@@ -326,24 +422,28 @@ class LinaPogovorPogled(
         }
     }
 
+    private fun odjemalecAsistentke(): si.safeer.lina.samostojna.PonudnikOdjemalec {
+        // A4, C (24. 11. 2026): kljuc samo za asistentko ima prednost; brez njega isti ponudnik kot klici (A6).
+        val nastavitveAsistentke = AsistentkaShramba(a)
+        return IzbiraAsistentke.odjemalec(SkupniKljuci.shrambaAsistentke(a), nastavitveAsistentke.model(), nastavitveAsistentke.brezplacni(), prenos)
+            // Lastnik 24. 11. 2026: model, ki ga ponudnik ne pozna vec, Lina sama zamenja z delujocim istega ponudnika.
+            ?: if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos)
+            else SamodejniOdjemalec(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos, ModelShrambaAndroid(a))
+    }
+
     private fun trenutniAsistent(): Asistent {
         val zdaj = ZonedDateTime.now()
         val danes = zdaj.toLocalDate()
         val obstojeci = asistent
         if (obstojeci != null && asistentDan == danes) return obstojeci
-        // A4, C (24. 11. 2026): kljuc samo za asistentko ima prednost; brez njega isti ponudnik kot klici (A6).
-        val nastavitveAsistentke = AsistentkaShramba(a)
-        val odjemalec = IzbiraAsistentke.odjemalec(SkupniKljuci.shrambaAsistentke(a), nastavitveAsistentke.model(), nastavitveAsistentke.brezplacni(), prenos)
-            // Lastnik 24. 11. 2026: model, ki ga ponudnik ne pozna vec, Lina sama zamenja z delujocim istega ponudnika.
-            ?: if (jeVertex()) VertexOdjemalec(google, { googleShramba.projekt() }, prenos = prenos)
-            else SamodejniOdjemalec(SkupniKljuci.aktivniPonudnik(a), SkupniKljuci.shrambaZaPonudnika(a, SkupniKljuci.aktivniPonudnik(a)), prenos, ModelShrambaAndroid(a))
+        val odjemalec = odjemalecAsistentke()
         val orodja = nastavitveKljuci.orodja()
         val navodilo = SistemskoNavodilo.zgradi(zdaj, iskanje = orodja.iskanjeNaVoljo, branje = orodja.branjeNaVoljo, koledar = true)
         vprasajZaKoledar()
         // Trajna zgodovina seje in zapiski kot podatek (lastnik 23. 11. 2026: Lina je pozabljala pogovor in ni brala zapiskov).
         return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan,
             koledar = KoledarIzvajalec(KoledarAndroid(a)), seja = SpominPogovorovPogled.seja(a),
-            zapiski = { vidniZapiski(zapiski.beri()).map { it.besedilo } }).also { asistent = it; asistentDan = danes }
+            zapiski = { vidniZapiski(zapiski.beri()).map { it.besedilo } }, tockeNaloge = { TockeNalog.vklopljeno(a) }, sistem = sistem).also { asistent = it; asistentDan = danes }
     }
 
     /** Enkrat (ob prvem pogovoru) vpraša za dovoljenje branja koledarja; zavrnitev se ne ponavlja (orodje takrat pove, da dovoljenja ni). */
@@ -386,7 +486,8 @@ class LinaPogovorPogled(
      */
     fun posljiPoziv(prikaz: String, poziv: String, dodatek: String = ""): Boolean {
         if (caka) return false
-        posljiBesedilo(prikaz, poziv, dodatek = dodatek)
+        // Povzetek klicev nosi besedilo klicateljev: nezaupano (N2).
+        posljiBesedilo(prikaz, poziv, dodatek = dodatek, nezaupano = true)
         return true
     }
 
@@ -394,15 +495,50 @@ class LinaPogovorPogled(
         val vnos = klepetVnos.text.toString().trim()
         if ((vnos.isEmpty() && priponke.isEmpty()) || caka) return
         klepetVnos.setText("")
+        val nezaupano = deljenoVOsnutku
+        deljenoVOsnutku = false
         (a.getSystemService(Activity.INPUT_METHOD_SERVICE) as? InputMethodManager)?.hideSoftInputFromWindow(klepetVnos.windowToken, 0)
-        if (priponke.isEmpty()) { posljiBesedilo(vnos, vnos); return }
+        if (priponke.isEmpty() && DokumentiLokalno.vklopljeno(a)) zahtevaIskanjaVDokumentih(vnos)?.let { isciVDokumentih(vnos, it); return }
+        if (priponke.isEmpty()) { posljiBesedilo(vnos, vnos, nezaupano = nezaupano); return }
         val izbrane = priponke.toList()
         priponke.clear()
         narisiPriponke()
         val imena = izbrane.joinToString(", ") { ime(it) }
         val prikaz = listOf(vnos, "📎 $imena").filter { it.isNotEmpty() }.joinToString("\n")
         val binarne = izbrane.filterIsInstance<PripravljenaPriponka.Binarna>().map { it.priponka }
-        posljiBesedilo(prikaz, besediloZPriponkami(vnos.ifEmpty { PRIVZETA_ZAHTEVA_PRIPONKE }, izbrane), binarne)
+        posljiBesedilo(prikaz, besediloZPriponkami(vnos.ifEmpty { PRIVZETA_ZAHTEVA_PRIPONKE }, izbrane), binarne, nezaupano = nezaupano)
+    }
+
+    /**
+     * »Poišči v mojih dokumentih …« (23. 11. 2026): isce samo lokalni indeks na telefonu. Vprasanje in rezultat sta samo na
+     * zaslonu: ne gresta v trajni pogovor, sinhronizacijo z racunalnikom ali model, dokler uporabnik rezultata ne poslje Lini.
+     */
+    private fun isciVDokumentih(vnos: String, iskano: String) {
+        napakaZaPonovitev = null
+        prisilnoNaDno = true
+        sporocila += false to vnos
+        val poizvedba = poizvedbaFts(iskano)
+        if (poizvedba == null || !DokumentiLokalno.imaIndeks(a)) {
+            sporocila += true to a.getString(R.string.docs_chat_no_index)
+            osvezi()
+            return
+        }
+        caka = true
+        osvezi()
+        DokumentiLokalno.iskanje.execute {
+            val zadetki = runCatching { DokumentiLokalno.isci(a, poizvedba) }.getOrDefault(emptyList())
+            glavna.post {
+                if (a.isFinishing) return@post
+                caka = false
+                val besedilo = if (zadetki.isEmpty()) a.getString(R.string.docs_chat_none) else
+                    a.getString(R.string.docs_chat_found) + "\n\n" + zadetki.joinToString("\n\n") { z ->
+                        (z.stran?.let { a.getString(R.string.docs_source_page_fmt, z.ime, it) } ?: z.ime) + "\n" + z.izrezek
+                    }
+                sporocila += true to besedilo
+                if (zadetki.isNotEmpty()) lokalniRezultati += besedilo
+                osvezi()
+            }
+        }
     }
 
     private fun ime(p: PripravljenaPriponka) = when (p) {
@@ -428,10 +564,18 @@ class LinaPogovorPogled(
             data?.clipData?.let { c -> for (i in 0 until c.itemCount) add(c.getItemAt(i).uri) }
             if (isEmpty()) data?.data?.let { add(it) }
         }
-        if (uriji.isEmpty()) return
+        dodajUrije(uriji)
+    }
+
+    /**
+     * Ista pot za izbiro, deljenje in fotografijo: branje na ozadni niti (z mejo), vrsta po bajtih, meje priponk.
+     * [poBranju] tece na ozadni niti po branju (fotografija: brisanje zacasne datoteke).
+     */
+    private fun dodajUrije(uriji: List<Uri>, poBranju: () -> Unit = {}) {
+        if (uriji.isEmpty()) { poBranju(); return }
         val ponudnik = if (imaKljucAsistentke()) Ponudnik.OPENROUTER else SkupniKljuci.aktivniPonudnik(a)
         nit.execute {
-            val izidi = uriji.map { uri -> preberiPriponko(uri, ponudnik) }
+            val izidi = try { uriji.map { uri -> preberiPriponko(uri, ponudnik) } } finally { poBranju() }
             glavna.post {
                 if (a.isFinishing) return@post
                 for (izid in izidi) {
@@ -478,6 +622,81 @@ class LinaPogovorPogled(
         return pripraviPriponko(ime, bajti, ponudnik)
     }
 
+    /**
+     * Deli -> Lina (24. 11. 2026). Vrne false, ce namen ni deljenje. Datoteke gredo samo med priponke, besedilo v polje:
+     * NIC se ne poslje samo (tuja aplikacija ne sme sama sprozit poziva modelu), poslje lastnik s tapom Poslji.
+     * URI se prebere takoj z zacasnim dovoljenjem namena (brez takePersistableUriPermission); file:// in lasten ponudnik se zavrneta.
+     */
+    fun sprejmiDeljenje(namen: Intent): Boolean {
+        val uriji = runCatching { urijiDeljenja(namen) }.getOrDefault(emptyList())
+        val besedilo = runCatching { namen.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() }.getOrNull()
+        val o = odlociDeljenje(namen.action, namen.type, uriji.map { it.scheme to it.authority }, besedilo, sprejemaDeljenje(a), priponke.size,
+            setOf(PosnetekPonudnik.avtoriteta(a)))
+        when (o) {
+            OdlocitevDeljenja.NiDeljenje -> return false
+            is OdlocitevDeljenja.Zavrni -> opozori(a.getString(when (o.razlog) {
+                ZavrnitevDeljenja.IZKLOPLJENO -> R.string.share_off
+                ZavrnitevDeljenja.NEPODPRTA_VRSTA -> R.string.share_unsupported
+                ZavrnitevDeljenja.PRAZNO -> R.string.share_empty
+            }))
+            is OdlocitevDeljenja.Sprejmi -> {
+                o.besedilo?.let { b ->
+                    val zdaj = klepetVnos.text.toString().trimEnd()
+                    klepetVnos.setText(if (zdaj.isEmpty()) b else "$zdaj\n$b")
+                    deljenoVOsnutku = true
+                    klepetVnos.setSelection(klepetVnos.text.length)
+                }
+                if (o.cezMejo > 0) opozori(a.getString(R.string.chat_attach_too_many, NAJVEC_PRIPONK))
+                if (o.nedovoljeni > 0) opozori(a.getString(R.string.share_not_allowed, o.nedovoljeni))
+                if (o.indeksi.isNotEmpty()) opozori(a.getString(R.string.share_ready))
+                dodajUrije(o.indeksi.map { uriji[it] })
+            }
+        }
+        return true
+    }
+
+    @Suppress("DEPRECATION")
+    private fun urijiDeljenja(namen: Intent): List<Uri> {
+        val izDodatka = when (namen.action) {
+            Intent.ACTION_SEND -> listOfNotNull(namen.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+            Intent.ACTION_SEND_MULTIPLE -> namen.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.filterNotNull().orEmpty()
+            else -> emptyList()
+        }
+        if (izDodatka.isNotEmpty()) return izDodatka
+        val c = namen.clipData ?: return emptyList()
+        return (0 until c.itemCount).mapNotNull { c.getItemAt(it).uri }
+    }
+
+    /**
+     * Gumb »Fotografiraj«: program za fotografiranje, ki ga izbere sistem, zapise sliko v cacheDir prek [PosnetekPonudnik]
+     * (zacasno dovoljenje za pisanje iz namena; Lina nima dovoljenja CAMERA).
+     */
+    private fun fotografiraj() {
+        PosnetekPonudnik.datoteka(a).delete()   // ostanek, ce je bil proces med fotografiranjem ubit
+        val uri = PosnetekPonudnik.naslov(a)
+        val namen = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+            .putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri)
+            .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        namen.clipData = android.content.ClipData.newRawUri("", uri)
+        try { a.startActivityForResult(namen, ZAHTEVA_FOTO) }
+        catch (e: ActivityNotFoundException) { opozori(a.getString(R.string.chat_photo_no_app)) }
+        catch (e: SecurityException) { opozori(a.getString(R.string.chat_photo_no_app)) }
+    }
+
+    /** Rezultat programa za fotografiranje (DialerActivity.onActivityResult): slika gre med priponke, zacasna datoteka se pobrise. */
+    fun dodajFotografijo(uspeh: Boolean) {
+        val uri = PosnetekPonudnik.naslov(a)
+        a.revokeUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val f = PosnetekPonudnik.datoteka(a)
+        if (!uspeh || f.length() == 0L) {
+            f.delete()
+            // Nekateri programi EXTRA_OUTPUT prezrejo in vrnejo samo sliciko: datoteka ostane prazna.
+            if (uspeh) opozori(a.getString(R.string.chat_attach_read_fail, f.name))
+            return
+        }
+        dodajUrije(listOf(uri)) { f.delete() }
+    }
+
     private fun narisiPriponke() {
         vrsticaPriponk.removeAllViews()
         for (p in priponke.toList()) {
@@ -499,7 +718,7 @@ class LinaPogovorPogled(
         android.widget.Toast.makeText(a, besedilo, android.widget.Toast.LENGTH_LONG).show()
     }
 
-    private fun posljiBesedilo(prikaz: String, vnos: String, binarne: List<si.safeer.lina.samostojna.Priponka> = emptyList(), dodatek: String = "") {
+    private fun posljiBesedilo(prikaz: String, vnos: String, binarne: List<si.safeer.lina.samostojna.Priponka> = emptyList(), dodatek: String = "", nezaupano: Boolean = false) {
         caka = true
         napakaZaPonovitev = null
         prisilnoNaDno = true
@@ -509,7 +728,7 @@ class LinaPogovorPogled(
         val asist = trenutniAsistent()
         val mojRod = rod
         nit.execute {
-            val odgovor = try { asist.povej(vnos, binarne) } catch (e: Exception) { Odgovor.Napaka(e.javaClass.simpleName) }
+            val odgovor = try { asist.povej(vnos, binarne, nezaupano) } catch (e: Exception) { Odgovor.Napaka(e.javaClass.simpleName) }
             glavna.post {
                 if (a.isFinishing) return@post
                 if (mojRod != rod) { odstraniZadnjo(); caka = false; osvezi(); return@post }
@@ -532,17 +751,25 @@ class LinaPogovorPogled(
                             a.getString(R.string.local_reminder_set, odgovor.besedilo, kdaj) + if (natancno) "" else " " + a.getString(R.string.local_reminder_approx)
                         }
                     }
-                    is Odgovor.NovaBudilka -> {
-                        potrdiBudilko(odgovor)
-                        a.getString(R.string.local_alarm_proposed, opisBudilke(odgovor))
-                    }
+                    is Odgovor.NovaBudilka ->
+                        if (potrdiBudilko(odgovor, asist.zadnjiObratPoOrodjih)) a.getString(R.string.local_alarm_proposed, opisBudilke(odgovor))
+                        else a.getString(R.string.sys_alarm_auto, opisBudilke(odgovor))
+                    // Brez dostopa ostane v klepetu natancno ime nastavitve (tudi, ce uporabnik okno zapre).
+                    is Odgovor.NeMoti ->
+                        if (potrdiNeMoti(odgovor)) a.getString(if (odgovor.vklop) R.string.sys_dnd_proposed_on else R.string.sys_dnd_proposed_off)
+                        else a.getString(R.string.sys_dnd_access_msg)
+                    is Odgovor.Svetlost ->
+                        if (potrdiSvetlost(odgovor)) a.getString(R.string.sys_brightness_proposed, odgovor.odstotek)
+                        else a.getString(R.string.sys_brightness_access_msg)
                     is Odgovor.NoviDogodek -> {
                         val kdaj = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(odgovor.zacetekMs))
                         potrdiDogodek(odgovor)
                         a.getString(R.string.local_event_proposed, odgovor.naslov, kdaj)
                     }
+                    // T7 (pregled 1915): naloga iz nezaupane seje gre racunalniku sele po lastnikovi potrditvi.
                     is Odgovor.NalogaRacunalniku ->
-                        if (posljiRacunalniku(odgovor.besedilo)) { asist.nalogaPredana(odgovor.besedilo); a.getString(R.string.local_task_sent, odgovor.besedilo) }
+                        if (asist.zadnjiObratPoOrodjih) { potrdiNalogoRacunalniku(asist, odgovor.besedilo); a.getString(R.string.local_task_proposed, odgovor.besedilo) }
+                        else if (posljiRacunalniku(odgovor.besedilo)) { asist.nalogaPredana(odgovor.besedilo); a.getString(R.string.local_task_sent, odgovor.besedilo) }
                         else a.getString(R.string.local_task_busy)
                     is Odgovor.Napaka -> when (odgovor.sporocilo) {
                         "Brez povezave" -> a.getString(R.string.local_err_offline)
@@ -551,7 +778,7 @@ class LinaPogovorPogled(
                     }
                 }
                 sporocila += true to besedilo
-                if (odgovor is Odgovor.Napaka) { napakaZaPonovitev = Triple(prikaz, vnos, binarne); dodatekZaPonovitev = dodatek }
+                if (odgovor is Odgovor.Napaka) { napakaZaPonovitev = Triple(prikaz, vnos, binarne); dodatekZaPonovitev = dodatek; nezaupanoZaPonovitev = nezaupano }
                 if (odgovor !is Odgovor.Napaka) runCatching {
                     val trajen = PogovorSkupni.dobi(a)
                     trajen.dodaj("lastnik", prikaz)
@@ -581,7 +808,20 @@ class LinaPogovorPogled(
                 }
             }
             .setNegativeButton(R.string.local_event_cancel, null)
-            .show()
+            .pokaziVarno()
+    }
+
+    /** Naloga za racunalnik iz nezaupane seje: vedno potrditev (brez »Velja za podobne«), okno zavrne dotike skozi prekrivno plast. */
+    private fun potrdiNalogoRacunalniku(asist: Asistent, besedilo: String) {
+        android.app.AlertDialog.Builder(a)
+            .setTitle(R.string.local_task_confirm_title)
+            .setMessage(a.getString(R.string.local_task_confirm_msg, besedilo))
+            .setPositiveButton(R.string.local_task_confirm_send) { _, _ ->
+                obvestilo(if (posljiRacunalniku(besedilo)) { asist.nalogaPredana(besedilo); a.getString(R.string.local_task_sent, besedilo) }
+                    else a.getString(R.string.local_task_busy))
+            }
+            .setNegativeButton(R.string.local_event_cancel, null)
+            .pokaziVarno()
     }
 
     /** Opis za uporabnika: ura, oznaka in dnevi (kratka imena dni v jeziku telefona). */
@@ -592,12 +832,63 @@ class LinaPogovorPogled(
         return listOf(ura, b.oznaka, dnevi).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
-    /** Budilka gre v aplikacijo Ura (AlarmClock.ACTION_SET_ALARM) sele po uporabnikovi potrditvi. */
-    private fun potrdiBudilko(b: Odgovor.NovaBudilka) {
+    /**
+     * Potrditev dejanja s skupnim modulom soglasij (pravilo lastnika 19. in 24. 11. 2026): ob prvi potrditvi »Velja tudi za vse
+     * podobne« (privzeto obkljukano, preklic v Nastavitve > Dovoljenja); spremembe nastavitev sistema vprasajo vedno.
+     * Vrne true, ce je pokazala okno (dejanje se izvede ob potrditvi), false, ce je dejanje izvedla takoj.
+     */
+    private fun potrdi(vrsta: VrstaDejanja, naslov: Int, sporocilo: String, gumb: Int, poOrodjih: Boolean, izvedi: () -> Unit): Boolean {
+        if (!SistemskiNadzor.potrebnaPotrditev(vrsta, soglasja, poOrodjih)) { izvedi(); return false }
+        val zaPodobne = if (SistemskiNadzor.ponudiZaPodobne(vrsta)) CheckBox(a).apply {
+            setTextAppearance(R.style.Gw_Body); setText(R.string.consent_similar); isChecked = true
+        } else null
+        val okno = android.app.AlertDialog.Builder(a).setTitle(naslov)
+            .setMessage(if (zaPodobne == null) sporocilo + "\n\n" + a.getString(R.string.consent_always_asks) else sporocilo)
+            .setPositiveButton(gumb) { _, _ ->
+                if (zaPodobne?.isChecked == true) runCatching { soglasja.dodaj(vrsta, SistemskiNadzor.OBSEG, Izvor.UPORABNIK_V_APLIKACIJI, System.currentTimeMillis()) }
+                izvedi()
+            }
+            .setNegativeButton(R.string.local_event_cancel, null)
+        if (zaPodobne != null) okno.setView(android.widget.FrameLayout(a).apply { setPadding(dp(20), dp(4), dp(20), 0); addView(zaPodobne) })
+        okno.pokaziVarno()
+        return true
+    }
+
+    /** Dostop, ki ga da uporabnik sam v nastavitvah telefona: razlaga z natancnim imenom nastavitve in gumb, ki jo odpre. */
+    private fun razloziDostop(sporocilo: Int, namen: android.content.Intent) {
         android.app.AlertDialog.Builder(a)
-            .setTitle(R.string.local_alarm_confirm_title)
-            .setMessage(opisBudilke(b))
-            .setPositiveButton(R.string.local_alarm_add) { _, _ ->
+            .setTitle(R.string.sys_access_title)
+            .setMessage(sporocilo)
+            .setPositiveButton(R.string.sys_access_open) { _, _ ->
+                if (runCatching { a.startActivity(namen) }.isFailure) opozori(a.getString(R.string.sys_access_open_failed))
+            }
+            .setNegativeButton(R.string.local_event_cancel, null)
+            .pokaziVarno()
+    }
+
+    /** Vrne false, ce dostopa ni (pokazana je razlaga), sicer true. */
+    private fun potrdiNeMoti(o: Odgovor.NeMoti): Boolean {
+        if (!sistem.imaDostopNeMoti()) { razloziDostop(R.string.sys_dnd_access_msg, sistem.namenDostopNeMoti()); return false }
+        return potrdi(VrstaDejanja.SPREMEMBA_NASTAVITEV_ALI_DOSTOPA, R.string.sys_dnd_confirm_title,
+            a.getString(if (o.vklop) R.string.sys_dnd_on else R.string.sys_dnd_off), R.string.sys_apply, poOrodjih = false) {
+            // Stikalo in dostop se preverita znova ob izvedbi (uporabnik ju je lahko vmes spremenil).
+            val ok = sistem.vklopljen() && sistem.nastaviNeMoti(o.vklop)
+            opozori(a.getString(if (ok) R.string.sys_done else R.string.sys_failed))
+        }
+    }
+
+    private fun potrdiSvetlost(o: Odgovor.Svetlost): Boolean {
+        if (!sistem.imaDostopSvetlost()) { razloziDostop(R.string.sys_brightness_access_msg, sistem.namenDostopSvetlost()); return false }
+        return potrdi(VrstaDejanja.SPREMEMBA_NASTAVITEV_ALI_DOSTOPA, R.string.sys_brightness_confirm_title,
+            a.getString(R.string.sys_brightness_msg, o.odstotek), R.string.sys_apply, poOrodjih = false) {
+            val ok = sistem.vklopljen() && sistem.nastaviSvetlost(o.odstotek)
+            opozori(a.getString(if (ok) R.string.sys_done else R.string.sys_failed))
+        }
+    }
+
+    /** Budilka gre v aplikacijo Ura (AlarmClock.ACTION_SET_ALARM) po potrditvi ali s trajnim soglasjem; vrne true, ce je vprasala. */
+    private fun potrdiBudilko(b: Odgovor.NovaBudilka, poOrodjih: Boolean): Boolean =
+        potrdi(VrstaDejanja.NASTAVI_BUDILKO, R.string.local_alarm_confirm_title, opisBudilke(b), R.string.local_alarm_add, poOrodjih) {
                 val namen = android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM)
                     .putExtra(android.provider.AlarmClock.EXTRA_HOUR, b.ura)
                     .putExtra(android.provider.AlarmClock.EXTRA_MINUTES, b.minuta)
@@ -612,10 +903,7 @@ class LinaPogovorPogled(
                 if (b.dnevi.isNotEmpty()) namen.putExtra(android.provider.AlarmClock.EXTRA_DAYS, ArrayList(b.dnevi.map { (it % 7) + 1 }))
                 val ok = runCatching { a.startActivity(namen) }.isSuccess
                 android.widget.Toast.makeText(a, if (ok) R.string.local_alarm_set else R.string.local_alarm_failed, android.widget.Toast.LENGTH_LONG).show()
-            }
-            .setNegativeButton(R.string.local_event_cancel, null)
-            .show()
-    }
+        }
 
     private fun odstraniZadnjo() {
         if (sporocila.isNotEmpty()) sporocila.removeAt(sporocila.lastIndex)

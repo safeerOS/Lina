@@ -46,11 +46,37 @@ object SamostojnaNaloga {
 
     private fun imaNacrt(s: String) = KORAK.findAll(s).count() >= 2
 
+    private val TOCKA = Regex("^(\\s*)(?:\\d{1,3}[.)]|[-*•])\\s+(\\S.*)$")
+
+    /**
+     * Tocke nacrta (lastnik 24. 11. 2026: Lina je poslala 5 tock, narejena 1, nihce ni opazil): alineje in stevilke najvisje ravni
+     * (najmanjsi zamik) postanejo »1. 2. 3.«, podtocke in ostalo besedilo ostanejo. Manj kot 2 tocki = nespremenjeno in 0.
+     */
+    fun ostevilci(nacrt: String): Pair<String, Int> {
+        val vrstice = nacrt.lines()
+        val zadetki = vrstice.map { TOCKA.find(it) }
+        val zamik = zadetki.filterNotNull().minOfOrNull { it.groupValues[1].length } ?: return nacrt to 0
+        if (zadetki.count { it != null && it.groupValues[1].length == zamik } < 2) return nacrt to 0
+        var st = 0
+        val izid = vrstice.mapIndexed { i, v ->
+            val m = zadetki[i]
+            if (m != null && m.groupValues[1].length == zamik) "${m.groupValues[1]}${++st}. ${m.groupValues[2]}" else v
+        }
+        return izid.joinToString("\n") to st
+    }
+
+    /**
+     * Zahteva dokaza za vsako tocko. Brez stevila in oblike vrstice: racunalnik (tocke-naloge.ts) sam izpelje T1..Tn iz VSEH
+     * ostevilcenih vrstic prejetega besedila in predpise obliko porocila, zato telefon ne sme navesti drugacnega stevila.
+     */
+    const val TOCKE_NAVODILO = "Točke načrta so oštevilčene. Za VSAKO točko bo v poročilu potreben dokaz (pot datoteke, preizkus ali commit) " +
+        "ali »ni narejeno - razlog«; naloga je končana šele, ko ima vsaka točka dokaz."
+
     /**
      * [naloga]: besedilo iz vrstice [[racunalnik: ...]]; [pogovor]: zadnja sporocila (najnovejse zadnje, vloga uporabnik/Lina);
-     * [zapiski]: vidni zapiski Line (najnovejsi prvi).
+     * [zapiski]: vidni zapiski Line (najnovejsi prvi); [tocke]: stikalo »Točke naloge« v Nastavitvah (privzeto vklopljeno).
      */
-    fun pripravi(naloga: String, pogovor: List<Sporocilo>, zapiski: List<String>): Izid {
+    fun pripravi(naloga: String, pogovor: List<Sporocilo>, zapiski: List<String>, tocke: Boolean = true): Izid {
         val n = naloga.trim()
         val viri = (pogovor.map { it.besedilo }.reversed() + zapiski)
         val kljucne = besede(n)
@@ -84,6 +110,11 @@ object SamostojnaNaloga {
         if (povezave.isNotEmpty()) deli += "Povezave iz pogovora z lastnikom:\n" + povezave.joinToString("\n") { "- $it" }
         if (ustrezni.isNotEmpty()) deli += "Zapiski Line, ki se nanašajo na nalogo:\n" + ustrezni.joinToString("\n") { "- " + it.trim().take(NAJVEC_ZNAKOV_ZAPISKA) }
         if (!n.contains("AGENTS.md")) deli += OMEJITVE
+        // Tocke se ostevilcijo pred skrajsanjem: navodilo pove pravo stevilo, tudi ce se konec nacrta odreze.
+        if (nacrt != null && tocke) {
+            val (ostevilcen, st) = ostevilci(nacrt)
+            if (st > 0) { nacrt = ostevilcen; deli += TOCKE_NAVODILO }
+        }
         // nacrt dobi prostor, ki ostane (je najdaljsi); skrajsanje je oznaceno, da Claude Code ve, da vprasa za ostanek
         if (nacrt != null) {
             val ostane = NAJVEC_ZNAKOV - deli.sumOf { it.length + 2 } - 40

@@ -11,7 +11,7 @@ import kotlin.math.sin
  *  1. Visokopasovni filter 100 Hz (2. red): odstrani brumenje omrezja, ropotanje in enosmerno komponento; govor je nad 100 Hz.
  *  2. Mehek ekspander: ko je raven blizu ocenjenega ozadja (minimalna statistika), ga zmanjsa najvec za 9 dB. Govor ga takoj odpre
  *     (pritisk takoj, zadrzanje 200 ms, sprostitev 100 ms); prvih 500 ms ne dela, da se ozadje nauci.
- * Stanje (filter, ozadje) se prenasa med kosi: rezultat ni odvisen od razreza toka. Izklop: nastavitev lina_zvok/filter_suma.
+ * Stanje (filter, ozadje) se prenasa med kosi: rezultat ni odvisen od razreza toka. Izklop: stikalo »Zmanjsanje hrupa« (lina_zvok/obdelava_zvoka).
  */
 internal class FiltrKlicatelja {
     private val fs = 16000.0

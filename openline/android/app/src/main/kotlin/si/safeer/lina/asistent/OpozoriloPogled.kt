@@ -2,6 +2,7 @@ package si.safeer.lina.asistent
 
 import android.app.Activity
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import si.safeer.lina.R
 import si.safeer.lina.config.OpozoriloShramba
 import si.safeer.lina.samostojna.OpozoriloLine
@@ -15,18 +16,22 @@ class OpozoriloPogled(private val a: Activity) {
     private val shramba = OpozoriloShramba(a)
     private var odprto: AlertDialog? = null
 
-    private var zePokazano = false
+    /**
+     * Ob odprtju aplikacije: samo, ce trenutna razlicica se ni potrjena. Kdaj (enkrat na odprtje, eno okno za drugim) odloca
+     * vrsta oken v DialerActivity (VrstaOkenZagona, 24. 11. 2026: opozorilo in Wi-Fi sta bila odprta hkrati).
+     */
+    fun trebaObOdprtju(): Boolean = shramba.pokazi()
 
-    /** Ob odprtju aplikacije (enkrat na odprtje, ne ob vsakem vracanju iz nastavitev): samo, ce trenutna razlicica se ni potrjena. */
-    fun obOdprtju() {
-        if (zePokazano || !shramba.pokazi()) return
-        zePokazano = true
-        pokazi()
+    fun zapri() {
+        odprto?.dismiss()
     }
 
-    /** Vedno (Nastavitve > O Lini). */
-    fun pokazi() {
-        if (odprto?.isShowing == true) return
+    /** Vedno (Nastavitve > O Lini). [obZaprtju] se poklice, ko se okno zapre (Razumem, Pozneje, nazaj). */
+    fun pokazi(obZaprtju: (() -> Unit)? = null) {
+        odprto?.takeIf { it.isShowing }?.let { d ->
+            obZaprtju?.let { f -> d.setOnDismissListener { f() } }
+            return
+        }
         val potrjena = shramba.potrjena()
         val sporocilo = buildString {
             append(a.getString(R.string.first_run_body))
@@ -42,6 +47,7 @@ class OpozoriloPogled(private val a: Activity) {
             b.setPositiveButton(R.string.first_run_ok) { _, _ -> shramba.potrdi() }
                 .setNegativeButton(R.string.first_run_later, null)
         }
-        odprto = b.show()
+        obZaprtju?.let { f -> b.setOnDismissListener { f() } }
+        odprto = b.pokaziVarno()
     }
 }

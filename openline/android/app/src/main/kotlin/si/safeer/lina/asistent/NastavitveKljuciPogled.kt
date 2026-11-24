@@ -72,7 +72,13 @@ class NastavitveKljuciPogled(
         val starsi = naslovOrodij.parent as LinearLayout
         val mesto = starsi.indexOfChild(naslovOrodij)
         val ime = ImeUporabnikaPogled(a, starsi, mesto)
-        SpominPogovorovPogled(a, starsi, mesto + ime.dodanih)
+        // Dostava paketa (lastnik 23. in 24. 11. 2026) za imenom: oboje je vedenje osebne tajnice v klicu.
+        val paket = PaketDostavePogled(a, starsi, mesto + ime.dodanih)
+        SpominPogovorovPogled(a, starsi, mesto + ime.dodanih + paket.dodanih)
+        // Prosojna plast predloge (23. 11. 2026): pred »Pozabi kljuc«, zato v podmeniju Orodja.
+        ProsojnaPlastActivity.dodajVNastavitve(a, starsi, starsi.indexOfChild(kljucPozabi))
+        // Tik pred naslovom spletnih orodij, torej za spominom (24. 11. 2026).
+        TockeNalog.vstavi(a, starsi, starsi.indexOfChild(naslovOrodij))
         kljucShrani.setOnClickListener { shraniKljuc() }
         googleGumb.setOnClickListener { zacniPrijavoGoogle() }
         kljucPozabi.setOnClickListener {

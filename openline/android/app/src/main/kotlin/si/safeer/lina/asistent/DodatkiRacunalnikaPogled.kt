@@ -2,6 +2,7 @@ package si.safeer.lina.asistent
 
 import android.app.Activity
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -142,7 +143,7 @@ class DodatkiRacunalnikaPogled(private val a: Activity, starsi: LinearLayout) {
                 .setPositiveButton(R.string.addons_turn_on) { _, _ -> preklopi(id, true) }
                 .setNegativeButton(android.R.string.cancel) { _, _ -> st.isChecked = false }
                 .setOnCancelListener { st.isChecked = false }
-                .show()
+                .pokaziVarno()
             return
         }
         preklopi(id, vklop)

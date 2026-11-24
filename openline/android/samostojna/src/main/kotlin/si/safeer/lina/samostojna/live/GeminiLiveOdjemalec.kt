@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import si.safeer.lina.samostojna.DnevnikKlicev
 import si.safeer.lina.samostojna.GoogleZeton
 import si.safeer.lina.samostojna.ImeTozilnik
+import si.safeer.lina.samostojna.Paket
 import si.safeer.lina.samostojna.SejaKlica
 import si.safeer.lina.samostojna.ZapisKlica
 import si.safeer.lina.samostojna.ShranjevalnikKljuca
@@ -49,8 +50,15 @@ class GeminiLiveOdjemalec(
     // Diagnosticni zajem tistega, kar klicatelj sliši (glas Line, 16 kHz s16le mono). Samo izhod Line, nikoli glas klicatelja.
     private val zajemIzhoda: ((ByteArray) -> Unit)? = null,
     // Obdelava zvoka (lastnik 22. 11. 2026: privzeto vklopljena, z izklopom): filter suma klicatelja, omejevalnik Linine ravni, nizka obcutljivost zacetka govora.
-    private val obdelavaZvoka: Boolean = true
+    // Bere se sproti (stikalo »Zmanjsanje hrupa« v Nastavitvah, 24. 11. 2026): sprememba velja brez ponovnega zagona prehoda.
+    private val obdelavaZvokaNastavitev: () -> Boolean = { true },
+    /**
+     * Dostava paketa (lastnik 23. in 24. 11. 2026, Paket.kt): stavek za dostavljalca (»Paket pričakujemo. Prosim, pustite ga pred hišo.«) ali
+     * "" (izklopljeno). Prebere se sele, ko se klicatelj predstavi kot dostava; nikoli ni v sistemskem navodilu. Napaka = izklopljeno.
+     */
+    private val odgovorPaketa: () -> String = { "" },
 ) : ZvocniMost {
+    private val obdelavaZvoka: Boolean get() = obdelavaZvokaNastavitev()
 
     companion object {
         const val ORODJE_SPOROCILO = "shrani_sporocilo"
@@ -399,17 +407,33 @@ class GeminiLiveOdjemalec(
         }
     }
 
+    /**
+     * Dostava paketa: koda presodi izrek klicatelja (Paket.jeDostava) in modelu poslje dobesedni stavek, najvec enkrat na klic. Telefon nima
+     * govora iz kode, zato stavek izgovori model (kot uvod »Lina se predstavi.«). [celIzrek] = konec obrata (turnComplete); zvok ali prepis
+     * modela NI meja (klicatelj lahko Lini skoci v besedo). Med odlomki prepisa velja samo vzorec, ki ga nadaljevanje izreka ne spremeni.
+     */
+    private fun preveriPaket(s: SejaKlica, celIzrek: Boolean) {
+        if (slovoKonec || s.jePaketPovedan()) return
+        val izrek = s.izrekObrata()
+        if (izrek.isBlank() || !Paket.jeDostava(izrek, celIzrek)) return
+        val stavek = runCatching(odgovorPaketa).getOrDefault("").trim()
+        if (stavek.isEmpty() || !s.oznaciPaket()) return
+        casovniZapis("dostava paketa zaznana, stavek poslan modelu")
+        val navodilo = "Klicatelj je dostavljalec paketa. Povej mu dobesedno samo tole: »$stavek« Nato ga vprasaj, ali zeli pustiti sporocilo; ce ne, se vljudno poslovi."
+        ws?.posiljiBesedilo(buildJsonObject { putJsonObject("realtimeInput") { put("text", navodilo) } }.toString())
+    }
+
     /** Prepis govora (vhod = klicatelj, izhod = Lina) in klic orodja shrani_sporocilo; odgovor orodja gre modelu nazaj. */
     private fun obdelajPrepisInOrodje(msg: String) {
-        if (!msg.contains("Transcription") && !msg.contains("toolCall")) return
+        if (!msg.contains("Transcription") && !msg.contains("toolCall") && !msg.contains("\"turnComplete\"")) return
         val s = seja ?: return
         try {
             val koren = Json.parseToJsonElement(msg).jsonObject
             koren["serverContent"]?.jsonObject?.let { sc ->
-                sc["inputTranscription"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.let { s.dodajVhod(it) }
+                sc["inputTranscription"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.let { s.dodajVhod(it); preveriPaket(s, celIzrek = false) }
                 sc["outputTranscription"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull?.let { s.dodajIzhod(it) }
             }
-            if (msg.contains("\"turnComplete\"")) s.konecObrata()
+            if (msg.contains("\"turnComplete\"")) { preveriPaket(s, celIzrek = true); s.konecObrata() }
             val klici = koren["toolCall"]?.jsonObject?.get("functionCalls")?.jsonArray ?: return
             val odgovori = klici.mapNotNull { k ->
                 val f = k.jsonObject

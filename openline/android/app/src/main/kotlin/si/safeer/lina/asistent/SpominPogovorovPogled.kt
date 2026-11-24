@@ -2,6 +2,7 @@ package si.safeer.lina.asistent
 
 import android.app.Activity
 import android.app.AlertDialog
+import si.safeer.lina.pokaziVarno
 import android.content.Context
 import android.view.View
 import android.widget.Button
@@ -63,7 +64,7 @@ class SpominPogovorovPogled(private val a: Activity, private val vsebnik: Linear
             AlertDialog.Builder(a).setMessage(R.string.memory_delete_confirm)
                 .setPositiveButton(R.string.memory_delete) { _, _ -> izbrisiSejo(a); stanje.setText(if (s.izbrisiVse()) R.string.memory_deleted else R.string.tool_err_net) }
                 .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                .pokaziVarno()
         }
     }
 }
