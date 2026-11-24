@@ -5,6 +5,7 @@
  *
  * Locen modul brez uvozov asistentke/kanala, da ga lahko varno poklice pravila.server.ts ob vklopu dodatka (preizkus 4.4).
  */
+import { imaPosixDovoljenja } from "./platforma.server.ts";
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -69,7 +70,7 @@ async function zapisiRacun(root: string, r: RacunN8nDatoteka): Promise<void> {
   const zacasna = `${cilj}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(zacasna, JSON.stringify(r, null, 2), { mode: 0o600, flag: "wx" });
   await rename(zacasna, cilj);
-  if (process.platform !== "win32") await chmod(cilj, 0o600).catch(() => undefined);
+  if (imaPosixDovoljenja()) await chmod(cilj, 0o600).catch(() => undefined);
 }
 
 /** Samo notranje (streznik): odsifrira shranjeni API kljuc n8n. Nikoli ga ne izpisi ali poslji odjemalcu. */

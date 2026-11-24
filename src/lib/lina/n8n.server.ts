@@ -11,6 +11,7 @@
  * izbral »Velja tudi za vse podobne« (namizje, seja lastnika) ali ce naprava naloge kanala nosi podpisano dovoljenje za ta predogled.
  * USTVARJANJE toka se vedno vprasa. Predlog iz oznake modela (izvor »lina«) in s telefona je vedno samo predlog.
  */
+import { imaPosixDovoljenja } from "./platforma.server.ts";
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -128,7 +129,7 @@ async function zapisiPredloge(root: string, s: StanjeDatoteka): Promise<void> {
   const zacasna = `${cilj}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(zacasna, JSON.stringify({ v: 1, predlogi: s.predlogi.slice(-NAJVEC_PREDLOGOV_N8N) }, null, 2), { mode: 0o600, flag: "wx" });
   await rename(zacasna, cilj);
-  if (process.platform !== "win32") await chmod(cilj, 0o600).catch(() => undefined);
+  if (imaPosixDovoljenja()) await chmod(cilj, 0o600).catch(() => undefined);
 }
 
 function jePotekel(p: PredlogN8n, zdaj: Date): boolean {
