@@ -185,7 +185,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
             for (an in g.anotacije) addView(tiho("${an.raven}: ${an.sporocilo}" + if (an.pot.isNotEmpty()) " (${an.pot})" else ""))
         }
         if (g.stanje == "caka") addView(Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.builds_confirm); setOnClickListener { potrdi(g) } })
-        if (namesti) addView(Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.builds_install); setOnClickListener { namesti() } })
+        if (namesti) addView(Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.builds_install); setOnClickListener { namesti(g) } })
     }
 
     private fun izberiTok() {
@@ -249,7 +249,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
     }
 
     /** Prenos v cacheDir, preverbe (NamestitevApk + PackageManager), nato PackageInstaller; sistemsko okno potrdi lastnik. */
-    private fun namesti() {
+    private fun namesti(g: Gradnja) {
         if (dela) return
         if (!NamestitevPaketa.imaDovoljenje(a)) {
             AlertDialog.Builder(a, R.style.Gw_Dialog)
@@ -280,6 +280,8 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                             napaka is OdgovorLine.Napaka && napaka.status == 409 && napaka.koda == "vsota" -> a.getString(R.string.install_changed)
                             napaka != null -> sporocilo(GradnjeLine.napaka(napaka))
                             izid is IzidPrenosa.Zavrnjeno -> a.getString(zavrnitev(izid.razlog))
+                            // Namesti se samo gradnja, ki jo je lastnik tapnil (id in sha256 iz prikaza).
+                            izid is IzidPrenosa.Ok && (izid.gradnja != g.id || izid.sha256 != g.paket?.sha256) -> a.getString(R.string.install_changed)
                             izid is IzidPrenosa.Ok -> {
                                 glavna.post { stanje.setText(R.string.install_checking) }
                                 val z = NamestitevPaketa.preveriArhiv(a, izid.datoteka)
