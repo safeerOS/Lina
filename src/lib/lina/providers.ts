@@ -514,7 +514,7 @@ export async function callProvider(input: ProviderCall): Promise<RezultatPonudni
  * ostali statusi so po dokumentaciji OpenRouter (errors-and-debugging): 402 premalo dobroimetja, 429 omejitev,
  * 404 in 503 pa ob »data_collection: deny« najpogosteje pomenita, da model nima ponudnika brez zbiranja podatkov.
  */
-export function razlogOpenRouter(status: number, kontekst?: { model: string; brezplacniDovoljeni?: boolean; asistentka?: boolean }): string | null {
+export function razlogOpenRouter(status: number, kontekst?: { model: string; brezplacniDovoljeni?: boolean; asistentka?: boolean; vednoDeny?: boolean }): string | null {
   if (status === 401) return "OpenRouter: ključ ni veljaven.";
   // B6 in C8 (24. 11. 2026): sporocila za brezplacne modele in stanje racuna; brez konteksta ostanejo stara besedila.
   if (kontekst) {
@@ -526,6 +526,8 @@ export function razlogOpenRouter(status: number, kontekst?: { model: string; bre
       return "OpenRouter: dosežena omejitev brezplačnih modelov (20 zahtevkov na minuto; 50 na dan, z vsaj 10 kupljenimi krediti 1000).";
     }
     if (brezplacen && (status === 404 || status === 503)) {
+      // naloga 11 N4: deny je vsilila Lina (orodja, tuja vsebina) - nastavitev racuna napake ne odpravi
+      if (kontekst.vednoDeny) return "OpenRouter: za naloge in tujo vsebino Lina zahteva ponudnika, ki ne zbira podatkov; ta brezplačni model ga nima. Izberite plačljiv ali drug model.";
       return kontekst.brezplacniDovoljeni
         ? "OpenRouter: vklopite brezplačne modele v računu OpenRouter (Privacy) ali izberite drug model."
         : "OpenRouter: vklopite stikalo za brezplačne modele.";
@@ -600,7 +602,7 @@ async function napakaOpenRouter(input: ProviderCall, status: number, secret: str
     if (izid.ok) return { ...izid, povratek: `Na računu OpenRouter ni dobroimetja, zato je odgovoril brezplačni model ${rezerva}.` };
     return izid;
   }
-  const kontekst = { model, brezplacniDovoljeni: input.brezplacniDovoljeni === true, asistentka: input.vsebinaKlica === false };
+  const kontekst = { model, brezplacniDovoljeni: input.brezplacniDovoljeni === true, asistentka: input.vsebinaKlica === false, vednoDeny: input.vednoDeny === true };
   let sporocilo = razlogOpenRouter(status, kontekst) ?? `Ponudnik je zavrnil klic (${status}).`;
   if (status === 429 && jeBrezplacenModel(model)) {
     const { stanjeOpenRouter } = await import("./openrouter.server.ts");
@@ -1347,6 +1349,7 @@ export async function callProviderZOrodji(
             model,
             brezplacniDovoljeni: zNaslovom.brezplacniDovoljeni === true,
             asistentka: !vsebinaKlica,
+            vednoDeny: true, // klic z orodji vedno z deny (V11)
           }) ?? `Ponudnik je zavrnil klic (${response.status}).`;
         return { ok: false, sporocilo: hideSecret(sporocilo, secret), ...(vzrok ? { vzrok } : {}) };
       }
