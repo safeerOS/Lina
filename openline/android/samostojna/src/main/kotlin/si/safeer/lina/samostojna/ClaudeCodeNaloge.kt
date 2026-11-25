@@ -78,6 +78,11 @@ object SamostojnaNaloga {
      */
     private val ABSOLUTNA_POT = Regex("(?<![\\w/.:])~?(?:/[\\w.@+-]+)+")
     private val IME_MAPE = Regex("(?:map[aoie]\\w*|projekt\\w*)\\s*[\"'»«„“]([^\"'»«„“”\\n]{1,80})[\"'»«”“]", RegexOption.IGNORE_CASE)
+    // T12 (pregled 0213): pot Windows in ime mape BREZ narekovajev, ki je videti kot ime mape (vezaj, podcrtaj ali velika crka v besedi);
+    // navadna beseda za »mapi/projektu« (»V mapi Prenosi«, »v projektu popravi«) ni ime mape.
+    private val POT_WINDOWS = Regex("(?<![\\w])[A-Za-z]:\\\\[^\\s,;\"'»«„“”]+")
+    // brez IGNORE_CASE: \\p{Lu} mora ostati velika crka
+    private val IME_MAPE_GOLO = Regex("(?:[Mm]ap[aoie]\\w*|[Pp]rojekt\\w*)\\s+([\\p{L}\\d]+(?:[-_][\\p{L}\\d]+)+|\\p{L}+\\p{Lu}[\\p{L}\\d]*)")
 
     /** Prva pot ali ime mape iz naloge, ki je ni v [viri] (besedila uporabnika in zapiski); podpot omenjene poti velja. */
     internal fun neznanaMapa(naloga: String, viri: List<String>): String? {
@@ -85,7 +90,8 @@ object SamostojnaNaloga {
         val znanePoti = viri.flatMap { v -> ABSOLUTNA_POT.findAll(v).map { it.value.trimEnd('.', ',', ';', ':', '/') }.toList() }.filter { it.count { c -> c == '/' } >= 2 }
         val poti = ABSOLUTNA_POT.findAll(naloga).map { it.value.trimEnd('.', ',', ';', ':', '/') }.filter { it.length > 1 }
         poti.firstOrNull { p -> !vir.contains(p) && znanePoti.none { p.startsWith("$it/") } }?.let { return it }
-        return IME_MAPE.findAll(naloga).map { it.groupValues[1].trim() }.firstOrNull { it.isNotEmpty() && !vir.contains(it, ignoreCase = true) }
+        POT_WINDOWS.findAll(naloga).map { it.value.trimEnd('.', ',', ';', ':', '\\') }.firstOrNull { it.length > 3 && !vir.contains(it, ignoreCase = true) }?.let { return it }
+        return (IME_MAPE.findAll(naloga) + IME_MAPE_GOLO.findAll(naloga)).map { it.groupValues[1].trim() }.firstOrNull { it.isNotEmpty() && !vir.contains(it, ignoreCase = true) }
     }
 
     fun pripravi(naloga: String, pogovor: List<Sporocilo>, zapiski: List<String>, tocke: Boolean = true): Izid {
