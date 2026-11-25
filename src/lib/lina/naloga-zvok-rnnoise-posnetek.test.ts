@@ -98,4 +98,49 @@ describe("prepisiRsdo: ciscenje pred RSDO za stikalom", { timeout: 30000 }, () =
     assert.ok((await prepis(undefined)).equals(izvirnik));
     assert.ok((await prepis(true, async () => null)).equals(izvirnik));
   });
+
+  it("pregled 0213 C3: ociscen glas je v NOVI datoteki 0600 (ffmpeg jo je ustvaril 0644 po umask), ne prepisan cez izvirnik", async () => {
+    let nacin = -1;
+    let ino = -1;
+    let inoFfmpeg = -2;
+    const { chmod, stat } = await import("node:fs/promises");
+    const izvajalec: Izvajalec = async (program, args) => {
+      if (program === "ffmpeg") {
+        const w = args[args.length - 1] as string;
+        await writeFile(w, wavZListom(govor16), { mode: 0o644 });
+        await chmod(w, 0o644);
+        inoFfmpeg = (await stat(w)).ino;
+      }
+      return { koda: 0, izhod: "" };
+    };
+    const besedilo = await prepisiRsdo(Buffer.from("RIFFxxxxWEBM"), "audio/webm", {
+      izvajalec,
+      ciscenje: true,
+      streznik: {
+        pripravljen: () => true,
+        prepisi: async (wav) => {
+          const s = await stat(wav);
+          nacin = s.mode & 0o777;
+          ino = s.ino;
+          return "dober dan";
+        },
+      },
+    });
+    assert.equal(besedilo, "dober dan");
+    assert.equal(nacin, 0o600, "ociscen glas klicatelja samo za lastnika");
+    assert.notEqual(ino, inoFfmpeg, "zapis v novo datoteko in rename (okrnjen zapis ne zamenja izvirnika)");
+  });
+
+  it("pregled 0213 C5: stikalo vklopljeno, RNNoise ni na voljo - pot RSDO to zapise v dnevnik (kot zivi klic)", async () => {
+    const dn: string[] = [];
+    const izvajalec: Izvajalec = async (program, args) => {
+      if (program === "ffmpeg") await writeFile(args[args.length - 1] as string, wavZListom(govor16));
+      return { koda: 0, izhod: "" };
+    };
+    await prepisiRsdo(Buffer.from("RIFFxxxxWEBM"), "audio/webm", {
+      izvajalec, ciscenje: true, rnnoise: async () => null, dnevnik: (s) => void dn.push(s),
+      streznik: { pripravljen: () => true, prepisi: async () => "x" },
+    } as Parameters<typeof prepisiRsdo>[2]);
+    assert.deepEqual(dn, ["rnnoise-ni-na-voljo"]);
+  });
 });

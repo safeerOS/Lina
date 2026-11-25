@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { access, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { freemem, homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { odlociPotPrepisa, type PotPrepisa } from "./live/rsdo-namig.ts";
@@ -47,18 +47,29 @@ export type OdvisnostiRsdo = {
   ciscenje?: boolean;
   /** RNNoise (preizkusi); privzeto modul procesa. */
   rnnoise?: () => Promise<RnnoiseModul | null>;
+  /** Dnevnik (preizkusi); privzeto stderr procesa kot zivi klic (most.ts »rnnoise-ni-na-voljo«). */
+  dnevnik?: (s: string) => void;
 };
 
-/** RNNoise na WAV za RSDO; ob kakrsni koli napaki ostane izhod ffmpeg (prepis gre naprej). */
+/**
+ * RNNoise na WAV za RSDO; ob kakrsni koli napaki ostane izhod ffmpeg (prepis gre naprej). Pregled 0213 C3: ociscen posnetek gre v
+ * novo datoteko (wx, 0600) in sele cel zamenja izvirnik (rename) - napaka med pisanjem (ENOSPC) ne okrni posnetka, ki gre v RSDO.
+ */
 async function ocistiZaRsdo(wav: string, odv: OdvisnostiRsdo): Promise<void> {
   if (odv.ciscenje !== true) return;
+  const dnevnik = odv.dnevnik ?? ((s: string) => process.stderr.write(`[lina-rsdo] ${s}\n`));
+  const zacasna = `${wav}.${randomBytes(6).toString("hex")}.ociscen`;
   try {
     const modul = await (odv.rnnoise ?? nalozRnnoise)();
-    if (!modul) return;
+    // C5: stikalo vklopljeno, RNNoise ni na voljo - prepis gre brez filtra, a to mora biti vidno v dnevniku
+    if (!modul) { dnevnik("rnnoise-ni-na-voljo"); return; }
     const ociscen = await ocistiWav16k(modul, await readFile(wav));
-    if (ociscen) await writeFile(wav, ociscen, { mode: 0o600 });
+    if (!ociscen) return;
+    await writeFile(zacasna, ociscen, { mode: 0o600, flag: "wx" });
+    await rename(zacasna, wav);
   } catch {
     /* izvirnik ffmpeg ostane */
+    await unlink(zacasna).catch(() => undefined);
   }
 }
 
