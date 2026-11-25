@@ -9,7 +9,7 @@
  * dodajo v register; brez njih Lina dela samo z vgrajenimi orodji. Tajnica (klici) te datoteke ne uvaza.
  * Komentarji brez sumnikov.
  */
-import { access, appendFile, chmod, mkdir, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { access, appendFile, chmod, lstat, mkdir, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
@@ -39,6 +39,7 @@ import {
 import { izberiUcenje, normirajTip, type UcenjeVmesnik } from "./orkestrator-ucenje.ts";
 import { zaznajVbrizg } from "./vbrizg.ts";
 import type { DefinicijaOrodja, KlicOrodja, MoznostiOrodij, RezultatOrodij, SporociloOrodja } from "./providers.ts";
+import { imaPosixDovoljenja } from "./platforma.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { koncajTekVLini, odpriTekVLini, prekliciVprasanjeVLini, vrsticaTekaVLini, zastaviVprasanjeVLini, type OdgovorVLini } from "./vprasanja-agentov.server.ts";
 
@@ -211,7 +212,7 @@ export type Orkestrator = {
   /** Preveri cakajoce pomocnike (samo enega ali vse): koncan, zavrnjen, izginil ali cez rok -> izid v zanko. */
   preveriPomocnike(samo?: string): Promise<void>;
   odgovorLastnika(id: string, besedilo: unknown): Promise<StanjeNaloge>;
-  /** Izbris koncane naloge (stanje in dnevnik); nekoncana -> napaka »faza«. */
+  /** Izbris koncane naloge (stanje; dnevnik dejanj v arhiv/); nekoncana -> napaka »faza«. */
   izbrisi(id: string): Promise<void>;
   izidPomocnika(nalogaId: string): Promise<void>;
   /** Ob zagonu Line: nadaljuje tekoce naloge, znova zastavi cakajoca vprasanja, preveri pomocnike. */
@@ -732,18 +733,34 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   };
 
   const brezNapake = (e: NodeJS.ErrnoException) => { if (e.code !== "ENOENT") throw e; };
-  /** Samo lastni datoteki veljavne naloge (id preverjen z VELJAVEN_ID); manjkajoca datoteka ni napaka. arhiviraj: dnevnik v arhiv/. */
-  const izbrisiDatoteke = async (id: string, arhiviraj = false, zadnja = 0) => {
+  const obstaja = (p: string) => lstat(p).then(() => true, () => false);
+  /** Naloga 12 #5: arhiv mora biti prava mapa lastnika (ne simbolna povezava, ne datoteka); sicer napaka in nic se ne premakne. */
+  const mapaArhiva = async () => {
+    const a = path.join(mapa, "arhiv");
+    await mkdir(a, { mode: 0o700 }).catch((e: NodeJS.ErrnoException) => { if (e.code !== "EEXIST") throw e; });
+    const st = await lstat(a);
+    const tujLastnik = imaPosixDovoljenja() && typeof process.getuid === "function" && st.uid !== process.getuid();
+    if (st.isSymbolicLink() || !st.isDirectory() || tujLastnik) throw new Error("orkestrator/arhiv ni prava mapa lastnika");
+    return a;
+  };
+  /**
+   * Samo lastni datoteki naloge (id preverjen z VELJAVEN_ID); manjkajoca datoteka ni napaka. Dnevnik dejanj vedno v arhiv/ (naloga 11 N5,
+   * naloga 12 #5: tudi rocni izbris; zapis izvedenih dejanj ostane, AGENTS.md), NAJPREJ arhiv in sele nato izbris stanja: napaka vmes
+   * (arhiv ni mapa, Windows EBUSY) pusti nalogo celo. Obstojec arhiviran dnevnik se ne prepise.
+   */
+  const izbrisiDatoteke = async (id: string, zadnja = 0) => {
+    const dnevnik = `${id}.dnevnik.jsonl`;
+    if (await obstaja(path.join(mapa, dnevnik))) {
+      const a = await mapaArhiva();
+      let cilj = path.join(a, dnevnik);
+      if (await obstaja(cilj)) cilj = path.join(a, `${id}.${zdaj()}.${randomBytes(3).toString("hex")}.dnevnik.jsonl`);
+      await rename(path.join(mapa, dnevnik), cilj);
+    }
     await unlink(path.join(mapa, pot(id))).catch(brezNapake);
     // naloga 12 #2: verzija izbrisane naloge ostane v indeksu (vec od zadnje): kopija se ne vrne
     const m = await znaneVerzije();
     m.set(id, Math.max(m.get(id) ?? 0, zadnja) + 1);
     await shraniIndeks();
-    const dnevnik = `${id}.dnevnik.jsonl`;
-    if (!arhiviraj) return void (await unlink(path.join(mapa, dnevnik)).catch(brezNapake));
-    // naloga 11 N5: zapis izvedenih dejanj ostane (AGENTS.md); arhiv ni na seznamu nalog
-    await mkdir(path.join(mapa, "arhiv"), { recursive: true, mode: 0o700 });
-    await rename(path.join(mapa, dnevnik), path.join(mapa, "arhiv", dnevnik)).catch(brezNapake);
   };
   /** Naloga 11 N5: cas v prihodnosti ali neberljiv ne steje kot novejsi (na konec vrste), sicer podtaknjene naloge izrinejo prave. */
   const veljavenCas = (s: StanjeNaloge) => {
@@ -759,10 +776,11 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       const t = veljavenCas(s);
       const star = t !== null && zdaj() - t > HRANI_KONCANE_MS;
       if (!star && i < NAJVEC_KONCANIH) continue;
+      // naloga 12 #5: napaka pri eni nalogi ne ustavi ciscenja ostalih
       await vVrsti(s.id, async () => {
         const sveze = await preberi(s.id);
-        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id, true, sveze.verzija);
-      });
+        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id, sveze.verzija);
+      }).catch(() => undefined);
     }
   };
   /**
@@ -904,7 +922,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           return void (await izbrisiDatoteke(id));
         }
         if (!KONCNE_FAZE.includes(s.faza)) throw new OrkestratorNapaka("faza");
-        await izbrisiDatoteke(id, false, s.verzija);
+        await izbrisiDatoteke(id, s.verzija);
       });
     },
     async nadaljujPoZagonu() {
