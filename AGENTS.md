@@ -1694,6 +1694,11 @@ ter da ji more sam omejiti obseg dela«.
   racunalniku in telefonu (uporabnik potrdi »Razumem«, brez potrditve Lina ne sprejema klicev in ne zaganja agentov) in vedno
   dosegljivo v Nastavitve > O Lini. Potrditev se shrani z razlicico besedila; ob spremembi besedila znova.
 - Namestitvene povezave = GitHub Releases safeerOS/Lina (deb, APK, SHA256SUMS); isti vir uporablja vgrajena posodobitev.
+- Pregled 0213 A7 (25. 11. 2026): vgrajena posodobitev z GitHuba (lina-lupina iz safeerOS/Lina, safeer-os iz safeerOS/Safeer-linux)
+  zahteva SHA256SUMS.sig = surov 64-bajtni podpis Ed25519 cez SHA256SUMS s kljucem JAVNI_KLJUC_IZDAJ (posodobitev.server.ts, odtis
+  DER a3ae3bcb...0b56); podpis se preveri PRED prenosom paketa, brez ali z napacnim podpisom razlog »podpis«. Podpise
+  .github/workflows/podpis-izdaje.yml (okolje podpis-izdaj, skrivnost PODPIS_IZDAJ_KLJUC); isti tok mora biti tudi v Safeer-linux,
+  sicer Lina od 0.2.13 izdaj safeer-os ne namesti. Vir »mapa« in gradnja nista podpisana (vmesnik to pove).
 - Posnetki zaslona samo z demo podatki (skil safeer-posnetki-naprav), brez lastnikovih imen, stevilk, klicev.
 
 ## OmniRoute kot ponudnik mozganov (lastnik 24. 11. 2026)
