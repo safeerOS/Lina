@@ -1224,8 +1224,10 @@ export const ukazOrkestratorjaFn = createServerFn({ method: "POST" })
     noStore();
     clearLegacyCookie();
     const { ukazOrkestratorja, OrkestratorNapaka } = await import("./orkestrator.server.ts");
+    // pregled V6 (naloga 9): brez gesla novo nalogo ustvari samo okno lupine (zeton, ki ga lupina doda samo svojim zahtevam)
+    const { GLAVA_LUPINE, veljavenZetonLupine } = await import("./lupina.server.ts");
     try {
-      return { ok: true as const, stanje: await ukazOrkestratorja(await sessionToken(), data?.ukaz) };
+      return { ok: true as const, stanje: await ukazOrkestratorja(await sessionToken(), data?.ukaz, undefined, veljavenZetonLupine(getRequest().headers.get(GLAVA_LUPINE), process.env.LINA_LUPINA_ZETON)) };
     } catch (e) {
       if (e instanceof OrkestratorNapaka) return { ok: false as const, razlog: e.koda };
       if (e instanceof VprasanjeNapaka) return { ok: false as const, razlog: e.razlog };

@@ -7,7 +7,7 @@ const http = require("http");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
-const { APP_ID, mapaPodatkov, prosiZaKonec } = require("./pomocniki");
+const { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik } = require("./pomocniki");
 
 const NAMESTITEV = app.isPackaged ? path.join(process.resourcesPath, "lina") : path.join(__dirname, "..");
 const IKONA = path.join(__dirname, "ikona.png");
@@ -16,6 +16,8 @@ let okno = null;
 let pladenj = null;
 let koncujem = false;
 let naslov = "";
+// Zeton lupine (nakljucen ob zagonu): streznik ga dobi v okolju, okno ga posilja samo strezniku (naloga 9, V6).
+const zetonLupine = crypto.randomBytes(24).toString("hex");
 
 app.commandLine.appendSwitch("lang", "sl"); // datum in ura v slovenski obliki
 if (process.platform === "win32") app.setAppUserModelId(APP_ID); // obvestila Windows (bliznjica NSIS ima isti appId)
@@ -69,7 +71,7 @@ async function zazeniStreznik() {
       LINA_DATA: podatki,
       // Pot klicev (OpenLine): paket je v resources/lina/openline (lastnik 22. 11. 2026: »OpenLine ni v programu (manjka paket)«).
       ...(fs.existsSync(path.join(NAMESTITEV, "openline", "dist", "index.js")) ? { LINA_OPENLINE_DIR: path.join(NAMESTITEV, "openline") } : {}),
-      LINA_LUPINA_ZETON: crypto.randomBytes(24).toString("hex"),
+      LINA_LUPINA_ZETON: zetonLupine,
     },
     // kanal IPC: ustavitev s pospravljanjem tudi na Windows (tam je SIGTERM trd konec); streznik konca tudi, ce lupina umre
     stdio: ["ignore", "ignore", "ignore", "ipc"],
@@ -93,6 +95,9 @@ function dovoliDovoljenja() {
     const zvok = dovoljenje === "media" && Array.isArray(podrobnosti.mediaTypes) && podrobnosti.mediaTypes.every((m) => m === "audio");
     odgovori(lokalno(podrobnosti.requestingUrl) && (zvok || dovoljenje === "notifications"));
   });
+  // Brez gesla streznik novo nalogo orkestratorja sprejme samo z zetonom lupine (drug lokalni proces ga nima).
+  session.defaultSession.webRequest.onBeforeSendHeaders((podrobnosti, odgovori) =>
+    odgovori({ requestHeaders: glaveZaStreznik(podrobnosti.url, naslov, zetonLupine, podrobnosti.requestHeaders) }));
   session.defaultSession.setPermissionCheckHandler((wc, dovoljenje, izvor) => lokalno(izvor) && (dovoljenje === "media" || dovoljenje === "notifications"));
 }
 

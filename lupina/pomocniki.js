@@ -43,4 +43,24 @@ function prosiZaKonec(otrok, platforma) {
   return "signal";
 }
 
-module.exports = { APP_ID, mapaPodatkov, prosiZaKonec };
+/** Glava z zetonom lupine (isto ime kot GLAVA_LUPINE v src/lib/lina/lupina.server.ts). */
+const GLAVA_LUPINE = "x-lina-lupina";
+
+/**
+ * Glave zahteve iz okna Line (naloga 9, V6): zeton lupine dobi SAMO lokalni streznik Line (isti izvor kot naslov); vsakemu drugemu
+ * izvoru se glava odstrani, tudi ce bi jo nastavila stran. Brez gesla streznik po tem zetonu loci okno Line od drugih lokalnih procesov.
+ */
+function glaveZaStreznik(url, naslov, zeton, glave) {
+  const izid = {};
+  for (const [k, v] of Object.entries(glave || {})) if (k.toLowerCase() !== GLAVA_LUPINE) izid[k] = v;
+  let izvor = "";
+  try {
+    izvor = new URL(url).origin;
+  } catch {
+    /* neveljaven naslov: brez zetona */
+  }
+  if (zeton && naslov && izvor === naslov) izid[GLAVA_LUPINE] = zeton;
+  return izid;
+}
+
+module.exports = { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik };

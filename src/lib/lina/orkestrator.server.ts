@@ -119,7 +119,7 @@ export type OdvisnostiOrkestratorja = {
 };
 
 export class OrkestratorNapaka extends Error {
-  readonly koda: "izklopljeno" | "ni-naloge" | "oblika" | "polno" | "faza";
+  readonly koda: "izklopljeno" | "ni-naloge" | "oblika" | "polno" | "faza" | "geslo";
   constructor(koda: OrkestratorNapaka["koda"]) {
     super(koda);
     this.koda = koda;
@@ -851,8 +851,12 @@ export async function stanjeOrkestratorja(token: string | null, dir?: string): P
   return { vklopljen: await jeOrkestratorVklopljen(dir), naloge };
 }
 
-/** Ukazi iz kartice: nova naloga, ustavi, odgovor na vprasanje (besedilo), potrdi/zavrni (po poti vprasanj agentov: »dovoli« z geslom). */
-export async function ukazOrkestratorja(token: string | null, ukaz: unknown, dir?: string): Promise<StanjeOrkestratorja> {
+/**
+ * Ukazi iz kartice: nova naloga, ustavi, odgovor na vprasanje (besedilo), potrdi/zavrni (po poti vprasanj agentov: »dovoli« z geslom).
+ * izLupine: zahteva nosi veljaven zeton lupine (okno Line). Pregled V6: brez gesla lokalno sejo dobi vsak lokalni proces, zato novo
+ * nalogo brez gesla ustvari samo okno lupine; z geslom velja seja z geslom (kot »dovoli«).
+ */
+export async function ukazOrkestratorja(token: string | null, ukaz: unknown, dir?: string, izLupine = false): Promise<StanjeOrkestratorja> {
   const root = resolveDataDir(dir);
   const { requireOwner } = await import("./auth.server.ts");
   await requireOwner(token, root);
@@ -860,6 +864,7 @@ export async function ukazOrkestratorja(token: string | null, ukaz: unknown, dir
   const o = orkestrator(dir);
   const id = typeof u.id === "string" ? u.id : "";
   if (u.vrsta === "nova") {
+    if (!izLupine && !(await (await import("./auth.server.ts")).ownerExists(root))) throw new OrkestratorNapaka("geslo");
     const s = await o.nova({ cilj: u.cilj, tip: u.tip });
     void o.teci(s.id).catch(() => undefined);
   } else if (u.vrsta === "ustavi") {
