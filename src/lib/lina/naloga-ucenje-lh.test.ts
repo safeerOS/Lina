@@ -41,6 +41,8 @@ const NAVODILO = [
 /** Nadomestni model odgovori po vsebini zahtevka (ne po vrstnem redu: povzetek pogovora tece v ozadju). */
 type Klic = { url: string; system: string; user: string };
 let klici: Klic[] = [];
+/** Vsi gostitelji, ki jih je dosegel katerikoli klic v tej datoteki (nikoli se ne pobrise). */
+const VSI_GOSTITELJI = new Set<string>();
 const VPRASANJA = [
   "Kaj preveriš na majici, preden začneš kontrolo?",
   "S čim primerjaš barvo tiska in pod kakšno svetlobo?",
@@ -65,6 +67,8 @@ function namestiModel(): void {
     const telo = JSON.parse(String(init?.body ?? "{}")) as { messages?: Array<{ role: string; content: string }> };
     const system = telo.messages?.find((m) => m.role === "system")?.content ?? "";
     const user = telo.messages?.filter((m) => m.role === "user").map((m) => m.content).join("\n") ?? "";
+    VSI_GOSTITELJI.add(new URL(String(url)).host);
+    if (new URL(String(url)).host !== "127.0.0.1:3192") throw new Error(`nov gostitelj: ${String(url)}`);
     klici.push({ url: String(url), system, user });
     let odgovor = "V redu.";
     if (system.includes("SESTAVA UČNE ENOTE")) odgovor = enotaModela();
@@ -144,7 +148,10 @@ describe("ucenje-lh: merilo (kontrola tiska na majice, 5 korakov)", () => {
     assert.ok(o5.includes(VPRASANJA[2]!), o5);
 
     // 4. preverba po koraku: zgresek NE gre naprej
+    klici = [];
     const o6 = await recem("Pozabil sem.", token, dir);
+    const ocena = klici.find((k) => k.system.includes("OCENA ODGOVORA"));
+    assert.ok(ocena?.user.includes(`VPRAŠANJE: ${VPRASANJA[2]}`) && ocena.user.includes("KORAK 3: S povečevalom"), "ocenjuje se pravi korak");
     assert.ok(o6.includes(VPRASANJA[2]!), `isti korak znova: ${o6}`);
     assert.ok(!o6.includes(VPRASANJA[3]!), "ne naprej na nepreverjenem koraku");
     const o7 = await recem("S povečevalom pregledam, ali so robovi motiva ostri.", token, dir);
@@ -158,11 +165,8 @@ describe("ucenje-lh: merilo (kontrola tiska na majice, 5 korakov)", () => {
     const s2 = await stanjeUcenjaLH(token, dir);
     assert.equal(s2.enote[0]!.znanih, 4, "koraki 2-5 preverjeni, korak 1 ostane nepreverjen");
 
-    // 5. vsi modelni klici so sli samo na Linin ponudnik (lasten streznik), noben nov gostitelj
-    namestiModel();
-    await recem("Kako poteka kontrola tiska na majice?", token, dir);
-    assert.ok(klici.length > 0);
-    assert.deepEqual([...new Set(klici.map((k) => new URL(k.url).host))], ["127.0.0.1:3192"]);
+    // 5. vsi modelni klici (tudi sestava in ocene modula) so sli samo na Linin ponudnik, noben nov gostitelj
+    assert.deepEqual([...VSI_GOSTITELJI], ["127.0.0.1:3192"]);
 
     // 6. izbris enote: naslednji pogovor je nima vec
     await assert.rejects(() => izbrisiEnotoLH(s2.enote[0]!.id, null, dir));
@@ -194,6 +198,38 @@ describe("ucenje-lh: merilo (kontrola tiska na majice, 5 korakov)", () => {
     klici = [];
     await recem("Kakšno je vreme?", token, dir);
     assert.ok(klici.every((k) => !k.system.includes("OCENA ODGOVORA")));
+  });
+
+  it("ura ne pogoltne opomnika (koledar), nove ure ali nove enote; ostane na istem koraku", async () => {
+    const { dir, token } = await pripravi();
+    await recem(NAVODILO, token, dir);
+    const z = await recem("Preveri me iz kontrole tiska na majice.", token, dir);
+    assert.match(z, /»konec«/, "zacetek ure pove izhod");
+    // opomnik: gre v koledar (model razbere), ura ostane
+    klici = [];
+    await recem("Opomni me jutri ob 9.00, da pokličem dobavitelja.", token, dir);
+    assert.ok(klici.every((k) => !k.system.includes("OCENA ODGOVORA")), "opomnik ni ocenjen kot odgovor");
+    const naprej = await recem("Ne vem.", token, dir);
+    assert.ok(naprej.includes(VPRASANJA[1]!), `ura je ostala pri merjenju: ${naprej}`);
+    klici = [];
+    await recem("Barvo z vzorcem primerjam, nato vpišem opomnik za kontrolo.", token, dir);
+    assert.ok(klici.some((k) => k.system.includes("OCENA ODGOVORA")), "odgovor, ki omeni opomnik, se oceni");
+    // nova enota med uro: shrani se, ura se konca
+    const druga = await recem("Nauči se postopka menjava sita:\n1. Izklopi stroj.\n2. Odpni okvir sita.\n3. Vstavi novo sito.", token, dir);
+    assert.match(druga, /Shranila sem učno enoto/);
+    assert.equal((await stanjeUcenjaLH(token, dir)).enote.length, 2);
+    // nova ura med uro: zacne se ura druge enote
+    await recem("Preveri me iz kontrole tiska na majice.", token, dir);
+    const tretja = await recem("Preveri me iz menjave sita.", token, dir);
+    assert.match(tretja, /korak 2\/3/, tretja);
+  });
+
+  it("predolgo navodilo: Lina opozori, da je sporocilo odrezano (koraki se ne izgubijo tiho)", async () => {
+    const { dir, token } = await pripravi();
+    const dolgo = `${NAVODILO}\n${Array.from({ length: 40 }, (_, i) => `${i + 6}. Dodaten korak kontrole stevilka ${i + 6} z dolgim opisom ${"x".repeat(40)}.`).join("\n")}`;
+    assert.ok(dolgo.length > 2000);
+    const o = await recem(dolgo, token, dir);
+    assert.match(o, /odrezano/);
   });
 
   it("Lina brez modula (zastavica gradnje -> nadomestek) deluje; nastavitve povedo, da modula ni", async () => {

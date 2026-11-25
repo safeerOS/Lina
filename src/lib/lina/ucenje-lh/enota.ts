@@ -3,8 +3,8 @@
  * omrezja in brez datotek.
  *
  * Zamisli iz LearnHarness (github.com/amosblomqvist/learnharness, commit 069a6a1, Amos Blomqvist, AGPL-3.0-only):
- * dvojisko iskanje meje (prober/10-probe-doctrine.md »Bracket the learner's edge«), »nikoli ne gradi na nepreverjenem koraku«
- * (teacher/20-teaching.md), »nepreizkusena meja ni ugotovitev« in »najsibkejse najprej« (practice/10-doctrine.md).
+ * dvojisko iskanje meje in »nepreizkusena meja ni ugotovitev« (prober/10-probe-doctrine.md »Bracket the learner's edge«),
+ * »nikoli ne gradi na nepreverjenem koraku« (teacher/20-teaching.md) in »weakest first« (practice/10-doctrine.md, vrstica 68).
  * Koda je nova (spremenil Safeer, team@safeer.si, 25. 11. 2026): LearnHarness meri tla in strop z modelom in orodjem probe_done;
  * tu je meja indeks v urejeni verigi korakov. Ponavljanje (skatle 1/3/7/14/30 dni) je lastna koda Safeer - jedro LearnHarness
  * ponavljanja med sejami nima. Licenca: AGPL-3.0 (LICENSE v tej mapi), ker je del modula, prirejenega po LearnHarness.
@@ -42,6 +42,11 @@ export const ROK_SEJE_MS = 2 * 60 * 60_000;
 export const INTERVALI_DNI = [1, 3, 7, 14, 30] as const;
 
 /** Nezaupano ali shranjeno besedilo v varno obliko: brez krmilnih in nevidnih znakov, brez oznak [[ ]], omejena dolzina. */
+/** Kot cisto, a v eni vrstici (besedilo modela ne sme ponarediti vrstice pogovora, npr. »\nLastnik: ...«). */
+export function enaVrstica(s: unknown, najvec: number): string {
+  return cisto(typeof s === "string" ? s.replace(/\s*[\r\n]+\s*/g, " ") : s, najvec);
+}
+
 export function cisto(s: unknown, najvec: number): string {
   if (typeof s !== "string") return "";
   return s
@@ -109,8 +114,10 @@ export function najdiEnoto(enote: readonly Enota[], besedilo: string): Enota | n
   let naj: Enota | null = null;
   let tocke = 0;
   for (const e of enote) {
-    const t = presek(koreni(e.naslov), k);
-    if (t > 0 && t >= tocke) {
+    const n = koreni(e.naslov);
+    const t = presek(n, k);
+    // vsaj dva korena naslova (ali vsi, ce jih je manj): »nauci me kako natisniti majice« ne sprozi ure »kontrola tiska na majice«
+    if (t >= Math.min(2, n.size) && t > 0 && t >= tocke) {
       naj = e;
       tocke = t;
     }
@@ -149,18 +156,19 @@ export function sestaviEnoto(navodilo: string, odgovorModela: string | null, id:
   if (koraki.length < NAJMANJ_KORAKOV) return null;
   const m = odgovorModela ? (razberiJson(odgovorModela) as { naslov?: unknown; koraki?: unknown } | null) : null;
   const mk = m && Array.isArray(m.koraki) && m.koraki.length === koraki.length ? (m.koraki as Array<Record<string, unknown>>) : null;
-  const naslov = cisto(m?.naslov, NAJVEC_ZNAKOV_NASLOVA) || naslovBesedila || "Postopek";
+  // naslov modela samo ob veljavnem odgovoru (sicer bi napacen odgovor lahko prepisal drugo enoto z istim naslovom)
+  const naslov = (mk ? enaVrstica(m?.naslov, NAJVEC_ZNAKOV_NASLOVA) : "") || naslovBesedila || "Postopek";
   return {
     id,
     naslov,
     ustvarjeno: zdaj.toISOString(),
     koraki: koraki.map((besedilo, i) => {
       const x = mk?.[i] ?? {};
-      const bistvo = Array.isArray(x.bistvo) ? x.bistvo.map((b) => cisto(b, 40)).filter(Boolean).slice(0, 6) : [];
+      const bistvo = Array.isArray(x.bistvo) ? x.bistvo.map((b) => enaVrstica(b, 40)).filter(Boolean).slice(0, 6) : [];
       return {
         besedilo,
-        razlaga: cisto(x.razlaga, NAJVEC_ZNAKOV_KORAKA),
-        vprasanje: cisto(x.vprasanje, 300) || `Kaj narediš v ${i + 1}. koraku postopka »${naslov}« in zakaj?`,
+        razlaga: enaVrstica(x.razlaga, NAJVEC_ZNAKOV_KORAKA),
+        vprasanje: enaVrstica(x.vprasanje, 300) || `Kaj narediš v ${i + 1}. koraku postopka »${naslov}« in zakaj?`,
         bistvo: bistvo.length ? bistvo : [...koreni(besedilo)].slice(0, 3),
       };
     }),
@@ -192,7 +200,7 @@ export function oceniRezerva(odgovor: string, bistvo: readonly string[]): { razu
 export function razberiOceno(odgovorModela: string): { razume: boolean; manjka: string } | null {
   const j = razberiJson(odgovorModela) as { razume?: unknown; manjka?: unknown } | null;
   if (!j || typeof j.razume !== "boolean") return null;
-  return { razume: j.razume, manjka: cisto(j.manjka, 300) };
+  return { razume: j.razume, manjka: enaVrstica(j.manjka, 300) };
 }
 
 /** Ponavljanje po skatlah: prav -> visja skatla in daljsi razmik; narobe -> skatla 0, ponovi cez 1 dan. */

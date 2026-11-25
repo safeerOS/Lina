@@ -353,7 +353,8 @@ export async function asistentPogovor(
   if (!brain) return { ok: false, sporocilo: await razlogBrezAsistentke(root), zgodovina };
   // Ucenje postopkov (modul ucenje-lh, AGPL, 25. 11. 2026): odloca koda iz lastnikovega besedila (sestava enote, ura, odgovor v uri);
   // po paketu in n8n (njihov »da« ima prednost), samo v tem pogovoru (ne priponke, ne klici). Brez modula vrne null.
-  const ucenje = await ucenjeLHSporocilo(root, novo, brain, zdaj);
+  // Izrecen koledarski ukaz med uro gre koledarju (ura ostane na istem koraku); navodilo s korakom »opomnik« se vseeno shrani kot enota.
+  const ucenje = await ucenjeLHSporocilo(root, novo, brain, zdaj, besedilo.trim().length > MEJA_BESEDILA, jeKoledarskaNamera(novo));
   if (ucenje !== null) return zakljuci(ucenje);
   if (jeKoledarskaNamera(novo)) {
     // Model samo razbere naslov in cas; zapis in potrditev naredi koda, zato Lina ne more trditi, kar ni zapisano.

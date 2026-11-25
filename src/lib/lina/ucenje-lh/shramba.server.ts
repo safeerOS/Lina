@@ -18,6 +18,7 @@ import {
   NAJVEC_IZKUSENJ,
   NAJVEC_IZKUSENJ_NA_TIP,
   cisto,
+  enaVrstica,
   zacetniNapredek,
   type Enota,
   type IzkusnjaLH,
@@ -80,16 +81,16 @@ function veljavnaEnota(x: unknown): Enota | null {
   const e = x as Partial<Enota> | null;
   if (!e || typeof e.id !== "string" || !/^[a-z0-9-]{1,40}$/.test(e.id) || !Array.isArray(e.koraki)) return null;
   const koraki = e.koraki.slice(0, NAJVEC_KORAKOV).map((k) => ({
-    besedilo: cisto(k?.besedilo, NAJVEC_ZNAKOV_KORAKA),
-    razlaga: cisto(k?.razlaga, NAJVEC_ZNAKOV_KORAKA),
-    vprasanje: cisto(k?.vprasanje, 300),
-    bistvo: Array.isArray(k?.bistvo) ? k.bistvo.map((b: unknown) => cisto(b, 40)).filter(Boolean).slice(0, 6) : [],
+    besedilo: enaVrstica(k?.besedilo, NAJVEC_ZNAKOV_KORAKA),
+    razlaga: enaVrstica(k?.razlaga, NAJVEC_ZNAKOV_KORAKA),
+    vprasanje: enaVrstica(k?.vprasanje, 300),
+    bistvo: Array.isArray(k?.bistvo) ? k.bistvo.map((b: unknown) => enaVrstica(b, 40)).filter(Boolean).slice(0, 6) : [],
   }));
   if (koraki.length < NAJMANJ_KORAKOV || koraki.some((k) => !k.besedilo || !k.vprasanje)) return null;
   const napredek = koraki.map((_, i) => veljavenNapredek(Array.isArray(e.napredek) ? e.napredek[i] : null));
   return {
     id: e.id,
-    naslov: cisto(e.naslov, NAJVEC_ZNAKOV_NASLOVA) || "Postopek",
+    naslov: enaVrstica(e.naslov, NAJVEC_ZNAKOV_NASLOVA) || "Postopek",
     ustvarjeno: typeof e.ustvarjeno === "string" ? e.ustvarjeno.slice(0, 40) : "",
     koraki,
     napredek,
@@ -106,8 +107,12 @@ function veljavnaSeja(x: unknown, enote: Enota[]): Seja | null {
   const lo = cel(s.lo, n);
   const hi = cel(s.hi, n);
   const korak = cel(s.korak, n);
-  if (lo === null || hi === null || korak === null || lo > hi || typeof s.zadnjic !== "string") return null;
+  if (lo === null || hi === null || korak === null || lo > hi || typeof s.zadnjic !== "string" || Number.isNaN(Date.parse(s.zadnjic))) return null;
   const vrsta = Array.isArray(s.vrsta) ? s.vrsta.filter((i): i is number => cel(i, n - 1) !== null).slice(0, n) : [];
+  // vsaka faza mora imeti korak, ki obstaja (sicer bi ura obticala)
+  if (s.faza === "merjenje" && lo >= hi) return null;
+  if (s.faza === "pouk" && korak >= n) return null;
+  if (s.faza === "ponavljanje" && vrsta.length === 0) return null;
   return { enotaId: e.id, faza: s.faza as Seja["faza"], lo, hi, korak, vrsta, zadnjic: s.zadnjic };
 }
 
