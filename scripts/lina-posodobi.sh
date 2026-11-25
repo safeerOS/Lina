@@ -80,6 +80,8 @@ if [ "$PAKET" = "safeer-os" ]; then
 fi
 # Cisto zaprtje (od 0.2.7). Ne pkill: ubil bi tudi procese Chromiuma in Lina bi se sesula.
 /opt/Lina/lina-lupina --koncaj >/dev/null 2>&1 < /dev/null 9>&-
+# Zeton za --koncaj velja samo za to Lino; nova (setsid spodaj) ga ne sme podedovati.
+unset LINA_KONCAJ_ZETON
 for i in $(seq 1 15); do pgrep -x lina-lupina >/dev/null || break; sleep 1; done
 # Starejsa Lina brez --koncaj: SIGTERM samo glavnemu procesu (brez --type in brez streznika).
 for p in $(pgrep -x lina-lupina); do

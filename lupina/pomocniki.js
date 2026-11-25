@@ -1,6 +1,8 @@
 // Pomocniki lupine (Linux in Windows), loceni od Electrona, da jih preizkus pozene z lazno platformo (src/lib/lina/lupina-windows.test.ts).
 // Lupina ne more uvoziti src/lib/lina/platforma.server.ts (TypeScript v svezenju streznika), zato je ta datoteka edina izjema
 // zaklepa platforma-ena.test.ts; vejitve po platformi v lupini so samo tu.
+const crypto = require("crypto");
+const { execFile } = require("child_process");
 const path = require("path");
 
 /** Enak appId kot build.appId v package.json: Windows z njim poveze obvestila z bliznjico, ki jo naredi namestitev NSIS. */
@@ -63,4 +65,32 @@ function glaveZaStreznik(url, naslov, zeton, glave) {
   return izid;
 }
 
-module.exports = { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik };
+/**
+ * Prisilni konec streznika (naloga 9, V10). Windows: kill() je TerminateProcess samo za streznik - OpenLine, tunel in RSDO bi ostali
+ * brez starsa; zato taskkill /T /F po PID (celo drevo, vzorec tunel.server.ts). Linux: SIGKILL kot doslej.
+ */
+function prisilniKonec(otrok, platforma, zazeni = execFile) {
+  if (!otrok || otrok.exitCode !== null) return;
+  try {
+    if (platforma === "win32" && otrok.pid) zazeni("taskkill", ["/pid", String(otrok.pid), "/T", "/F"], { windowsHide: true }, () => {});
+    else otrok.kill("SIGKILL");
+  } catch {
+    /* ze koncan */
+  }
+}
+
+/** Najkrajsi zeton za --koncaj (lupina ustvari 24 bajtov = 48 znakov hex). */
+const NAJKRAJSI_ZETON_KONCAJ = 32;
+
+/**
+ * »lina-lupina --koncaj« iz drugega primerka (naloga 9, V10): Lino zapre samo, ce drugi primerek poslje zeton, ki ga je ta lupina
+ * dala strezniku (LINA_KONCAJ_ZETON), streznik pa samo skripti posodobitve. Drug proces istega uporabnika zetona nima.
+ */
+function koncajDovoljen(argv, dodatno, zeton) {
+  if (!Array.isArray(argv) || !argv.includes("--koncaj")) return false;
+  const dan = dodatno && typeof dodatno === "object" ? dodatno.koncaj : undefined;
+  if (typeof zeton !== "string" || zeton.length < NAJKRAJSI_ZETON_KONCAJ || typeof dan !== "string" || dan.length !== zeton.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(dan), Buffer.from(zeton));
+}
+
+module.exports = { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik, prisilniKonec, koncajDovoljen };

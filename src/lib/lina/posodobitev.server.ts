@@ -210,7 +210,8 @@ export function okoljeSkripte(env: NodeJS.ProcessEnv): Record<string, string> {
   const izid: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (typeof v !== "string") continue;
-    if (/^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE)$/.test(k) || /^(XDG|LC)_[A-Z_]+$/.test(k)) izid[k] = v;
+    // LINA_KONCAJ_ZETON (naloga 9, V10): samo s tem zetonom skripta zapre Lino z »lina-lupina --koncaj«
+    if (/^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|LINA_KONCAJ_ZETON)$/.test(k) || /^(XDG|LC)_[A-Z_]+$/.test(k)) izid[k] = v;
   }
   izid.PATH = "/usr/bin:/bin";
   return izid;

@@ -7,7 +7,7 @@ const http = require("http");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
-const { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik } = require("./pomocniki");
+const { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik, prisilniKonec, koncajDovoljen } = require("./pomocniki");
 
 const NAMESTITEV = app.isPackaged ? path.join(process.resourcesPath, "lina") : path.join(__dirname, "..");
 const IKONA = path.join(__dirname, "ikona.png");
@@ -18,6 +18,8 @@ let koncujem = false;
 let naslov = "";
 // Zeton lupine (nakljucen ob zagonu): streznik ga dobi v okolju, okno ga posilja samo strezniku (naloga 9, V6).
 const zetonLupine = crypto.randomBytes(24).toString("hex");
+// Zeton za »--koncaj« (naloga 9, V10): streznik ga da samo skripti posodobitve; drug proces Line ne zapre.
+const zetonKoncaja = crypto.randomBytes(24).toString("hex");
 
 app.commandLine.appendSwitch("lang", "sl"); // datum in ura v slovenski obliki
 if (process.platform === "win32") app.setAppUserModelId(APP_ID); // obvestila Windows (bliznjica NSIS ima isti appId)
@@ -25,12 +27,15 @@ if (process.platform === "win32") app.setAppUserModelId(APP_ID); // obvestila Wi
 // Ne s pkill: ta poslje SIGTERM tudi notranjim procesom Chromiuma (GPU, omrezje, zygote) in glavni proces se
 // sesuje (FATAL »GPU process isn't usable«, jedro: trap int3; izmerjeno 23. 11. 2026).
 const SAMO_KONCAJ = process.argv.includes("--koncaj");
-if (!app.requestSingleInstanceLock()) {
+if (!app.requestSingleInstanceLock({ koncaj: process.env.LINA_KONCAJ_ZETON || "" })) {
   app.quit();
 } else if (SAMO_KONCAJ) {
   app.quit(); // Lina ne tece: ni kaj zapreti
 } else {
-  app.on("second-instance", (_dogodek, argv) => (argv.includes("--koncaj") ? app.quit() : pokazi()));
+  app.on("second-instance", (_dogodek, argv, _mapa, dodatno) => {
+    if (!argv.includes("--koncaj")) pokazi();
+    else if (koncajDovoljen(argv, dodatno, zetonKoncaja)) app.quit();
+  });
 }
 
 function prostaVrata() {
@@ -72,6 +77,7 @@ async function zazeniStreznik() {
       // Pot klicev (OpenLine): paket je v resources/lina/openline (lastnik 22. 11. 2026: »OpenLine ni v programu (manjka paket)«).
       ...(fs.existsSync(path.join(NAMESTITEV, "openline", "dist", "index.js")) ? { LINA_OPENLINE_DIR: path.join(NAMESTITEV, "openline") } : {}),
       LINA_LUPINA_ZETON: zetonLupine,
+      LINA_KONCAJ_ZETON: zetonKoncaja,
     },
     // kanal IPC: ustavitev s pospravljanjem tudi na Windows (tam je SIGTERM trd konec); streznik konca tudi, ce lupina umre
     stdio: ["ignore", "ignore", "ignore", "ipc"],
@@ -144,7 +150,7 @@ function ustaviStreznik() {
   const s = strez;
   if (!s || s.exitCode !== null) return;
   prosiZaKonec(s, process.platform);
-  const prisilno = setTimeout(() => { try { if (s.exitCode === null) s.kill("SIGKILL"); } catch {} }, 6000);
+  const prisilno = setTimeout(() => prisilniKonec(s, process.platform), 6000);
   prisilno.unref();
   s.once("exit", () => clearTimeout(prisilno));
 }
@@ -156,7 +162,7 @@ app.on("will-quit", (e) => {
   e.preventDefault();
   const konec = () => { strez = null; app.quit(); };
   s.once("exit", konec);
-  setTimeout(() => { try { if (s.exitCode === null) s.kill("SIGKILL"); } catch {} ; setTimeout(() => app.exit(0), 500); }, 6000);
+  setTimeout(() => { prisilniKonec(s, process.platform); setTimeout(() => app.exit(0), 500); }, 6000);
 });
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
   process.on(signal, () => { ustaviStreznik(); app.quit(); });
