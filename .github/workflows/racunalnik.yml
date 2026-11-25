@@ -16,6 +16,7 @@ on:
       - "public/**"
       - "skili/**"
       - "lupina/**"
+      - "jazz-paket/**"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
@@ -95,20 +96,18 @@ jobs:
           if [ -d public ]; then cp -r public "$GITHUB_WORKSPACE/openline-paket/"; fi
 
       - name: Paket modulov, ki jih streznik nalozi po imenu (jazz za samoucenje, unpdf za otroka razclembe PDF)
+        # unpdf: otrok razclembe ga nalozi po imenu (import.meta.resolve), zato ga svezenje nima (0.2.10: PDF »poskodovan«).
+        # naloga 10 V8: zaklenjeno kot windows.yml (jazz-paket/package-lock.json = vnosi korenskega locka, preizkus naloga-9-v8)
+        working-directory: jazz-paket
         run: |
           set -euo pipefail
-          # unpdf: otrok razclembe ga nalozi po imenu (import.meta.resolve), zato ga svezenje nima (0.2.10: PDF »poskodovan«).
-          UNPDF=$(node -p "require('./package-lock.json').packages['node_modules/unpdf'].version")
-          mkdir -p jazz-paket
-          echo '{"name":"jp","private":true}' > jazz-paket/package.json
-          cd jazz-paket
-          npm install --omit=dev --no-audit --no-fund jazz-tools@0.8.23 cojson@0.8.23 cojson-transport-ws@0.8.23 "unpdf@${UNPDF}"
+          npm ci --omit=dev --no-audit --no-fund
           test -d node_modules/jazz-tools
           test -f node_modules/unpdf/package.json
 
       - name: Namestitev lupine (Electron in electron-builder)
         working-directory: lupina
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Paket deb
         working-directory: lupina
