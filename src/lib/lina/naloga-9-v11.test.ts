@@ -8,7 +8,7 @@ import { mkdtemp } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, it } from "node:test";
+import { after, afterEach, describe, it } from "node:test";
 import { setupOwner } from "./auth.server.ts";
 import { pogovorBrain, shraniKljucAsistentke } from "./keys.server.ts";
 import { ustvariOrkestrator } from "./orkestrator.server.ts";
@@ -19,10 +19,16 @@ const KOREN = mkdtempSync(path.join(tmpdir(), "lina-n9-v11-"));
 process.on("exit", () => rmSync(KOREN, { recursive: true, force: true }));
 const praviFetch = globalThis.fetch;
 const DENY = { data_collection: "deny" };
+const prejLinaData = process.env.LINA_DATA;
 
 afterEach(() => {
   globalThis.fetch = praviFetch;
+  if (prejLinaData === undefined) delete process.env.LINA_DATA;
+  else process.env.LINA_DATA = prejLinaData;
 });
+
+// naloga 11 N9: preizkus ne pusti LINA_DATA spremenjene za druge preizkuse v istem procesu
+after(() => assert.equal(process.env.LINA_DATA, prejLinaData));
 
 describe("V11: callProviderZOrodji vedno z deny", () => {
   it("OpenRouter :free s stikalom in vsebinaKlica false: telo ima provider.data_collection = deny", () => {
