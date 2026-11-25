@@ -16,7 +16,8 @@ const trdiPosiljanje = /po[sš]iljam|poslala|predala|predajam/i;
 test("vprašanje o različici: prepozna naravne oblike, ne pa drugih vprašanj", () => {
   for (const v of ["Katera različica si?", "katero verzijo imaš nameščeno", "Kakšna je tvoja različica?", "Which version are you?"]) assert.ok(vprasanjeORazlicici(v), v);
   for (const v of ["Katera različica Pythona je na računalniku?", "Pošlji nalogo računalniku", "Kaj je novega v Androidu 16?",
-    "Katero verzijo ponudbe naj pošljem stranki?", "Katera različica dokumenta je zadnja?", "Katero različico si želiš za stran?"]) assert.ok(!vprasanjeORazlicici(v), v);
+    "Katero verzijo ponudbe naj pošljem stranki?", "Katera različica dokumenta je zadnja?", "Katero različico si želiš za stran?",
+    "Zapiši si, da je nova verzija pogodbe podpisana", "Opomni me jutri, da si ogledam novo različico ponudbe", "Ali si poslala novo verzijo ponudbe?"]) assert.ok(!vprasanjeORazlicici(v), v);
 });
 
 test("odgovor o različici: prava različica iz nameščenega paketa z virom; brez podatka ne ugiba", () => {
@@ -69,7 +70,7 @@ test("naloga s pravo mapo: ostane predlog (ali zavrnitev programa), trditve mode
 
 test("sestaviAsistenta: odsek O SEBI je v navodilu za vse poti (pogovor in priponke), z različico ali »ne poznaš«", () => {
   assert.match(sestaviAsistenta([], "Živjo", undefined, undefined, [], "", "", { razlicica: "0.2.11" }).system, /O SEBI[^]*0\.2\.11/);
-  assert.match(sestaviAsistenta([], "Živjo", undefined, undefined, []).system, /O SEBI[^]*različice ne poznaš/i);
+  assert.match(sestaviAsistenta([], "Živjo", undefined, undefined, [], "", "", { razlicica: null }).system, /O SEBI[^]*različice ne poznaš/i);
 });
 
 test("prava pot asistentPogovor: vprašanje o različici dobi odgovor iz paketa brez modela; drugo vprašanje dobi O SEBI v navodilu", async () => {
@@ -98,4 +99,11 @@ test("prava pot asistentPogovor: vprašanje o različici dobi odgovor iz paketa 
     if (staro === undefined) delete process.env.LINA_DATA; else process.env.LINA_DATA = staro;
     await razlicicaLine({ izvedi: async () => { throw new Error("ponastavi"); }, sveze: true });
   }
+});
+
+test("odstranitev trditev ohrani vrstice z drugimi oznakami in prelome", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "lina-11-"));
+  const r = await obdelajClaudeCode(root, "Pošiljam nalogo računalniku.\nPrva vrstica ostane.\n[[gradnja: lina | apk]]\n[[claude-code: /nikjer/X | popravi]]", true);
+  assert.match(r, /Prva vrstica ostane\.\n\[\[gradnja: lina \| apk\]\]/);
+  assert.doesNotMatch(r, trdiPosiljanje);
 });

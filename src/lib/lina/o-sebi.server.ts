@@ -49,14 +49,15 @@ export async function razlicicaLine(o: { izvedi?: Izvedi; sveze?: boolean } = {}
   return vrednost;
 }
 
-const RAZLICICA = /različic|razlicic|verzij|version/i;
-/** Vprasanje mora meriti na Lino samo, sicer gre za razlicico necesa drugega (ponudbe, dokumenta). */
-const O_SEBI = /(^|[^\p{L}])si(?![\p{L}])(?!\s+(žel|zel|misl|lahko|upa))|(^|[^\p{L}])(tvoj\p{L}*|lina|lino|are you|your)(?![\p{L}])|ima[sš] name[sš][cč]en|te[cč]e[sš]/iu;
-/** Vprasanje o drugem programu ali napravi ni vprasanje o Lini. */
-const DRUG_PROGRAM = /python|android|java|node|ubuntu|linux|windows|chrome|kotlin|gradle|sistem/i;
+/**
+ * Vprasanje o Linini razlicici: »si/imaš (nameščeno)/teče/are you« takoj za besedo razlicica na koncu vprasanja ali »tvoja/Lina« ob njej.
+ * Golo »si« ni dovolj (»Zapiši si, da je nova verzija pogodbe …«); zgresena oblika ni draga, ker model razlicico dobi v O SEBI.
+ */
+const VPRASANJE =
+  /(različic|razlicic|verzij|version)\p{L}*\s+(si|ima[sš](\s+name[sš][cč]en\p{L}*)?|te[cč]e[sš]?|are you)\s*[?.!]*\s*$|(^|[^\p{L}])(tvoj\p{L}*|your)\s+(različic|razlicic|verzij|version)|(različic|razlicic|verzij|version)\p{L}*\s+(lin[ae]|tvoj\p{L}*|of lina)(?!\p{L})/iu;
 
 export function vprasanjeORazlicici(besedilo: string): boolean {
-  return besedilo.length <= 120 && RAZLICICA.test(besedilo) && O_SEBI.test(besedilo) && !DRUG_PROGRAM.test(besedilo);
+  return besedilo.length <= 120 && VPRASANJE.test(besedilo.trim());
 }
 
 export function odgovorORazlicici(razlicica: string | null): string {
