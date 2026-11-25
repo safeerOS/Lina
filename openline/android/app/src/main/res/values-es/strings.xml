@@ -263,7 +263,7 @@
     <string name="local_task_zavrnjena">El ordenador rechazó la tarea (este teléfono no tiene permiso). Revisa la conexión en Ajustes > Ordenador.</string>
     <string name="local_task_prevec">El ordenador rechazó la tarea por demasiadas solicitudes en poco tiempo. Inténtalo dentro de unos minutos.</string>
     <string name="local_task_zasedeno">No entregué la tarea porque ya hay otra en curso en el ordenador. Espera a que termine.</string>
-    <string name="local_task_napaka">No pude entregar la tarea: el ordenador devolvió un error. Los detalles están en la pestaña Ordenador.</string>
+    <string name="local_task_napaka">No pude entregar la tarea por un error (texto de la tarea, firma del teléfono o respuesta del ordenador). Inténtalo de nuevo; los detalles están en la pestaña Ordenador.</string>
     <string name="local_task_preverjam">Compruebo si el ordenador acepta la tarea …</string>
     <string name="local_task_shrani_naslov">¿Guardar la tarea para más tarde?</string>
     <string name="local_task_shrani">Guardar y enviar más tarde</string>

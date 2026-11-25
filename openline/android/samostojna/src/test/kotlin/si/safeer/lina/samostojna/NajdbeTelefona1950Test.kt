@@ -82,7 +82,9 @@ class NajdbeTelefona1950Test {
         // Naloga 11: posiljanje in »predana« sta v predajNalogo; »predana« samo po potrditvi racunalnika (SPREJETA)
         assertTrue(t.contains("predajNalogo(asist, besedilo)"), t)
         val p = telo(pogovor, "predajNalogo")
-        assertTrue(p.contains("posljiRacunalniku(besedilo)") && Regex("""IzidPredaje\.SPREJETA\) asist\.nalogaPredana\(besedilo\)""").containsMatchIn(p), p)
+        assertTrue(p.contains("posljiRacunalniku(besedilo)") && p.contains("izidNaloge("), p)
+        val iz = telo(pogovor, "izidNaloge")
+        assertTrue(iz.contains("val sprejeta = izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA") && iz.contains("if (sprejeta) asist.nalogaPredana(besedilo)"), iz)
         // brez »Velja za podobne«: nezaupana naloga nikoli ne postane trajno soglasje
         assertFalse(t.contains("soglasja") || t.contains("consent_similar"), t)
     }

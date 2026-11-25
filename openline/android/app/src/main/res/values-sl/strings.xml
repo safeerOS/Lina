@@ -263,7 +263,7 @@
     <string name="local_task_zavrnjena">Računalnik je nalogo zavrnil (ta telefon nima dovoljenja). Preveri povezavo v Nastavitvah > Računalnik.</string>
     <string name="local_task_prevec">Računalnik je nalogo zavrnil, ker je bilo v kratkem času preveč zahtev. Poskusi čez nekaj minut.</string>
     <string name="local_task_zasedeno">Naloge nisem oddala, ker na računalniku že teče druga naloga. Počakaj, da se konča.</string>
-    <string name="local_task_napaka">Naloge nisem mogla oddati: računalnik je vrnil napako. Podrobnosti so v zavihku Računalnik.</string>
+    <string name="local_task_napaka">Naloge nisem mogla oddati zaradi napake (besedilo naloge, podpis telefona ali odgovor računalnika). Poskusi znova; podrobnosti so v zavihku Računalnik.</string>
     <string name="local_task_preverjam">Preverjam, ali računalnik nalogo sprejme …</string>
     <string name="local_task_shrani_naslov">Shranim nalogo za pozneje?</string>
     <string name="local_task_shrani">Shrani in pošlji pozneje</string>

@@ -116,10 +116,30 @@ class ZvestobaVirom11Test {
     }
 
     @Test fun `vprasanje o razlicici necesa drugega ni vprasanje o Lini`() {
-        for (v in listOf("Katero verzijo ponudbe naj pošljem stranki?", "Katera različica dokumenta je zadnja?", "Katero različico si želiš za stran?", "Katera različica Pythona je na računalniku?"))
+        for (v in listOf("Katero verzijo ponudbe naj pošljem stranki?", "Katera različica dokumenta je zadnja?", "Katero različico si želiš za stran?", "Katera različica Pythona je na računalniku?",
+                "Zapiši si, da je nova verzija pogodbe podpisana", "Opomni me jutri, da si ogledam novo različico ponudbe", "Ali si poslala novo verzijo ponudbe?"))
             assertFalse(OSebi.jeVprasanjeORazlicici(v), v)
         for (v in listOf("Katera različica si?", "Katero verzijo imaš nameščeno?", "Kakšna je tvoja različica?", "Which version are you?"))
             assertTrue(OSebi.jeVprasanjeORazlicici(v), v)
+    }
+
+    @Test fun `varovalo ohrani vrstice z ukazi - zapisek z besedo predala in opomnik za trditvijo`() {
+        val z = Asistent(Model("Zapisala sem.\n[[zapisek: Ana je predala nalogo računalniku]]"), "S").povej("Zapiši: Ana je predala nalogo računalniku.")
+        assertTrue(z is Odgovor.Zapisek, z.toString())
+        assertEquals("Ana je predala nalogo računalniku", (z as Odgovor.Zapisek).besedilo)
+        val o = Asistent(Model("Pošiljam nalogo računalniku.\n[[opomnik: 2026-12-01T09:00:00+01:00|preveri nalogo]]"), "S").povej("Opomni me 1. 12. ob 9h, da preverim nalogo.")
+        assertTrue(o is Odgovor.Opomnik, o.toString())
+    }
+
+    @Test fun `izid predaje gre v zgodovino - model v naslednjem obratu ve, da naloga ni bila sprejeta`() {
+        val m = Model("[[racunalnik: V mapi /home/uporabnik/projekt popravi prijavo.]]", "V redu.")
+        val a = Asistent(m, "S", racunalnikSeznanjen = { true })
+        assertTrue(a.povej("Pošlji računalniku: v mapi /home/uporabnik/projekt popravi prijavo.") is Odgovor.NalogaRacunalniku)
+        a.nalogaNiPredana("popravi prijavo", "Naloge nisem mogla poslati, ker računalnik ni dosegljiv.")
+        a.povej("Kaj je z nalogo?")
+        val model = m.klici.last().first.filter { it.vloga == "model" }.joinToString("\n") { it.besedilo }
+        assertTrue(model.contains("ni sprejel") && model.contains("ni dosegljiv"), model)
+        assertFalse(model.contains("izid sporoči program"), model)
     }
 
     @Test fun `izid predaje - vsak primer OdgovorLine ima svoje besedilo`() {

@@ -316,7 +316,13 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private val shrambaCakajoce get() = context.getSharedPreferences("lina_cakajoca_naloga", Context.MODE_PRIVATE)
 
     /** Ena shranjena naloga (lastnik jo je potrdil v oknu); nova zamenja staro. */
-    fun shraniZaPozneje(besedilo: String): Boolean = shrambaCakajoce.edit().putString("besedilo", besedilo).commit()
+    fun shraniZaPozneje(besedilo: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null): Boolean {
+        obIzidu?.let { obIzidShranjene = it }
+        return shrambaCakajoce.edit().putString("besedilo", besedilo).commit()
+    }
+
+    /** Klic klepeta za izid shranjene naloge (samo v pomnilniku: po ponovnem zagonu gre izid le v dnevnik zavihka Racunalnik). */
+    @Volatile private var obIzidShranjene: ((IzidPredaje, String?) -> Unit)? = null
 
     /** Glavna nit: shranjeno nalogo poslje, ko je racunalnik dosegljiv in telefon ne dela druge; izid gre v dnevnik zavihka Racunalnik. */
     private fun posljiShranjeno() {
@@ -324,10 +330,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         if (posiljam || nalogaId != null) return
         shrambaCakajoce.edit().remove("besedilo").apply()
         // nazaj v shrambo samo ob nedosegljivem (403/429/napaka bi se sicer ponavljali v nedogled); izid gre v dnevnik zavihka Racunalnik
-        poslji(b) { izid, _ ->
+        poslji(b) { izid, id ->
+            if (izid != IzidPredaje.NEDOSEGLJIV) obIzidShranjene?.also { obIzidShranjene = null }?.invoke(izid, id)
             when (izid) {
                 IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
-                IzidPredaje.NEDOSEGLJIV -> shraniZaPozneje(b)
+                IzidPredaje.NEDOSEGLJIV -> shrambaCakajoce.edit().putString("besedilo", b).apply()
                 else -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_ni, b.take(120)))
             }
         }

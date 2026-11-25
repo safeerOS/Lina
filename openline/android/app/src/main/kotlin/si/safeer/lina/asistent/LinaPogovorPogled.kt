@@ -65,7 +65,7 @@ class LinaPogovorPogled(
     /** Poslje nalogo; izid (sprejeta s stevilko ali napaka) pride na glavni niti, sele po odgovoru racunalnika. */
     private val posljiRacunalniku: (String, (si.safeer.lina.samostojna.IzidPredaje, String?) -> Unit) -> Unit = { _, izid -> izid(si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV, null) },
     /** Shrani nalogo, ki jo telefon poslje, ko bo racunalnik dosegljiv (lastnikova potrditev v oknu). */
-    private val shraniZaPozneje: (String) -> Boolean = { false },
+    private val shraniZaPozneje: (String, (si.safeer.lina.samostojna.IzidPredaje, String?) -> Unit) -> Boolean = { _, _ -> false },
 ) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
@@ -821,29 +821,38 @@ class LinaPogovorPogled(
      * racunalnik -> »nisem mogla poslati« in ponudba, da jo telefon shrani in poslje, ko bo racunalnik dosegljiv.
      */
     private fun predajNalogo(asist: Asistent, besedilo: String) {
-        posljiRacunalniku(besedilo) { izid, id ->
-            if (a.isFinishing) return@posljiRacunalniku
-            if (izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA) asist.nalogaPredana(besedilo)
-            // imena nizov = PredajaNaloge.kljuc(izid); ZvestobaVirom11Test preveri, da obstajajo v vseh jezikih
-            val kljuc = when (izid) {
-                si.safeer.lina.samostojna.IzidPredaje.SPREJETA -> R.string.local_task_sprejeta
-                si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV -> R.string.local_task_nedosegljiv
-                si.safeer.lina.samostojna.IzidPredaje.CLAUDE_CODE_NI -> R.string.local_task_claude_code_ni
-                si.safeer.lina.samostojna.IzidPredaje.ZAVRNJENA -> R.string.local_task_zavrnjena
-                si.safeer.lina.samostojna.IzidPredaje.PREVEC -> R.string.local_task_prevec
-                si.safeer.lina.samostojna.IzidPredaje.ZASEDENO -> R.string.local_task_zasedeno
-                si.safeer.lina.samostojna.IzidPredaje.NAPAKA -> R.string.local_task_napaka
-            }
-            obvestilo(if (izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA) a.getString(kljuc, besedilo, si.safeer.lina.samostojna.PredajaNaloge.stevilka(id ?: "")) else a.getString(kljuc))
-            if (izid == si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV) ponudiShranjevanje(besedilo)
-        }
+        posljiRacunalniku(besedilo) { izid, id -> izidNaloge(asist, besedilo, izid, id, ponudiShranitev = true) }
     }
 
-    private fun ponudiShranjevanje(besedilo: String) {
+    /** Glavna nit: izid v klepet in (na niti pogovora, kot povej) v zgodovino Asistenta, da model ve, kaj se je zgodilo. */
+    private fun izidNaloge(asist: Asistent, besedilo: String, izid: si.safeer.lina.samostojna.IzidPredaje, id: String?, ponudiShranitev: Boolean) {
+        if (a.isFinishing) return
+        // imena nizov = PredajaNaloge.kljuc(izid); ZvestobaVirom11Test preveri, da obstajajo v vseh jezikih
+        val kljuc = when (izid) {
+            si.safeer.lina.samostojna.IzidPredaje.SPREJETA -> R.string.local_task_sprejeta
+            si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV -> R.string.local_task_nedosegljiv
+            si.safeer.lina.samostojna.IzidPredaje.CLAUDE_CODE_NI -> R.string.local_task_claude_code_ni
+            si.safeer.lina.samostojna.IzidPredaje.ZAVRNJENA -> R.string.local_task_zavrnjena
+            si.safeer.lina.samostojna.IzidPredaje.PREVEC -> R.string.local_task_prevec
+            si.safeer.lina.samostojna.IzidPredaje.ZASEDENO -> R.string.local_task_zasedeno
+            si.safeer.lina.samostojna.IzidPredaje.NAPAKA -> R.string.local_task_napaka
+        }
+        val sprejeta = izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA
+        val sporocilo = if (sprejeta) a.getString(kljuc, besedilo, si.safeer.lina.samostojna.PredajaNaloge.stevilka(id ?: "")) else a.getString(kljuc)
+        nit.execute { if (sprejeta) asist.nalogaPredana(besedilo) else asist.nalogaNiPredana(besedilo, sporocilo) }
+        obvestilo(sporocilo)
+        if (izid == si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV && ponudiShranitev) ponudiShranjevanje(asist, besedilo)
+    }
+
+    private fun ponudiShranjevanje(asist: Asistent, besedilo: String) {
         android.app.AlertDialog.Builder(a)
             .setTitle(R.string.local_task_shrani_naslov)
             .setMessage(besedilo)
-            .setPositiveButton(R.string.local_task_shrani) { _, _ -> obvestilo(a.getString(if (shraniZaPozneje(besedilo)) R.string.local_task_shranjena else R.string.local_task_napaka)) }
+            .setPositiveButton(R.string.local_task_shrani) { _, _ ->
+                // izid poznejse predaje gre v klepet in zgodovino (shranjena naloga se ne ponudi znova)
+                val ok = shraniZaPozneje(besedilo) { izid, id -> glavna.post { izidNaloge(asist, besedilo, izid, id, ponudiShranitev = false) } }
+                obvestilo(a.getString(if (ok) R.string.local_task_shranjena else R.string.local_task_napaka))
+            }
             .setNegativeButton(R.string.local_event_cancel, null)
             .pokaziVarno()
     }

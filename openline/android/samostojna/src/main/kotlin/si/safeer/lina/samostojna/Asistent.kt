@@ -84,9 +84,18 @@ class Asistent(
      * Klice aplikacija, ko je racunalnik nalogo res sprejel (zavrnjena naloga ne sme postati »zadnja«). Oznaka gre v trajno zgodovino
      * seje, da Lina po ponovnem zagonu ve, da je bila naloga sprejeta (naloga 11: sicer bi resnicno »poslala sem« zamenjala z zanikanjem).
      */
-    fun nalogaPredana(besedilo: String) {
-        zadnjaNaloga = besedilo
-        runCatching { seja?.dodaj("[program]", PredajaNaloge.OZNAKA_SPREJETA + besedilo.take(300) + "]", zdaj().toInstant().toEpochMilli()) }
+    fun nalogaPredana(besedilo: String) = zapisiIzidNaloge(besedilo, PredajaNaloge.OZNAKA_SPREJETA + besedilo.take(300) + "]", sprejeta = true)
+
+    /** Racunalnik naloge ni sprejel: model v naslednjem obratu ve, zakaj (besedilo, ki ga je videl uporabnik). */
+    fun nalogaNiPredana(besedilo: String, sporocilo: String) =
+        zapisiIzidNaloge(besedilo, "[program: naloge »${besedilo.take(200)}« računalnik ni sprejel: ${sporocilo.take(300)}]", sprejeta = false)
+
+    /** Izid zamenja zacasno oznako »izid sporoči program« v zgodovini in gre v trajno zgodovino seje. Klici na isti niti kot [povej]. */
+    private fun zapisiIzidNaloge(besedilo: String, zapis: String, sprejeta: Boolean) {
+        if (sprejeta) zadnjaNaloga = besedilo
+        val i = zgodovina.indexOfLast { it.vloga == "model" && it.besedilo.startsWith(ZACASNI_IZID) }
+        if (i >= 0) zgodovina[i] = Sporocilo("model", zapis)
+        runCatching { seja?.dodaj("[program]", zapis, zdaj().toInstant().toEpochMilli()) }
     }
     // Orodja vzporedno (do 3 naenkrat) s predpomnilnikom uspesnih rezultatov v tem pogovoru (22. 11. 2026).
     private val izvajalec = IzvajalecOrodij({ k ->
@@ -202,7 +211,7 @@ class Asistent(
                             }
                             is SamostojnaNaloga.Izid.Pripravljena -> {
                                 // Trditve modela (»pošiljam«) ne gredo v zgodovino: izid pove program sele po odgovoru racunalnika (naloga 11).
-                                val besedilo = "[naloga za računalnik je šla programu; izid sporoči program: ${p.besedilo.take(300)}]"
+                                val besedilo = "$ZACASNI_IZID${p.besedilo.take(300)}]"
                                 zgodovina.add(Sporocilo("model", besedilo))
                                 obrezi()
                                 zapomni(vnos, besedilo)
@@ -296,6 +305,7 @@ class Asistent(
 
     companion object {
         private const val NAJVEC_KROGOV_ORODIJ = 2
+        private const val ZACASNI_IZID = "[naloga za računalnik je šla programu; izid sporoči program: "
         /** Vecji priklic za nalogo racunalniku in odgovor Claude Code (navadni: SpominPogovorov.NAJVEC_PRIKLICANIH po 300 znakov). */
         const val VECJI_PRIKLIC = 15
         const val ZNAKOV_VECJEGA_PRIKLICA = 800

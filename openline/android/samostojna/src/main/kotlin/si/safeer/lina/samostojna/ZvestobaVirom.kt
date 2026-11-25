@@ -28,14 +28,17 @@ object OSebi {
         "branje koledarja telefona", "lokalni dokumenti", "način ne moti in svetlost zaslona (po potrditvi, če je vklopljen sistemski nadzor)",
     )
 
-    private val RAZLICICA = Regex("različic|razlicic|verzij|version", RegexOption.IGNORE_CASE)
-    /** Vprasanje mora meriti na Lino samo (»si«, »tvoja«, »Lina«, »imaš nameščeno«), sicer gre za razlicico necesa drugega (ponudbe, dokumenta). */
-    private val O_SEBI = Regex("\\bsi\\b(?!\\s+(žel|zel|misl|lahko|upa))|\\b(tvoj\\w*|lina|lino|are you|your)\\b|ima[sš] name[sš][cč]en|te[cč]e[sš]", RegexOption.IGNORE_CASE)
-    /** Vprasanje o drugem programu ali napravi ni vprasanje o Lini. */
-    private val DRUG_PROGRAM = Regex("python|android|java|node|ubuntu|linux|windows|chrome|kotlin|gradle|sistem", RegexOption.IGNORE_CASE)
+    /**
+     * Vprasanje o Linini razlicici: »si/imaš (nameščeno)/teče/are you« takoj za besedo razlicica na koncu vprasanja ali »tvoja/Lina« ob njej.
+     * Golo »si« ni dovolj (»Zapiši si, da je nova verzija pogodbe …«); zgresena oblika ni draga, ker model razlicico dobi v O SEBI.
+     */
+    private val VPRASANJE_RAZLICICE = Regex(
+        "(različic|razlicic|verzij|version)\\w*\\s+(si|ima[sš](\\s+name[sš][cč]en\\w*)?|te[cč]e[sš]?|are you)\\s*[?.!]*\\s*$|" +
+            "\\b(tvoj\\w*|your)\\s+(različic|razlicic|verzij|version)|(različic|razlicic|verzij|version)\\w*\\s+(lin[ae]|tvoj\\w*|of lina)\\b",
+        RegexOption.IGNORE_CASE,
+    )
 
-    fun jeVprasanjeORazlicici(vnos: String): Boolean =
-        vnos.length <= 120 && RAZLICICA.containsMatchIn(vnos) && O_SEBI.containsMatchIn(vnos) && !DRUG_PROGRAM.containsMatchIn(vnos)
+    fun jeVprasanjeORazlicici(vnos: String): Boolean = vnos.length <= 120 && VPRASANJE_RAZLICICE.containsMatchIn(vnos.trim())
 
     fun odgovorORazlicici(razlicica: String): String =
         if (razlicica.isBlank()) "Različice ne vem: aplikacija mi je ni sporočila. Piše v Nastavitvah telefona pod Aplikacije > Lina."
@@ -84,14 +87,21 @@ object PredajaNaloge {
     fun brezLazneTrditve(besedilo: String, stanje: StanjeRacunalnika, sprejeta: Boolean = false): String {
         fun lazna(st: String) = O_RACUNALNIKU.containsMatchIn(st) &&
             ((!sprejeta && TRDI_POSILJANJE.containsMatchIn(st)) || (stanje != StanjeRacunalnika.DOSEGLJIV && TRDI_POVEZAVO.containsMatchIn(st)))
-        val stavki = besedilo.split(Regex("(?<=[.!?])\\s+|\\n"))
-        if (stavki.none(::lazna)) return besedilo
-        val ostalo = stavki.filterNot(::lazna).joinToString(" ").trim()
+        // po vrsticah: vrstice z ukazi ([[zapisek: …]], [[opomnik: …]]) ostanejo cele in na svojem mestu
+        var odstranjeno = false
+        val vrstice = besedilo.lines().mapNotNull { v ->
+            if (v.trim().startsWith("[[")) return@mapNotNull v
+            val stavki = v.split(Regex("(?<=[.!?])\\s+"))
+            val ostanek = stavki.filterNot(::lazna)
+            if (ostanek.size == stavki.size) v else { odstranjeno = true; ostanek.joinToString(" ").ifBlank { null } }
+        }
+        if (!odstranjeno) return besedilo
+        val ostalo = vrstice.joinToString("\n").trim()
         val dejstvo = when (stanje) {
             StanjeRacunalnika.NI_SEZNANJEN -> "Naloge nisem mogla poslati, ker telefon ni povezan z Lino na računalniku (Nastavitve > Računalnik)."
             StanjeRacunalnika.NEDOSEGLJIV -> "Naloge nisem mogla poslati, ker računalnik ni dosegljiv."
             StanjeRacunalnika.DOSEGLJIV -> "Naloga ni bila predana programu; povej, kaj naj pripravim, pa jo predlagam znova."
         }
-        return if (ostalo.isEmpty()) dejstvo else "$dejstvo $ostalo"
+        return if (ostalo.isEmpty()) dejstvo else "$dejstvo\n$ostalo"
     }
 }

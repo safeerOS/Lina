@@ -263,7 +263,7 @@
     <string name="local_task_zavrnjena">L\'ordinateur a refusé la tâche (ce téléphone n\'est pas autorisé). Vérifiez la connexion dans Réglages > Ordinateur.</string>
     <string name="local_task_prevec">L\'ordinateur a refusé la tâche : trop de requêtes en peu de temps. Réessayez dans quelques minutes.</string>
     <string name="local_task_zasedeno">Je n\'ai pas transmis la tâche car une autre tâche est déjà en cours sur l\'ordinateur. Attendez qu\'elle se termine.</string>
-    <string name="local_task_napaka">Je n\'ai pas pu transmettre la tâche : l\'ordinateur a renvoyé une erreur. Détails dans l\'onglet Ordinateur.</string>
+    <string name="local_task_napaka">Je n\'ai pas pu transmettre la tâche à cause d\'une erreur (texte de la tâche, signature du téléphone ou réponse de l\'ordinateur). Réessayez ; détails dans l\'onglet Ordinateur.</string>
     <string name="local_task_preverjam">Je vérifie si l\'ordinateur accepte la tâche …</string>
     <string name="local_task_shrani_naslov">Enregistrer la tâche pour plus tard ?</string>
     <string name="local_task_shrani">Enregistrer et envoyer plus tard</string>

@@ -263,7 +263,7 @@
     <string name="local_task_zavrnjena">The computer rejected the task (this phone is not allowed). Check the connection in Settings > Computer.</string>
     <string name="local_task_prevec">The computer rejected the task because of too many requests in a short time. Try again in a few minutes.</string>
     <string name="local_task_zasedeno">I did not hand over the task because another task is already running on the computer. Wait for it to finish.</string>
-    <string name="local_task_napaka">I could not hand over the task: the computer returned an error. Details are in the Computer tab.</string>
+    <string name="local_task_napaka">I could not hand over the task because of an error (task text, phone signature or the computer\'s reply). Try again; details are in the Computer tab.</string>
     <string name="local_task_preverjam">Checking whether the computer accepts the task …</string>
     <string name="local_task_shrani_naslov">Save the task for later?</string>
     <string name="local_task_shrani">Save and send later</string>

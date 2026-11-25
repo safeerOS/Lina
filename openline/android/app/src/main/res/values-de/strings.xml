@@ -263,7 +263,7 @@
     <string name="local_task_zavrnjena">Der Computer hat die Aufgabe abgelehnt (dieses Telefon ist nicht berechtigt). Prüfe die Verbindung unter Einstellungen > Computer.</string>
     <string name="local_task_prevec">Der Computer hat die Aufgabe wegen zu vieler Anfragen abgelehnt. Versuche es in ein paar Minuten erneut.</string>
     <string name="local_task_zasedeno">Ich habe die Aufgabe nicht übergeben, weil auf dem Computer bereits eine Aufgabe läuft. Warte, bis sie fertig ist.</string>
-    <string name="local_task_napaka">Ich konnte die Aufgabe nicht übergeben: Der Computer hat einen Fehler gemeldet. Details im Tab Computer.</string>
+    <string name="local_task_napaka">Ich konnte die Aufgabe wegen eines Fehlers nicht übergeben (Aufgabentext, Signatur des Telefons oder Antwort des Computers). Versuche es erneut; Details im Tab Computer.</string>
     <string name="local_task_preverjam">Ich prüfe, ob der Computer die Aufgabe annimmt …</string>
     <string name="local_task_shrani_naslov">Aufgabe für später speichern?</string>
     <string name="local_task_shrani">Speichern und später senden</string>
