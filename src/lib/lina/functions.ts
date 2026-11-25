@@ -1519,6 +1519,23 @@ export const posodobiLinoFn = createServerFn({ method: "POST" }).handler(async (
   return zacniPosodobitev(await sessionToken());
 });
 
+// --- 25. 11. 2026: drugi Safeer programi (samo namesceni, samo s seznama PAKETI). Brskalnik da samo ime; streznik ga preveri.
+export const stanjeDrugihPaketovFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { stanjeDrugihPaketov } = await import("./posodobitev.server.ts");
+  return stanjeDrugihPaketov(await sessionToken());
+});
+
+export const posodobiPaketFn = createServerFn({ method: "POST" })
+  .validator((data: { paket?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const { zacniPosodobitev } = await import("./posodobitev.server.ts");
+    return zacniPosodobitev(await sessionToken(), undefined, {}, typeof data?.paket === "string" ? data.paket : "");
+  });
+
 /** Pravo stanje dodatkov (vsebniki), da vmesnik ne trdi »deluje«, ce ne tece. */
 export const stanjeDodatkovFn = createServerFn({ method: "GET" }).handler(async () => {
   noStore();

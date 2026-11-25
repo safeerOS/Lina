@@ -4,6 +4,9 @@
  * Varovala: ime paketa, samo NOVEJSA razlicica (23. 11. 2026 je bil pomotoma namescen 0.2.5 cez 0.2.8), SHA-256 iz SHA256SUMS
  * (vir GitHub), vsoto preverjene datoteke preveri se skripta tik pred pkexec, ena posodobitev naenkrat.
  * Brskalnik ne da nobenega podatka: pot, razlicico in vir izracuna streznik sam.
+ * 25. 11. 2026 (lastnik: »z programom lina kar klikneš posodobi«): enako za druge Safeer programe s SEZNAMA DOVOLJENIH (PAKETI),
+ * samo ce so namesceni - Lina deluje tudi brez njih (pravilo lastnika 25. 11. 06:45). Safeer OS Lina po namestitvi ne poslje
+ * nobenega signala: zamenjavo procesa naredi Safeer OS sam (nova_razlicica, koda 75); Lina jo samo opazuje (ps, samo branje).
  */
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -16,19 +19,25 @@ import { readJsonFile, resolveDataDir } from "./store.server.ts";
 import { prenesiPreverjeno, vsotaEnaka } from "./tunel.server.ts";
 
 export const IME_PAKETA = "lina-lupina";
+/** Seznam dovoljenih paketov in vir izdaj (javni repozitorij, sredstvo <paket>_<razlicica>_amd64.deb + SHA256SUMS). */
+export const PAKETI = { "lina-lupina": "safeerOS/Lina", "safeer-os": "safeerOS/Safeer-linux" } as const;
+export type ImePaketa = keyof typeof PAKETI;
+/** Own-key preverba: `in` bi sprejel tudi constructor, __proto__ ... */
+export const jeDovoljenPaket = (p: unknown): p is ImePaketa => typeof p === "string" && Object.hasOwn(PAKETI, p);
+/** Toliko casa ima Safeer OS, da sam zamenja proces z novo razlicico; nato Lina ponudi gumb (potrdi uporabnik). */
+export const ROK_ZAMENJAVE_MS = 120_000;
 export const SKRIPTA_POSODOBITVE = "/opt/Lina/resources/lina/posodobi.sh";
 export const DATOTEKA_VIRA = "posodobitev.json";
 export const DATOTEKA_IZIDA = "posodobitev-izid.json";
 export const MAPA_PRENOSA = "posodobitev";
-const API_IZDAJE = "https://api.github.com/repos/safeerOS/Lina/releases/latest";
-const OSNOVA_PRENOSA = "https://github.com/safeerOS/Lina/releases/download/";
 const NAJVEC_PAKETA = 400_000_000;
 const ROK_PAKETA_MS = 30 * 60_000;
 const NAJVEC_API = 1_000_000;
 const PREDPOMNILNIK_MS = 10 * 60_000;
 /** Stroga oblika razlicice (stevke in pike): poenostavi primerjavo v bashu in JSON izida ostane varen. */
 const RAZLICICA = /^[0-9]{1,6}(\.[0-9]{1,6}){0,3}$/;
-const IME_DEB = /^lina-lupina_([0-9.]{1,30})_amd64\.deb$/;
+const imeDeb = (paket: ImePaketa) => new RegExp(`^${paket}_([0-9.]{1,30})_amd64\\.deb$`);
+const datotekaIzida = (paket: ImePaketa) => (paket === IME_PAKETA ? DATOTEKA_IZIDA : `posodobitev-izid-${paket}.json`);
 const NADZORNI = /[\u0000-\u001f\u007f-\u009f]/;
 
 export type Vir = "github" | "mapa";
@@ -48,7 +57,7 @@ export type StanjePosodobitve =
       napakaVira: boolean;
       zadnjiIzid: IzidPosodobitve | null;
     };
-export type RazlogZavrnitve = "platforma" | "ni_skripte" | "ni_namescena" | "ze_tece" | "ni_vira" | "ni_novejsa" | "napacen_paket" | "vsota" | "prenos" | "pot";
+export type RazlogZavrnitve = "neznan_paket" | "platforma" | "ni_skripte" | "ni_namescena" | "ze_tece" | "ni_vira" | "ni_novejsa" | "napacen_paket" | "vsota" | "prenos" | "pot";
 export type IzidZagona = { ok: true; razlicica: string } | { ok: false; razlog: RazlogZavrnitve };
 
 /** Zagnan otrok: samo kar potrebujemo (dogodka konca, odveza). */
@@ -131,11 +140,12 @@ export function varnaPot(p: unknown): p is string {
   return typeof p === "string" && p.length > 0 && p.length < 4096 && path.isAbsolute(p) && !NADZORNI.test(p);
 }
 
-/** Najnovejsi lina-lupina_*_amd64.deb v mapi; primerjava kot dpkg (0.2.10 > 0.2.9), ne abecedno. */
-export function najnovejsiPaket(imena: readonly string[]): { ime: string; razlicica: string } | null {
+/** Najnovejsi <paket>_*_amd64.deb v mapi; primerjava kot dpkg (0.2.10 > 0.2.9), ne abecedno. */
+export function najnovejsiPaket(imena: readonly string[], paket: ImePaketa = IME_PAKETA): { ime: string; razlicica: string } | null {
   let naj: { ime: string; razlicica: string } | null = null;
+  const vzorec = imeDeb(paket);
   for (const ime of imena) {
-    const m = IME_DEB.exec(ime);
+    const m = vzorec.exec(ime);
     if (!m || !veljavnaRazlicica(m[1])) continue;
     if (!naj || primerjajRazlicici(m[1], naj.razlicica) > 0) naj = { ime, razlicica: m[1] };
   }
@@ -205,9 +215,9 @@ function odv(o: Odvisnosti) {
 }
 type Odv = ReturnType<typeof odv>;
 
-export async function namescenaRazlicica(o: Odv): Promise<string | null> {
+export async function namescenaRazlicica(o: Odv, paket: ImePaketa = IME_PAKETA): Promise<string | null> {
   try {
-    const v = (await o.izvedi("/usr/bin/dpkg-query", ["-W", "-f=${Version}", IME_PAKETA])).trim();
+    const v = (await o.izvedi("/usr/bin/dpkg-query", ["-W", "-f=${Version}", paket])).trim();
     return veljavnaRazlicica(v) ? v : null;
   } catch {
     return null;
@@ -233,16 +243,16 @@ async function mapaVira(root: string): Promise<string | null | "neveljavno"> {
   return varnaPot(vsebina.mapa) ? path.resolve(vsebina.mapa) : "neveljavno";
 }
 
-type Predpomnilnik = { cas: number; kandidat: Kandidat | null } | null;
-let predpomnilnik: Predpomnilnik = null;
+const predpomnilnik = new Map<ImePaketa, { cas: number; kandidat: Kandidat | null }>();
 export function ponastaviPredpomnilnik(): void {
-  predpomnilnik = null;
+  predpomnilnik.clear();
 }
 
 /** Vir A: zadnja izdaja javnega repozitorija. Naslove sredstev sestavimo sami (ne browser_download_url). */
-export async function kandidatGithub(o: Odv, sveze = false): Promise<Kandidat | null> {
-  if (!sveze && predpomnilnik && o.zdaj() - predpomnilnik.cas < PREDPOMNILNIK_MS) return predpomnilnik.kandidat;
-  const odgovor = await o.fetchFn(API_IZDAJE, {
+export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
+  const shranjen = predpomnilnik.get(paket);
+  if (!sveze && shranjen && o.zdaj() - shranjen.cas < PREDPOMNILNIK_MS) return shranjen.kandidat;
+  const odgovor = await o.fetchFn(`https://api.github.com/repos/${PAKETI[paket]}/releases/latest`, {
     redirect: "error",
     headers: { accept: "application/vnd.github+json", "user-agent": "Lina" },
     signal: AbortSignal.timeout(15_000),
@@ -257,29 +267,30 @@ export async function kandidatGithub(o: Odv, sveze = false): Promise<Kandidat | 
     const izdaja = JSON.parse(besedilo) as { tag_name?: unknown; assets?: Array<{ name?: unknown }> };
     const oznaka = izdaja.tag_name;
     const imena = Array.isArray(izdaja.assets) ? izdaja.assets.map((a) => (typeof a?.name === "string" ? a.name : "")) : [];
-    const paket = najnovejsiPaket(imena);
-    if (typeof oznaka === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(oznaka) && paket && imena.includes("SHA256SUMS")) {
-      const osnova = `${OSNOVA_PRENOSA}${oznaka}/`;
-      kandidat = { razlicica: paket.razlicica, vir: "github", ime: paket.ime, url: osnova + paket.ime, urlVsot: osnova + "SHA256SUMS" };
+    const deb = najnovejsiPaket(imena, paket);
+    if (typeof oznaka === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(oznaka) && deb && imena.includes("SHA256SUMS")) {
+      const osnova = `https://github.com/${PAKETI[paket]}/releases/download/${oznaka}/`;
+      kandidat = { razlicica: deb.razlicica, vir: "github", ime: deb.ime, url: osnova + deb.ime, urlVsot: osnova + "SHA256SUMS" };
     }
   }
-  predpomnilnik = { cas: o.zdaj(), kandidat };
+  predpomnilnik.set(paket, { cas: o.zdaj(), kandidat });
   return kandidat;
 }
 
-async function kandidatMapa(o: Odv, mapa: string): Promise<Kandidat | null> {
-  const paket = najnovejsiPaket(await o.beriMapo(mapa).catch(() => []));
-  return paket ? { razlicica: paket.razlicica, vir: "mapa", ime: paket.ime, pot: path.join(mapa, paket.ime) } : null;
+async function kandidatMapa(o: Odv, mapa: string, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
+  const deb = najnovejsiPaket(await o.beriMapo(mapa).catch(() => []), paket);
+  return deb ? { razlicica: deb.razlicica, vir: "mapa", ime: deb.ime, pot: path.join(mapa, deb.ime) } : null;
 }
 
-async function kandidat(o: Odv, root: string, sveze: boolean): Promise<Kandidat | null> {
+/** Mapa iz posodobitev.json (razvojni racunalnik) velja za vse pakete s seznama: v njej se isce <paket>_*_amd64.deb. */
+async function kandidat(o: Odv, root: string, sveze: boolean, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
   const mapa = await mapaVira(root);
   if (mapa === "neveljavno") return null;
-  return mapa ? kandidatMapa(o, mapa) : kandidatGithub(o, sveze);
+  return mapa ? kandidatMapa(o, mapa, paket) : kandidatGithub(o, sveze, paket);
 }
 
-export async function zadnjiIzid(root: string): Promise<IzidPosodobitve | null> {
-  const i = await readJsonFile<Partial<IzidPosodobitve>>(root, DATOTEKA_IZIDA).catch(() => null);
+export async function zadnjiIzid(root: string, paket: ImePaketa = IME_PAKETA): Promise<IzidPosodobitve | null> {
+  const i = await readJsonFile<Partial<IzidPosodobitve>>(root, datotekaIzida(paket)).catch(() => null);
   const kode: KodaIzida[] = ["namesceno", "preklicano", "napaka", "ni_novejsa", "napacen_paket", "vsota"];
   if (!i || typeof i.cas !== "string" || !veljavnaRazlicica(i.razlicica) || typeof i.ok !== "boolean" || !kode.includes(i.koda as KodaIzida)) return null;
   return { cas: i.cas.slice(0, 40), razlicica: i.razlicica, ok: i.ok, koda: i.koda as KodaIzida };
@@ -291,10 +302,10 @@ export function posodobitevTece(): boolean {
   return tece;
 }
 
-async function predpogoj(o: Odv): Promise<RazlogNiNaVoljo | { namescena: string }> {
+async function predpogoj(o: Odv, paket: ImePaketa = IME_PAKETA): Promise<RazlogNiNaVoljo | { namescena: string }> {
   if (!jeLinuxAmd64(o.platforma, o.arh)) return "platforma";
   if (!o.obstaja(o.skripta)) return "ni_skripte";
-  const namescena = await namescenaRazlicica(o);
+  const namescena = await namescenaRazlicica(o, paket);
   return namescena ? { namescena } : "ni_namescena";
 }
 
@@ -395,8 +406,8 @@ async function kopirajGradnjo(root: string, deb: string): Promise<string | null>
 }
 
 /** Zagon posodobitve: kandidata izracuna streznik znova (brskalnik ne da nicesar); skripta tece locena od streznika. */
-export async function zacniPosodobitev(token: string | null, dir?: string, odvisnosti: Odvisnosti = {}): Promise<IzidZagona> {
-  return zacni(token, dir, odvisnosti, null);
+export async function zacniPosodobitev(token: string | null, dir?: string, odvisnosti: Odvisnosti = {}, paket: string = IME_PAKETA): Promise<IzidZagona> {
+  return zacni(token, dir, odvisnosti, null, paket);
 }
 
 /**
@@ -408,9 +419,10 @@ export async function zacniPosodobitevIzGradnje(token: string | null, deb: { pot
   return zacni(token, dir, odvisnosti, deb);
 }
 
-async function zacni(token: string | null, dir: string | undefined, odvisnosti: Odvisnosti, gradnja: { pot: string; sha256: string } | null): Promise<IzidZagona> {
+async function zacni(token: string | null, dir: string | undefined, odvisnosti: Odvisnosti, gradnja: { pot: string; sha256: string } | null, paket: string = IME_PAKETA): Promise<IzidZagona> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
+  if (!jeDovoljenPaket(paket) || (gradnja !== null && paket !== IME_PAKETA)) return { ok: false, razlog: "neznan_paket" };
   if (gradnja !== null && (!varnaPot(gradnja.pot) || !/^[0-9a-f]{64}$/.test(gradnja.sha256))) return { ok: false, razlog: "pot" };
   // Zaklep sinhrono, pred prvim await po preverbi lastnika: dva hkratna klika ne zazeneta dveh namestitev.
   if (tece) return { ok: false, razlog: "ze_tece" };
@@ -418,11 +430,11 @@ async function zacni(token: string | null, dir: string | undefined, odvisnosti: 
   let predano = false;
   try {
     const o = odv(odvisnosti);
-    const p = await predpogoj(o);
+    const p = await predpogoj(o, paket);
     if (typeof p === "string") return { ok: false, razlog: p };
     let k: Kandidat | null;
     try {
-      k = gradnja !== null ? await kandidatMapa(o, path.dirname(path.resolve(gradnja.pot))) : await kandidat(o, root, true);
+      k = gradnja !== null ? await kandidatMapa(o, path.dirname(path.resolve(gradnja.pot))) : await kandidat(o, root, true, paket);
     } catch {
       return { ok: false, razlog: "ni_vira" };
     }
@@ -449,9 +461,11 @@ async function zacni(token: string | null, dir: string | undefined, odvisnosti: 
     }
     if (!varnaPot(deb) || !varnaPot(root)) return { ok: false, razlog: "pot" };
     const podatki = await podatkiPaketa(o, deb);
-    if (!podatki || podatki.paket !== IME_PAKETA || podatki.razlicica !== k.razlicica) return { ok: false, razlog: "napacen_paket" };
+    if (!podatki || podatki.paket !== paket || podatki.razlicica !== k.razlicica) return { ok: false, razlog: "napacen_paket" };
     if (primerjajRazlicici(podatki.razlicica, p.namescena) <= 0) return { ok: false, razlog: "ni_novejsa" };
-    const otrok = o.zazeni("/bin/bash", [o.skripta, deb, root, vsota], okoljeSkripte(o.env));
+    // 4. argument samo za druge pakete: skripta brez njega pomeni lina-lupina (enak klic kot pred 25. 11.)
+    const argumenti = [o.skripta, deb, root, vsota, ...(paket === IME_PAKETA ? [] : [paket])];
+    const otrok = o.zazeni("/bin/bash", argumenti, okoljeSkripte(o.env));
     predano = true;
     const sprosti = () => {
       tece = false;
@@ -464,3 +478,85 @@ async function zacni(token: string | null, dir: string | undefined, odvisnosti: 
     if (!predano) tece = false;
   }
 }
+
+// --- Drugi Safeer programi (25. 11. 2026): samo namesceni, samo s seznama; Lina brez njih nima ne napake ne vrstic.
+export type Zamenjava = "caka" | "zaznana" | "ni_zaznana" | "ne_tece";
+export type StanjePaketa = {
+  paket: ImePaketa;
+  namescena: string;
+  razpolozljiva: string | null;
+  vir: Vir | null;
+  novejsa: boolean;
+  tece: boolean;
+  napakaVira: boolean;
+  zadnjiIzid: IzidPosodobitve | null;
+  /** Samo safeer-os po uspesni namestitvi iz Line: ali je Safeer OS sam zamenjal proces z novo razlicico. */
+  zamenjava: Zamenjava | null;
+};
+
+/**
+ * Zacetki procesov safeer_os.py (ms od epohe) iz `ps -eo etimes=,args=`; zaganjalnik in varuh ne stejeta (zaganjalnik ohrani PID).
+ * null = ps ni uspel (ne vemo, ali tece).
+ */
+async function zacetkiSafeerOs(o: Odv): Promise<number[] | null> {
+  let izpis: string;
+  try {
+    izpis = await o.izvedi("/usr/bin/ps", ["-eo", "etimes=,args="]);
+  } catch {
+    return null;
+  }
+  const zacetki: number[] = [];
+  for (const vrstica of izpis.split("\n")) {
+    const m = /^\s*(\d+)\s+(.*)$/.exec(vrstica);
+    if (m && /(^|\s|\/)safeer_os\.py(\s|$)/.test(m[2]!)) zacetki.push(o.zdaj() - Number(m[1]) * 1000);
+  }
+  return zacetki;
+}
+
+async function zamenjavaSafeerOs(o: Odv, izid: IzidPosodobitve | null): Promise<Zamenjava | null> {
+  const t = izid?.ok && izid.koda === "namesceno" ? Date.parse(izid.cas) : NaN;
+  if (Number.isNaN(t)) return null;
+  const zacetki = await zacetkiSafeerOs(o);
+  // etimes je v sekundah: proces, zagnan v isti sekundi kot zapis izida, velja za novega
+  if (zacetki?.some((z) => z >= t - 1000)) return "zaznana";
+  if (zacetki?.length === 0) return "ne_tece";
+  return o.zdaj() - t < ROK_ZAMENJAVE_MS ? "caka" : "ni_zaznana";
+}
+
+export async function stanjeDrugihPaketov(token: string | null, dir?: string, odvisnosti: Odvisnosti = {}): Promise<StanjePaketa[]> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  const o = odv(odvisnosti);
+  const izid: StanjePaketa[] = [];
+  for (const paket of Object.keys(PAKETI) as ImePaketa[]) {
+    if (paket === IME_PAKETA) continue;
+    const p = await predpogoj(o, paket);
+    if (typeof p === "string") continue;
+    let k: Kandidat | null = null;
+    let napakaVira = false;
+    try {
+      k = await kandidat(o, root, false, paket);
+    } catch {
+      napakaVira = true;
+    }
+    const zadnji = await zadnjiIzid(root, paket);
+    izid.push({
+      paket,
+      namescena: p.namescena,
+      razpolozljiva: k?.razlicica ?? null,
+      vir: k?.vir ?? null,
+      novejsa: Boolean(k && primerjajRazlicici(k.razlicica, p.namescena) > 0),
+      tece,
+      napakaVira,
+      zadnjiIzid: zadnji,
+      zamenjava: paket === "safeer-os" ? await zamenjavaSafeerOs(o, zadnji) : null,
+    });
+  }
+  return izid;
+}
+
+/*
+ * »Znova zazeni Safeer OS« je v vmesniku samo NAVODILO (25. 11. 2026): tekocega Safeer OS Lina nikoli ne ustavi (skil
+ * safeer-os-ponovni-zagon-link: varuh bi ob signalu ugasnil namizje in Scit), safeerctl nima zahteve za ponovni zagon, nacin
+ * zagona ob prijavi pa ni povsod enak (--delovna ni v samodejnem zagonu paketa) - zato varne poti za zagon iz Line ni.
+ */

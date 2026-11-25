@@ -26,11 +26,11 @@ import { Avtonomija } from "@/components/avtonomija.tsx";
 import { ModelAsistentke } from "@/components/model-asistentke.tsx";
 import { tM } from "@/lib/lina/besedila-mozgani.ts";
 import { SonioxNastavitve } from "@/components/soniox-nastavitve.tsx";
-import { posodobiLinoFn, stanjeDodatkovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
+import { posodobiLinoFn, posodobiPaketFn, stanjeDodatkovFn, stanjeDrugihPaketovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
 import { StraniNastavitve } from "@/components/strani-nastavitve.tsx";
 import { DovoljenjaNastavitve } from "@/components/dovoljenja-nastavitve.tsx";
 import { NarocilaNastavitve } from "@/components/narocila-nastavitve.tsx";
-import type { IzidPosodobitve, RazlogZavrnitve, StanjePosodobitve } from "@/lib/lina/posodobitev.server.ts";
+import type { IzidPosodobitve, RazlogZavrnitve, StanjePaketa, StanjePosodobitve } from "@/lib/lina/posodobitev.server.ts";
 import { GOVOR_MODELI } from "@/lib/lina/govor-model.ts";
 import { razvrstiKlice } from "@/lib/lina/tajnica.ts";
 import { OMNIROUTE_PRIVZETI_NASLOV } from "@/lib/lina/omniroute.ts";
@@ -3830,7 +3830,7 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
     return `${t("posZadnjiIzid")}: ${i.razlicica}, ${opis}${Number.isNaN(cas.getTime()) ? "" : ` (${casKlica(i.cas)})`}`;
   };
   const napisNapake = (r: RazlogZavrnitve): string =>
-    r === "ze_tece" ? t("posNapakaZeTece") : r === "napacen_paket" || r === "vsota" ? t("posNapakaPreverba") : r === "prenos" || r === "ni_vira" ? t("posNapakaPrenos") : r === "ni_novejsa" ? t("posNiNovejse") : t("posNapaka");
+    r === "neznan_paket" ? t("posNeznanPaket") : r === "ze_tece" ? t("posNapakaZeTece") : r === "napacen_paket" || r === "vsota" ? t("posNapakaPreverba") : r === "prenos" || r === "ni_vira" ? t("posNapakaPrenos") : r === "ni_novejsa" ? t("posNiNovejse") : t("posNapaka");
   const posodobi = () => {
     setDelam(true);
     setSporocilo(t("posZacenjam"));
@@ -3873,7 +3873,84 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
       </button>
       <p className="mt-2 text-sm" role="status" aria-live="polite">{sporocilo}</p>
       {stanje?.zadnjiIzid ? <p className="mt-1 text-xs text-[var(--color-moss)]">{napisIzida(stanje.zadnjiIzid)}</p> : null}
+      <DrugiPaketi onError={onError} napisNapake={napisNapake} napisIzida={napisIzida} />
     </Razdelek>
+  );
+}
+
+const IME_PROGRAMA: Record<StanjePaketa["paket"], string> = { "lina-lupina": "Lina", "safeer-os": "Safeer OS" };
+
+/** Drugi programi Safeer (25. 11. 2026): samo namesceni (streznik jih izbere); brez njih se ne pokaze nic. */
+function DrugiPaketi({ onError, napisNapake, napisIzida }: { onError: (s: string) => void; napisNapake: (r: RazlogZavrnitve) => string; napisIzida: (i: IzidPosodobitve) => string }) {
+  const [paketi, setPaketi] = useState<StanjePaketa[]>([]);
+  const [delam, setDelam] = useState(false);
+  const [sporocilo, setSporocilo] = useState("");
+  const [navodilo, setNavodilo] = useState(false);
+  const osvezi = () => stanjeDrugihPaketovFn().then(setPaketi).catch(() => {});
+  useEffect(() => {
+    void osvezi();
+  }, []);
+  // med namestitvijo in cakanjem na zamenjavo Safeer OS (najvec 120 s) stanje osvezujemo, da se izid in gumb pokazeta sama
+  const caka = paketi.some((p) => p.tece || p.zamenjava === "caka");
+  useEffect(() => {
+    if (!caka) return;
+    const id = window.setInterval(() => void osvezi(), 15_000);
+    return () => window.clearInterval(id);
+  }, [caka]);
+  if (paketi.length === 0) return null;
+  const posodobi = (paket: string) => {
+    setDelam(true);
+    setSporocilo(t("posZacenjam"));
+    posodobiPaketFn({ data: { paket } })
+      .then((izid) => {
+        setSporocilo(izid.ok ? t("posZacela") : napisNapake(izid.razlog));
+        void osvezi();
+      })
+      .catch(() => {
+        setSporocilo("");
+        onError(t("posNapaka"));
+      })
+      .finally(() => setDelam(false));
+  };
+  return (
+    <section className="mt-6" aria-labelledby="pos-drugi-naslov">
+      <h3 id="pos-drugi-naslov" className="text-sm font-semibold">{t("posDrugiNaslov")}</h3>
+      {paketi.map((p) => (
+        <div key={p.paket} className="mt-3">
+          <dl className="grid max-w-prose grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt className="font-medium">{IME_PROGRAMA[p.paket]}</dt>
+            <dd>{p.namescena}</dd>
+            <dt className="font-medium">{t("posRazpolozljiva")}</dt>
+            <dd>
+              {p.razpolozljiva && p.vir
+                ? `${p.razpolozljiva} (${p.vir === "github" ? t("posVirGithub") : t("posVirMapa")})`
+                : p.napakaVira
+                  ? t("posNiVira")
+                  : t("posNiNovejse")}
+            </dd>
+          </dl>
+          {p.paket === "safeer-os" ? <p className="mt-2 max-w-prose text-xs text-[var(--color-moss)]">{t("posPojasniloSafeerOs")}</p> : null}
+          <button type="button" className="lina-gumb-majhen mt-2" disabled={delam || !p.novejsa || p.tece} onClick={() => posodobi(p.paket)}>
+            {t("posGumbPaket")} {IME_PROGRAMA[p.paket]}
+          </button>
+          {p.zadnjiIzid ? <p className="mt-1 text-xs text-[var(--color-moss)]">{napisIzida(p.zadnjiIzid)}</p> : null}
+          {p.zamenjava === "caka" ? <p className="mt-1 text-sm">{t("posZamenjavaCaka")}</p> : null}
+          {p.zamenjava === "zaznana" ? <p className="mt-1 text-sm">{t("posZamenjavaZaznana")}</p> : null}
+          {p.zamenjava === "ne_tece" ? <p className="mt-1 text-sm">{t("posZamenjavaNeTece")}</p> : null}
+          {p.zamenjava === "ni_zaznana" ? (
+            <>
+              <p className="mt-1 text-sm">{t("posZamenjavaNi")}</p>
+              {/* samo navodilo: Lina Safeer OS ne ustavlja in ne zaganja (posodobitev.server.ts) */}
+              <button type="button" className="lina-gumb-majhen mt-2" aria-expanded={navodilo} aria-controls="pos-znova-navodilo" onClick={() => setNavodilo(true)}>
+                {t("posZnovaZazeni")}
+              </button>
+              {navodilo ? <p id="pos-znova-navodilo" className="mt-2 max-w-prose text-sm">{t("posZnovaNavodilo")}</p> : null}
+            </>
+          ) : null}
+        </div>
+      ))}
+      <p className="mt-2 text-sm" role="status" aria-live="polite">{sporocilo}</p>
+    </section>
   );
 }
 

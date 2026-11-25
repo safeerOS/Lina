@@ -18,6 +18,7 @@ import {
   ponastaviPredpomnilnik,
   posodobitevTece,
   primerjajRazlicici,
+  stanjeDrugihPaketov,
   stanjePosodobitve,
   vsotaIzSeznama,
   zacniPosodobitev,
@@ -381,5 +382,189 @@ test("skripta --preveri: novejsi paket gre, tuje ime, napacna vsota in starejsa 
   assert.equal(pozeni(["relativna.deb", podatki, vsota]).status, 2, "relativna pot");
   assert.equal(pozeni([nov, podatki]).status, 2, "manjka argument");
   // --preveri ne pise nicesar v podatkovno mapo (ne dnevnika ne izida).
+  assert.deepEqual(execFileSync("/bin/ls", ["-A", podatki], { encoding: "utf8" }), "");
+});
+
+// --- 25. 11. 2026: Lina posodablja tudi druge Safeer programe (seznam dovoljenih), samo ce so namesceni.
+/** Lazni sistem za vec paketov: namescene razlicice po imenu, izpis ps (etimes + ukaz). */
+function laznoVec(o: { namescene: Record<string, string>; paketi?: Record<string, { paket: string; razlicica: string }>; ps?: string; dodatno?: Partial<Odvisnosti> }) {
+  const zagoni: Zagon[] = [];
+  const odv: Odvisnosti = {
+    ...lazno().odv,
+    izvedi: async (program, argumenti) => {
+      if (program === "/usr/bin/dpkg-query") {
+        const v = o.namescene[argumenti.at(-1)!];
+        if (!v) throw new Error("ni namescen");
+        return v;
+      }
+      if (program === "/usr/bin/dpkg-deb") {
+        const p = o.paketi?.[argumenti[1]!];
+        if (!p) throw new Error("ni paketa");
+        return `Package: ${p.paket}\nVersion: ${p.razlicica}\n`;
+      }
+      if (program === "/usr/bin/ps") return o.ps ?? "";
+      throw new Error(`nepricakovan program ${program}`);
+    },
+    zazeni: (program, argumenti, env) => {
+      const otrok = Object.assign(new EventEmitter(), { unref() {} });
+      zagoni.push({ program, argumenti, env, otrok });
+      return otrok;
+    },
+    ...o.dodatno,
+  };
+  return { odv, zagoni };
+}
+
+test("neznan paket je zavrnjen (tudi imena lastnosti objekta), nic se ne zazene", async () => {
+  const { dir, token } = await novaMapa();
+  const { odv, zagoni } = laznoVec({ namescene: { "lina-lupina": "0.2.8", "drug-paket": "1.0" } });
+  for (const ime of ["drug-paket", "constructor", "__proto__", "toString", "", "lina-lupina "]) {
+    assert.deepEqual(await zacniPosodobitev(token, dir, odv, ime), { ok: false, razlog: "neznan_paket" }, ime);
+  }
+  assert.equal(zagoni.length, 0);
+  assert.equal(posodobitevTece(), false);
+});
+
+test("safeer-os: starejsa ali enaka razlicica je zavrnjena", async () => {
+  const { dir, token } = await novaMapa();
+  const mapa = mkdtempSync(path.join(KOREN, "izhod-"));
+  const deb = path.join(mapa, "safeer-os_0.4.95_amd64.deb");
+  writeFileSync(deb, "star safeer");
+  writeFileSync(path.join(dir, "posodobitev.json"), JSON.stringify({ mapa }));
+  for (const v of ["0.4.96", "0.4.95"]) {
+    const { odv, zagoni } = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": v }, paketi: { [deb]: { paket: "safeer-os", razlicica: "0.4.95" } } });
+    assert.deepEqual(await zacniPosodobitev(token, dir, odv, "safeer-os"), { ok: false, razlog: "ni_novejsa" });
+    assert.equal(zagoni.length, 0);
+  }
+});
+
+test("safeer-os: paket Line v mapi ne velja za safeer-os in obratno (ime iz dpkg-deb -f)", async () => {
+  const { dir, token } = await novaMapa();
+  const mapa = mkdtempSync(path.join(KOREN, "izhod-"));
+  const deb = path.join(mapa, "safeer-os_0.4.97_amd64.deb");
+  writeFileSync(deb, "x");
+  writeFileSync(path.join(mapa, "lina-lupina_9.9.9_amd64.deb"), "lina");
+  writeFileSync(path.join(dir, "posodobitev.json"), JSON.stringify({ mapa }));
+  const { odv, zagoni } = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [deb]: { paket: "lina-lupina", razlicica: "0.4.97" } } });
+  assert.deepEqual(await zacniPosodobitev(token, dir, odv, "safeer-os"), { ok: false, razlog: "napacen_paket" });
+  assert.equal(zagoni.length, 0);
+});
+
+function githubSafeer(o: { deb: Buffer; vsote: string }) {
+  const klici: string[] = [];
+  const fetchFn = (async (u: string | URL) => {
+    const url = String(u);
+    klici.push(url);
+    if (url === "https://api.github.com/repos/safeerOS/Safeer-linux/releases/latest") {
+      return Response.json({ tag_name: "v0.4.97", assets: [{ name: "safeer-os-tema_9.9.9_all.deb" }, { name: "safeer-os_0.4.97_amd64.deb" }, { name: "lina-lupina_9.9.9_amd64.deb" }, { name: "SHA256SUMS" }] });
+    }
+    const gost = new URL(url).hostname;
+    if (gost === "github.com") return new Response(null, { status: 302, headers: { location: "https://release-assets.githubusercontent.com/" + path.basename(new URL(url).pathname) } });
+    if (gost === "release-assets.githubusercontent.com") return new Response(url.endsWith("SHA256SUMS") ? o.vsote : new Uint8Array(o.deb));
+    return new Response("ni", { status: 404 });
+  }) as typeof fetch;
+  return { fetchFn, klici };
+}
+
+test("safeer-os z GitHuba (safeerOS/Safeer-linux): napacna SHA je zavrnjena, prava gre v skripto z imenom paketa", async () => {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  const deb = Buffer.from("safeer-os 0.4.97");
+  const koncna = path.join(path.resolve(dir), "posodobitev", "safeer-os_0.4.97_amd64.deb");
+  const slab = githubSafeer({ deb, vsote: `${"0".repeat(64)}  safeer-os_0.4.97_amd64.deb\n` });
+  const a = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [koncna]: { paket: "safeer-os", razlicica: "0.4.97" } }, dodatno: { fetchFn: slab.fetchFn } });
+  assert.deepEqual(await zacniPosodobitev(token, dir, a.odv, "safeer-os"), { ok: false, razlog: "vsota" });
+  assert.equal(a.zagoni.length, 0);
+  assert.equal(existsSync(koncna), false);
+
+  ponastaviPredpomnilnik();
+  const dober = githubSafeer({ deb, vsote: `${sha(deb)}  safeer-os_0.4.97_amd64.deb\n` });
+  const b = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [koncna]: { paket: "safeer-os", razlicica: "0.4.97" } }, dodatno: { fetchFn: dober.fetchFn } });
+  assert.deepEqual(await zacniPosodobitev(token, dir, b.odv, "safeer-os"), { ok: true, razlicica: "0.4.97" });
+  assert.ok(dober.klici.includes("https://github.com/safeerOS/Safeer-linux/releases/download/v0.4.97/safeer-os_0.4.97_amd64.deb"));
+  assert.ok(!dober.klici.some((k) => k.includes("/safeerOS/Lina/")), "vir safeer-os ni repozitorij Line");
+  assert.deepEqual(b.zagoni[0]!.argumenti, ["/opt/Lina/resources/lina/posodobi.sh", koncna, path.resolve(dir), sha(deb), "safeer-os"]);
+  b.zagoni[0]!.otrok.emit("exit", 0);
+});
+
+test("nenamescen paket se ne prikaze; Lina brez drugih Safeer programov nima ne napake ne praznih vrstic", async () => {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  const fetchFn = (async () => { throw new Error("omrezje ni dovoljeno"); }) as typeof fetch;
+  const brez = laznoVec({ namescene: { "lina-lupina": "0.2.11" }, dodatno: { fetchFn } });
+  assert.deepEqual(await stanjeDrugihPaketov(token, dir, brez.odv), []);
+  assert.equal((await stanjePosodobitve(token, dir, brez.odv)).naVoljo, true, "posodobitev Line deluje brez Safeer OS");
+  const z = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, dodatno: { fetchFn } });
+  const s = await stanjeDrugihPaketov(token, dir, z.odv);
+  assert.equal(s.length, 1);
+  assert.equal(s[0]!.paket, "safeer-os");
+  assert.equal(s[0]!.namescena, "0.4.96");
+  assert.equal(s[0]!.napakaVira, true);
+  assert.equal(s[0]!.zamenjava, null, "brez namestitve iz Line ni cakanja na zamenjavo");
+  // ne-Linux: nic
+  assert.deepEqual(await stanjeDrugihPaketov(token, dir, laznoVec({ namescene: { "safeer-os": "0.4.96" }, dodatno: { platforma: "win32" } }).odv), []);
+  await assert.rejects(() => stanjeDrugihPaketov(null, dir, z.odv));
+});
+
+test("izid safeer-os je v svoji datoteki (ne kaze se kot izid Line)", async () => {
+  const { dir, token } = await novaMapa();
+  writeFileSync(path.join(dir, "posodobitev-izid-safeer-os.json"), JSON.stringify({ cas: "2026-11-25T05:43:00Z", razlicica: "0.4.96", ok: true, koda: "namesceno" }));
+  const { odv } = laznoVec({ namescene: { "lina-lupina": "0.2.11" } });
+  assert.equal((await stanjePosodobitve(token, dir, odv)).zadnjiIzid, null);
+});
+
+test("Safeer OS po namestitvi: caka 120 s, nato brez novega procesa gumb; nov proces = zaznana zamenjava", async () => {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  const T = Date.parse("2026-11-25T05:43:00Z");
+  writeFileSync(path.join(dir, "posodobitev-izid-safeer-os.json"), JSON.stringify({ cas: "2026-11-25T05:43:00Z", razlicica: "0.4.96", ok: true, koda: "namesceno" }));
+  const fetchFn = (async () => { throw new Error("omrezje ni dovoljeno"); }) as typeof fetch;
+  const stari = "  6300 /usr/bin/python3 -s /usr/lib/safeer-os/core/varuh_procesov.py --delovna\n  6300 /usr/bin/python3 -s /usr/lib/safeer-os/safeer_os.py --delovna\n";
+  const zamenjava = async (zdaj: number, ps: string) =>
+    (await stanjeDrugihPaketov(token, dir, laznoVec({ namescene: { "safeer-os": "0.4.96" }, ps, dodatno: { fetchFn, zdaj: () => zdaj } }).odv))[0]!.zamenjava;
+  assert.equal(await zamenjava(T + 60_000, stari), "caka");
+  assert.equal(await zamenjava(T + 121_000, stari), "ni_zaznana");
+  assert.equal(await zamenjava(T + 121_000, ""), "ne_tece", "Safeer OS ne tece: ne trdimo, da ni preklopil");
+  // varuh (isti PID zaganjalnika) ne steje; steje samo safeer_os.py, zagnan po namestitvi
+  assert.equal(await zamenjava(T + 300_000, "  10 /usr/bin/python3 -s /usr/lib/safeer-os/core/varuh_procesov.py --delovna\n  6600 /usr/bin/python3 -s /usr/lib/safeer-os/safeer_os.py --delovna\n"), "ni_zaznana");
+  assert.equal(await zamenjava(T + 300_000, "  200 /usr/bin/python3 -s /usr/lib/safeer-os/safeer_os.py --delovna\n"), "zaznana");
+});
+
+test("Safeer OS: ko ne tece, ni »ni preklopil«; napaka ps ni »ne tece«; v strezniku ni signalov ne zagona Safeer OS", async () => {
+  const { dir, token } = await novaMapa();
+  const T = Date.parse("2026-11-25T05:43:00Z");
+  writeFileSync(path.join(dir, "posodobitev-izid-safeer-os.json"), JSON.stringify({ cas: "2026-11-25T05:43:00Z", razlicica: "0.4.96", ok: true, koda: "namesceno" }));
+  const fetchFn = (async () => { throw new Error("omrezje ni dovoljeno"); }) as typeof fetch;
+  const ne = laznoVec({ namescene: { "safeer-os": "0.4.96" }, ps: "  6300 /usr/bin/python3 -s /usr/lib/safeer-os/core/varuh_procesov.py --delovna\n", dodatno: { fetchFn, zdaj: () => T + 300_000 } });
+  assert.equal((await stanjeDrugihPaketov(token, dir, ne.odv))[0]!.zamenjava, "ne_tece");
+  const brezPs = laznoVec({ namescene: { "safeer-os": "0.4.96" }, dodatno: { fetchFn, zdaj: () => T + 300_000 } });
+  const izvedi = brezPs.odv.izvedi!;
+  brezPs.odv.izvedi = async (program, argumenti) => { if (program === "/usr/bin/ps") throw new Error("ps ni uspel"); return izvedi(program, argumenti); };
+  assert.equal((await stanjeDrugihPaketov(token, dir, brezPs.odv))[0]!.zamenjava, "ni_zaznana");
+  assert.equal(ne.zagoni.length + brezPs.zagoni.length, 0);
+  const koda = readFileSync(path.resolve("src/lib/lina/posodobitev.server.ts"), "utf8");
+  assert.doesNotMatch(koda, /process\.kill|\bpkill\b|SIGTERM|SIGKILL|"\/usr\/bin\/safeer-os"/);
+});
+
+test("skripta --preveri za safeer-os: neznan paket (4. argument), tuje ime v paketu, napacna vsota", { skip: !existsSync("/usr/bin/dpkg-deb") && "dpkg-deb ni na voljo" }, () => {
+  const mapa = mkdtempSync(path.join(KOREN, "deb-"));
+  const podatki = mkdtempSync(path.join(KOREN, "podatki-"));
+  const pozeni = (args: string[]) => spawnSync("/bin/bash", [SKRIPTA, "--preveri", ...args], { encoding: "utf8", env: { PATH: "/usr/bin:/bin", LC_ALL: "C" } });
+  const nov = zgradiDeb(mapa, "safeer-os", "999.0.0");
+  const vsota = sha(readFileSync(nov));
+  assert.equal(pozeni([nov, podatki, vsota, "drug-paket"]).status, 2, "paket ni na seznamu");
+  assert.notEqual(pozeni([nov, podatki, vsota]).status, 0, "deb safeer-os ni paket Line");
+  assert.notEqual(pozeni([nov, podatki, "f".repeat(64), "safeer-os"]).status, 0, "napacna vsota");
+  const lina = zgradiDeb(mkdtempSync(path.join(KOREN, "deb-")), "lina-lupina", "999.0.0");
+  assert.notEqual(pozeni([lina, podatki, sha(readFileSync(lina)), "safeer-os"]).status, 0, "deb Line ni safeer-os");
+  const namescen = spawnSync("/usr/bin/dpkg-query", ["-W", "-f=${Version}", "safeer-os"], { encoding: "utf8" });
+  const r = pozeni([nov, podatki, vsota, "safeer-os"]);
+  if (namescen.status === 0 && namescen.stdout.trim() !== "") {
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    assert.match(r.stdout, /paket: safeer-os .*nova: 999\.0\.0 .*ukaz: \/usr\/bin\/pkexec \/usr\/bin\/dpkg -i/);
+    assert.doesNotMatch(r.stdout, /lina-lupina --koncaj/);
+  } else {
+    assert.equal(r.status, 1, "nenamescen safeer-os se ne namesti");
+  }
   assert.deepEqual(execFileSync("/bin/ls", ["-A", podatki], { encoding: "utf8" }), "");
 });
