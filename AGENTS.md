@@ -605,15 +605,19 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
   brez Safeer OS) poslusa na link.safeer.si po protokolu core/link_rele.py (presence/listen/accept), allow = samo id-ji naprav, ki jih je
   lastnik dodal (kanal-claude). Nastavitev `globalLink` v asistent-telefon.json, privzeto VKLOPLJENA (lastnik 25. 11. 2026 »da«; stikalo v »Povezi telefon«;
   agent releja tece samo, ce ga registrira zagon programa - registrirajRele v zagon.server.ts, v preizkusih nikoli);
-  vir na streznikovi strani je »rele« (rele ne pove, katera naprava je poklicala - omejitve so skupne vsem kanalom releja, podpis naprave
-  pa velja za vsako zahtevo). Telefon: id Line na releju dobi v podpisanem GET /stanje (polje rele), kanal odpre ReleKanal (modul podpis),
+  vir na streznikovi strani je »rele« (rele ne pove, katera naprava je poklicala); omejitve zahtev in zavrnitev tecejo po KANALU
+  (`r:rele#<n>`, 120/20 na minuto) in skupno za vse kanale releja (5x visje: menjava kanalov ne obide meje) - pregled 0213 A2; ostanek:
+  skupna meja lahko se vedno zapre pot vsem kanalom. Podpis naprave velja za vsako zahtevo. AgentReleja.ustavi zapre tudi sprejete kanale (A12). Telefon: id Line na releju dobi v podpisanem GET /stanje (polje rele), kanal odpre ReleKanal (modul podpis),
   OkHttp gre prek ReleVrata (127.0.0.1 + 32-bajtna skrivnost procesa) z ISTIM pripetim odtisom; ena tovarna PovezavaLine.ustvari.
   Neposredne poti za asistentko Lina nima (Caddy/tunel prepustita samo /api/voice/*). Preizkusi: rele-lina.test.ts, ReleLineTest.kt.
-  Naloge agentov in gradnje so od 25. 11. 2026 (lastnik »da«) tudi v POTI_ODDALJENO; seznanjanje, /koda/*, sinhronizacija in klici ostanejo samo doma.
+  Naloge agentov in gradnje so od 25. 11. 2026 (lastnik »da«) tudi v POTI_ODDALJENO, od pregleda 0213 (A10) tudi vprasanja agentov
+  (GET /agent-vprasanja, POST /agent-vprasanje/odgovor - sicer naloga, dodeljena od zunaj, caka do roka); seznanjanje, /koda/*,
+  sinhronizacija in klici ostanejo samo doma.
 - `vir` mora biti identiteta, ki jo je transport OVERIL (naprava s seznama dovoljenih na relu), nikoli naslov odjemalca na relu in nikoli
   id iz telesa zahteve (napadalec bi izpraznil kvoto zrtve). Omejitve zahtev, zavrnitev in povezav (8 na vir, 32 skupaj, rok rokovanja)
   tecejo po `p:<vir>`, ne po naslovu 127.0.0.1.
-- Beli seznam (POTI_ODDALJENO, razclenjen z istim URL kot usmerjanje): POST naloga, odobritev, ustavi, dodatek (23. 11. 2026); GET dogodki, stanje, dodatki. Seznanjanje
+- Beli seznam (POTI_ODDALJENO, razclenjen z istim URL kot usmerjanje): POST naloga, odobritev, ustavi, dodatek (23. 11. 2026); GET dogodki, stanje, dodatki;
+  naloge agentov, gradnje in vprasanja agentov (25. 11. 2026, glej zgoraj; celoten seznam je v asistent-streznik.server.ts). Seznanjanje
   (/seznani, /koda/*) nikoli prek oddaljene poti. Podpis naprave, okno casa in enkratni niz preveri streznik kot doma; preklic naprave velja
   ze pri naslednji zahtevi (seznam se bere ob vsaki zahtevi).
 - Po neodvisnem slepem pregledu (18. 11. 2026) dodano in z mutacijo dokazano: `SSL_OP_NO_RENEGOTIATION` v `createSecureContext` (brez njega
@@ -975,8 +979,10 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
 
 ## Vprasanja in delo agenta v Lini (naloga 23, del 1; 25. 11. 2026; vprasanja-agentov.ts, vprasanja-agentov.server.ts)
 - Lastnik 23. 11. in 25. 11. 2026: »neposreden vpogled v vprasanja in delo Claude Code-a«. Naloga za claude (brez peskovnika, ne Windows)
-  tece v Lini brez okna: `claude -p <poziv> --output-format stream-json --verbose --permission-mode default --setting-sources user
-  --permission-prompt-tool mcp__linavprasanja__dovoljenje --mcp-config <podatki>/vpr/<id>.json --strict-mcp-config`. Drugi agenti in
+  tece v Lini brez okna: `claude -p <poziv> --output-format stream-json --verbose --permission-mode default --restricted --tools <seznam>
+  --permission-prompt-tool mcp__linavprasanja__dovoljenje --mcp-config <podatki>/vpr/<id>.json --strict-mcp-config` (pregled 0213 A3:
+  --restricted prezre nastavitve user/project/local, zato pravila allow iz ~/.claude/settings.json ne obidejo vprasanj Line; datotecna
+  orodja so omejena na delovno mapo, kjer je tudi mapa naloge; preverjeno samo s `claude --help` 2.1.331, prava seja NEPREVERJENA). Drugi agenti in
   claude v peskovniku ostanejo v terminalu (del 2: pty).
 - Narocnina: Claude Code je se vedno Anthropicov program z lastnikovo prijavo na lastnikovem racunalniku (kot v terminalu); Lina ne dobi
   ne prijave ne kljuca, samo bere njegov izpis in odgovarja na vprasanja za dovoljenje. Odlocitev 13. 11. (Lina nima prijave Claude) velja.
@@ -987,10 +993,13 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   sestavljen ukaz, neznano orodje) je samo oznaka za prikaz.
 - Racunalnik: »Dovoli« samo z geslom lastnika, ki je obstajalo ze ob zagonu agenta (agent lahko sam nastavi geslo prek lokalnega API);
   »Zavrni« vedno. Telefon: GET /agent-vprasanja (nizStanjaVprasanj) in POST /agent-vprasanje/odgovor (nizOdgovoraVprasanja veze id,
-  odlocitev in zgostitev prikazanega + celega vnosa); samo domace omrezje. Odgovor velja enkrat. Vnos, ki ni ves viden (racunalnik nad
+  odlocitev in zgostitev prikazanega + celega vnosa); doma in prek Global Linka (pregled 0213 A10). Ista naprava lahko od zunaj
+  dodeli nalogo IN odobri njena vprasanja - odlocitev vodje/lastnika (alternativa: dodelitev od zunaj zavrniti).
+  Znacka s stevilom cakajocih vprasanj je na vnosu »Racunalnik« v okvirju, obvestilo namizja ob novem vprasanju (B7). Odgovor velja enkrat. Vnos, ki ni ves viden (racunalnik nad
   200 000 znakov ali skriti znaki, telefon nad 4000 znakov), se lahko samo zavrne. Odobritev gre agentu sele po zapisu v dnevnik odlocitev (vprasanja-agentov-odlocitve.jsonl, 0600, predogled brez ocitnih
   skrivnosti + zgostitev vnosa); brez zapisa je zavrnitev.
-- PREOSTALO: kar dovolijo lastnikove nastavitve Claude Code (~/.claude/settings.json allow), ne pride v Lino. Stanje zagonov je v pomnilniku
+- PREOSTALO: kar Claude Code dovoli privzeto brez vprasanja (branje v delovni mapi), ne pride v Lino; pravila allow iz nastavitev
+  se od pregleda 0213 (A3, --restricted) ne uporabijo. Stanje zagonov je v pomnilniku
   procesa Line. Pogodba orodja za dovoljenja (vnos tool_name/input, odgovor behavior allow+updatedInput / deny+message) in MCP_TOOL_TIMEOUT
   nista preverjena s pravim Claude Code (preizkusi z laznim Claude: vprasanja-agentov.test.ts). Telefonski zaslon je locena naloga.
 
