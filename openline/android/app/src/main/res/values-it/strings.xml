@@ -202,6 +202,7 @@
     <string name="assistant_err_busy">Troppe richieste. Riprova tra un minuto.</string>
     <string name="assistant_err_gone">Lina non conosce più questa attività.</string>
     <string name="assistant_err_other">Errore di comunicazione con Lina.</string>
+    <string name="assistant_err_unknown">La richiesta ha raggiunto il computer, ma non è arrivata risposta; l\'esito è sconosciuto. Controlla lo stato prima di riprovare.</string>
     <string name="assistant_wait_confirm">In attesa che Lina sul tuo computer confermi questo telefono.</string>
     <string name="assistant_pair_accepted">Lina sul tuo computer ha confermato questo telefono. Associato.</string>
     <string name="assistant_pair_refused">Lina sul tuo computer ha rifiutato l’associazione.</string>
@@ -264,6 +265,7 @@
     <string name="local_task_prevec">Il computer ha rifiutato l\'attività per troppe richieste in poco tempo. Riprova tra qualche minuto.</string>
     <string name="local_task_zasedeno">Non ho consegnato l\'attività perché sul computer ne è già in corso un\'altra. Attendi che finisca.</string>
     <string name="local_task_napaka">Non ho potuto consegnare l\'attività a causa di un errore (testo dell\'attività, firma del telefono o risposta del computer). Riprova; dettagli nella scheda Computer.</string>
+    <string name="local_task_neznan">Non so se il computer ha ricevuto l\'attività: la richiesta è partita, ma non è arrivata risposta. Controlla la scheda Computer prima di inviarla di nuovo.</string>
     <string name="local_task_preverjam">Verifico se il computer accetta l\'attività …</string>
     <string name="local_task_shrani_naslov">Salvare l\'attività per dopo?</string>
     <string name="local_task_shrani">Salva e invia dopo</string>

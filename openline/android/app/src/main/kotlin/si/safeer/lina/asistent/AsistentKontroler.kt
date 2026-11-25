@@ -343,6 +343,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             when (izid) {
                 IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
                 IzidPredaje.NEDOSEGLJIV -> shrambaCakajoce.edit().putString("besedilo", b).putString("odtis", odtis).putLong("cas", cas).apply()
+                // T1: izid neznan - ne shrani znova (bi se lahko izvedla dvakrat), lastnik preveri v zavihku Racunalnik
+                IzidPredaje.NEZNAN -> dodaj(context.getString(si.safeer.lina.R.string.local_task_neznan))
                 else -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_ni, b.take(120)))
             }
         }

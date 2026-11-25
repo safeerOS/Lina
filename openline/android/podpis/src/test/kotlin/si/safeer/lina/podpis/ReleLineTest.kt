@@ -108,7 +108,8 @@ class ReleLineTest {
         val zavrnjeno = OdgovorLine.Napaka(403, "zavrnjeno")
         assertEquals(zavrnjeno, IzbirnaPovezava(Lazna(zavrnjeno), null, rele, poVrsti) { poti += it }.stanjeSeje("a", 1, "b", "c"))
         assertEquals(OdgovorLine.Nedosegljiva, IzbirnaPovezava(Lazna(OdgovorLine.Nedosegljiva), null, Lazna(OdgovorLine.Nedosegljiva), poVrsti) { poti += it }.naloga("{}"))
-        assertEquals(listOf(PotLine.DOMACE_OMREZJE, PotLine.DOMACE_OMREZJE, null), poti)
+        // T10 (pregled 0213): zavrnitev 403 je dosegljiva pot (rele se ne poskusi), a ni »povezano prek« za zavihek Racunalnik
+        assertEquals(listOf(PotLine.DOMACE_OMREZJE, null, null), poti)
         // brez releja (Global Link izklopljen na racunalniku): samo LAN
         assertEquals(OdgovorLine.Nedosegljiva, IzbirnaPovezava(Lazna(OdgovorLine.Nedosegljiva), null, null, poVrsti).naloga("{}"))
     }
@@ -377,4 +378,28 @@ class ReleLineTest {
         }
     }
 
+    @Test
+    fun `T10 - zavrnitev 401 ali 403 in neznan izid niso »povezano prek«, 503 (seja zaprta) je`() {
+        val poti = mutableListOf<PotLine?>()
+        IzbirnaPovezava(Lazna(OdgovorLine.Napaka(403, "zavrnjeno")), null, null, poVrsti) { poti += it }.stanjeSeje("a", 1, "b", "c")
+        IzbirnaPovezava(Lazna(OdgovorLine.Napaka(401, null)), null, null, poVrsti) { poti += it }.stanjeSeje("a", 1, "b", "c")
+        IzbirnaPovezava(Lazna(OdgovorLine.Napaka(503, "claude-code-ni")), null, null, poVrsti) { poti += it }.stanjeSeje("a", 1, "b", "c")
+        IzbirnaPovezava(Lazna(OdgovorLine.Napaka(0, IzidOddaje.NEZNAN)), null, null, poVrsti) { poti += it }.naloga("{}")
+        assertEquals(listOf(null, null, PotLine.DOMACE_OMREZJE, null), poti)
+    }
+
+    @Test
+    fun `T1 - zahteva oddana po LAN brez odgovora - rele se ne poskusi z istim enkratnim nizom, izid je neznan`() {
+        val neznan = IzidOddaje.poNapaki(oddano = true, spreminja = true)
+        assertEquals(OdgovorLine.Napaka(0, IzidOddaje.NEZNAN), neznan)
+        assertEquals(SporociloNapake.NEZNAN_IZID, NapakaLine.sporocilo(neznan))
+        for (klic in listOf<(PovezavaZLino) -> OdgovorLine>({ it.naloga("{}") }, { it.potrditevGradnje("{}") }, { it.dodeliAgentNalogo("{}") }, { it.odobritev("{}") })) {
+            val rele = Lazna(OdgovorLine.Ok("{}"))
+            assertEquals(neznan, klic(IzbirnaPovezava(Lazna(neznan), null, rele, poVrsti)))
+            assertEquals(0, rele.klici.get())
+        }
+        // povezava ni vzpostavljena (zunaj doma LAN ne odgovori) ali branje (GET): naslednja pot se poskusi - Global Link deluje
+        assertEquals(OdgovorLine.Nedosegljiva, IzidOddaje.poNapaki(oddano = false, spreminja = true))
+        assertEquals(OdgovorLine.Nedosegljiva, IzidOddaje.poNapaki(oddano = true, spreminja = false))
+    }
 }

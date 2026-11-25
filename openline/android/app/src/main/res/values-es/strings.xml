@@ -202,6 +202,7 @@
     <string name="assistant_err_busy">Demasiadas solicitudes. Inténtelo de nuevo dentro de un minuto.</string>
     <string name="assistant_err_gone">Lina ya no conoce esta tarea.</string>
     <string name="assistant_err_other">Error al comunicarse con Lina.</string>
+    <string name="assistant_err_unknown">La solicitud llegó al ordenador, pero no hubo respuesta; el resultado es desconocido. Compruebe el estado antes de volver a intentarlo.</string>
     <string name="assistant_wait_confirm">Esperando a que Lina en su ordenador confirme este teléfono.</string>
     <string name="assistant_pair_accepted">Lina en su ordenador ha confirmado este teléfono. Vinculado.</string>
     <string name="assistant_pair_refused">Lina en su ordenador ha rechazado la vinculación.</string>
@@ -264,6 +265,7 @@
     <string name="local_task_prevec">El ordenador rechazó la tarea por demasiadas solicitudes en poco tiempo. Inténtalo dentro de unos minutos.</string>
     <string name="local_task_zasedeno">No entregué la tarea porque ya hay otra en curso en el ordenador. Espera a que termine.</string>
     <string name="local_task_napaka">No pude entregar la tarea por un error (texto de la tarea, firma del teléfono o respuesta del ordenador). Inténtalo de nuevo; los detalles están en la pestaña Ordenador.</string>
+    <string name="local_task_neznan">No sé si el ordenador recibió la tarea: la solicitud salió, pero no llegó respuesta. Revise la pestaña Ordenador antes de enviarla de nuevo.</string>
     <string name="local_task_preverjam">Compruebo si el ordenador acepta la tarea …</string>
     <string name="local_task_shrani_naslov">¿Guardar la tarea para más tarde?</string>
     <string name="local_task_shrani">Guardar y enviar más tarde</string>

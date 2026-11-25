@@ -965,6 +965,7 @@ class DialerActivity : Activity() {
         SporociloNapake.PREVEC -> R.string.assistant_err_busy
         SporociloNapake.NI_NALOGE -> R.string.assistant_err_gone
         SporociloNapake.NAPAKA -> R.string.assistant_err_other
+        SporociloNapake.NEZNAN_IZID -> R.string.assistant_err_unknown
     }
 
     private fun sendTask() {

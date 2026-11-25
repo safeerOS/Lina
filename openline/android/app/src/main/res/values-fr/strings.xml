@@ -202,6 +202,7 @@
     <string name="assistant_err_busy">Trop de demandes. Réessayez dans une minute.</string>
     <string name="assistant_err_gone">Lina ne connaît plus cette tâche.</string>
     <string name="assistant_err_other">Erreur de communication avec Lina.</string>
+    <string name="assistant_err_unknown">La demande a atteint l\'ordinateur, mais aucune réponse n\'est arrivée ; le résultat est inconnu. Vérifiez l\'état avant de réessayer.</string>
     <string name="assistant_wait_confirm">En attente que Lina sur votre ordinateur confirme ce téléphone.</string>
     <string name="assistant_pair_accepted">Lina sur votre ordinateur a confirmé ce téléphone. Associé.</string>
     <string name="assistant_pair_refused">Lina sur votre ordinateur a refusé l’association.</string>
@@ -264,6 +265,7 @@
     <string name="local_task_prevec">L\'ordinateur a refusé la tâche : trop de requêtes en peu de temps. Réessayez dans quelques minutes.</string>
     <string name="local_task_zasedeno">Je n\'ai pas transmis la tâche car une autre tâche est déjà en cours sur l\'ordinateur. Attendez qu\'elle se termine.</string>
     <string name="local_task_napaka">Je n\'ai pas pu transmettre la tâche à cause d\'une erreur (texte de la tâche, signature du téléphone ou réponse de l\'ordinateur). Réessayez ; détails dans l\'onglet Ordinateur.</string>
+    <string name="local_task_neznan">Je ne sais pas si l\'ordinateur a reçu la tâche : la demande est partie, mais aucune réponse n\'est arrivée. Vérifiez l\'onglet Ordinateur avant de la renvoyer.</string>
     <string name="local_task_preverjam">Je vérifie si l\'ordinateur accepte la tâche …</string>
     <string name="local_task_shrani_naslov">Enregistrer la tâche pour plus tard ?</string>
     <string name="local_task_shrani">Enregistrer et envoyer plus tard</string>

@@ -836,6 +836,7 @@ class LinaPogovorPogled(
             si.safeer.lina.samostojna.IzidPredaje.PREVEC -> R.string.local_task_prevec
             si.safeer.lina.samostojna.IzidPredaje.ZASEDENO -> R.string.local_task_zasedeno
             si.safeer.lina.samostojna.IzidPredaje.NAPAKA -> R.string.local_task_napaka
+            si.safeer.lina.samostojna.IzidPredaje.NEZNAN -> R.string.local_task_neznan
         }
         val sprejeta = izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA
         val sporocilo = if (sprejeta) a.getString(kljuc, besedilo, si.safeer.lina.samostojna.PredajaNaloge.stevilka(id ?: "")) else a.getString(kljuc)

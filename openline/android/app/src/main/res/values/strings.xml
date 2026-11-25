@@ -202,6 +202,7 @@
     <string name="assistant_err_busy">Too many requests. Try again in a minute.</string>
     <string name="assistant_err_gone">Lina no longer knows this task.</string>
     <string name="assistant_err_other">Error talking to Lina.</string>
+    <string name="assistant_err_unknown">The request reached the computer, but no reply came; the outcome is unknown. Check the state before trying again.</string>
     <string name="assistant_wait_confirm">Waiting for Lina on your computer to confirm this phone.</string>
     <string name="assistant_pair_accepted">Lina on your computer confirmed this phone. Paired.</string>
     <string name="assistant_pair_refused">Lina on your computer refused the pairing.</string>
@@ -264,6 +265,7 @@
     <string name="local_task_prevec">The computer rejected the task because of too many requests in a short time. Try again in a few minutes.</string>
     <string name="local_task_zasedeno">I did not hand over the task because another task is already running on the computer. Wait for it to finish.</string>
     <string name="local_task_napaka">I could not hand over the task because of an error (task text, phone signature or the computer\'s reply). Try again; details are in the Computer tab.</string>
+    <string name="local_task_neznan">I do not know whether the computer received the task: the request was sent but no reply came. Check the Computer tab before sending it again.</string>
     <string name="local_task_preverjam">Checking whether the computer accepts the task …</string>
     <string name="local_task_shrani_naslov">Save the task for later?</string>
     <string name="local_task_shrani">Save and send later</string>

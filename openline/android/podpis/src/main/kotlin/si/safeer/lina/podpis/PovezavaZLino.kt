@@ -44,13 +44,32 @@ interface PovezavaZLino {
 }
 
 /** Kaj uporabnik izve ob napaki (kljuc besedila v aplikaciji). Vse 403 so ista koda (Lina ne pove razloga). */
-enum class SporociloNapake { NEDOSEGLJIVA, CLAUDE_CODE_NI, ZAVRNJENO, PREVEC, NI_NALOGE, NAPAKA }
+enum class SporociloNapake { NEDOSEGLJIVA, CLAUDE_CODE_NI, ZAVRNJENO, PREVEC, NI_NALOGE, NAPAKA, NEZNAN_IZID }
+
+/**
+ * T1 (pregled 0213): izid zahteve, ki se je koncala brez odgovora Line. [oddano] = zahteva je bila ze zapisana v vzpostavljeno
+ * povezavo (TLS z Lino uspel); [spreminja] = POST ali prenos, ki ga Lina izvede (naloga, gradnja, agent, odobritev).
+ */
+object IzidOddaje {
+    const val NEZNAN = "neznan-izid"
+
+    /**
+     * Oddana zahteva, ki spreminja stanje, brez odgovora: Lina jo je morda ze izvedla. Druga pot (rele) bi poslala ISTO telo z istim
+     * enkratnim nizom (Lina ga zavrne s 403, telefon bi lazno pokazal »zavrnjeno«) ali dvojni zagon; zato izid »neznan«, brez ponovitve.
+     * Neuspela povezava (zunaj doma LAN ne odgovori, TLS ne uspe) in branje ostaneta Nedosegljiva: naslednja pot se poskusi.
+     */
+    fun poNapaki(oddano: Boolean, spreminja: Boolean): OdgovorLine =
+        if (oddano && spreminja) OdgovorLine.Napaka(0, NEZNAN) else OdgovorLine.Nedosegljiva
+
+    fun jeNeznan(o: OdgovorLine): Boolean = o is OdgovorLine.Napaka && o.status == 0 && o.koda == NEZNAN
+}
 
 object NapakaLine {
     fun sporocilo(o: OdgovorLine): SporociloNapake? = when (o) {
         is OdgovorLine.Ok -> null
         OdgovorLine.Nedosegljiva -> SporociloNapake.NEDOSEGLJIVA
         is OdgovorLine.Napaka -> when {
+            IzidOddaje.jeNeznan(o) -> SporociloNapake.NEZNAN_IZID
             o.status == 503 -> SporociloNapake.CLAUDE_CODE_NI
             o.status == 403 -> SporociloNapake.ZAVRNJENO
             o.status == 429 -> SporociloNapake.PREVEC

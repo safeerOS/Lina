@@ -202,6 +202,7 @@
     <string name="assistant_err_busy">Preveč zahtev. Poskusite čez minuto.</string>
     <string name="assistant_err_gone">Lina te naloge ne pozna več.</string>
     <string name="assistant_err_other">Napaka pri povezavi z Lino.</string>
+    <string name="assistant_err_unknown">Zahteva je prišla do računalnika, odgovora pa ni bilo; izid ni znan. Preden poskusiš znova, preveri stanje.</string>
     <string name="assistant_wait_confirm">Čakam, da te Lina na računalniku potrdi.</string>
     <string name="assistant_pair_accepted">Lina na računalniku je telefon potrdila. Seznanjeno.</string>
     <string name="assistant_pair_refused">Lina na računalniku je seznanitev zavrnila.</string>
@@ -264,6 +265,7 @@
     <string name="local_task_prevec">Računalnik je nalogo zavrnil, ker je bilo v kratkem času preveč zahtev. Poskusi čez nekaj minut.</string>
     <string name="local_task_zasedeno">Naloge nisem oddala, ker na računalniku že teče druga naloga. Počakaj, da se konča.</string>
     <string name="local_task_napaka">Naloge nisem mogla oddati zaradi napake (besedilo naloge, podpis telefona ali odgovor računalnika). Poskusi znova; podrobnosti so v zavihku Računalnik.</string>
+    <string name="local_task_neznan">Ne vem, ali je računalnik nalogo prejel: zahteva je odšla, odgovora pa ni bilo. Preden jo pošlješ znova, preveri zavihek Računalnik.</string>
     <string name="local_task_preverjam">Preverjam, ali računalnik nalogo sprejme …</string>
     <string name="local_task_shrani_naslov">Shranim nalogo za pozneje?</string>
     <string name="local_task_shrani">Shrani in pošlji pozneje</string>

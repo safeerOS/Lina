@@ -202,6 +202,7 @@
     <string name="assistant_err_busy">Zu viele Anfragen. Versuchen Sie es in einer Minute erneut.</string>
     <string name="assistant_err_gone">Lina kennt diese Aufgabe nicht mehr.</string>
     <string name="assistant_err_other">Fehler bei der Kommunikation mit Lina.</string>
+    <string name="assistant_err_unknown">Die Anfrage hat den Computer erreicht, aber es kam keine Antwort; das Ergebnis ist unbekannt. Prüfen Sie den Zustand, bevor Sie es erneut versuchen.</string>
     <string name="assistant_wait_confirm">Warte darauf, dass Lina auf Ihrem Computer dieses Telefon bestätigt.</string>
     <string name="assistant_pair_accepted">Lina auf Ihrem Computer hat dieses Telefon bestätigt. Gekoppelt.</string>
     <string name="assistant_pair_refused">Lina auf Ihrem Computer hat die Kopplung abgelehnt.</string>
@@ -264,6 +265,7 @@
     <string name="local_task_prevec">Der Computer hat die Aufgabe wegen zu vieler Anfragen abgelehnt. Versuche es in ein paar Minuten erneut.</string>
     <string name="local_task_zasedeno">Ich habe die Aufgabe nicht übergeben, weil auf dem Computer bereits eine Aufgabe läuft. Warte, bis sie fertig ist.</string>
     <string name="local_task_napaka">Ich konnte die Aufgabe wegen eines Fehlers nicht übergeben (Aufgabentext, Signatur des Telefons oder Antwort des Computers). Versuche es erneut; Details im Tab Computer.</string>
+    <string name="local_task_neznan">Ich weiß nicht, ob der Computer die Aufgabe erhalten hat: Die Anfrage wurde gesendet, aber es kam keine Antwort. Prüfen Sie den Tab Computer, bevor Sie sie erneut senden.</string>
     <string name="local_task_preverjam">Ich prüfe, ob der Computer die Aufgabe annimmt …</string>
     <string name="local_task_shrani_naslov">Aufgabe für später speichern?</string>
     <string name="local_task_shrani">Speichern und später senden</string>

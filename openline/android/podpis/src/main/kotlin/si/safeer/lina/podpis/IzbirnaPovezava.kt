@@ -29,7 +29,8 @@ class IzbirnaPovezava(
         val odg = prenos(pot(lan, PotLine.DOMACE_OMREZJE, klic) { uspela = it },
             neposredno?.takeIf { oddaljeno }?.let { pot(it, PotLine.NEPOSREDNO, klic) { p -> uspela = p } },
             rele?.takeIf { oddaljeno }?.let { pot(it, PotLine.GLOBAL_LINK, klic) { p -> uspela = p } })
-        obIzidu(if (odg == null) null else uspela)
+        // T10 (pregled 0213): zavrnitev (401/403) in neznan izid sta dosegljiva pot (druga se ne poskusi), nista pa »povezano prek«
+        obIzidu(if (odg == null || odg is OdgovorLine.Napaka && (odg.status == 401 || odg.status == 403 || IzidOddaje.jeNeznan(odg))) null else uspela)
         return odg ?: OdgovorLine.Nedosegljiva
     }
 

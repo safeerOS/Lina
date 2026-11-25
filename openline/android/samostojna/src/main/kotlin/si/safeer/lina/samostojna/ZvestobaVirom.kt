@@ -52,7 +52,7 @@ object OSebi {
 }
 
 /** Izid predaje naloge računalniku: besedilo uporabniku izbere aplikacija po tem izidu (strings.xml), nikoli pred njim. */
-enum class IzidPredaje { SPREJETA, NEDOSEGLJIV, CLAUDE_CODE_NI, ZAVRNJENA, PREVEC, ZASEDENO, NAPAKA }
+enum class IzidPredaje { SPREJETA, NEDOSEGLJIV, CLAUDE_CODE_NI, ZAVRNJENA, PREVEC, ZASEDENO, NAPAKA, NEZNAN }
 
 object PredajaNaloge {
     /** Enako kot NapakaLine.sporocilo (podpis): 503 claude-code-ni, 403 zavrnjeno, 429 prevec; drugo je napaka, ne »ni dosegljiv«. */
@@ -62,6 +62,8 @@ object PredajaNaloge {
         status == 503 -> IzidPredaje.CLAUDE_CODE_NI
         status == 403 -> IzidPredaje.ZAVRNJENA
         status == 429 -> IzidPredaje.PREVEC
+        // T1 (pregled 0213): zahteva oddana, odgovora ni (IzidOddaje, status 0) - racunalnik jo je morda prejel
+        status == 0 -> IzidPredaje.NEZNAN
         else -> IzidPredaje.NAPAKA
     }
 
