@@ -46,7 +46,7 @@ jobs:
           [ ${#apki[@]} -gt 0 ] || { echo "::error::Ni APK za podpis"; rm -f "$KS"; exit 1; }
           for apk in "${apki[@]}"; do
             "$AS" sign --ks "$KS" --ks-key-alias lina --ks-pass env:LINA_PODPIS_GESLO --key-pass env:LINA_PODPIS_GESLO "$apk"
-            odtis="$("$AS" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+            odtis="$("$AS" verify --print-certs "$apk" | grep -m1 'certificate SHA-256 digest:' | sed 's/.*digest: //' | tr -d ':' | tr 'A-F' 'a-f')"
             [ "$odtis" = "$PRICAKOVAN" ] || { echo "::error::Napacen odtis podpisa ($odtis) v $apk"; rm -f "$KS"; exit 1; }
             echo "Podpis OK: $apk"
           done
