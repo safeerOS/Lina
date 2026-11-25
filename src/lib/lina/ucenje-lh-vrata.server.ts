@@ -18,7 +18,7 @@ type Pregled = { vklopljen: boolean; enote: PregledEnote[] };
 export type StanjeUcenjaLH = Pregled & { naVoljo: boolean };
 type KlicModela = (z: { system: string; text: string; maxTokens: number; najvecZnakov: number }) => Promise<string | null>;
 type ModulLH = {
-  obdelajSporocilo(root: string, besedilo: string, klic: KlicModela, zdaj?: Date): Promise<string | null>;
+  obdelajSporocilo(root: string, besedilo: string, klic: KlicModela, zdaj?: Date, odrezano?: boolean, koledar?: boolean): Promise<string | null>;
   odsekPogovora(root: string, besedilo: string): Promise<string>;
   stanje(root: string): Promise<Pregled>;
   nastavi(root: string, vklop: boolean): Promise<Pregled>;
@@ -45,8 +45,10 @@ async function modul(): Promise<ModulLH | null> {
 
 type Mozgani = Pick<ProviderCall, "provider" | "model" | "key"> & Partial<ProviderCall>;
 
-/** Sporocilo lastnika v pogovoru (ne priponke, ne klici). Vrne odgovor modula ali null (obicajen pogovor). Nikoli ne vrze. */
-export async function ucenjeLHSporocilo(root: string, besedilo: string, brain: Mozgani, zdaj: Date = new Date()): Promise<string | null> {
+/** Sporocilo lastnika v pogovoru (ne priponke, ne klici). Vrne odgovor modula ali null (obicajen pogovor). Nikoli ne vrze.
+ *  odrezano: lastnikovo sporocilo je bilo daljse od meje pogovora (modul na to opozori, da ne izgubi korakov tiho).
+ *  koledar: koledarska namera (koda Line); med uro gre izrecen ukaz koledarju, ura ostane. */
+export async function ucenjeLHSporocilo(root: string, besedilo: string, brain: Mozgani, zdaj: Date = new Date(), odrezano = false, koledar = false): Promise<string | null> {
   const m = await modul();
   if (!m) return null;
   const klic: KlicModela = async (z) => {
@@ -54,7 +56,7 @@ export async function ucenjeLHSporocilo(root: string, besedilo: string, brain: M
     return r.ok ? r.text : null;
   };
   try {
-    const odg = await m.obdelajSporocilo(root, besedilo, klic, zdaj);
+    const odg = await m.obdelajSporocilo(root, besedilo, klic, zdaj, odrezano, koledar);
     return odg === null ? null : hideSecret(odg, brain.key);
   } catch {
     console.warn("lina ucenje-lh: obdelava ni uspela");

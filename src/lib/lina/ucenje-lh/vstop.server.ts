@@ -47,6 +47,8 @@ const pregled = (s: StanjeLH): PregledLH => ({
   enote: s.enote.map((e) => ({ id: e.id, naslov: e.naslov, korakov: e.koraki.length, znanih: znanih(e), ustvarjeno: e.ustvarjeno, koraki: e.koraki.map((k) => k.besedilo) })),
 });
 
+const UKAZ_KOLEDARJU = /^\s*(lina[,:]?\s*)?(opomni me|dodaj (dogodek|opomnik|zapisek)|nov (dogodek|opomnik|zapisek)|zapi[sš]i si)/i;
+const IZHOD = "Uro kadarkoli končate z »konec«";
 const datum = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("sl-SI", { timeZone: "Europe/Ljubljana" }) : "");
 
 async function oceni(klic: KlicModela, e: Enota, i: number, odgovor: string): Promise<{ razume: boolean; manjka: string }> {
@@ -69,13 +71,13 @@ function zacniUro(s: StanjeLH, e: Enota, zdaj: Date): string {
   const zePreverjen = e.napredek.some((n) => n.preverjen);
   if (zePreverjen && zapadli.length > 0) {
     s.seja = { enotaId: e.id, faza: "ponavljanje", lo: 0, hi: e.koraki.length, korak: zapadli[0]!, vrsta: zapadli, zadnjic: zdaj.toISOString() };
-    return `Ponoviva »${e.naslov}« (najprej najšibkejši koraki: ${zapadli.length}).\n${predstaviKorak(e, zapadli[0]!)}`;
+    return `Ponoviva »${e.naslov}« (najprej najšibkejši koraki: ${zapadli.length}). ${IZHOD}\n${predstaviKorak(e, zapadli[0]!)}`;
   }
   if (zePreverjen) return `»${e.naslov}« znate; naslednja ponovitev: ${datum(naslednjaPonovitev(e))}.`;
   const n = e.koraki.length;
   s.seja = { enotaId: e.id, faza: "merjenje", lo: 0, hi: n, korak: 0, vrsta: [], zadnjic: zdaj.toISOString() };
   const m = sredina(0, n);
-  return `${BESEDILO_MERJENJA}\nVprašanje (korak ${m + 1}/${n}): ${e.koraki[m]!.vprasanje}`;
+  return `${BESEDILO_MERJENJA} ${IZHOD}\nVprašanje (korak ${m + 1}/${n}): ${e.koraki[m]!.vprasanje}`;
 }
 
 function konecUre(s: StanjeLH, e: Enota): string {
@@ -95,7 +97,10 @@ async function odgovorNaUro(s: StanjeLH, e: Enota, besedilo: string, klic: KlicM
     seja.lo = p.lo;
     seja.hi = p.hi;
     if (!p.konec) return `${o.razume ? "Prav." : "Zabeleženo."} Vprašanje (korak ${sredina(p.lo, p.hi) + 1}/${n}): ${e.koraki[sredina(p.lo, p.hi)]!.vprasanje}`;
-    if (p.lo >= n) return konecUre(s, e);
+    if (p.lo >= n) {
+      const nepreverjeni = e.napredek.some((x) => !x.preverjen);
+      return `${konecUre(s, e)}${nepreverjeni ? ` ${BESEDILO_NEPREVERJENO}` : ""}`;
+    }
     seja.faza = "pouk";
     seja.korak = p.lo;
     const nepreverjeni = e.napredek.slice(0, p.lo).some((x) => !x.preverjen);
@@ -105,7 +110,7 @@ async function odgovorNaUro(s: StanjeLH, e: Enota, besedilo: string, klic: KlicM
   const o = await oceni(klic, e, i, besedilo);
   e.napredek[i] = poPreverbi(e.napredek[i]!, o.razume, zdaj);
   // en korak, ena preverba: brez dokaza ni naslednjega koraka (LearnHarness teacher/20-teaching.md)
-  if (!o.razume) return `Ni še čisto.${o.manjka ? ` ${o.manjka}` : ""} Še enkrat:\n${predstaviKorak(e, i)}`;
+  if (!o.razume) return `Ni še čisto.${o.manjka ? ` ${o.manjka}` : ""} Še enkrat (${IZHOD.toLowerCase()}):\n${predstaviKorak(e, i)}`;
   let naslednji: number | undefined;
   if (seja.faza === "pouk") {
     seja.korak = i + 1;
@@ -122,12 +127,16 @@ async function odgovorNaUro(s: StanjeLH, e: Enota, besedilo: string, klic: KlicM
  * Lastnikovo sporocilo: vrne odgovor Line, ce ga obdela modul (sestava enote, ura, odgovor v uri), sicer null (obicajen pogovor).
  * Odloca koda iz lastnikovega besedila, nikoli oznaka modela.
  */
-async function obdelajSporocilo(root: string, besedilo: string, klic: KlicModela, zdaj: Date = new Date()): Promise<string | null> {
+async function obdelajSporocilo(root: string, besedilo: string, klic: KlicModela, zdaj: Date = new Date(), odrezano = false, koledar = false): Promise<string | null> {
   return vVrsti(root, async () => {
     const s = await preberiStanjeLH(root);
     if (!s.vklopljen) return null;
     if (s.seja && zdaj.getTime() - Date.parse(s.seja.zadnjic) > ROK_SEJE_MS) s.seja = null;
-    if (s.seja) {
+    // nova enota ali ura za drugo/isto enoto ima prednost pred odgovorom v uri (sicer bi jo ura ocenila kot odgovor)
+    const nova = jeNameraSestave(besedilo) || (jeNameraUre(besedilo) && najdiEnoto(s.enote, besedilo) !== null);
+    // izrecen ukaz za koledar med uro (»opomni me ...«) gre koledarju, ura ostane na istem koraku; odgovor, ki samo omeni opomnik, se oceni
+    if (s.seja && !nova && koledar && UKAZ_KOLEDARJU.test(besedilo)) return null;
+    if (s.seja && !nova) {
       const e = s.enote.find((x) => x.id === s.seja!.enotaId);
       if (e && jeKonec(besedilo)) {
         s.seja = null;
@@ -148,18 +157,19 @@ async function obdelajSporocilo(root: string, besedilo: string, klic: KlicModela
       } catch {
         odgovorModela = null;
       }
-      const nova = sestaviEnoto(besedilo, odgovorModela, randomUUID(), zdaj);
-      if (!nova) return null;
-      const ista = s.enote.findIndex((e) => e.naslov.toLowerCase() === nova.naslov.toLowerCase());
+      const enota = sestaviEnoto(besedilo, odgovorModela, randomUUID(), zdaj);
+      if (!enota) return null;
+      const ista = s.enote.findIndex((e) => e.naslov.toLowerCase() === enota.naslov.toLowerCase());
       if (ista < 0 && s.enote.length >= NAJVEC_ENOT) return `Učnih enot je že ${NAJVEC_ENOT}; izbrišite kakšno v Nastavitvah, pa shranim novo.`;
-      if (ista >= 0) s.enote[ista] = { ...nova, id: s.enote[ista]!.id };
-      else s.enote.push(nova);
+      if (ista >= 0) s.enote[ista] = { ...enota, id: s.enote[ista]!.id };
+      else s.enote.push(enota);
       s.seja = null;
       await zapisiStanjeLH(root, s);
-      console.info(`lina ucenje-lh: enota shranjena (korakov=${nova.koraki.length}, enot=${s.enote.length}, model=${odgovorModela ? 1 : 0})`);
+      console.info(`lina ucenje-lh: enota shranjena (korakov=${enota.koraki.length}, enot=${s.enote.length}, model=${odgovorModela ? 1 : 0})`);
       return (
-        `Shranila sem učno enoto »${nova.naslov}« (${nova.koraki.length} korakov${odgovorModela ? "" : ", preverbe brez modela"}). ` +
-        `Vidna je v Nastavitvah, kjer jo lahko izbrišete. Ko želite, recite »preveri me iz ${nova.naslov.toLowerCase()}«: najprej izmerim, kaj že znate, nato greva korak za korakom.`
+        `Shranila sem učno enoto »${enota.naslov}« (${enota.koraki.length} korakov${odgovorModela ? "" : ", preverbe brez modela"}). ` +
+        `Vidna je v Nastavitvah, kjer jo lahko izbrišete. Ko želite, recite »preveri me iz ${enota.naslov.toLowerCase()}«: najprej izmerim, kaj že znate, nato greva korak za korakom.` +
+        (odrezano ? ` Opozorilo: sporočilo je bilo daljše od dovoljenega in je odrezano; preverite v Nastavitvah, ali so shranjeni vsi koraki.` : "")
       );
     }
     if (jeNameraUre(besedilo)) {
