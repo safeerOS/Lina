@@ -540,6 +540,29 @@
   background: var(--color-signal);
 }
 
+/* naloga 16: telefon dodan, stanje ni znano (ne »zaprta«) */
+.lina2-pika-neznano {
+  background: var(--color-brass);
+}
+
+/* naloga 16: »Linija zaprta« je gumb, ki odpre zaslon Linija */
+.lina2-stanje-gumb {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lina2-stanje-gumb:focus-visible {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .lina2-ura {
   color: var(--color-moss);
   flex-direction: column;

@@ -12,6 +12,7 @@ import { ZnanjeDatoteke } from "@/components/znanje-datoteke.tsx";
 import { sporociloNapake, sporociloStreznika, t, type Beseda } from "@/lib/lina/besedila.ts";
 import { jePredHiso, PRED_HISO } from "@/lib/lina/paket.ts";
 import { PoveziTelefon } from "@/components/povezi-telefon.tsx";
+import { oznakaLinije, type TelefonLinije } from "@/lib/lina/oznaka-linije.ts";
 import { casKlica, korakiNastavitve, uraGlave, stanjeKlica, vstavi, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
 import { FOKUS, GUMB, GUMB_OBROBA, GUMB_SIGNAL, IZBIRA, NAMIG, OZNAKA_POLJA, PLOSCA, POLJE, Podrazdelek, Razdelek, StanjeNalaganja, StanjeNapaka, StanjePrazno, Znacka } from "@/components/ui-lina.tsx";
 import { SpominLastnika } from "@/components/spomin-lastnika.tsx";
@@ -106,6 +107,7 @@ export function LinaDesk({
   vrzeli: vrzeliIn,
   zacetniZavihek,
   vdelan = false,
+  telefonLinije = null,
 }: {
   line: LinijaZGlasom;
   calls: CallSession[];
@@ -119,6 +121,8 @@ export function LinaDesk({
   zacetniZavihek?: RazdelekLine;
   /** Vdelan v okvir: okvir ima lasten meni, zato se vrstica razdelkov ne prikaze. */
   vdelan?: boolean;
+  /** Naloga 16: stanje telefona za oznako linije (okvir ga osvezuje); brez njega oznaka ne trdi »zaprta« pred odgovorom. */
+  telefonLinije?: TelefonLinije | null;
 }) {
   const router = useRouter();
   const [tabIzbran, setTab] = useState<Tab>(zacetniZavihek ?? "klic");
@@ -160,6 +164,7 @@ export function LinaDesk({
   const [opozorilo, setOpozorilo] = useState("");
   const [catalog, setCatalog] = useState<Catalog>(line.catalog);
   const [open, setOpen] = useState(line.open);
+  const oznaka = oznakaLinije(open, telefonLinije);
   const [seconds, setSeconds] = useState(0);
   const [mind, setMind] = useState(brain);
   const [place, setPlace] = useState(storage);
@@ -360,7 +365,11 @@ export function LinaDesk({
             </p>
           ) : null}
           <p className="mt-2 flex flex-wrap gap-2" aria-live="polite">
-            <Znacka ton={open ? "moss" : "brass"}>{open ? t("uiLinijaOdprta") : t("uiLinijaZaprta")}</Znacka>
+            {oznaka.odpreLinijo ? (
+              <button type="button" className={`rounded-full ${FOKUS}`} aria-label={t("linOznakaOdpri")} onClick={() => setTab("linija")}>
+                <Znacka ton="brass">{t(oznaka.kljuc)}</Znacka>
+              </button>
+            ) : <Znacka ton={oznaka.ton === "ok" ? "moss" : "ink"}>{t(oznaka.kljuc)}</Znacka>}
             <Znacka ton="ink">
               {mind.nastavljen
                 ? `${t("uiMozganiNaslov")}: ${mind.provider}`
@@ -737,9 +746,8 @@ export function LinaDesk({
       ) : null}
       {tab === "zapiski" ? <ZapiskiPanel onError={setError} /> : null}
       {tab === "telefon" ? (
-        <section className="mt-5 max-w-xl rounded-3xl bg-[var(--color-sheet)] p-5">
-          <PoveziTelefon onError={setError} />
-        </section>
+        // naloga 16: zaslon ima sam dva stolpca (levo nastavitve, desno QR, koda in vnos kode), zato ni ozke kartice
+        <PoveziTelefon onError={setError} />
       ) : null}
       {tab === "linija" ? (
         <section className="mt-5 max-w-xl rounded-3xl bg-[var(--color-sheet)] p-5">

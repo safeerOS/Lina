@@ -24,7 +24,7 @@ import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import { requireOwner } from "./auth.server.ts";
 import { ID_NAPRAVE, potVticnice } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
-import { povabiloOpenLine, stanjeOpenLine, type PovabiloOpenLine } from "./openline-povabilo.server.ts";
+import { povabiloOpenLine, stanjeOpenLine, telefoniOpenLine, type PovabiloOpenLine } from "./openline-povabilo.server.ts";
 import { SeznanitevSKodo } from "./koda-seznanitev.ts";
 import { idVSkupinah } from "./id-naprave.ts";
 import { jeClanKroga, PRESKOK_PRIMERJAVE_ZA_CLANE } from "./clan-kroga.server.ts";
@@ -528,6 +528,22 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
     opozoriloKlicev: stanje().opozoriloKlicev || stanje().opozoriloPripraveKlicev || "",
     klicevSePripravlja: !!stanje().pripravaKlicev,
   };
+}
+
+/** Naloga 16: telefon za oznako linije. povezan = ziva povezava s potjo klicev; seznanjen = telefon je dodan, zive povezave ni ali je ne vemo. */
+export type TelefonLinije = "povezan" | "seznanjen" | "ne";
+
+/**
+ * Naloga 16 (lastnik 25. 11. 2026: »Čeprav je telefon povezan je Linija zaprta«): stanje telefona za oznako linije. Racunalnik ne ve,
+ * ali Lina na telefonu klice sprejema (telefon tega ne javi), zato nikoli ne trdimo »zaprta«, ce je telefon dodan.
+ */
+export async function telefonZaLinijo(token: string | null, dir?: string, telefoni: typeof telefoniOpenLine = telefoniOpenLine): Promise<TelefonLinije> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  const ol = await telefoni(root);
+  if (ol && ol.povezanih > 0) return "povezan";
+  if ((ol && ol.naprav > 0) || (await preberiKanal(root)).dovoljene.size > 0) return "seznanjen";
+  return "ne";
 }
 
 /** Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. */

@@ -1,7 +1,9 @@
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LinaDesk } from "@/components/lina-desk.tsx";
-import { izberiModelFn, logoutFn, stanjeVprasanjAgentovFn } from "@/lib/lina/functions.ts";
+import { izberiModelFn, logoutFn, stanjeVprasanjAgentovFn, telefonZaLinijoFn } from "@/lib/lina/functions.ts";
+import { t } from "@/lib/lina/besedila.ts";
+import { oznakaLinije, type TelefonLinije } from "@/lib/lina/oznaka-linije.ts";
 import { IME_PONUDNIKA } from "@/lib/lina/types.ts";
 import { kliciZaPrikaz, steviloNovih } from "@/lib/lina/imenik.ts";
 import { datumGlave, uraGlave, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
@@ -98,6 +100,19 @@ export function Lina2Okvir(props: Props) {
     }
   }, [aktivnaStran]);
 
+  // Naloga 16: oznaka linije uposteva tudi telefon (ziva pot klicev OpenLine ali dodan telefon), ne samo linije racunalnika.
+  const [telefon, setTelefon] = useState<TelefonLinije | null>(null);
+  useEffect(() => {
+    let ziv = true;
+    const osvezi = () => {
+      if (document.hidden) return;
+      void telefonZaLinijoFn().then((x) => { if (ziv) setTelefon(x); }).catch(() => { if (ziv) setTelefon(null); });
+    };
+    osvezi();
+    const c = setInterval(osvezi, 20_000);
+    return () => { ziv = false; clearInterval(c); };
+  }, []);
+
   const novihKlicev = useMemo(() => steviloNovih(kliciZaPrikaz(props.calls, [], 50), ogled), [props.calls, ogled]);
 
   // Pregled 0213 B7: agent (Claude Code v Lini) stoji, dokler lastnik ne odgovori - znacka na Racunalniku in obvestilo namizja
@@ -152,7 +167,8 @@ export function Lina2Okvir(props: Props) {
 
   const ura = zdaj ? uraGlave(zdaj) : "";
   const datum = zdaj ? datumGlave(zdaj) : "";
-  const odprta = props.line.open;
+  const oznaka = oznakaLinije(props.line.open, telefon);
+  const pika = oznaka.ton === "ok" ? "lina2-pika-ok" : oznaka.ton === "zaprta" ? "lina2-pika-slaba" : "lina2-pika-neznano";
   const mozgani = props.brain.nastavljen || props.llm;
 
   return (
@@ -190,10 +206,13 @@ export function Lina2Okvir(props: Props) {
           </nav>
           <div className="lina2-stranska-dno">
             <div className="lina2-online" role="status">
-              <span className={`lina2-pika ${odprta ? "lina2-pika-ok" : "lina2-pika-slaba"}`} aria-hidden="true" />
+              <span className={`lina2-pika ${pika}`} aria-hidden="true" />
               <span className="lina2-online-besedilo">
-                <strong>{odprta ? t2("online") : t2("offline")}</strong>
-                <span>{odprta ? t2("onlineOpis") : t2("offlineOpis")}</span>
+                {oznaka.odpreLinijo ? (
+                  <button type="button" className="lina2-stanje-gumb" aria-label={t("linOznakaOdpri")} onClick={() => pojdi("linija")}><strong>{t(oznaka.kljuc)}</strong></button>
+                ) : <strong>{t(oznaka.kljuc)}</strong>}
+                {/* »Klice prevzema Lina« samo, ko to res ve (linija racunalnika); o telefonu racunalnik tega ne ve */}
+                <span>{oznaka.ton === "zaprta" ? t2("offlineOpis") : oznaka.kljuc === "linOznaka_odprta" || oznaka.kljuc === "linOznaka_racunalnik" ? t2("onlineOpis") : ""}</span>
               </span>
             </div>
             <button type="button" className="lina2-nav-gumb" aria-expanded={!zmanjsan} onClick={preklopiMeni}>
@@ -215,8 +234,10 @@ export function Lina2Okvir(props: Props) {
                 {novihKlicev > 0 ? <span className="lina2-znacka-st">{novihKlicev}</span> : null}
               </button>
               <p className="lina2-stanje" role="status">
-                <span className={`lina2-pika ${odprta ? "lina2-pika-ok" : "lina2-pika-slaba"}`} aria-hidden="true" />
-                <span>{odprta ? t2("linijaOdprta") : t2("linijaZaprta")}</span>
+                <span className={`lina2-pika ${pika}`} aria-hidden="true" />
+                {oznaka.odpreLinijo ? (
+                  <button type="button" className="lina2-stanje-gumb" aria-label={t("linOznakaOdpri")} onClick={() => pojdi("linija")}>{t(oznaka.kljuc)}</button>
+                ) : <span>{t(oznaka.kljuc)}</span>}
                 <span className="lina2-loci" aria-hidden="true">·</span>
                 <span>{mozgani ? `${t2("mozganiDa")}: ${props.brain.provider ?? "OK"}` : t2("mozganiNe")}</span>
               </p>
@@ -235,7 +256,7 @@ export function Lina2Okvir(props: Props) {
               <DomovPanel
                 calls={props.calls}
                 podjetje={props.line.catalog.company.name}
-                linijaOdprta={odprta}
+                linija={oznaka}
                 onOdpri={(z) => (jeStran(z, nacin) ? pojdi(z) : undefined)}
                 brain={props.brain}
                 ukaz={ukaz}
@@ -251,7 +272,7 @@ export function Lina2Okvir(props: Props) {
             {aktivnaStran === "mediji" ? <MedijiPanel /> : null}
             {aktivnaStran === "kontrola" ? <KontrolaTiskaPanel /> : null}
             {aktivnaStran === "racunalnik" ? <RacunalnikPanel /> : null}
-            {LASTNI.includes(aktivnaStran) ? null : <LinaDesk {...props} zacetniZavihek={aktivnaStran as RazdelekLine} vdelan />}
+            {LASTNI.includes(aktivnaStran) ? null : <LinaDesk {...props} zacetniZavihek={aktivnaStran as RazdelekLine} vdelan telefonLinije={telefon} />}
           </div>
 
           <form

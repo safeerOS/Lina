@@ -51,7 +51,7 @@ import { stanjaDodatkov, uskladiEnkrat } from "./dodatki.server.ts";
 import { stanjeSlovenskega } from "./dodatki-telefon.server.ts";
 import { pozabiOmniroute, shraniOmniroute, stanjeOmniroute, type VnosOmniroute } from "./omniroute.server.ts";
 import {
-  odkleniPovezovanje, odlociSeznanitev, potrdiIdSeznanitve, odstraniNapravo, shraniAsistenta, stanjeAsistenta, vnesiKodoTelefona, zacniSeznanitev, zacniSeznanitevSKodo, zapriSeznanitevSKodo,
+  odkleniPovezovanje, odlociSeznanitev, potrdiIdSeznanitve, odstraniNapravo, shraniAsistenta, stanjeAsistenta, telefonZaLinijo, vnesiKodoTelefona, zacniSeznanitev, zacniSeznanitevSKodo, zapriSeznanitevSKodo,
 } from "./asistent-telefon.server.ts";
 import { dnevnikAvtonomije, stanjeAvtonomije, ukazAvtonomije } from "./avtonomija.server.ts";
 import { jeNacrtVklopljen, nacrtClaudeNaloge, nastaviNacrt, stanjeClaudeNalog, ukazClaudeNalog } from "./claude-naloge.server.ts";
@@ -860,6 +860,13 @@ export const shraniIzbiroGithubFn = createServerFn({ method: "POST" })
     clearLegacyCookie();
     return shraniIzbiroGithub(await sessionToken(), data?.izbira);
   });
+
+/** Naloga 16: telefon za oznako »Linija odprta/zaprta« (povezan, seznanjen, ne); samo branje. */
+export const telefonZaLinijoFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return telefonZaLinijo(await sessionToken());
+});
 
 /** Telefon za asistentko (zaslon »Poveži telefon«): privzeto izklopljeno; QR in potrditev lastnika (asistent-telefon.server.ts). */
 export const stanjeAsistentaFn = createServerFn({ method: "GET" }).handler(async () => {

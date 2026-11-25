@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "@/lib/lina/besedila.ts";
 import { idVSkupinah } from "@/lib/lina/id-naprave.ts";
 import {
@@ -23,18 +23,172 @@ function IdTelefona({ id }: { id: string }) {
   );
 }
 
+/** Razlog, zakaj QR in koda se nista na voljo (null = sta na voljo); besedilo v jeziku vmesnika. */
+export function razlogBrezKode(s: Stanje | null, povabilo: Povabilo | null): string | null {
+  if (!s) return t("telPripravljam");
+  if (!s.vklop) return t("telIzklopljeno");
+  if (s.samoGlobalLink) return t("telSamoGlobalLink");
+  if (!s.tece) return s.napakaKoda ? `${t(`telNapaka_${s.napakaKoda}`)} ${t("telPoskusamZnova")}` : t("telZaganjam");
+  if (!povabilo || !s.sKodo.odprto) return s.sKodo.zaprtoSe ? null : t("telPripravljam");
+  return null;
+}
+
+export type PovezavaPloscaLastnosti = {
+  s: Stanje | null;
+  povabilo: Povabilo | null;
+  zaposlen: boolean;
+  kodaTel: Record<string, string>;
+  onKodaTel: (pairId: string, vrednost: string) => void;
+  onPotrdiKodo: (pairId: string) => void;
+  onOdkleni: () => void;
+  onVklopi: () => void;
+  onDodaj: (c: { koda: string; id: string }) => void;
+  onZavrni: (koda: string) => void;
+};
+
+const GUMB = "w-fit rounded-xl border border-[var(--color-rule)] px-4 py-2 text-sm disabled:opacity-50";
+const POLJE = "mt-1 w-full rounded-xl border border-[var(--color-rule)] bg-[var(--color-sheet)] text-[var(--color-ink)] px-3 py-2";
+const GUMB_MAJHEN = "w-fit rounded-xl border border-[var(--color-rule)] px-3 py-1 text-sm disabled:opacity-50";
+const POLJE_KODE = "w-28 rounded-xl border border-[var(--color-rule)] bg-[var(--color-sheet)] text-[var(--color-ink)] px-3 py-1.5 tracking-widest disabled:opacity-60";
+
+/**
+ * Naloga 16 (lastnik 25. 11. 2026: »vedno naj kaže QR kodo in 6-mestno kodo, prikaz in vnos«; »postavitev naj bo ob strani, kjer je
+ * prostor«): QR, koda tega racunalnika in vnos kode s telefona so VEDNO na zaslonu, drug ob drugem v desnem stolpcu, kot seznanitev
+ * Safeer Linka. Ko del za telefon ne tece, je na mestu QR in kode jasen razlog; Lina poskusa sama in oboje se pokaze samo.
+ */
+export function PovezavaPlosca({ s, povabilo, zaposlen, kodaTel, onKodaTel, onPotrdiKodo, onOdkleni, onVklopi, onDodaj, onZavrni }: PovezavaPloscaLastnosti) {
+  const razlog = razlogBrezKode(s, povabilo);
+  const qr = s?.tece && povabilo ? povabilo : null;
+  const koda = s?.tece && s.sKodo.odprto ? s.sKodo.koda : "";
+  const cakajoKodo = s?.tece ? s.sKodo.cakajoKodo : [];
+  return (
+    <section aria-labelledby="pt-povezava" className="grid content-start gap-3 rounded-3xl bg-[var(--color-sheet)] p-4" data-povezava-plosca="1">
+      <h3 id="pt-povezava" className="text-lg">{t("telPovezavaNaslov")}</h3>
+      {razlog ? (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-signal)]">
+          <p>{razlog}</p>
+          {s && !s.vklop ? <button type="button" disabled={zaposlen} className={GUMB_MAJHEN} onClick={onVklopi}>{t("telVklopiPovezavo")}</button> : null}
+        </div>
+      ) : null}
+      {s && s.cakajo.map((c) => {
+        // N5d: tudi clan ozjega kroga Safeer Linka vidi id in ga potrdi (telefon za Lino vedno zahteva dotik »ID se ujema«, zato bi
+        // bilo potrjevanje brez primerjave slepo); opomba samo pove, zakaj. Streznik preskoka ne dovoli (PRESKOK_PRIMERJAVE_ZA_CLANE).
+        const clan = s.ozjiKrog.includes(c.koda);
+        return (
+        <div key={c.koda} role="group" aria-label={t("telCaka")} className="grid gap-1 rounded-xl border border-[var(--color-rule)] p-3 text-sm">
+          <p>{t("telCaka")}: <strong>{c.ime}</strong></p>
+          {clan ? <p className="text-sm text-[var(--color-moss)]">{t("telClanPrimerjaj")}</p> : null}
+          <IdTelefona id={c.id} />
+          <div className="flex gap-2">
+            <button type="button" disabled={zaposlen || idVSkupinah(c.id) === null} className={GUMB} onClick={() => onDodaj(c)}>
+              {t("telIdSeDujemaDodaj")}
+            </button>
+            <button type="button" disabled={zaposlen} className={GUMB} onClick={() => onZavrni(c.koda)}>
+              {t("telZavrni")}
+            </button>
+          </div>
+        </div>
+        );
+      })}
+      <div className="grid items-start gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]">
+        <figure className="grid content-start gap-2" data-del="qr">
+          {qr ? (
+            // SVG iz lastnega kodirnika (qr.ts): samo pravokotniki, brez skript
+            <div role="img" aria-label={t("telQrOznaka")} className="lina-qr w-[11rem] max-w-full rounded-xl bg-white p-2 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: qr.svg }} />
+          ) : (
+            <div role="img" aria-label={t("telQrNiNaVoljo")} className="grid aspect-square w-[11rem] max-w-full place-items-center rounded-xl border-2 border-dashed border-[var(--color-rule)] p-3 text-center text-xs text-[var(--color-moss)]">
+              {t("telQrNiNaVoljo")}
+            </div>
+          )}
+          <figcaption className="text-xs text-[var(--color-moss)]">
+            {t("telQrRazlaga")} {qr ? (qr.klici ? t("telQrKlici") : t("telQrBrezKlicev")) : null}
+          </figcaption>
+          {qr?.opozorilo ? <p role="alert" className="text-sm text-[var(--color-signal)]">{qr.opozorilo}</p> : null}
+        </figure>
+        <div className="grid content-start gap-3">
+          <div className="grid gap-1 text-sm" data-del="koda">
+            <p className="font-medium">{t("telKodaRacunalnika")}</p>
+            {/* koda v dveh skupinah po tri, bralnik zaslona jo prebere po stevkah */}
+            {koda ? (
+              <p className="text-3xl tracking-widest" aria-label={koda.split("").join(" ")}>{koda.slice(0, 3)} {koda.slice(3)}</p>
+            ) : (
+              <p className="text-3xl tracking-widest text-[var(--color-moss)]" aria-label={t("telKodaNiNaVoljo")}>––– –––</p>
+            )}
+            <p className="text-xs text-[var(--color-moss)]">{t("telKodaRazlaga")}</p>
+            {s?.tece && s.sKodo.oglas ? <p>{t("telKodaOglas")} <strong>{s.sKodo.oglas}</strong></p> : null}
+            {s?.tece && s.sKodo.zaprtoSe ? (
+              <div className="grid gap-2">
+                <p role="status" className="text-[var(--color-signal)]">{t("telKodaZaprto")} {Math.ceil(s.sKodo.zaprtoSe / 60)}</p>
+                <button type="button" disabled={zaposlen} className={GUMB} onClick={onOdkleni}>{t("telOdkleni")}</button>
+              </div>
+            ) : null}
+          </div>
+          {s?.tece && s.sKodo.cakajoKodo.map((c) => (
+            <form
+              key={c.pairId}
+              className="grid gap-1 rounded-xl border border-[var(--color-rule)] p-2 text-sm"
+              data-del="vnos"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onPotrdiKodo(c.pairId);
+              }}
+            >
+              <p>{t("telKodaCaka")}: <strong>{c.ime}</strong></p>
+              <IdTelefona id={c.id} />
+              {c.napacna ? <p role="alert" className="text-[var(--color-signal)]">{t("telKodaNapacna")}</p> : null}
+              <label htmlFor={`pt-koda-${c.pairId}`}>{t("telKodaVnesi")}</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id={`pt-koda-${c.pairId}`}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={7}
+                  value={kodaTel[c.pairId] ?? ""}
+                  onChange={(e) => onKodaTel(c.pairId, e.target.value)}
+                  className={POLJE_KODE}
+                />
+                <button type="submit" disabled={zaposlen || idVSkupinah(c.id) === null || !/^\d{3}\s?\d{3}$/.test(kodaTel[c.pairId] ?? "")} className={GUMB_MAJHEN}>{t("telKodaPotrdi")}</button>
+              </div>
+            </form>
+          ))}
+          {cakajoKodo.length === 0 ? (
+            <form className="grid gap-1 rounded-xl border border-[var(--color-rule)] p-2 text-sm" data-del="vnos" onSubmit={(e) => e.preventDefault()}>
+              <label htmlFor="pt-koda-prazno">{t("telKodaVnesi")}</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input id="pt-koda-prazno" inputMode="numeric" autoComplete="one-time-code" maxLength={7} disabled aria-describedby="pt-koda-prazno-namig" className={POLJE_KODE} />
+                <button type="submit" disabled className={GUMB_MAJHEN}>{t("telKodaPotrdi")}</button>
+              </div>
+              <p id="pt-koda-prazno-namig" className="text-xs text-[var(--color-moss)]">{t("telKodaVnosNamig")}</p>
+            </form>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Pred potekom QR (10 min) ga zamenjamo z novim; rezerva, da telefon ne skenira kode tik pred iztekom. */
+const QR_PREJ_MS = 30_000;
+/** Po neuspelem samodejnem poskusu (QR, okno s kodo) najprej cez toliko casa znova, da zaslon ne udarja po strezniku. */
+const PREMOR_PO_NAPAKI_MS = 15_000;
+
 /**
  * Zaslon »Poveži telefon« (lastnik 14. 11. 2026): en QR za obe poti (klici OpenLine in asistentka), potrditev telefona z enim
  * gumbom (ime in id n-...). Privzeto izklopljeno; naslov samo izmed zasebnih naslovov tega racunalnika.
+ * Naloga 16: levo nastavitve, desno (PovezavaPlosca) QR, koda in vnos kode, brez gumba »Pokaži kodo QR«: QR in okno s kodo se
+ * odpreta sama, dokler je zaslon odprt (ob zapustitvi se okno s kodo zapre - oglas mDNS ne ostane), in se osvezita sama.
  */
 export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
   const [s, setS] = useState<Stanje | null>(null);
   const [naslov, setNaslov] = useState("");
   const [vrata, setVrata] = useState("");
-  const [povabilo, setPovabilo] = useState<Povabilo | null>(null);
+  const [povabilo, setPovabilo] = useState<(Povabilo & { do: number; kljuc: string }) | null>(null);
   const [zaposlen, setZaposlen] = useState(false);
   const [lokalna, setLokalna] = useState("");
   const [kodaTel, setKodaTel] = useState<Record<string, string>>({});
+  const [zdaj, setZdaj] = useState(() => Date.now());
+  const premorDo = useRef({ qr: 0, koda: 0 });
+  const vTeku = useRef({ qr: false, koda: false, zagon: false });
 
   function prevzemi(x: Stanje) {
     setS(x);
@@ -54,9 +208,50 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
   // med cakanjem na telefon osvezi stanje (prijava telefona, seja Claude Code)
   useEffect(() => {
     if (!s?.vklop) return;
-    const i = setInterval(() => { void stanjeAsistentaFn().then(setS).catch(() => undefined); }, 3000);
+    const i = setInterval(() => {
+      setZdaj(Date.now());
+      void stanjeAsistentaFn().then(setS).catch(() => undefined);
+    }, 3000);
     return () => clearInterval(i);
   }, [s?.vklop]);
+
+  // naloga 16: vklopljeno, a ne tece -> en takojsen poskus zagona (streznik nato poskusa sam vsakih 30 s, zaslon se osvezuje)
+  useEffect(() => {
+    if (!s || !s.vklop || s.tece || s.samoGlobalLink || vTeku.current.zagon) return;
+    vTeku.current.zagon = true;
+    void shraniAsistentaFn({ data: {} }).then(setS).catch(() => undefined);
+  }, [s?.vklop, s?.tece, s?.samoGlobalLink]);
+
+  // naloga 16: QR brez klika; nov QR pred potekom in ko streznik zacne teci (stari QR nosi stari naslov ali vrata)
+  const tece = !!s?.tece;
+  const kljucStreznika = s ? `${s.naslov}:${s.vrata}:${s.odtis}` : "";
+  useEffect(() => {
+    if (!tece) {
+      setPovabilo(null);
+      return;
+    }
+    if ((povabilo && povabilo.kljuc === kljucStreznika && povabilo.do - QR_PREJ_MS > zdaj) || vTeku.current.qr || premorDo.current.qr > zdaj) return;
+    vTeku.current.qr = true;
+    zacniSeznanitevFn()
+      .then((p) => setPovabilo({ ...p, do: Date.now() + p.velja, kljuc: kljucStreznika }))
+      .catch(() => { premorDo.current.qr = Date.now() + PREMOR_PO_NAPAKI_MS; })
+      .finally(() => { vTeku.current.qr = false; });
+  }, [tece, kljucStreznika, povabilo, zdaj]);
+
+  // naloga 16: okno s 6-mestno kodo brez klika (ne med zaporo po prevec poskusih); po porabi ali poteku se odpre novo
+  const kodaOdprta = !!s?.sKodo.odprto;
+  const zaprtoSe = s?.sKodo.zaprtoSe ?? 0;
+  useEffect(() => {
+    if (!tece || kodaOdprta || zaprtoSe > 0 || vTeku.current.koda || premorDo.current.koda > zdaj) return;
+    vTeku.current.koda = true;
+    zacniSeznanitevSKodoFn()
+      .then(() => stanjeAsistentaFn().then(setS))
+      .catch(() => { premorDo.current.koda = Date.now() + PREMOR_PO_NAPAKI_MS; })
+      .finally(() => { vTeku.current.koda = false; });
+  }, [tece, kodaOdprta, zaprtoSe, zdaj]);
+
+  // ob zapustitvi zaslona se okno s kodo zapre (koda ne velja vec, oglas mDNS se ustavi)
+  useEffect(() => () => { void zapriSeznanitevSKodoFn().catch(() => undefined); }, []);
 
   async function izvedi(delo: () => Promise<void>) {
     setZaposlen(true);
@@ -73,11 +268,27 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     }
   }
 
-  if (!s) return null;
-  const gumb = "w-fit rounded-xl border border-[var(--color-rule)] px-4 py-2 text-sm disabled:opacity-50";
-  const polje = "mt-1 w-full rounded-xl border border-[var(--color-rule)] bg-[var(--color-sheet)] text-[var(--color-ink)] px-3 py-2";
+  const plosca = (
+    <PovezavaPlosca
+      s={s}
+      povabilo={povabilo}
+      zaposlen={zaposlen}
+      kodaTel={kodaTel}
+      onKodaTel={(pairId, v) => setKodaTel({ ...kodaTel, [pairId]: v })}
+      onPotrdiKodo={(pairId) => void izvedi(async () => setS(await vnesiKodoTelefonaFn({ data: { pairId, koda: kodaTel[pairId] ?? "" } })))}
+      onOdkleni={() => void izvedi(async () => setS(await odkleniPovezovanjeFn()))}
+      onVklopi={() => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { vklop: true } })))}
+      onDodaj={(c) => void izvedi(async () => { await potrdiIdSeznanitveFn({ data: { koda: c.koda, id: c.id } }); setS(await odlociSeznanitevFn({ data: { koda: c.koda, sprejmi: true } })); setPovabilo(null); })}
+      onZavrni={(koda) => void izvedi(async () => setS(await odlociSeznanitevFn({ data: { koda, sprejmi: false } })))}
+    />
+  );
+  const gumb = GUMB;
+  const polje = POLJE;
+  if (!s) return <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]"><div className="lg:col-start-2">{plosca}</div></div>;
   return (
-    <section aria-labelledby="pt-naslov" className="grid gap-3">
+    <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
+      <div className="lg:order-2">{plosca}</div>
+    <section aria-labelledby="pt-naslov" className="grid gap-3 rounded-3xl bg-[var(--color-sheet)] p-5 lg:order-1">
       <h3 id="pt-naslov" className="text-lg">{t("telNaslov")}</h3>
       <p className="text-sm text-[var(--color-moss)]">{t("telRazlaga")}</p>
       <form
@@ -140,93 +351,11 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
         <>
           <p className="text-sm">{t("telTece")} {s.naslov}:{s.vrata}</p>
           <p className="text-sm">{s.claudeCode ? t("telClaudeOdprt") : t("telClaudeZaprt")}</p>
-          <button type="button" disabled={zaposlen} className={gumb} onClick={() => izvedi(async () => setPovabilo(await zacniSeznanitevFn()))}>
-            {t("telPokaziQr")}
-          </button>
-          <button type="button" disabled={zaposlen} className={gumb} onClick={() => izvedi(async () => { await zacniSeznanitevSKodoFn(); setS(await stanjeAsistentaFn()); })}>
-            {t("telPoveziSKodo")}
-          </button>
-          {s.sKodo.zaprtoSe ? (
-            <div className="grid gap-2">
-              <p role="status" className="text-sm text-[var(--color-signal)]">{t("telKodaZaprto")} {Math.ceil(s.sKodo.zaprtoSe / 60)}</p>
-              <button type="button" disabled={zaposlen} className={gumb} onClick={() => izvedi(async () => setS(await odkleniPovezovanjeFn()))}>
-                {t("telOdkleni")}
-              </button>
-            </div>
-          ) : null}
           {s.opozoriloKlicev ? <p role="alert" className="text-sm text-[var(--color-signal)]">{s.opozoriloKlicev}</p> : null}
-          {s.sKodo.odprto ? (
-            <div className="grid gap-2 text-sm">
-              {/* koda v dveh skupinah po tri, bralnik zaslona jo prebere po stevkah */}
-              <p className="text-3xl tracking-widest" aria-label={s.sKodo.koda.split("").join(" ")}>{s.sKodo.koda.slice(0, 3)} {s.sKodo.koda.slice(3)}</p>
-              <p className="text-[var(--color-moss)]">{t("telKodaRazlaga")}</p>
-              {s.sKodo.oglas ? <p>{t("telKodaOglas")} <strong>{s.sKodo.oglas}</strong></p> : null}
-              <button type="button" disabled={zaposlen} className={gumb} onClick={() => izvedi(async () => setS(await zapriSeznanitevSKodoFn()))}>
-                {t("telKodaZapri")}
-              </button>
-            </div>
-          ) : null}
-          {s.sKodo.cakajoKodo.map((c) => (
-            <form
-              key={c.pairId}
-              className="grid gap-1 rounded-xl border border-[var(--color-rule)] p-3 text-sm"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void izvedi(async () => setS(await vnesiKodoTelefonaFn({ data: { pairId: c.pairId, koda: kodaTel[c.pairId] ?? "" } })));
-              }}
-            >
-              <p>{t("telKodaCaka")}: <strong>{c.ime}</strong></p>
-              <IdTelefona id={c.id} />
-              {c.napacna ? <p role="alert" className="text-[var(--color-signal)]">{t("telKodaNapacna")}</p> : null}
-              <label htmlFor={`pt-koda-${c.pairId}`}>
-                {t("telKodaVnesi")}
-                <input
-                  id={`pt-koda-${c.pairId}`}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={7}
-                  value={kodaTel[c.pairId] ?? ""}
-                  onChange={(e) => setKodaTel({ ...kodaTel, [c.pairId]: e.target.value })}
-                  className={polje}
-                />
-              </label>
-              <button type="submit" disabled={zaposlen || idVSkupinah(c.id) === null || !/^\d{3}\s?\d{3}$/.test(kodaTel[c.pairId] ?? "")} className={gumb}>{t("telKodaPotrdi")}</button>
-            </form>
-          ))}
-          {povabilo ? (
-            <figure className="grid gap-2">
-              {/* SVG iz lastnega kodirnika (qr.ts): samo pravokotniki, brez skript */}
-              <div aria-label={t("telPokaziQr")} className="w-fit" dangerouslySetInnerHTML={{ __html: povabilo.svg }} />
-              <figcaption className="text-sm text-[var(--color-moss)]">
-                {t("telQrRazlaga")} {povabilo.klici ? t("telQrKlici") : t("telQrBrezKlicev")}
-              </figcaption>
-              {povabilo.opozorilo ? <p role="alert" className="text-sm text-[var(--color-signal)]">{povabilo.opozorilo}</p> : null}
-            </figure>
-          ) : null}
         </>
       ) : (
         s.samoGlobalLink ? null : <p className="text-sm">{t("telNeTece")}</p>
       )}
-      {s.cakajo.map((c) => {
-        // N5d: tudi clan ozjega kroga Safeer Linka vidi id in ga potrdi (telefon za Lino vedno zahteva dotik »ID se ujema«, zato bi
-        // bilo potrjevanje brez primerjave slepo); opomba samo pove, zakaj. Streznik preskoka ne dovoli (PRESKOK_PRIMERJAVE_ZA_CLANE).
-        const clan = s.ozjiKrog.includes(c.koda);
-        return (
-        <div key={c.koda} role="group" aria-label={t("telCaka")} className="grid gap-1 rounded-xl border border-[var(--color-rule)] p-3 text-sm">
-          <p>{t("telCaka")}: <strong>{c.ime}</strong></p>
-          {clan ? <p className="text-sm text-[var(--color-moss)]">{t("telClanPrimerjaj")}</p> : null}
-          <IdTelefona id={c.id} />
-          <div className="flex gap-2">
-            <button type="button" disabled={zaposlen || idVSkupinah(c.id) === null} className={gumb} onClick={() => izvedi(async () => { await potrdiIdSeznanitveFn({ data: { koda: c.koda, id: c.id } }); setS(await odlociSeznanitevFn({ data: { koda: c.koda, sprejmi: true } })); setPovabilo(null); })}>
-              {t("telIdSeDujemaDodaj")}
-            </button>
-            <button type="button" disabled={zaposlen} className={gumb} onClick={() => izvedi(async () => setS(await odlociSeznanitevFn({ data: { koda: c.koda, sprejmi: false } })))}>
-              {t("telZavrni")}
-            </button>
-          </div>
-        </div>
-        );
-      })}
       <h4 className="text-base">{t("telNaprave")}</h4>
       {s.naprave.length ? (
         <ul className="grid gap-1 text-sm">
@@ -247,5 +376,6 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       </p>
       {lokalna ? <p role="alert" className="text-sm text-[var(--color-signal)]">{lokalna}</p> : null}
     </section>
+    </div>
   );
 }

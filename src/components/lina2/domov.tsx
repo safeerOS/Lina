@@ -6,6 +6,7 @@ import { lokalniCas, uraBesedilo } from "@/lib/lina/koledar.ts";
 import { datumDanes, vLjubljani } from "@/lib/lina/ui-videz.ts";
 import { delPozdrava, type DelPozdrava } from "@/lib/lina/motivacija.ts";
 import type { BrainPublic, CallSession } from "@/lib/lina/types.ts";
+import type { OznakaLinije } from "@/lib/lina/oznaka-linije.ts";
 import { AsistentPanel, DanesKartica } from "@/components/lina2/pogovor.tsx";
 import { MotivacijaBesedilo } from "./mediji.tsx";
 import {
@@ -234,10 +235,11 @@ function useIzbiraDomov() {
 }
 
 /** Zacetna stran: pozdrav, klici, ki jih je prevzela Lina (s povzetkom), dnevni pregled in imenik. */
-export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz, glas, onPrevzeto, strani }: {
+export function DomovPanel({ calls, podjetje, linija, onOdpri, brain, ukaz, glas, onPrevzeto, strani }: {
   calls: CallSession[];
   podjetje: string;
-  linijaOdprta: boolean;
+  /** Naloga 16: skupna oznaka linije (racunalnik in telefon), oznaka-linije.ts. */
+  linija: OznakaLinije;
   onOdpri: Odpri;
   brain: BrainPublic;
   ukaz?: { id: number; besedilo: string } | null;
@@ -394,8 +396,10 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
               <div>
                 <p className="lina-hitro-opis">{t("d2HitreKlici")}</p>
                 <p className="lina-hitro-vrstica">
-                  <span className={`lina2-pika ${linijaOdprta ? "lina2-pika-ok" : "lina2-pika-slaba"}`} aria-hidden="true" />
-                  {t("d2HitreLinija")}: {linijaOdprta ? t("d2HitreOdprta") : t("d2HitreZaprta")}
+                  <span className={`lina2-pika ${linija.ton === "ok" ? "lina2-pika-ok" : linija.ton === "zaprta" ? "lina2-pika-slaba" : "lina2-pika-neznano"}`} aria-hidden="true" />
+                  {linija.odpreLinijo ? (
+                    <button type="button" className="lina2-stanje-gumb" aria-label={t("linOznakaOdpri")} onClick={() => onOdpri("linija")}>{t(linija.kljuc)}</button>
+                  ) : t(linija.kljuc)}
                 </p>
               </div>
             </div>

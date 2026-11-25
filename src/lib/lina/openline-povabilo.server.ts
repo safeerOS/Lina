@@ -77,14 +77,11 @@ export type PovabiloOpenLine = { url: string; koda: string; odtis: string };
 export type PovezavaTls = (vrata: number, naslov?: string) => TLSSocket;
 
 /**
- * Enkratna koda OpenLine za telefon. `javniNaslov` = https://<zasebni naslov>:<vrata> (telefon ga doseze v domacem omrezju).
- * Odtis potrdila se preveri, preden gre kljuc API po povezavi; odgovor 3xx se ne sledi.
+ * Ena zahteva HTTP na upravni vmesnik OpenLine prek TLS: odtis potrdila se preveri PRED posiljanjem zahteve (v njej je kljuc API),
+ * odgovor je omejen na NAJVEC_ODGOVOR, preusmeritvam se ne sledi (klicatelj preveri status).
  */
-export async function povabiloOpenLine(root: string, javniNaslov: string, povezi: PovezavaTls = (v, naslov = "127.0.0.1") => tlsConnect({ host: naslov, port: v, rejectUnauthorized: false, servername: "localhost" })): Promise<PovabiloOpenLine> {
-  const n = await nastavitveOpenLine(root);
-  if (!n) throw new Error("Streznik OpenLine ni nastavljen.");
-  const telo = JSON.stringify({ publicUrl: javniNaslov });
-  const odgovor = await new Promise<{ status: number; telo: string }>((ok, ne) => {
+function zahtevaOpenLine(n: { vrata: number; odtis: string; naslov: string }, zahteva: string, povezi: PovezavaTls): Promise<{ status: number; telo: string }> {
+  return new Promise<{ status: number; telo: string }>((ok, ne) => {
     const s = povezi(n.vrata, n.naslov);
     const kosi: Buffer[] = [];
     let dolzina = 0;
@@ -98,8 +95,7 @@ export async function povabiloOpenLine(root: string, javniNaslov: string, povezi
         ne(new Error("Odtis potrdila OpenLine se ne ujema."));
         return;
       }
-      s.write(`POST /v1/pairing HTTP/1.1\r\nHost: localhost:${n.vrata}\r\nx-api-key: ${n.kljuc}\r\ncontent-type: application/json\r\n` +
-        `content-length: ${Buffer.byteLength(telo)}\r\nconnection: close\r\n\r\n${telo}`);
+      s.write(zahteva);
     });
     s.on("data", (k: Buffer) => {
       dolzina += k.length;
@@ -128,6 +124,18 @@ export async function povabiloOpenLine(root: string, javniNaslov: string, povezi
       ok({ status: Number(m[1]), telo: m[3] });
     });
   });
+}
+
+/**
+ * Enkratna koda OpenLine za telefon. `javniNaslov` = https://<zasebni naslov>:<vrata> (telefon ga doseze v domacem omrezju).
+ * Odtis potrdila se preveri, preden gre kljuc API po povezavi; odgovor 3xx se ne sledi.
+ */
+export async function povabiloOpenLine(root: string, javniNaslov: string, povezi: PovezavaTls = (v, naslov = "127.0.0.1") => tlsConnect({ host: naslov, port: v, rejectUnauthorized: false, servername: "localhost" })): Promise<PovabiloOpenLine> {
+  const n = await nastavitveOpenLine(root);
+  if (!n) throw new Error("Streznik OpenLine ni nastavljen.");
+  const telo = JSON.stringify({ publicUrl: javniNaslov });
+  const odgovor = await zahtevaOpenLine(n, `POST /v1/pairing HTTP/1.1\r\nHost: localhost:${n.vrata}\r\nx-api-key: ${n.kljuc}\r\ncontent-type: application/json\r\n` +
+    `content-length: ${Buffer.byteLength(telo)}\r\nconnection: close\r\n\r\n${telo}`, povezi);
   if (odgovor.status >= 300 && odgovor.status < 400) throw new Error("OpenLine je odgovoril s preusmeritvijo; ne sledimo.");
   if (odgovor.status === 401 || odgovor.status === 403) throw new Error("OpenLine kljuca API ni sprejel.");
   if (odgovor.status !== 201) throw new Error(`OpenLine je odgovoril ${odgovor.status}.`);
@@ -141,4 +149,24 @@ export async function povabiloOpenLine(root: string, javniNaslov: string, povezi
   if (typeof j.certSha256 !== "string" || !enakoKonstantno(normalizirajOdtis(j.certSha256), n.odtis)) throw new Error("OpenLine je vrnil drug odtis.");
   if (j.publicUrl !== javniNaslov) throw new Error("OpenLine je vrnil drug naslov.");
   return { url: javniNaslov, koda: j.code, odtis: n.odtis };
+}
+
+/**
+ * Naloga 16 (oznaka linije): koliko telefonov ima OpenLine zapisanih in koliko jih je ZDAJ povezanih s potjo klicev. OpenLine pozna
+ * zivo vticnico naprave (`connected`; ping vsakih 20 s, ob zaprti vticnici se takoj pobrise). Ne pove, ali Lina na telefonu klice
+ * sprejema. null = ne vemo (OpenLine ni nastavljen, ne odgovori ali odgovori nepricakovano).
+ */
+export async function telefoniOpenLine(root: string, povezi: PovezavaTls = (v, naslov = "127.0.0.1") => tlsConnect({ host: naslov, port: v, rejectUnauthorized: false, servername: "localhost" })): Promise<{ naprav: number; povezanih: number } | null> {
+  const n = await nastavitveOpenLine(root).catch(() => null);
+  if (!n) return null;
+  try {
+    const odgovor = await zahtevaOpenLine(n, `GET /v1/devices HTTP/1.1\r\nHost: localhost:${n.vrata}\r\nx-api-key: ${n.kljuc}\r\nconnection: close\r\n\r\n`, povezi);
+    if (odgovor.status !== 200) return null;
+    const j = JSON.parse(odgovor.telo) as { devices?: unknown };
+    if (!Array.isArray(j.devices)) return null;
+    const povezanih = j.devices.filter((d) => !!d && typeof d === "object" && (d as { connected?: unknown }).connected === true).length;
+    return { naprav: j.devices.length, povezanih };
+  } catch {
+    return null;
+  }
 }
