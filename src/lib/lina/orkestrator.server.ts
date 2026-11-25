@@ -357,7 +357,9 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   // Meja: po ponovnem zagonu vrnjen indeks skupaj s starim stanjem ostane veljaven - zato klic z diska po zagonu caka potrditev.
   const INDEKS = "indeks.json";
   let verzije: Promise<Map<string, number>> | null = null;
-  const znaneVerzije = () => (verzije ??= (async () => {
+  const znaneVerzije = () => (verzije ??= naloziVerzije().catch((e: unknown) => { verzije = null; throw e; }));
+  // zavrnitev (npr. .kljuc zavrnjen, naloga 12 #1) se ne shrani: po popravku pravic deluje brez ponovnega zagona
+  const naloziVerzije = async () => {
     const m = new Map<string, number>();
     const x = await readJsonFile<unknown>(mapa, INDEKS).catch(() => null);
     if (!x || typeof x !== "object" || Array.isArray(x)) return m;
@@ -370,7 +372,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       for (const [id, n] of Object.entries(v)) if (VELJAVEN_ID.test(id) && Number.isSafeInteger(n) && (n as number) >= 0) m.set(id, n as number);
     }
     return m;
-  })());
+  };
   let zapisIndeksa: Promise<unknown> = Promise.resolve();
   /** En zapis indeksa naenkrat (vVrsti je po nalogi, indeks je skupen). */
   const shraniIndeks = async () => {
@@ -792,6 +794,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     const oznaka = path.join(mapa, ".selitev-podpis");
     if (await access(oznaka).then(() => true, () => false)) return;
     await mkdir(mapa, { recursive: true, mode: 0o700 });
+    let vse = true;
     for (const ime of (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x))) {
       const id = ime.slice(0, -5);
       await vVrsti(id, async () => {
@@ -809,9 +812,10 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           dogodek(s, "napaka", "Ustavljeno ob nadgradnji Line: stanje iz prejsnje izdaje ni preverjeno, nobeno dejanje ni izvedeno.");
         }
         await zapisi(s);
-      }).catch(() => undefined);
+      }).catch(() => { vse = false; });
     }
-    await writeFile(oznaka, "", { flag: "wx", mode: 0o600 }).catch(() => undefined);
+    // oznaka samo, ce je bila obdelana vsaka datoteka (napaka, npr. zavrnjen .kljuc, selitve ne porabi)
+    if (vse) await writeFile(oznaka, "", { flag: "wx", mode: 0o600 }).catch(() => undefined);
   };
   const seznamVeljavnih = async () => {
     const imena = (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x));

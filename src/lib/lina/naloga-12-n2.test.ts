@@ -120,3 +120,19 @@ describe("#2: verzija stanja in indeks", () => {
     assert.equal(st.n, 1);
   });
 });
+
+describe("#2: zavrnjen kljuc ob branju indeksa", { skip: process.platform === "win32" }, () => {
+  it("po popravku pravic .kljuc zapis deluje brez ponovnega zagona", async () => {
+    const { chmod, mkdir } = await import("node:fs/promises");
+    const root = await mapa();
+    await mkdir(path.join(root, "orkestrator"), { recursive: true });
+    await writeFile(path.join(root, "orkestrator", "indeks.json"), JSON.stringify({ verzije: {}, podpis: "x" }));
+    await writeFile(path.join(root, ".kljuc"), Buffer.alloc(32, 4), { mode: 0o600 });
+    await chmod(path.join(root, ".kljuc"), 0o644);
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
+    await assert.rejects(o.nova({ cilj: "Naloga ob zavrnjenem kljucu." }));
+    await chmod(path.join(root, ".kljuc"), 0o600);
+    const n = await o.nova({ cilj: "Naloga." });
+    assert.ok(await o.preberi(n.id));
+  });
+});

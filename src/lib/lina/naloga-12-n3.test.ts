@@ -121,3 +121,21 @@ describe("#3: enkratna selitev nepodpisanih nalog", () => {
     assert.match(kartica, /n\.nepreverjeno \?[^\n]*orkNepreverjeno/);
   });
 });
+
+describe("#3: selitev ob napaki ni porabljena", { skip: process.platform === "win32" }, () => {
+  it("ce selitev datoteke pade (kljuc zavrnjen), se ob naslednjem zagonu ponovi", async () => {
+    const { chmod, copyFile, mkdir } = await import("node:fs/promises");
+    const vir = await mapa();
+    const id = await staro(vir, [], koncana);
+    const root = await mapa();
+    await mkdir(path.join(root, "orkestrator"), { recursive: true });
+    await copyFile(path.join(vir, "orkestrator", `${id}.json`), path.join(root, "orkestrator", `${id}.json`));
+    await writeFile(path.join(root, ".kljuc"), Buffer.alloc(32, 4), { mode: 0o600 });
+    await chmod(path.join(root, ".kljuc"), 0o644);
+    await ustvariOrkestrator(root, { ...brez, klicModela: koncni }).nadaljujPoZagonu().catch(() => undefined);
+    await chmod(path.join(root, ".kljuc"), 0o600);
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
+    await o.nadaljujPoZagonu();
+    assert.equal((await o.preberi(id))?.nepreverjeno, true);
+  });
+});
