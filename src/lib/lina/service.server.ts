@@ -34,7 +34,6 @@ import {
 import { zabeleziVbrizg, zaznajVbrizg } from "./vbrizg.ts";
 import { omenilEposto, stavekPotrditve } from "./eposta.ts";
 import { PREDPONA_KLICA_TELEFONA } from "./klici-telefon.ts";
-import { kliciTelefona } from "./sinhron-telefon.server.ts";
 import { NAJVEC_SPOROCILA, imaTajnico, jeNujno, ocistiSporocilo, razvrstiKlice, sporociloObProsnji, zajemiTajnico, zeliPravoOsebo } from "./tajnica.ts";
 import { rezervirajKvoto, sprozNujnoObvestilo } from "./nujni.server.ts";
 import { odgovorTemeLastnika } from "./teme.ts";
@@ -2085,8 +2084,8 @@ export async function listCalls(ctx: SessionContext, dir?: string): Promise<Call
   const root = resolveDataDir(dir);
   await requireOwner(ctx.token, root);
   const book = await loadCalls(root);
-  // Nujni klici na vrhu zapisnika, nato najnovejsi (lastnik 10. 11. 2026). Klici, ki jih je sprejela Lina na telefonu (naloga 17), so na istem seznamu.
-  return razvrstiKlice([...Object.values(book), ...(await kliciTelefona(root))]);
+  // Nujni klici na vrhu zapisnika, nato najnovejsi (lastnik 10. 11. 2026). Klice s telefona doda klici-seznam.server.ts (naloga 17).
+  return razvrstiKlice(Object.values(book));
 }
 
 export async function talk(

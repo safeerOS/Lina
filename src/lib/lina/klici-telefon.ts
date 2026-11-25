@@ -4,8 +4,27 @@
  */
 import { emptyOrder } from "./brain.ts";
 import { normalizirajTelefon } from "./imenik.ts";
-import type { KlicSinhron } from "./sinhron-telefon.server.ts";
 import type { CallSession } from "./types.ts";
+
+/** Zapis klica s telefona v sinhronizaciji (sinhron-telefon.server.ts ga preveri). Tu, ker ta modul uvaza pot klica (service.server.ts). */
+export type IzmenjavaSinhron = { govorec: "klicatelj" | "lina"; cas: number; besedilo: string };
+export type KlicSinhron = {
+  id: string;
+  casZacetka: number;
+  stevilka: string;
+  trajanjeS: number;
+  nujno: boolean;
+  povzetek: string;
+  nacin: "osebna" | "podjetje";
+  klicatelj: string;
+  podjetje: string;
+  sporocilo: string;
+  sporociloDobesedno: string;
+  brezSporocilaRazlog: string;
+  /** Celoten prepis pogovora (telefon 0.2.14); starejsi zapisi ga nimajo (polja ni). */
+  prepisPogovora?: IzmenjavaSinhron[];
+  prepisOkrnjen?: boolean;
+};
 
 /** Id klica s telefona na racunalniku; klici racunalnika (Twilio CA..., pisarna-...) te predpone nimajo. */
 export const PREDPONA_KLICA_TELEFONA = "s-telefona-";

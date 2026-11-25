@@ -14,6 +14,7 @@ import { setupOwner } from "./auth.server.ts";
 import { t } from "./besedila.ts";
 import { MEJA_IZMENJAV, MEJA_ODGOVORA_B, MEJA_PREPISA_B, MEJA_ZAPISA_B, izmenjajSinhron, kliciTelefona, preveriKlic, type KlicSinhron } from "./sinhron-telefon.server.ts";
 import { PREDPONA_KLICA_TELEFONA, klicIzTelefona } from "./klici-telefon.ts";
+import { seznamKlicev } from "./klici-seznam.server.ts";
 import { listCalls, phoneTurn, talk } from "./service.server.ts";
 
 process.env.LINA_LLM = "0";
@@ -71,6 +72,17 @@ describe("naloga 17: sprejem prepisa s telefona (nezaupan podatek)", () => {
       ],
     });
     assert.deepEqual(k.prepisPogovora, [prepis[0], prepis[1]]);
+  });
+
+  it("preskocena izmenjava oznaci prepis kot okrnjen (vrzel ni videti popolna)", () => {
+    const k = preveriKlic({ ...klic("klic-1"), prepisPogovora: [prepis[0], { govorec: "klicatelj", cas: CAS, besedilo: "x".repeat(2001) }, prepis[1]] });
+    assert.deepEqual(k.prepisPogovora, [prepis[0], prepis[1]]);
+    assert.equal(k.prepisOkrnjen, true);
+  });
+
+  it("zapis, ki ze brez prepisa preseze 46 KiB (kontrolni znaki v JSON po 6 B), se zavrne", () => {
+    const kontrolni = "\u0001".repeat(2000);
+    assert.throws(() => preveriKlic({ ...klic("klic-1", { povzetek: kontrolni, sporocilo: kontrolni, brezSporocilaRazlog: kontrolni, sporociloDobesedno: "\u0001".repeat(6000) }) }));
   });
 
   it("prepis, ki ni seznam, ne podre klica", () => {
@@ -145,6 +157,10 @@ describe("naloga 17: vsak klic s telefona dobi svojo mapo z zapiskom in prepisom
     await rm(path.join(dir, "zapiski", mape[0]), { recursive: true });
     await izmenjajSinhron({ rev: 0, klici: [], pogovor: [], navodila: null }, dir);
     assert.deepEqual(await mapeKlicev(dir), []);
+    // pokvarjena datoteka oznak map: nobena mapa se ne podvoji (tudi izbrisana ne)
+    await writeFile(path.join(dir, "sinhron-telefon-mape.json"), "{pokvarjeno");
+    await izmenjajSinhron({ rev: 0, klici: [], pogovor: [], navodila: null }, dir);
+    assert.deepEqual(await mapeKlicev(dir), []);
   });
 
   it("stari zapisi brez prepisa dobijo mapo ob naslednji sinhronizaciji, z napisom »prepis ni na voljo«", async () => {
@@ -215,15 +231,21 @@ describe("naloga 17: zaslon Klici vidi klice s telefona", () => {
     assert.equal(klicIzTelefona(klic("klic-1", { casZacetka: Number.MAX_SAFE_INTEGER }), ""), null);
   });
 
-  it("listCalls vrne klice s telefona poleg klicev racunalnika; pokvarjen zapis se preskoci", async () => {
+  it("seznam klicev (zaslon) vrne klice s telefona poleg klicev racunalnika; pokvarjen zapis ne podre ne seznama ne sinhronizacije", async () => {
     const dir = await novaMapa();
     const token = await setupOwner("geslo-test-1234", dir);
     await izmenjajSinhron({ rev: 0, klici: [preveriKlic({ ...klic("klic-1"), prepisPogovora: prepis })], pogovor: [], navodila: null }, dir);
     const st = JSON.parse(await readFile(path.join(dir, "sinhron-telefon.json"), "utf8"));
     st.klici.push({ rev: 99, k: { ...klic("klic-zlo"), casZacetka: Number.MAX_SAFE_INTEGER } }, { rev: 100, k: null });
     await writeFile(path.join(dir, "sinhron-telefon.json"), JSON.stringify(st));
-    const seznam = await listCalls({ token }, dir);
+    const seznam = await seznamKlicev({ token }, dir);
     assert.equal(seznam.length, 1);
+    assert.deepEqual(await listCalls({ token }, dir), [], "pot klica (calls.json) klicev s telefona ne vidi");
+    // sinhronizacija z isto pokvarjeno datoteko ne vrze (prej TypeError ob vsaki izmenjavi)
+    const o = await izmenjajSinhron({ rev: 0, klici: [klic("klic-2")], pogovor: [], navodila: null }, dir);
+    // null vnos je preskocen; klic-zlo je veljaven objekt (samo cas ni prikazljiv), zato gre telefonu nazaj
+    assert.deepEqual(o.klici.map((k) => k.id).sort(), ["klic-1", "klic-2", "klic-zlo"]);
+    await assert.rejects(seznamKlicev({ token: "napacen" }, dir));
     assert.equal(seznam[0].izvor, "telefon");
     assert.equal(seznam[0].transcript.length, 3);
   });

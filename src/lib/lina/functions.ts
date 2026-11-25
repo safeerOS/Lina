@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { seznamKlicev } from "./klici-seznam.server.ts";
 import { deleteCookie, getCookie, getRequest, getRequestIP, setCookie, setResponseHeader } from "@tanstack/react-start/server";
 import {
   LEGACY_CONVERSATION_COOKIE,
@@ -209,7 +210,8 @@ export const readLine = createServerFn({ method: "GET" }).handler(async () => {
 export const listCalls = createServerFn({ method: "GET" }).handler(async () => {
   noStore();
   clearLegacyCookie();
-  return listCallsCore({ token: await sessionToken() });
+  // naloga 17: tudi klici, ki jih je sprejela Lina na telefonu
+  return seznamKlicev({ token: await sessionToken() });
 });
 
 export const talk = createServerFn({ method: "POST" })
