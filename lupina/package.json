@@ -46,6 +46,15 @@
       {
         "from": "../scripts/rsdo-streznik.py",
         "to": "lina/rsdo-streznik.py"
+      },
+      {
+        "from": "../vendor/rnnoise-wasm",
+        "to": "lina/vendor/rnnoise-wasm",
+        "filter": [
+          "LICENSE",
+          "COPYING-RNNOISE",
+          "NOTICE"
+        ]
       }
     ],
     "linux": {

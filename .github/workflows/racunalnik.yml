@@ -131,6 +131,10 @@ jobs:
           grep -q 'resources/lina/node_modules/jazz-tools/package.json' vsebina-deb.txt
           grep -q 'resources/lina/node_modules/unpdf/package.json' vsebina-deb.txt
           grep -q 'resources/lina/rsdo-streznik.py' vsebina-deb.txt
+          # pregled 0213 C1: licence RNNoise (BSD-3 tocka 2) in ovoja (Apache-2.0 4(a)) morajo biti v paketu
+          grep -q 'resources/lina/vendor/rnnoise-wasm/LICENSE$' vsebina-deb.txt
+          grep -q 'resources/lina/vendor/rnnoise-wasm/COPYING-RNNOISE$' vsebina-deb.txt
+          grep -q 'resources/lina/vendor/rnnoise-wasm/NOTICE$' vsebina-deb.txt
           grep -E 'resources/lina/posodobi.sh$' vsebina-deb.txt | grep -q '^-rwx'
           sha256sum "$DEB" | tee izid/sha256.txt
           {
@@ -147,6 +151,9 @@ jobs:
           mkdir -p "$X"
           dpkg-deb -x "$(ls izid/*.deb)" "$X"
           L="$X/opt/Lina/lina-lupina"
+          # pregled 0213 C1: koda RNNoise (dinamicni uvoz ../../../vendor/rnnoise-wasm/rnnoise.js) mora biti v svezenju streznika,
+          # sicer stikalo »Zmanjsanje hrupa« v namescenem paketu tiho ne deluje (dnevnik samo »rnnoise-ni-na-voljo«)
+          grep -rqs '_rnnoise_process_frame' "$X/opt/Lina/resources/lina/.output/server"
           # Najprej sama lupina: manjkajoca knjiznica na streznikih GitHub ni napaka pakiranja.
           ELECTRON_RUN_AS_NODE=1 "$L" -p 'process.versions.node'
           python3 scripts/preverba-paketa-pdf.py "$RUNNER_TEMP/vzorec.pdf" "Pozdrav Lina PDF"
