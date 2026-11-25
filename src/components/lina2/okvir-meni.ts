@@ -54,6 +54,11 @@ export function menijStrani(
 }
 
 /** Preveri, ali je oznaka veljavna in vidna stran v trenutnem nacinu. */
+/** Pregled 0213 B7: koliko vprasanj agenta caka lastnika (znacka na Racunalniku in obvestilo namizja, ne glede na odprt zavihek). */
+export function cakajocaVprasanja(st: { vprasanja?: ReadonlyArray<{ stanje: string }> } | null | undefined): number {
+  return st?.vprasanja?.filter((v) => v.stanje === "caka").length ?? 0;
+}
+
 export function jeStran(v: string, nacin: NacinKlica | string | undefined): v is Stran {
   return menijStrani(nacin).some((n) => n.id === v);
 }

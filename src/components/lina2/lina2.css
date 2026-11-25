@@ -501,6 +501,20 @@
   right: .05rem;
 }
 
+/* pregled 0213 B7: vprasanja agenta, ki cakajo lastnika, na vnosu Racunalnik */
+.lina2-nav-gumb .lina2-znacka-st {
+  text-align: center;
+  background: var(--color-signal-fill);
+  color: #fff;
+  border-radius: 999px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 .25rem;
+  font-size: .68rem;
+  line-height: 1.1rem;
+  margin-left: auto;
+}
+
 .lina2-stanje {
   color: var(--color-moss);
   align-items: center;

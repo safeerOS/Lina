@@ -1,7 +1,7 @@
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LinaDesk } from "@/components/lina-desk.tsx";
-import { izberiModelFn, logoutFn } from "@/lib/lina/functions.ts";
+import { izberiModelFn, logoutFn, stanjeVprasanjAgentovFn } from "@/lib/lina/functions.ts";
 import { IME_PONUDNIKA } from "@/lib/lina/types.ts";
 import { kliciZaPrikaz, steviloNovih } from "@/lib/lina/imenik.ts";
 import { datumGlave, uraGlave, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
@@ -14,7 +14,7 @@ import { RacunalnikPanel } from "./racunalnik.tsx";
 import { KontrolaTiskaPanel } from "./kontrola-tiska.tsx";
 import { AsistentPanel } from "./pogovor.tsx";
 import { t2 } from "./besedila.ts";
-import { jeStran, menijStrani, najdiStran, veljavnaStran, type Stran } from "./okvir-meni.ts";
+import { cakajocaVprasanja, jeStran, menijStrani, najdiStran, veljavnaStran, type Stran } from "./okvir-meni.ts";
 
 /**
  * Lina 2.0: lupina programa (leva zlozljiva navigacija, zgornja vrstica, vsebina). Zasloni z lastnimi podatki
@@ -100,6 +100,31 @@ export function Lina2Okvir(props: Props) {
 
   const novihKlicev = useMemo(() => steviloNovih(kliciZaPrikaz(props.calls, [], 50), ogled), [props.calls, ogled]);
 
+  // Pregled 0213 B7: agent (Claude Code v Lini) stoji, dokler lastnik ne odgovori - znacka na Racunalniku in obvestilo namizja
+  // (ce ga je lastnik dovolil), tudi ko zavihek Racunalnik ni odprt; brez odgovora je vprasanje cez 10 min zavrnjeno.
+  const [vprasanj, setVprasanj] = useState(0);
+  const prejVprasanj = useRef(0);
+  useEffect(() => {
+    let ziv = true;
+    const osvezi = () => {
+      void stanjeVprasanjAgentovFn().then((st) => {
+        if (!ziv) return;
+        const n = cakajocaVprasanja(st);
+        if (n > prejVprasanj.current && typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification(t2("obvestiloVprasanjaNaslov"), { body: t2("obvestiloVprasanjaTelo") });
+        }
+        prejVprasanj.current = n;
+        setVprasanj(n);
+      }).catch(() => undefined);
+    };
+    osvezi();
+    const c = setInterval(osvezi, 10_000);
+    return () => {
+      ziv = false;
+      clearInterval(c);
+    };
+  }, []);
+
   function pojdi(cilj: Stran) {
     setStran(veljavnaStran(cilj, nacin));
     window.scrollTo({ top: 0 });
@@ -151,11 +176,13 @@ export function Lina2Okvir(props: Props) {
                     type="button"
                     className="lina2-nav-gumb"
                     aria-current={aktivnaStran === n.id ? "page" : undefined}
-                    title={zmanjsan ? n.oznaka : undefined}
+                    aria-label={n.id === "racunalnik" && vprasanj > 0 ? `${n.oznaka}: ${vprasanj} ${t2("navVprasanjaAgenta")}` : undefined}
+                    title={n.id === "racunalnik" && vprasanj > 0 ? `${n.oznaka}: ${vprasanj} ${t2("navVprasanjaAgenta")}` : zmanjsan ? n.oznaka : undefined}
                     onClick={() => pojdi(n.id)}
                   >
                     <Ikona ime={n.ikona} />
                     <span className="lina2-nav-besedilo">{n.oznaka}</span>
+                    {n.id === "racunalnik" && vprasanj > 0 ? <span className="lina2-znacka-st" aria-hidden="true">{vprasanj}</span> : null}
                   </button>
                 </li>
               ))}
