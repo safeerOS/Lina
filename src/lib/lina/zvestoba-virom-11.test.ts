@@ -103,7 +103,8 @@ test("prava pot asistentPogovor: vprašanje o različici dobi odgovor iz paketa 
 
 test("odstranitev trditev ohrani vrstice z drugimi oznakami in prelome", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "lina-11-"));
-  const r = await obdelajClaudeCode(root, "Pošiljam nalogo računalniku.\nPrva vrstica ostane.\n[[gradnja: lina | apk]]\n[[claude-code: /nikjer/X | popravi]]", true);
-  assert.match(r, /Prva vrstica ostane\.\n\[\[gradnja: lina \| apk\]\]/);
-  assert.doesNotMatch(r, trdiPosiljanje);
+  // vrstica z oznako ostane cela, tudi ko vsebuje besede, ki bi v navadnem stavku pomenile trditev
+  const r = await obdelajClaudeCode(root, "Pošiljam nalogo računalniku.\nPrva vrstica ostane.\n[[gradnja: lina | apk, ko je naloga predala računalniku]]\n[[claude-code: /nikjer/X | popravi]]", true);
+  assert.match(r, /Prva vrstica ostane\.\n\[\[gradnja: lina \| apk, ko je naloga predala računalniku\]\]/);
+  assert.doesNotMatch(r, /Pošiljam/);
 });
