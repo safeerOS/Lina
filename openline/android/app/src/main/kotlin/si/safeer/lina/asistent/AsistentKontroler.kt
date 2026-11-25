@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import si.safeer.lina.podpis.AsistentProtokol
+import si.safeer.lina.samostojna.IzidPredaje
+import si.safeer.lina.samostojna.PredajaNaloge
 import si.safeer.lina.podpis.DogodekLine
 import si.safeer.lina.podpis.NalogaLine
 import si.safeer.lina.podpis.NapakaLine
@@ -29,6 +31,8 @@ import si.safeer.lina.podpis.TokKode
  * Ena naloga naenkrat: poslje podpisano nalogo, v loceni niti dolgo poizveduje /dogodki, odobritev in ustavitev podpise kljuc
  * naprave (NapravaKljuc, Podpisnik). Stanje se spreminja samo na glavni niti; omrezje in KeyStore samo v ozadju.
  */
+private const val VELJAVNOST_DOSEGLJIVOSTI_MS = 30_000L
+
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
     enum class IzidSeznanitve { SPREJETO, ZAVRNJENO, POTEKLO, NAPAKA, NAPACNA_KODA, PREVEC, ZAPRTO, NI_ODPRTO, ZE_DODAN, ODTIS }
@@ -280,11 +284,54 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 is OdgovorLine.Napaka -> if (odg.koda == "claude-code-ni") false else null
                 else -> null
             }
-            naGlavni { seja = s }
+            if (odg !is OdgovorLine.Nedosegljiva) zadnjaDosegljivost = true to System.currentTimeMillis()
+            naGlavni { seja = s; if (odg !is OdgovorLine.Nedosegljiva) posljiShranjeno() }
         }.start()
     }
 
     private val prenosPoPoti = si.safeer.lina.samostojna.PrenosPoPoti()
+
+    /** Zadnja izmerjena dosegljivost (vrednost, cas ms); seznanitev ni dosegljivost (naloga 11, 06:49 na 5G). */
+    @Volatile private var zadnjaDosegljivost: Pair<Boolean, Long>? = null
+
+    /**
+     * Ali racunalnik ZDAJ odgovarja (podpisan GET /stanje; vsak odgovor streznika, tudi napaka, pomeni dosegljivo pot). Klice se v ozadju
+     * ob vprasanju Lini; rezultat velja 30 s. Ob prehodu v dosegljivo poslje shranjeno nalogo (ce telefon ne dela druge).
+     */
+    fun dosegljivZdaj(): Boolean {
+        zadnjaDosegljivost?.let { (v, t) -> if (System.currentTimeMillis() - t < VELJAVNOST_DOSEGLJIVOSTI_MS) return v }
+        val pov = povezava() ?: return false
+        val cas = System.currentTimeMillis()
+        val enkratni = NalogaLine.nakljucno(32)
+        val podpis = runCatching { NapravaKljuc.podpisiStanje(cas, enkratni) }.getOrNull()
+        val id = runCatching { NapravaKljuc.id() }.getOrNull()
+        val odg = if (podpis == null || id == null) OdgovorLine.Nedosegljiva else pov.stanjeSeje(id, cas, enkratni, podpis)
+        pov.zapri()
+        val dosegljiv = odg !is OdgovorLine.Nedosegljiva
+        zadnjaDosegljivost = dosegljiv to System.currentTimeMillis()
+        if (dosegljiv) naGlavni { posljiShranjeno() }
+        return dosegljiv
+    }
+
+    private val shrambaCakajoce get() = context.getSharedPreferences("lina_cakajoca_naloga", Context.MODE_PRIVATE)
+
+    /** Ena shranjena naloga (lastnik jo je potrdil v oknu); nova zamenja staro. */
+    fun shraniZaPozneje(besedilo: String): Boolean = shrambaCakajoce.edit().putString("besedilo", besedilo).commit()
+
+    /** Glavna nit: shranjeno nalogo poslje, ko je racunalnik dosegljiv in telefon ne dela druge; izid gre v dnevnik zavihka Racunalnik. */
+    private fun posljiShranjeno() {
+        val b = shrambaCakajoce.getString("besedilo", null) ?: return
+        if (posiljam || nalogaId != null) return
+        shrambaCakajoce.edit().remove("besedilo").apply()
+        // nazaj v shrambo samo ob nedosegljivem (403/429/napaka bi se sicer ponavljali v nedogled); izid gre v dnevnik zavihka Racunalnik
+        poslji(b) { izid, _ ->
+            when (izid) {
+                IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
+                IzidPredaje.NEDOSEGLJIV -> shraniZaPozneje(b)
+                else -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_ni, b.take(120)))
+            }
+        }
+    }
 
     /** Samodejna izbira poti (domace omrezje, nato Global Link) kot v Safeer OS; ena tovarna za vse klicatelje (PovezavaLine). */
     private fun povezava(): IzbirnaPovezava? = PovezavaLine.ustvari(context, prenosPoPoti)
@@ -298,9 +345,14 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         while (dnevnik.size > 50) dnevnik.removeFirst()
     }
 
-    /** true, ce je bila naloga sprejeta v obdelavo (ne pomeni, da jo je Lina sprejela). */
-    fun poslji(vnos: String): Boolean {
-        if (posiljam || nalogaId != null || NalogaLine.besedilo(vnos) == null) return false
+    /**
+     * true, ce je bila naloga sprejeta v obdelavo (ne pomeni, da jo je Lina sprejela). [obIzidu] (glavna nit) dobi dejanski izid:
+     * SPREJETA z id-jem sele po odgovoru racunalnika (naloga 11), sicer razlog; ob zavrnitvi takoj ZASEDENO ali NAPAKA.
+     */
+    fun poslji(vnos: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null): Boolean {
+        // izid vedno asinhrono (glavna nit), da pride za klicateljevim »Preverjam …«
+        if (posiljam || nalogaId != null) { obIzidu?.let { glavna.post { it(IzidPredaje.ZASEDENO, null) } }; return false }
+        if (NalogaLine.besedilo(vnos) == null) { obIzidu?.let { glavna.post { it(IzidPredaje.NAPAKA, null) } }; return false }
         posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
         obSpremembi()
         Thread {
@@ -310,7 +362,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             }.getOrNull()
             val odg = if (pov == null || naloga == null) OdgovorLine.Nedosegljiva else pov.naloga(AsistentProtokol.teloNaloge(naloga))
             pov?.zapri()
+            zadnjaDosegljivost = (odg !is OdgovorLine.Nedosegljiva) to System.currentTimeMillis()
             naGlavni {
+                // napaka podpisa (KeyStore) ni nedosegljiv racunalnik
+                obIzidu?.invoke(if (pov != null && naloga == null) IzidPredaje.NAPAKA
+                    else PredajaNaloge.izid(odg is OdgovorLine.Ok, odg is OdgovorLine.Nedosegljiva, (odg as? OdgovorLine.Napaka)?.status), naloga?.id)
                 posiljam = false
                 if (odg is OdgovorLine.Ok && naloga != null) {
                     nalogaId = naloga.id

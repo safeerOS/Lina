@@ -76,11 +76,28 @@ object SamostojnaNaloga {
      * [naloga]: besedilo iz vrstice [[racunalnik: ...]]; [pogovor]: zadnja sporocila (najnovejse zadnje, vloga uporabnik/Lina);
      * [zapiski]: vidni zapiski Line (najnovejsi prvi); [tocke]: stikalo »Točke naloge« v Nastavitvah (privzeto vklopljeno).
      */
+    private val ABSOLUTNA_POT = Regex("(?<![\\w/.:])~?(?:/[\\w.@+-]+)+")
+    private val IME_MAPE = Regex("(?:map[aoie]\\w*|projekt\\w*)\\s*[\"'»«„“]([^\"'»«„“”\\n]{1,80})[\"'»«”“]", RegexOption.IGNORE_CASE)
+
+    /** Prva pot ali ime mape iz naloge, ki je ni v [viri] (besedila uporabnika in zapiski); podpot omenjene poti velja. */
+    internal fun neznanaMapa(naloga: String, viri: List<String>): String? {
+        val vir = viri.joinToString("\n")
+        val znanePoti = viri.flatMap { v -> ABSOLUTNA_POT.findAll(v).map { it.value.trimEnd('.', ',', ';', ':', '/') }.toList() }.filter { it.count { c -> c == '/' } >= 2 }
+        val poti = ABSOLUTNA_POT.findAll(naloga).map { it.value.trimEnd('.', ',', ';', ':', '/') }.filter { it.length > 1 }
+        poti.firstOrNull { p -> !vir.contains(p) && znanePoti.none { p.startsWith("$it/") } }?.let { return it }
+        return IME_MAPE.findAll(naloga).map { it.groupValues[1].trim() }.firstOrNull { it.isNotEmpty() && !vir.contains(it, ignoreCase = true) }
+    }
+
     fun pripravi(naloga: String, pogovor: List<Sporocilo>, zapiski: List<String>, tocke: Boolean = true): Izid {
         val n = naloga.trim()
         val viri = (pogovor.map { it.besedilo }.reversed() + zapiski)
         val kljucne = besede(n)
         val zePovezave = POVEZAVA.findAll(n).map { it.value }.toSet()
+
+        // 0. Naloga 11 (06:49: izmisljena mapa »Lina-Project«): pot ali ime mape mora priti od uporabnika (pogovor) ali iz zapiskov.
+        neznanaMapa(n.replace(POVEZAVA, " "), pogovor.filter { it.vloga == "user" }.map { it.besedilo } + zapiski)?.let {
+            return Izid.Manjka("V nalogi je mapa »$it«, ki je v najinem pogovoru in zapiskih ne najdem. Katera je prava pot projekta na računalniku? Povej jo, pa nalogo pripravim.")
+        }
 
         // 1. Povezave: tiste, ki jih naloga omenja (beseda iz naloge v naslovu) ali vse, ce se naloga sklicuje na povezavo.
         val vsePovezave = viri.flatMap { v -> POVEZAVA.findAll(v).map { it.value.trimEnd('.', ',', ';', ':') }.toList() }.distinct()

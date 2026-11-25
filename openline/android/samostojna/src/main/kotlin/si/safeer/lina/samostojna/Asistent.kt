@@ -41,6 +41,10 @@ class Asistent(
     private val tockeNaloge: () -> Boolean = { true },
     // Sistemski nadzor telefona (24. 11. 2026): »ne moti«, svetlost, baterija; stikalo in baterija se preberejo ob vsakem vprasanju.
     private val sistem: SistemskiNadzorVir? = null,
+    // Naloga 11 (25. 11. 2026): seznanjen telefon (shramba) ni isto kot dosegljiv racunalnik ([racunalnikPovezan] = izmerjena dosegljivost).
+    private val racunalnikSeznanjen: () -> Boolean = { false },
+    // Nameščena različica (BuildConfig.VERSION_NAME); prazno = Lina različice ne pozna in je ne ugiba.
+    private val razlicica: String = "",
 ) {
     /** Ali je zadnji obrat bral nezaupano besedilo (rezultati orodij, priponke): takrat aplikacija dejanje vedno potrdi pri uporabniku. */
     // N2 (pregled 1750): ko je nezaupana vsebina v seji, ostane true do konca seje (tudi po obnovi zgodovine) - samo vklop, nikoli izklop.
@@ -48,6 +52,8 @@ class Asistent(
         private set
 
     private val zgodovina = mutableListOf<Sporocilo>()
+    /** Zadnja naloga, predana racunalniku v tem pogovoru: vprasanje o nalogi jo razlozi in ne poslje nove (lastnik 23. 11. 2026). */
+    private var zadnjaNaloga: String? = null
     /** Povzetek pogovora iz prejsnjih dni (iz [seja]); danasnji obrati so ze v [zgodovina]. */
     private val povzetek: String
 
@@ -56,6 +62,7 @@ class Asistent(
         if (o != null) zgodovina.addAll(o.danes.takeLast(najvecSporocil).dropWhile { it.vloga != "user" })
         povzetek = o?.povzetek ?: ""
         if (jeNezaupano(povzetek) || zgodovina.any { jeNezaupano(it.besedilo) }) zadnjiObratPoOrodjih = true
+        o?.danes?.lastOrNull { it.besedilo.startsWith(PredajaNaloge.OZNAKA_SPREJETA) }?.let { zadnjaNaloga = it.besedilo.removePrefix(PredajaNaloge.OZNAKA_SPREJETA).removeSuffix("]") }
     }
 
     /** Zapiski s skrivnostjo (kljuc, geslo) ne gredo ne modelu ne v nalogo za racunalnik. */
@@ -72,11 +79,15 @@ class Asistent(
     /** Obrat z nezaupano vsebino (tudi rezultat orodja, ki ga trajna zgodovina ne hrani) se shrani z oznako (N2); cisti obrati brez nje. */
     private fun oznaciNezaupano(vnos: String): String =
         if (obratNezaupan && !jeNezaupano(vnos)) OZNAKA_NEZAUPANO + "\n" + vnos else vnos
-    /** Zadnja naloga, predana racunalniku v tem pogovoru: vprasanje o nalogi jo razlozi in ne poslje nove (lastnik 23. 11. 2026). */
-    private var zadnjaNaloga: String? = null
 
-    /** Klice aplikacija, ko je racunalnik nalogo res sprejel (zavrnjena naloga ne sme postati »zadnja«). */
-    fun nalogaPredana(besedilo: String) { zadnjaNaloga = besedilo }
+    /**
+     * Klice aplikacija, ko je racunalnik nalogo res sprejel (zavrnjena naloga ne sme postati »zadnja«). Oznaka gre v trajno zgodovino
+     * seje, da Lina po ponovnem zagonu ve, da je bila naloga sprejeta (naloga 11: sicer bi resnicno »poslala sem« zamenjala z zanikanjem).
+     */
+    fun nalogaPredana(besedilo: String) {
+        zadnjaNaloga = besedilo
+        runCatching { seja?.dodaj("[program]", PredajaNaloge.OZNAKA_SPREJETA + besedilo.take(300) + "]", zdaj().toInstant().toEpochMilli()) }
+    }
     // Orodja vzporedno (do 3 naenkrat) s predpomnilnikom uspesnih rezultatov v tem pogovoru (22. 11. 2026).
     private val izvajalec = IzvajalecOrodij({ k ->
         when (k.orodje) {
@@ -117,9 +128,17 @@ class Asistent(
 
     private fun povejNotranje(vnos: String, priponke: List<Priponka>): Odgovor {
         // Priklic starejsih sorodnih obratov (ne tistih, ki so ze v zgodovini seje); podatek, ne navodilo. Napaka spomina ne podre pogovora.
+        // Lina o svoji razlicici odgovori iz namescene aplikacije, brez modela (naloga 11: »razlicica iz 23. novembra« je bila ugibanje).
+        if (OSebi.jeVprasanjeORazlicici(vnos) && priponke.isEmpty() && !jeNezaupano(vnos)) {
+            val o = OSebi.odgovorORazlicici(razlicica)
+            zgodovina.add(Sporocilo("user", vnos)); zgodovina.add(Sporocilo("model", o)); obrezi()
+            zapomni(vnos, o)
+            return Odgovor.Besedilo(o)
+        }
         val povezan = runCatching { racunalnikPovezan() }.getOrDefault(false)
+        val stanje = StanjeRacunalnika.iz(runCatching { racunalnikSeznanjen() }.getOrDefault(false), povezan)
         // Priprava naloge za racunalnik: vecji priklic (lastnik 23. 11. 2026), da Lina sama najde nacrt in povezave iz prejsnjih dni.
-        val zaNalogo = povezan && NAMEN_NALOGE.containsMatchIn(vnos)
+        val zaNalogo = stanje != StanjeRacunalnika.NI_SEZNANJEN && NAMEN_NALOGE.containsMatchIn(vnos)
         val priklic = runCatching {
             spomin?.let { if (zaNalogo) it.prikliči(vnos, zgodovina.map { z -> z.besedilo }, VECJI_PRIKLIC, ZNAKOV_VECJEGA_PRIKLICA) else it.prikliči(vnos, zgodovina.map { z -> z.besedilo }) } ?: ""
         }.getOrDefault("")
@@ -127,7 +146,7 @@ class Asistent(
         val nezaupanVnos = priponke.isNotEmpty() || jeNezaupano(vnos)
         obratNezaupan = nezaupanVnos
         if (nezaupanVnos || jeNezaupano(priklic)) zadnjiObratPoOrodjih = true
-        val navodilo = sistemskoNavodilo + SistemskoNavodilo.racunalnik(povezan) +
+        val navodilo = sistemskoNavodilo + SistemskoNavodilo.racunalnik(stanje) + OSebi.navodilo(razlicica) +
             (if (sistemVklopljen) SistemskiNadzor.navodilo(runCatching { sistem!!.baterija() }.getOrNull()) else "") + navodiloPovzetkaSeje(povzetek) + navodiloZapiskov(zapiskiZdaj()) +
             navodiloSpomina(priklic) + (if (nezaupanVnos) NAVODILO_PRIPONK else "")
 
@@ -158,7 +177,8 @@ class Asistent(
             is Rezultat.Besedilo -> {
                 // Vrstic orodja uporabniku ne pokazemo (tudi, ce jih model po omejitvi krogov ponovi).
                 // Naloga za racunalnik: vrstica je ukaz aplikaciji, uporabnik je ne vidi (zato se razcleni iz izvirnega besedila).
-                if (povezan) {
+                // Seznanjen a nedosegljiv: naloga gre vseeno programu, ki jo poskusi poslati in pove izid (ali ponudi shranjevanje).
+                if (stanje != StanjeRacunalnika.NI_SEZNANJEN) {
                     val nal = rezultat.besedilo.lines().map { it.trim() }
                         .firstOrNull { it.startsWith("[[racunalnik:") && it.endsWith("]]") }
                         ?.let { it.substring(13, it.length - 2).trim() }
@@ -181,17 +201,20 @@ class Asistent(
                                 return Odgovor.Besedilo(p.vprasanje)
                             }
                             is SamostojnaNaloga.Izid.Pripravljena -> {
-                                val besedilo = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
+                                // Trditve modela (»pošiljam«) ne gredo v zgodovino: izid pove program sele po odgovoru racunalnika (naloga 11).
+                                val besedilo = "[naloga za računalnik je šla programu; izid sporoči program: ${p.besedilo.take(300)}]"
                                 zgodovina.add(Sporocilo("model", besedilo))
                                 obrezi()
-                                zapomni(vnos, besedilo.ifEmpty { "Računalniku sem predala nalogo." } + "\n[naloga za računalnik: ${p.besedilo.take(300)}]")
+                                zapomni(vnos, besedilo)
                                 return Odgovor.NalogaRacunalniku(p.besedilo)
                             }
                         }
                     }
                 }
                 // Zenska oblika ze v zgodovini in spominu (23. 11. 2026): model v naslednjem obratu ne bere svojih moskih oblik nazaj.
-                val izModela = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
+                val brezOrodij = popraviMoskeOblike(rezultat.besedilo.lines().filterNot { jeVrsticaOrodja(it) }.joinToString("\n").trim())
+                // Tu program naloge ni predal: trditev o posiljanju ali povezavi zamenja dejstvo (razlaga ze predane naloge ostane).
+                val izModela = PredajaNaloge.brezLazneTrditve(brezOrodij, stanje, sprejeta = zadnjaNaloga != null)
                 // Po zadnjem krogu orodij je lahko ostala samo vrstica orodja (navodilo jih zahteva brez besedila); nadomestni stavek ne gre v spomin.
                 val besedilo = izModela.ifEmpty { BREZ_ODGOVORA }
                 zgodovina.add(Sporocilo("model", besedilo))

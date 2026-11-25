@@ -79,7 +79,10 @@ class NajdbeTelefona1950Test {
         assertTrue(Regex("""if \(asist\.zadnjiObratPoOrodjih\)\s*\{?\s*potrdiNalogoRacunalniku\(asist, odgovor\.besedilo\)""").containsMatchIn(veja!!), veja)
         val t = telo(pogovor, "potrdiNalogoRacunalniku")
         assertTrue(t.contains("setPositiveButton") && t.contains(".pokaziVarno()"), t)
-        assertTrue(t.contains("posljiRacunalniku(besedilo)") && t.contains("asist.nalogaPredana(besedilo)"), t)
+        // Naloga 11: posiljanje in »predana« sta v predajNalogo; »predana« samo po potrditvi racunalnika (SPREJETA)
+        assertTrue(t.contains("predajNalogo(asist, besedilo)"), t)
+        val p = telo(pogovor, "predajNalogo")
+        assertTrue(p.contains("posljiRacunalniku(besedilo)") && Regex("""IzidPredaje\.SPREJETA\) asist\.nalogaPredana\(besedilo\)""").containsMatchIn(p), p)
         // brez »Velja za podobne«: nezaupana naloga nikoli ne postane trajno soglasje
         assertFalse(t.contains("soglasja") || t.contains("consent_similar"), t)
     }

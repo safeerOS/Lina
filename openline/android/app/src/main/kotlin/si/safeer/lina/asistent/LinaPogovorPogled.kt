@@ -59,8 +59,13 @@ class LinaPogovorPogled(
     /** Odpre podmeni Mozgani v Nastavitvah (namig v praznem pogovoru brez kljuca). */
     private val odpriNastavitve: () -> Unit = {},
     /** Povezava z Lino na racunalniku (nalogo podpise telefon, prevzame jo Claude Code). */
+    /** Izmerjena dosegljivost racunalnika (klice se v ozadju ob vprasanju); seznanitev je [racunalnikSeznanjen] (naloga 11). */
     private val racunalnikPovezan: () -> Boolean = { false },
-    private val posljiRacunalniku: (String) -> Boolean = { false },
+    private val racunalnikSeznanjen: () -> Boolean = { false },
+    /** Poslje nalogo; izid (sprejeta s stevilko ali napaka) pride na glavni niti, sele po odgovoru racunalnika. */
+    private val posljiRacunalniku: (String, (si.safeer.lina.samostojna.IzidPredaje, String?) -> Unit) -> Unit = { _, izid -> izid(si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV, null) },
+    /** Shrani nalogo, ki jo telefon poslje, ko bo racunalnik dosegljiv (lastnikova potrditev v oknu). */
+    private val shraniZaPozneje: (String) -> Boolean = { false },
 ) {
     private val glavna = Handler(Looper.getMainLooper())
     private val nit = Executors.newSingleThreadExecutor()
@@ -442,6 +447,7 @@ class LinaPogovorPogled(
         vprasajZaKoledar()
         // Trajna zgodovina seje in zapiski kot podatek (lastnik 23. 11. 2026: Lina je pozabljala pogovor in ni brala zapiskov).
         return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan,
+            racunalnikSeznanjen = racunalnikSeznanjen, razlicica = si.safeer.lina.BuildConfig.VERSION_NAME,
             koledar = KoledarIzvajalec(KoledarAndroid(a)), seja = SpominPogovorovPogled.seja(a),
             zapiski = { vidniZapiski(zapiski.beri()).map { it.besedilo } }, tockeNaloge = { TockeNalog.vklopljeno(a) }, sistem = sistem).also { asistent = it; asistentDan = danes }
     }
@@ -769,8 +775,7 @@ class LinaPogovorPogled(
                     // T7 (pregled 1915): naloga iz nezaupane seje gre racunalniku sele po lastnikovi potrditvi.
                     is Odgovor.NalogaRacunalniku ->
                         if (asist.zadnjiObratPoOrodjih) { potrdiNalogoRacunalniku(asist, odgovor.besedilo); a.getString(R.string.local_task_proposed, odgovor.besedilo) }
-                        else if (posljiRacunalniku(odgovor.besedilo)) { asist.nalogaPredana(odgovor.besedilo); a.getString(R.string.local_task_sent, odgovor.besedilo) }
-                        else a.getString(R.string.local_task_busy)
+                        else { predajNalogo(asist, odgovor.besedilo); a.getString(R.string.local_task_preverjam) }
                     is Odgovor.Napaka -> when (odgovor.sporocilo) {
                         "Brez povezave" -> a.getString(R.string.local_err_offline)
                         "Prijava poteka" -> { google.odjava(); a.getString(R.string.local_google_relogin) }
@@ -811,14 +816,45 @@ class LinaPogovorPogled(
             .pokaziVarno()
     }
 
+    /**
+     * Naloga 11 (lastnik 25. 11. 2026): besedilo o predaji samo iz dejanskega izida (stevilka iz potrditve racunalnika); nedosegljiv
+     * racunalnik -> »nisem mogla poslati« in ponudba, da jo telefon shrani in poslje, ko bo racunalnik dosegljiv.
+     */
+    private fun predajNalogo(asist: Asistent, besedilo: String) {
+        posljiRacunalniku(besedilo) { izid, id ->
+            if (a.isFinishing) return@posljiRacunalniku
+            if (izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA) asist.nalogaPredana(besedilo)
+            // imena nizov = PredajaNaloge.kljuc(izid); ZvestobaVirom11Test preveri, da obstajajo v vseh jezikih
+            val kljuc = when (izid) {
+                si.safeer.lina.samostojna.IzidPredaje.SPREJETA -> R.string.local_task_sprejeta
+                si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV -> R.string.local_task_nedosegljiv
+                si.safeer.lina.samostojna.IzidPredaje.CLAUDE_CODE_NI -> R.string.local_task_claude_code_ni
+                si.safeer.lina.samostojna.IzidPredaje.ZAVRNJENA -> R.string.local_task_zavrnjena
+                si.safeer.lina.samostojna.IzidPredaje.PREVEC -> R.string.local_task_prevec
+                si.safeer.lina.samostojna.IzidPredaje.ZASEDENO -> R.string.local_task_zasedeno
+                si.safeer.lina.samostojna.IzidPredaje.NAPAKA -> R.string.local_task_napaka
+            }
+            obvestilo(if (izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA) a.getString(kljuc, besedilo, si.safeer.lina.samostojna.PredajaNaloge.stevilka(id ?: "")) else a.getString(kljuc))
+            if (izid == si.safeer.lina.samostojna.IzidPredaje.NEDOSEGLJIV) ponudiShranjevanje(besedilo)
+        }
+    }
+
+    private fun ponudiShranjevanje(besedilo: String) {
+        android.app.AlertDialog.Builder(a)
+            .setTitle(R.string.local_task_shrani_naslov)
+            .setMessage(besedilo)
+            .setPositiveButton(R.string.local_task_shrani) { _, _ -> obvestilo(a.getString(if (shraniZaPozneje(besedilo)) R.string.local_task_shranjena else R.string.local_task_napaka)) }
+            .setNegativeButton(R.string.local_event_cancel, null)
+            .pokaziVarno()
+    }
+
     /** Naloga za racunalnik iz nezaupane seje: vedno potrditev (brez »Velja za podobne«), okno zavrne dotike skozi prekrivno plast. */
     private fun potrdiNalogoRacunalniku(asist: Asistent, besedilo: String) {
         android.app.AlertDialog.Builder(a)
             .setTitle(R.string.local_task_confirm_title)
             .setMessage(a.getString(R.string.local_task_confirm_msg, besedilo))
             .setPositiveButton(R.string.local_task_confirm_send) { _, _ ->
-                obvestilo(if (posljiRacunalniku(besedilo)) { asist.nalogaPredana(besedilo); a.getString(R.string.local_task_sent, besedilo) }
-                    else a.getString(R.string.local_task_busy))
+                predajNalogo(asist, besedilo)
             }
             .setNegativeButton(R.string.local_event_cancel, null)
             .pokaziVarno()

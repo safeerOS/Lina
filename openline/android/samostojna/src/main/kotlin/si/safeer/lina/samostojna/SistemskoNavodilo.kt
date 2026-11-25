@@ -63,16 +63,30 @@ object SistemskoNavodilo {
      * Racunalnik uporabnika (lastnik 21. 11. 2026: Lina ukazuje drugim agentom na racunalniku in vodi projekte; 22. 11. 2026 ob 13.03
      * je klepet zanikal, da ima dostop, cetudi je program povezan). Dodano navodilu ob vsakem vprasanju, ker se povezava spreminja.
      */
-    fun racunalnik(povezan: Boolean): String =
-        if (povezan) " Uporabnik ima povezan racunalnik z Lino in programom Claude Code. Nalogo, ki jo je treba opraviti na racunalniku " +
+    fun racunalnik(povezan: Boolean): String = racunalnik(if (povezan) StanjeRacunalnika.DOSEGLJIV else StanjeRacunalnika.NI_SEZNANJEN)
+
+    /**
+     * Naloga 11 (25. 11. 2026, 06:49 na 5G): seznanjen telefon ni isto kot dosegljiv racunalnik. Lina je rekla »Da, povezana sem«, ker je
+     * navodilo za seznanjen telefon trdilo dostop. Tri stanja: ni seznanjen, seznanjen a nedosegljiv, dosegljiv (izmerjeno ob vprasanju).
+     */
+    fun racunalnik(stanje: StanjeRacunalnika): String = when (stanje) {
+        StanjeRacunalnika.NI_SEZNANJEN -> " Racunalnik ni povezan: nalog ne moreš predati racunalniku. Povej, da je treba telefon najprej povezati z Lino na racunalniku (nastavitve, Racunalnik)."
+        StanjeRacunalnika.NEDOSEGLJIV -> " Telefon je seznanjen z Lino na racunalniku, a racunalnik zdaj NI dosegljiv (preverjeno ob tem vprasanju; naloge delujejo samo v domacem omrezju ali prek poti, ki je telefon zdaj nima). " +
+            "Na vprasanje o povezavi povej natanko to; ne trdi, da si povezana. Ce uporabnik zeli nalogo za racunalnik, dodaj samostojno vrstico [[racunalnik: natancen opis naloge s polno potjo projekta]]; " +
+            "program jo poskusi poslati in sam pove izid (ce racunalnik ni dosegljiv, ponudi, da jo shrani in poslje pozneje). Ti nikoli ne pisi, da nalogo posiljas ali da si jo poslala."
+        StanjeRacunalnika.DOSEGLJIV -> RACUNALNIK_DOSEGLJIV
+    }
+
+    private const val RACUNALNIK_DOSEGLJIV = " Uporabnik ima povezan racunalnik z Lino in programom Claude Code. Nalogo, ki jo je treba opraviti na racunalniku " +
             "(programiranje, vodenje projekta, delo z drugimi agenti), predaj tako, da v odgovor dodas samostojno vrstico natanko v obliki " +
-            "[[racunalnik: natancen opis naloge]] (ena vrstica, v njej nic drugega) in uporabniku v enem stavku povej, kaj si predala. " +
-            "Naloga mora biti SAMOSTOJNA, ker Claude Code najinega pogovora ne vidi: v vrstico napisi cilj, ciljno mapo ali projekt, " +
+            "[[racunalnik: natancen opis naloge]] (ena vrstica, v njej nic drugega) in uporabniku v enem stavku povej, kaj predlagas; " +
+            "izid posiljanja (stevilko naloge ali napako) pove program, zato ne pisi, da nalogo posiljas ali da si jo poslala. " +
+            "Naloga mora biti SAMOSTOJNA, ker Claude Code najinega pogovora ne vidi: v vrstico napisi cilj, polno pot projekta, ki jo je povedal uporabnik ali je v zapiskih " +
+            "(ce poti ne veš, uporabnika vprasaj zanjo in vrstice ne dodaj; imena mape si nikoli ne izmisli), " +
             "korak nacrta, ki naj ga naredi, vse povezave, ki jih naloga omenja, in merilo, kdaj je koncana; nikoli ne pisi samo " +
             "»moj nacrt«, »kot dogovorjeno« ali »to povezavo« (aplikacija nalogi sama priloze nacrt, povezave in zapiske iz pogovora). " +
             "Nikoli ne trdi, da nimas dostopa do racunalnika. Rezultata naloge se ne izmisljuj: potek in odobritve so v zavihku Racunalnik. " +
             "Ce uporabnik sprasuje o nalogi, ki si jo ze predala (kaksna je, kaj si poslala, razlozi), mu jo v nekaj stavkih razlozi z besedilom iz pogovora in vrstice [[racunalnik: ...]] NE ponavljaj; nova vrstica je samo za novo nalogo."
-        else " Racunalnik ni povezan: nalog ne moreš predati racunalniku. Povej, da je treba telefon najprej povezati z Lino na racunalniku (nastavitve, Racunalnik)."
 
     /**
      * Navodilo za govorni klic: model govori, zato brez oznak v oglatih oklepajih (bi jih prebral na glas)
