@@ -314,11 +314,11 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
   );
   const gumb = GUMB;
   const polje = POLJE;
-  if (!s) return <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]"><div className="lg:col-start-2">{plosca}</div></div>;
+  if (!s) return <div className="mt-5 grid items-start gap-4 xl:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]"><div className="xl:col-start-2">{plosca}</div></div>;
   return (
-    <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
-      <div className="lg:order-2">{plosca}</div>
-    <section aria-labelledby="pt-naslov" className="grid gap-3 rounded-3xl bg-[var(--color-sheet)] p-5 lg:order-1">
+    <div className="mt-5 grid items-start gap-4 xl:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
+      <div className="xl:order-2">{plosca}</div>
+    <section aria-labelledby="pt-naslov" className="grid gap-3 rounded-3xl bg-[var(--color-sheet)] p-5 xl:order-1">
       <h3 id="pt-naslov" className="text-lg">{t("telNaslov")}</h3>
       <p className="text-sm text-[var(--color-moss)]">{t("telRazlaga")}</p>
       <form

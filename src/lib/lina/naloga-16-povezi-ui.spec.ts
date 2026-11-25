@@ -103,7 +103,9 @@ describe("naloga 16: Poveži telefon - QR, koda in vnos kode vedno vidni", () =>
       expect(t(k, "en")).not.toBe(t(k, "sl"));
     }
     const ui = readFileSync(new URL("../../components/povezi-telefon.tsx", import.meta.url), "utf8");
-    expect(ui).toMatch(/lg:grid-cols-\[minmax\(0,32rem\)_minmax\(0,1fr\)\]/);
+    // dva stolpca sele pri xl (1280): pri 1100 (privzeto okno lupine) je desni stolpec preozek, plosca je takrat na vrhu
+    expect(ui).toMatch(/xl:grid-cols-\[minmax\(0,32rem\)_minmax\(0,1fr\)\]/);
+    expect(ui).not.toMatch(/\blg:grid-cols-/);
     expect(ui).not.toContain('t("telPokaziQr")');
     const desk = readFileSync(new URL("../../components/lina-desk.tsx", import.meta.url), "utf8");
     expect(desk).not.toMatch(/max-w-xl[^"]*">\s*<PoveziTelefon/);
