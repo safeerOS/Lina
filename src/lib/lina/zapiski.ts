@@ -228,8 +228,12 @@ export function vsebinaZapiska(call: CallSession): string {
         `${t("zapisekNujniDogodki")} - ${t(d.vrsta === "obvestilo" ? "nujniDogodekObvestilo" : "nujniDogodekPrevezava")} (${casZaIme(d.cas, ":")}): ${t(IZID_DOGODKA[d.izid])}`,
     ),
     "",
+    // Klic s telefona (naloga 17): izvor in povzetek telefona; stari zapisi nimajo prepisa (nic se ne izmisli).
+    ...(call.izvor === "telefon" ? [`${t("zapisekIzvor")}: ${t("klicIzvorTelefon")}`, ...(call.povzetek?.zelel ? [`${t("zapisekPovzetek")}: ${vVrstico(call.povzetek.zelel)}`] : []), ""] : []),
     `## ${t("zapisekPogovor")}`,
     "",
+    ...(call.izvor === "telefon" && call.transcript.length === 0 ? [t("klicPrepisNi")] : []),
+    ...(call.prepisOkrnjen ? [t("klicPrepisOkrnjen")] : []),
     ...call.transcript.map((v) => `- ${v.role === "stranka" ? t("zapisekKlicatelj") : t("zapisekLina")}: ${vVrstico(v.text)}${v.razumljeno ? ` (${t("zapisekRazumljeno")}: ${vVrstico(v.razumljeno)})` : ""}`),
     "",
   ];

@@ -13,7 +13,8 @@ function vVrsti<T>(delo: () => Promise<T>): Promise<T> {
   return rezultat;
 }
 
-async function preberi(root: string): Promise<StikImenik[]> {
+/** Branje brez prijave samo za streznik (ime klicatelja s telefona); odjemalec bere prek imenikSeznam. */
+export async function preberi(root: string): Promise<StikImenik[]> {
   const s = await readJsonFile<unknown>(root, DATOTEKA);
   if (!Array.isArray(s)) return [];
   return s

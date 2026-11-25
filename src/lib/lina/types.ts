@@ -378,6 +378,10 @@ export type CallSession = {
   odsotnostPovedana?: string[];
   /** Vaja klica iz programa: ne gre med prave klice in narocila. */
   vaja?: boolean;
+  /** Klic je sprejela Lina na telefonu (sinhron-telefon.json, naloga 17); na racunalniku je samo za branje. */
+  izvor?: "telefon";
+  /** Telefon je konec prepisa odrezal zaradi meje velikosti. */
+  prepisOkrnjen?: boolean;
   /** Ime datoteke zapiska tega klica v mapi zapiskov (samo ime, brez poti); dopolnitev klica prepise isti zapisek. */
   zapisek?: string;
   /** Dobeseden zapis govora klicatelja (izbirni dodatek Soniox). */

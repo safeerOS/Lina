@@ -33,6 +33,8 @@ import {
 } from "./stik.ts";
 import { zabeleziVbrizg, zaznajVbrizg } from "./vbrizg.ts";
 import { omenilEposto, stavekPotrditve } from "./eposta.ts";
+import { PREDPONA_KLICA_TELEFONA } from "./klici-telefon.ts";
+import { kliciTelefona } from "./sinhron-telefon.server.ts";
 import { NAJVEC_SPOROCILA, imaTajnico, jeNujno, ocistiSporocilo, razvrstiKlice, sporociloObProsnji, zajemiTajnico, zeliPravoOsebo } from "./tajnica.ts";
 import { rezervirajKvoto, sprozNujnoObvestilo } from "./nujni.server.ts";
 import { odgovorTemeLastnika } from "./teme.ts";
@@ -2081,8 +2083,8 @@ export async function listCalls(ctx: SessionContext, dir?: string): Promise<Call
   const root = resolveDataDir(dir);
   await requireOwner(ctx.token, root);
   const book = await loadCalls(root);
-  // Nujni klici na vrhu zapisnika, nato najnovejsi (lastnik 10. 11. 2026).
-  return razvrstiKlice(Object.values(book));
+  // Nujni klici na vrhu zapisnika, nato najnovejsi (lastnik 10. 11. 2026). Klici, ki jih je sprejela Lina na telefonu (naloga 17), so na istem seznamu.
+  return razvrstiKlice([...Object.values(book), ...(await kliciTelefona(root))]);
 }
 
 export async function talk(
@@ -2093,6 +2095,8 @@ export async function talk(
   const root = resolveDataDir(dir);
   await requireOwner(ctx.token, root);
   const callSid = input.callSid?.trim() || `pisarna-${crypto.randomUUID()}`;
+  // Klic s telefona je koncan zapis: odlozi ali replika ne sme v calls.json narediti novega klica z njegovim id-jem.
+  if (callSid.startsWith(PREDPONA_KLICA_TELEFONA)) throw new Error(t("klicTelefonaSamoBranje"));
   return recordCaller({ ...input, callSid }, root);
 }
 

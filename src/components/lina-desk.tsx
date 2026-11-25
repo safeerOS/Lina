@@ -23,6 +23,7 @@ import { PotNaslova } from "@/components/pot-naslova.tsx";
 import { TwilioRacun } from "@/components/twilio-racun.tsx";
 import { NujnoOznaka } from "@/components/nujno-oznaka.tsx";
 import { NujniKlici } from "@/components/nujni-klici.tsx";
+import { PrepisKlica, ZnackaTelefon } from "@/components/klic-telefon.tsx";
 import { Avtonomija } from "@/components/avtonomija.tsx";
 import { ModelAsistentke } from "@/components/model-asistentke.tsx";
 import { tM } from "@/lib/lina/besedila-mozgani.ts";
@@ -579,34 +580,12 @@ export function LinaDesk({
                   </div>
                 ) : null}
               </div>
-              <div className="mt-4 flex max-h-64 min-h-24 flex-col gap-2 overflow-y-auto text-sm" aria-live="polite">
-                {(active?.transcript ?? []).length === 0 ? (
-                  <p className="m-auto max-w-[16rem] text-center text-xs text-[var(--color-moss)]">
-                    {t("uiPogovorPrazen")}
-                  </p>
-                ) : null}
-                {(active?.transcript ?? []).map((item, index) => (
-                  <p
-                    className={`max-w-[90%] rounded-2xl px-3 py-2 ${item.role === "lina" ? "self-start bg-[var(--color-surface)]" : "self-end bg-[var(--color-ink-fill)] text-white"}`}
-                    key={`${item.at}-${index}`}
-                  >
-                    {item.text}
-                    {item.razumljeno ? (
-                      <span className="ml-2 text-xs opacity-70">
-                        ({t("zapisekRazumljeno")}
-                        {": "}
-                        {item.razumljeno})
-                      </span>
-                    ) : null}
-                    {typeof item.zaupanje === "number" ? (
-                      <span className="ml-2 text-xs opacity-70">
-                        {t("zaupanjeOznaka")} {item.zaupanje.toFixed(2)}
-                      </span>
-                    ) : null}
-                  </p>
-                ))}
-              </div>
+              <PrepisKlica call={active} />
               <div className="mt-auto pt-4">
+                {active?.izvor === "telefon" ? (
+                  <p className="text-xs text-[var(--color-moss)]">{t("klicTelefonaSamoBranje")}</p>
+                ) : (
+                <>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -649,6 +628,8 @@ export function LinaDesk({
                     {t("uiPoslji")}
                   </button>
                 </form>
+                </>
+                )}
               </div>
             </div>
           </div>
@@ -3745,6 +3726,7 @@ function VrsticaKlica({ call, onOdpri }: { call: CallSession; onOdpri: () => voi
             ) : (
               <Znacka ton={stanje.ton}>{t(stanje.oznaka)}</Znacka>
             )}
+            <ZnackaTelefon call={call} />
             {call.kratek ? <Znacka ton="brass">{t("kratekOznaka")}</Znacka> : null}
             {!osebno && call.order.potrditevEposta ? <Znacka ton="moss">{t("potrditevOznaka")}</Znacka> : null}
           </span>
