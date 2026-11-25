@@ -111,7 +111,7 @@ export function razvrstiDejanje(orodje: string, vnos: Record<string, unknown>, d
 }
 
 // eslint-disable-next-line no-control-regex
-const NADZORNI = /\u001b\[[0-9;?]*[A-Za-z]|[\u0000-\u0008\u000b-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
+const NADZORNI = /\u001b\[[0-9;?]*[A-Za-z]|[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g;
 export function cisto(s: string, meja = NAJVEC_ZNAKOV_VRSTICE): string {
   return s.replace(NADZORNI, "").slice(0, meja);
 }

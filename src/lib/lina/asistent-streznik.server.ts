@@ -332,7 +332,7 @@ export type MoznostiStreznika = {
   };
   /**
    * Gradnje na GitHubu (24. 11. 2026, gradnje-github.server.ts); brez njih poti /gradnje in /gradnja/* odgovorijo 404. Napaka z
-   * lastnostjo razlog (GradnjaNapaka) postane 409 {napaka: razlog}. Poti so samo za domace omrezje (ni v POTI_ODDALJENO).
+   * lastnostjo razlog (GradnjaNapaka) postane 409 {napaka: razlog}. Poti so v POTI_ODDALJENO (lastnik 25. 11. 2026: tudi prek Global Linka).
    */
   gradnje?: {
     stanje(): Promise<unknown>;
@@ -345,7 +345,7 @@ export type MoznostiStreznika = {
   };
   /**
    * Naloge agentov na racunalniku (24. 11. 2026, claude-naloge.server.ts): vrsta, dodelitev in preklic s podpisom naprave; brez njih poti
-   * /agent-naloge in /agent-naloga/* odgovorijo 404. Napaka z lastnostjo razlog postane 409. Samo domace omrezje (ni v POTI_ODDALJENO).
+   * /agent-naloge in /agent-naloga/* odgovorijo 404. Napaka z lastnostjo razlog postane 409. Poti so v POTI_ODDALJENO (lastnik 25. 11. 2026: tudi prek Global Linka).
    */
   agentiNaloge?: {
     stanje(): Promise<unknown>;
