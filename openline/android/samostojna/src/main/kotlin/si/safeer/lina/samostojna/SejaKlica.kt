@@ -66,7 +66,14 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
                 cilj.append(' '); znakovPrepisa++
                 continue
             }
-            val kos = ostanek.take(prostor)
+            // Razrez ne sme prerezati nadomestnega para (slepi pregled N4): visoki del gre v naslednji kos.
+            var kos = ostanek.take(prostor)
+            val prerezPara = kos.length < ostanek.length && kos.last().isHighSurrogate()
+            if (prerezPara) kos = kos.dropLast(1)
+            if (kos.isEmpty()) {
+                if (nadaljuj) { novaIzmenjava = true; continue } // par v celoti v novo izmenjavo
+                prepisOkrnjen = true; return // ni prostora niti za en cel znak
+            }
             cilj.append(kos); znakovPrepisa += kos.length
             ostanek = ostanek.substring(kos.length)
         }

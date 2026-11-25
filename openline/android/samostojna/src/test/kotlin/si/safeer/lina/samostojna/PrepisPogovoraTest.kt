@@ -88,6 +88,29 @@ class PrepisPogovoraTest {
     }
 
     @Test
+    fun `slepi pregled N2 - zapis s polnimi polji v 3-bajtnih znakih ostane z prepisom vred pod mejo odgovora racunalnika`() {
+        val k = "漢"
+        val z = ZapisKlica(
+            id = "k-cjk", casZacetka = 1L, stevilka = "+99955501001", trajanjeS = 1, povzetek = k.repeat(2000),
+            klicatelj = k.repeat(240), podjetje = k.repeat(240), sporocilo = k.repeat(2000), sporociloDobesedno = k.repeat(6000),
+            brezSporocilaRazlog = k.repeat(2000),
+            prepisPogovora = (0 until 40).map { IzmenjavaKlica(if (it % 2 == 0) "klicatelj" else "lina", it.toLong(), k.repeat(500)) },
+        )
+        val p = z.zaSinhronizacijo()
+        assertTrue(json.encodeToString(p).toByteArray(Charsets.UTF_8).size <= 46 * 1024, "zapis presega mejo")
+        assertTrue(p.prepisOkrnjen)
+    }
+
+    @Test
+    fun `slepi pregled N4 - meja izmenjave ne prereze nadomestnega para`() {
+        val s = SejaKlica(0L, "+99955501001") { 1L }
+        s.dodajVhod("a".repeat(SejaKlica.MEJA_IZMENJAVE_ZNAKOV - 1) + "😀" + "b")
+        val p = s.zakljuci(2L).prepisPogovora
+        assertTrue(p.none { b -> b.besedilo.any { Character.isSurrogate(it) } && !b.besedilo.contains("😀") }, "osamljen nadomestni znak")
+        assertEquals("a".repeat(SejaKlica.MEJA_IZMENJAVE_ZNAKOV - 1) + "😀" + "b", p.joinToString("") { it.besedilo })
+    }
+
+    @Test
     fun `dolg izrek se razdeli na izmenjave do meje znakov`() {
         val s = SejaKlica(0L, "+99955501001") { 1L }
         s.dodajVhod("a".repeat(SejaKlica.MEJA_IZMENJAVE_ZNAKOV + 10))

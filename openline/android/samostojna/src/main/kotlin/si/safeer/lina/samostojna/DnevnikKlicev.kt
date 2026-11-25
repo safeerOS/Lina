@@ -126,7 +126,9 @@ data class ZapisKlica(
     // Oblika za sinhronizacijo z racunalnikom: sporocilo klicatelja (lastnik 20. 11. 2026) in prepis pogovora v mejah (25. 11. 2026);
     // staro polje prepis (prost niz) in imeImenik ostaneta samo na telefonu.
     fun zaSinhronizacijo(): ZapisKlicaSinhronizacija {
-        val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(prepisPogovora)
+        // Prepis dobi samo, kar od MEJA_ZAPISA_SINHRON_B ostane po ostalih poljih (vecbajtni znaki: slepi pregled N2).
+        val brez = jsonPrepis.encodeToString(projekcija(emptyList(), true)).toByteArray(Charsets.UTF_8).size
+        val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(prepisPogovora, minOf(MEJA_PREPISA_SINHRON_B, MEJA_ZAPISA_SINHRON_B - brez))
         return projekcija(prepis, prepisOkrnjen || skrajsan)
     }
 
@@ -160,10 +162,13 @@ data class IzmenjavaKlica(val govorec: String, val cas: Long, val besedilo: Stri
  */
 const val MEJA_PREPISA_SINHRON_B = 24 * 1024
 
+/** Najvec bajtov celega zapisa za racunalnik (JSON UTF-8): pod 48 KiB odgovora racunalnika z rezervo za ovoj odgovora. */
+const val MEJA_ZAPISA_SINHRON_B = 46 * 1024
+
 private val jsonPrepis = Json { encodeDefaults = true }
 
-/** Prepis v mejah za racunalnik: samo znana govorca, besedilo do MEJA_IZMENJAVE_ZNAKOV, skupaj do MEJA_PREPISA_SINHRON_B; ohrani zacetek. */
-fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>): Pair<List<IzmenjavaKlica>, Boolean> {
+/** Prepis v mejah za racunalnik: samo znana govorca, besedilo do MEJA_IZMENJAVE_ZNAKOV, skupaj do [mejaB] bajtov; ohrani zacetek. */
+fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>, mejaB: Int = MEJA_PREPISA_SINHRON_B): Pair<List<IzmenjavaKlica>, Boolean> {
     val izhod = ArrayList<IzmenjavaKlica>()
     var bajti = 2
     var skrajsan = false
@@ -174,7 +179,7 @@ fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>): Pair<List<Izmenja
         if (b.length != i.besedilo.length) skrajsan = true
         val e = IzmenjavaKlica(i.govorec, i.cas.coerceAtLeast(0L), b)
         val velikost = jsonPrepis.encodeToString(e).toByteArray(Charsets.UTF_8).size + 1
-        if (izhod.size >= SejaKlica.MEJA_IZMENJAV || bajti + velikost > MEJA_PREPISA_SINHRON_B) { skrajsan = true; break }
+        if (izhod.size >= SejaKlica.MEJA_IZMENJAV || bajti + velikost > mejaB) { skrajsan = true; break }
         izhod.add(e); bajti += velikost
     }
     return izhod to skrajsan
@@ -640,8 +645,9 @@ class DnevnikKlicev(
                         if (veljavenKlic != null) {
                             // Vir resnice je klic: projekcija se vedno obnovi iz njega, nikoli ne prevzame vsebine iz datoteke
                             // (zastarela ali spremenjena projekcija ne izgubi klica iz vrste in ne poslje tuje stevilke).
-                            prebraniCakajoci.add(veljavenKlic.zaSinhronizacijo())
-                            if (veljavenKlic.zaSinhronizacijo() != cakajoc) vsajEnPoskodovan = true
+                            val projekcija = veljavenKlic.zaSinhronizacijo()
+                            prebraniCakajoci.add(projekcija)
+                            if (projekcija != cakajoc) vsajEnPoskodovan = true
                         } else {
                             // osirotela projekcija (klica ni ali je neveljaven): ne postane trajna in se ne poslje
                             vsajEnPoskodovan = true
