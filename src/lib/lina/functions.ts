@@ -1676,6 +1676,39 @@ export const izbrisiPraviloPopravkaFn = createServerFn({ method: "POST" })
     return izbrisiPraviloPopravka(data.id, root);
   });
 
+// --- 25. 11. 2026: ucenje postopkov (modul ucenje-lh, AGPL, prek vrat; brez modula v gradnji naVoljo: false).
+export const stanjeUcenjaLHFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { stanjeUcenjaLH } = await import("./ucenje-lh-vrata.server.ts");
+  return stanjeUcenjaLH(await sessionToken());
+});
+
+export const nastaviUcenjeLHFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const { nastaviUcenjeLH } = await import("./ucenje-lh-vrata.server.ts");
+    return nastaviUcenjeLH(data?.vklop, await sessionToken());
+  });
+
+export const izbrisiEnotoLHFn = createServerFn({ method: "POST" })
+  .validator((data: { id?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const { izbrisiEnotoLH } = await import("./ucenje-lh-vrata.server.ts");
+    return izbrisiEnotoLH(data?.id, await sessionToken());
+  });
+
+export const izbrisiVseLHFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { izbrisiVseLH } = await import("./ucenje-lh-vrata.server.ts");
+  return izbrisiVseLH(await sessionToken());
+});
+
 export const stanjeAgentPomociFn = createServerFn({ method: "GET" }).handler(async () => {
   noStore();
   clearLegacyCookie();

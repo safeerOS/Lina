@@ -1536,7 +1536,8 @@ Izmerjeno (pomocnik, pravi model prek procesa): nalaganje 6,3 s, kratek posnetek
 - Ocena cilja naloge agenta (cilj-naloge.ts, cilj-naloge.server.ts; zamisel DeerFlow MIT in LearnHarness AGPL, koda NI prevzeta):
   ob uspelem izidu Claude Code model za pogovor oceni izid; na telefon gre stalno besedilo ocene pred izidom (rok 8 s, ob napaki izid
   brez ocene). Nadaljevanje Lina NE sprozi: nova naloga potrebuje podpis naprave. Izid agenta gre k ponudniku modela za pogovor.
-- LearnHarness (github.com/amosblomqvist/learnharness) je AGPL-3.0: kode ne kopiramo in ga ne dodamo kot odvisnost (Lina je placljiva).
+- LearnHarness (github.com/amosblomqvist/learnharness) je AGPL-3.0. Odlocitev lastnika 25. 11. 2026: jedro metode je vgrajeno kot LOCEN AGPL modul
+  src/lib/lina/ucenje-lh/ (glej razdelek »Ucenje postopkov (ucenje-lh)«); drugje kode LearnHarness ne kopiramo in ga ne dodamo kot odvisnost.
 
 ## Lina gradi APK in deb na GitHubu (lastnik 24. 11. 2026)
 Lastnik: »Naj lina zna tudi graditi apk na githube«. Privzeto VKLOPLJENO (njegova ideja), s stikalom za izklop v Nastavitvah.
@@ -1765,7 +1766,7 @@ ideje: privzeto VKLOPLJENE s stikalom. Vsaka tocka ostane tu, dokler ni v izdaji
   (lokalni OCR/QR), vpetje v kontrolo tiska (02e) in vmesnik.
 - Zvok: prepoznava glasu v hrupnem okolju tiskarne za asistentko IN tajnico (locevanje glasu od strojev, ucenje lastnikovega glasu in izrazov). -> v delu (zvok-hrup-1510).
 - Prilagodljivi kontekst: hitro ucenje in prepoznava terminologije razlicnih strok glede na uporabnika. -> v delu (testni racunalnik, safeer-pomoc/prilagodljivi-kontekst).
-- LearnHarness (AGPL-3.0): samo zamisli (personalizirane poti, kaj uporabnik ze zna, graf znanja), brez kode. -> v delu skupaj s prilagodljivim kontekstom.
+- LearnHarness (AGPL-3.0): NAREJENO 25. 11. 2026 kot locen AGPL modul ucenje-lh (ucenje postopkov iz lastnikovih navodil, meja znanja, preverba po koraku, ponavljanje). Graf znanja ni prevzet.
 - Lina kot vodja agentov: NAREJENO v 0.2.10/0.2.11 (naloge agentom, ocena konca, opomnik, pregled in zdruzitev kopij).
 - Sinhronizacija casa: cas v kontekstu (23. 11.) in vmesnik Europe/Ljubljana (popravki-1435-vmesnik). -> preveri ob 0.2.11.
 - Lokalni nacrt (Lina 23. 11., lastnik izpustil imenik): sistemski nadzor telefona (alarmi, svetlost, ne moti, baterija), indeksiranje dokumentov na telefonu (lokalno), lokalni vid (OCR na telefonu). -> ODPRTO.
@@ -1781,7 +1782,7 @@ ki ga je dala. Vsa nova koda z potrditvami uporablja skupni modul dovoljenj. -> 
 Lastnik: »Funkcija Prilagodljivi kontekst: sposobnost hitrega ucenja in prepoznavanja terminologije iz razlicnih strokovnih podrocij glede
 na potrebe uporabnika«; »Integracija LearnHarness ... za personalizirano ucenje in adaptivno sirjenje znanja v razlicne poklice«.
 Privzeto VKLOPLJENO (ideja lastnika), stikalo v Nastavitvah. Velja za oba nacina (podjetje, osebno) in asistentko.
-- LearnHarness je AGPL-3.0: koda NI prevzeta in ni odvisnost. Vzete samo zamisli: najprej izmeri, kaj uporabnik ze zna, in razlagaj samo
+- LearnHarness je AGPL-3.0: v slovar strok koda NI prevzeta (prevzeta je samo v locenem modulu ucenje-lh). Vzete samo zamisli: najprej izmeri, kaj uporabnik ze zna, in razlagaj samo
   novo; znanje iz virov ostane povezano z virom in se izbrise z njim.
 - Koda: src/lib/lina/stroke.ts (cisto: vgrajeni slovarji tisk, racunovodstvo, avtoservis, gradbenistvo - izraz, razlaga, sopomenke,
   napake prepoznave; predlog stroke; raba; predlogi iz dokumentov/pogovora; odseki z mejo 700/450 znakov; namigi), stroke.server.ts
@@ -1796,3 +1797,18 @@ Privzeto VKLOPLJENO (ideja lastnika), stikalo v Nastavitvah. Velja za oba nacina
   7+ stevk) ne pridejo v slovar.
 - Preizkusi: stroke.test.ts, stroke.server.test.ts. NEPREVERJENO: ucinek namigov na pravo prepoznavo sl-SI (Twilio, Gemini, Live) in
   kakovost predlogov iz pravih dokumentov; meji 700/450 znakov sta ocena (izmeri porabo zetonov pred spremembo).
+
+## Ucenje postopkov (ucenje-lh) - locen AGPL modul (lastnik 25. 11. 2026)
+Lastnik: »pa imejmo mi tudi za ta del kode licenco AGPL«. Lina se iz lastnikovih navodil hitreje uci postopkov (npr. kontrola tiska na majice).
+- Koda: src/lib/lina/ucenje-lh/ (LICENSE AGPL-3.0, README z izvorom: LearnHarness 069a6a1, Amos Blomqvist; »spremenil Safeer« v vsaki datoteki),
+  NOTICE v korenu. Prevzeta so samo besedila metode (pozivi.ts); enota.ts, shramba.server.ts, vstop.server.ts so nova koda okoli njih.
+- EDINI vhod: src/lib/lina/ucenje-lh-vrata.server.ts (lastna koda, ni AGPL). Gradnja z LINA_BREZ_UCENJA_LH=1 preslika vhod v
+  ucenje-lh-prazno.server.ts (scripts/ucenje-lh-zastavica.mjs, vite.config.ts); Lina brez modula deluje. Nova koda NE uvaza ucenje-lh/ drugje.
+- Potek (odloca koda iz lastnikovega besedila, nikoli oznaka modela; samo pogovor z asistentko, ne priponke, ne klici):
+  »Nauci se postopka ...« + vsaj 2 koraka -> ucna enota (koraki so lastnikove besede; model doda razlago, preverbo, bistvo) v ucenje-lh.json (0600);
+  relevantne enote gredo v naslednje pogovore kot podatek; »preveri me iz ...« -> merjenje meje (dvojisko) -> pouk od meje, en korak ena
+  preverba, zgresek = isti korak znova; ponavljanje po skatlah 1/3/7/14/30 dni (najsibkejsi najprej); »konec« prekine; ura po 2 h potece.
+- Modul nima omrezja: model klice samo vrata prek callProvider z Lininim ponudnikom (vsebinaKlica: false). Brez spletnega iskanja,
+  narekovanja, posodobitev LearnHarness (B9). Stikalo v Nastavitvah (UcenjeLHStikalo), privzeto vklopljeno, seznam enot s koraki, izbris.
+- Preizkusi: ucenje-lh.test.ts (logika, licenca, brez omrezja, edini vhod, zastavica), naloga-ucenje-lh.test.ts (merilo z nadomestnim modelom).
+  NEPREVERJENO: prava gradnja vite/nitro z LINA_BREZ_UCENJA_LH=1 (paket ni bil zgrajen), kakovost preverb s pravim modelom.
