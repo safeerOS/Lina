@@ -157,4 +157,16 @@ class NajdbeSlepi17tTest {
         assertEquals(SejaKlica.MEJA_DOBESEDNO, z.linaDobesedno.length)
     }
 
+    // N7 (sorodni rezi): meja sporocila in dobesednega ne prereze nadomestnega para.
+    @Test
+    fun `N7 - meja sporocila in dobesednega ne pusti osamljenega nadomestnega znaka`() {
+        val s = SejaKlica(0L, "+99955501001") { 1L }
+        s.shraniSporocilo("Ana", null, null, "a".repeat(SejaKlica.MEJA_SPOROCILA - 1) + "😀")
+        s.dodajVhod("b".repeat(SejaKlica.MEJA_DOBESEDNO - 1) + "😀")
+        val z = s.zakljuci(2L)
+        for (t in listOf(z.sporocilo, z.sporociloDobesedno)) {
+            assertFalse(t.indices.any { i -> Character.isHighSurrogate(t[i]) && (i + 1 >= t.length || !Character.isLowSurrogate(t[i + 1])) }, "osamljen visoki nadomestni znak")
+        }
+    }
+
 }

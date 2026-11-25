@@ -102,10 +102,11 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
 
     /** Orodje shrani_sporocilo; poznejsi klic dopolni prejsnjega (prazno polje ne izbrise ze zapisanega). */
     @Synchronized fun shraniSporocilo(ime: String?, priimek: String?, podjetje: String?, sporocilo: String?) {
-        ime?.trim()?.takeIf { it.isNotEmpty() }?.let { this.ime = it.take(MEJA_IMENA) }
-        priimek?.trim()?.takeIf { it.isNotEmpty() }?.let { this.priimek = it.take(MEJA_IMENA) }
-        podjetje?.trim()?.takeIf { it.isNotEmpty() }?.let { this.podjetje = it.take(MEJA_IMENA) }
-        sporocilo?.trim()?.takeIf { it.isNotEmpty() }?.let { this.sporocilo = it.take(MEJA_SPOROCILA) }
+        // Meje rezejo samo med celimi znaki (N7: osamljen nadomestni znak bi se v datoteki zapisal kot »?«).
+        ime?.trim()?.takeIf { it.isNotEmpty() }?.let { this.ime = kosVMejah(it, MEJA_IMENA, Int.MAX_VALUE) }
+        priimek?.trim()?.takeIf { it.isNotEmpty() }?.let { this.priimek = kosVMejah(it, MEJA_IMENA, Int.MAX_VALUE) }
+        podjetje?.trim()?.takeIf { it.isNotEmpty() }?.let { this.podjetje = kosVMejah(it, MEJA_IMENA, Int.MAX_VALUE) }
+        sporocilo?.trim()?.takeIf { it.isNotEmpty() }?.let { this.sporocilo = kosVMejah(it, MEJA_SPOROCILA, Int.MAX_VALUE) }
     }
 
     @Synchronized fun imaSporocilo(): Boolean = sporocilo.isNotEmpty()
@@ -113,8 +114,8 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
     @Synchronized
     fun zakljuci(konec: Long): ZapisKlica {
         val klicatelj = listOf(ime, priimek).filter { it.isNotEmpty() }.joinToString(" ")
-        val dobesedno = vhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MEJA_DOBESEDNO)
-        val linaDobesedno = izhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n").take(MEJA_DOBESEDNO)
+        val dobesedno = kosVMejah(vhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"), MEJA_DOBESEDNO, Int.MAX_VALUE)
+        val linaDobesedno = kosVMejah(izhod.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"), MEJA_DOBESEDNO, Int.MAX_VALUE)
         val razlog = when {
             sporocilo.isNotEmpty() -> ""
             paketPovedan -> "Klicala je dostava paketa; Lina je povedala, kje naj pusti paket."
