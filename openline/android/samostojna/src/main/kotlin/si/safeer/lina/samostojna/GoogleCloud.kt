@@ -142,5 +142,8 @@ fun sporociloBrezObracuna(projekt: String): String =
 /** Koraki vklopa obracuna (docs.cloud.google.com/billing/docs/how-to/modify-project, 2026-08-11); napisi konzole so angleski. */
 const val KORAKI_OBRACUNA = "Kako vklopite obračun v projektu: na console.cloud.google.com odprite meni ☰ → »Billing« → »Manage billing accounts« → zavihek »My projects«. V vrstici projekta, kjer piše »Billing is disabled«, odprite »⋮« (Actions) → »Change billing«, izberite obračunski račun in pritisnite »Set account«. Če obračunskega računa še nimate, vam ga Google ponudi ustvariti."
 
-/** Rezervni modeli Vertex po vrsti, ce izbrani na projektu ni na voljo. */
-val REZERVNI_MODELI_VERTEX = listOf("gemini-3-flash-preview", "gemini-2.5-flash")
+/**
+ * Rezervni modeli Vertex po vrsti, ce izbrani na projektu ni na voljo. 25. 11. 2026: gemini-2.5-flash opuscen
+ * (aistudio.google.com/docs/deprecations.md) in na Vertexu 404; gemini-3.6-flash na Vertexu (global) 404, gemini-3.8-flash 200.
+ */
+val REZERVNI_MODELI_VERTEX = listOf("gemini-3-flash-preview", "gemini-3.8-flash")

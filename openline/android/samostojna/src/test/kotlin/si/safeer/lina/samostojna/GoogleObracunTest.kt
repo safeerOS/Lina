@@ -62,6 +62,6 @@ class GoogleObracunTest {
         }
         val r = VertexOdjemalec({ "tok" }, { "moj-projekt-12345" }, prenos = p).apply { spanje = {} }.poslji(listOf(Sporocilo("user", "zivjo")), "")
         assertEquals("Dober dan", (r as Rezultat.Besedilo).besedilo)
-        assertTrue(p.naslovi.last().contains("/models/gemini-2.5-flash:generateContent"))
+        assertTrue(p.naslovi.last().contains("/models/gemini-3.8-flash:generateContent"))
     }
 }
