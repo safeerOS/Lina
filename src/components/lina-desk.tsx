@@ -3941,7 +3941,7 @@ function DrugiPaketi({ onError, napisNapake, napisIzida }: { onError: (s: string
             <>
               <p className="mt-1 text-sm">{t("posZamenjavaNi")}</p>
               {/* samo navodilo: Lina Safeer OS ne ustavlja in ne zaganja (posodobitev.server.ts) */}
-              <button type="button" className="lina-gumb-majhen mt-2" aria-expanded={navodilo} aria-controls="pos-znova-navodilo" onClick={() => setNavodilo(true)}>
+              <button type="button" className="lina-gumb-majhen mt-2" aria-expanded={navodilo} aria-controls="pos-znova-navodilo" onClick={() => setNavodilo((v) => !v)}>
                 {t("posZnovaZazeni")}
               </button>
               {navodilo ? <p id="pos-znova-navodilo" className="mt-2 max-w-prose text-sm">{t("posZnovaNavodilo")}</p> : null}
