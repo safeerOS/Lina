@@ -809,7 +809,7 @@
   isolation: isolate;
   display: grid;
   --lik-h: min(calc(100vh - 4.5rem), 54rem, calc((100vw - var(--sirina-menija) - 2.5rem) * .54));
-  grid-template-columns: calc(var(--lik-h) * .624) minmax(0, 1fr) minmax(15rem, 18rem);
+  grid-template-columns: calc(var(--lik-h) * .729) minmax(0, 1fr) minmax(15rem, 18rem);
   grid-template-rows: auto minmax(0, 1fr);
   column-gap: 1.25rem;
   row-gap: 1rem;
@@ -827,14 +827,10 @@
   height: var(--lik-h);
   width: auto;
   max-width: none;
-  aspect-ratio: 496 / 716;
-  object-fit: cover;
+  aspect-ratio: 802 / 1100;
+  object-fit: contain;
   pointer-events: none;
   user-select: none;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 93%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 6%, #000 78%, transparent 100%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 93%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 6%, #000 78%, transparent 100%);
-  mask-composite: intersect;
 }
 
 .lina-scena-sredina {
@@ -1245,7 +1241,7 @@
 
 @media (width<=1320px) {
   .lina-scena {
-    grid-template-columns: calc(var(--lik-h) * .624) minmax(0, 1fr);
+    grid-template-columns: calc(var(--lik-h) * .729) minmax(0, 1fr);
     grid-template-rows: auto 1fr auto;
     height: auto;
     min-height: calc(100vh - 7rem);

@@ -287,7 +287,7 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
   return (
     <section className="mt-5 flex flex-col gap-5">
       <div className="lina-scena">
-        <img className="lina-scena-lik" src="/lina/lina-scena.webp" alt="" width={496} height={716} loading="eager" decoding="async" />
+        <img className="lina-scena-lik" src="/lina/lina-domov.webp" alt="" width={802} height={1100} loading="eager" decoding="async" />
         <div className="lina-scena-sredina">
           <div className="lina-scena-glava">
           <div className="lina-hero-oblacek">
