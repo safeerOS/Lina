@@ -22,6 +22,8 @@ data class ZahtevaSinhron(
     val pogovor: List<PogovorSinhron> = emptyList(),
     val navodila: NavodilaSinhron? = null,
     val epoha: String? = null,
+    /** Id klicev, ki jih je uporabnik izbrisal na telefonu (N3): racunalnik jih izbrise s prepisom vred in jih ne vrne vec. */
+    val izbrisani: List<String> = emptyList(),
 )
 
 @Serializable
@@ -40,6 +42,8 @@ data class OdgovorSinhron(
 )
 
 const val ZMOZNOST_PREPIS = "prepis-v1"
+/** Racunalnik zna izbrisati klic po seznamu izbrisani (N3); brez tega izbris ostane v vrsti telefona. */
+const val ZMOZNOST_IZBRIS = "izbris-v1"
 
 object SinhronLine {
     const val NAJVEC_VNOSOV = 300
@@ -91,12 +95,14 @@ object SinhronLine {
         var prvi = true
         repeat(NAJVEC_KROGOV) {
             val cakajoci = omejiPoBajtih(dnevnik.cakajociZaSinhronizacijo().take(NAJVEC_VNOSOV))
-            val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null, epoha.ifEmpty { null }))
+            val izbrisi = if (prvi) dnevnik.izbrisiZaRacunalnik().take(NAJVEC_VNOSOV) else emptyList()
+            val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null, epoha.ifEmpty { null }, izbrisi))
             val odg = odgovor(poslji(telo) ?: return false) ?: return false
             val prepisSprejet = ZMOZNOST_PREPIS in odg.zmoznosti
             dnevnik.potrdiPoslane(cakajoci, prepisSprejet)
             // Racunalnik zdaj zna prepis: zapisi, ki jih je star racunalnik dobil brez prepisa, gredo v vrsto (naslednji krog).
             if (prepisSprejet) dnevnik.vrniZadrzanePrepise()
+            if (ZMOZNOST_IZBRIS in odg.zmoznosti) dnevnik.potrdiIzbrise(izbrisi)
             // Ce zapis prejetih klicev ne uspe, revizija ostane (racunalnik jih ob naslednjem krogu poslje znova).
             try { dnevnik.sprejmiIzRacunalnika(odg.klici) } catch (_: Exception) { return false }
             if (odg.pogovor.isNotEmpty()) prejetPogovor(odg.pogovor)

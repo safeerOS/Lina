@@ -186,6 +186,9 @@ fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>, mejaB: Int = MEJA_
     return izhod to skrajsan
 }
 
+/** Najvec zapomnjenih izbrisov (N3; ~30 B na id): toliko klicev hrani tudi racunalnik (MEJA_KLICEV). */
+const val MEJA_IZBRISANIH = 1000
+
 const val GOVOREC_KLICATELJ = "klicatelj"
 const val GOVOREC_LINA = "lina"
 
@@ -232,7 +235,11 @@ private data class DnevnikKlicevShramba(
     val zapisi: List<ZapisKlica>,
     val cakajoci: List<ZapisKlicaSinhronizacija> = emptyList(),
     /** Id zapisov s prepisom, ki jih je racunalnik brez zmoznosti prepisa (0.2.13) prejel brez njega (N1). */
-    val zadrzaniPrepisi: List<String> = emptyList()
+    val zadrzaniPrepisi: List<String> = emptyList(),
+    /** Id klicev, ki jih je uporabnik izbrisal (N3): z racunalnika se ne sprejmejo vec. */
+    val izbrisani: List<String> = emptyList(),
+    /** Izbrisi, ki jih racunalnik se ni potrdil (ZMOZNOST_IZBRIS). */
+    val izbrisiZaRacunalnik: List<String> = emptyList()
 )
 
 @Serializable
@@ -409,6 +416,9 @@ class DnevnikKlicev(
     private val vrstaSinhronizacije = linkedMapOf<String, ZapisKlicaSinhronizacija>()
     /** Zapisi s prepisom, ki jih je racunalnik prejel brez prepisa: gredo znova v vrsto, ko racunalnik javi ZMOZNOST_PREPIS (N1). */
     private val zadrzaniPrepisi = linkedSetOf<String>()
+    /** Izbrisani klici (N3): seznam zavrnitev za zapise z racunalnika in vrsta izbrisov, ki jih racunalnik se ni potrdil. */
+    private val izbrisani = linkedSetOf<String>()
+    private val izbrisiZaRac = linkedSetOf<String>()
     private var branjeSpodletelo = false
 
     init {
@@ -477,10 +487,14 @@ class DnevnikKlicev(
         val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
         predlaganiZapisi.remove(id)
         predlaganiCakajoci.remove(id)
-        shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values, zadrzaniPrepisi - id)
+        val noviIzbrisani = (izbrisani + id).toList().takeLast(MEJA_IZBRISANIH)
+        val noviZaRac = (izbrisiZaRac + id).toList().takeLast(MEJA_IZBRISANIH)
+        shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values, zadrzaniPrepisi - id, noviIzbrisani, noviZaRac)
         zapisi.remove(id)
         vrstaSinhronizacije.remove(id)
         zadrzaniPrepisi.remove(id)
+        izbrisani.clear(); izbrisani.addAll(noviIzbrisani)
+        izbrisiZaRac.clear(); izbrisiZaRac.addAll(noviZaRac)
         return true
     }
 
@@ -555,6 +569,19 @@ class DnevnikKlicev(
         }
     }
 
+    // Izbrisi za racunalnik (N3), od najstarejsega.
+    @Synchronized
+    fun izbrisiZaRacunalnik(): List<String> = izbrisiZaRac.toList()
+
+    // Racunalnik je javil ZMOZNOST_IZBRIS: poslani izbrisi so opravljeni (seznam zavrnitev ostane).
+    @Synchronized
+    fun potrdiIzbrise(poslani: List<String>) {
+        if (branjeSpodletelo || poslani.none { it in izbrisiZaRac }) return
+        val ostali = izbrisiZaRac - poslani.toSet()
+        shraniVShrambo(predlaganiIzbrisiZaRac = ostali)
+        izbrisiZaRac.clear(); izbrisiZaRac.addAll(ostali)
+    }
+
     // Racunalnik je javil ZMOZNOST_PREPIS: zadrzani zapisi s prepisom gredo znova v vrsto (isti id, racunalnik dopolni prepis).
     @Synchronized
     fun vrniZadrzanePrepise() {
@@ -574,7 +601,7 @@ class DnevnikKlicev(
         val predlagani = zapisi.toMutableMap()
         var dodanih = 0
         for (p in prejeti) {
-            if (predlagani.containsKey(p.id)) continue
+            if (predlagani.containsKey(p.id) || p.id in izbrisani) continue
             // Prepis z racunalnika je nezaupan: iste meje kot za posiljanje (govorec, dolzina, bajti).
             val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(p.prepisPogovora)
             val zapis = ZapisKlica(
@@ -637,6 +664,9 @@ class DnevnikKlicev(
                     if (poljeCakajoci != null && poljeCakajoci !is JsonArray) return false
                     cakajociElementi = poljeCakajoci as? JsonArray
                     zadrzaniElementi = koren["zadrzaniPrepisi"] as? JsonArray
+                    for ((polje, cilj) in listOf("izbrisani" to izbrisani, "izbrisiZaRacunalnik" to izbrisiZaRac)) {
+                        (koren[polje] as? JsonArray)?.let { el -> cilj.clear(); el.mapNotNullTo(cilj) { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull() } }
+                    }
                 }
                 is JsonArray -> {
                     seznamElementov = koren
@@ -713,7 +743,9 @@ class DnevnikKlicev(
     private fun shraniVShrambo(
         predlaganiZapisi: Collection<ZapisKlica> = zapisi.values,
         predlaganiCakajoci: Collection<ZapisKlicaSinhronizacija> = vrstaSinhronizacije.values,
-        predlaganiZadrzani: Collection<String> = zadrzaniPrepisi
+        predlaganiZadrzani: Collection<String> = zadrzaniPrepisi,
+        predlaganiIzbrisani: Collection<String> = izbrisani,
+        predlaganiIzbrisiZaRac: Collection<String> = izbrisiZaRac
     ) {
         val urejeni = urediZapise(predlaganiZapisi, nujniNaVrhu = true)
         val cakajoci = predlaganiCakajoci.sortedWith(
@@ -721,7 +753,8 @@ class DnevnikKlicev(
                 .thenByDescending { it.casZacetka }
                 .thenBy { it.id }
         )
-        val ovoj = DnevnikKlicevShramba(verzija = 1, zapisi = urejeni, cakajoci = cakajoci, zadrzaniPrepisi = predlaganiZadrzani.toList())
+        val ovoj = DnevnikKlicevShramba(verzija = 1, zapisi = urejeni, cakajoci = cakajoci, zadrzaniPrepisi = predlaganiZadrzani.toList(),
+            izbrisani = predlaganiIzbrisani.toList(), izbrisiZaRacunalnik = predlaganiIzbrisiZaRac.toList())
         val json = jsonDnevnik.encodeToString(ovoj)
         shramba.shrani(json)
     }

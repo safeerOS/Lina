@@ -55,4 +55,38 @@ class NajdbeSlepi17tTest {
         assertFalse(poslano.any { it.contains("klic-1-1") })
     }
 
+    // N3: izbris na telefonu se sinhronizira kot izbris in racunalnik ga ne more vrniti.
+    @Test
+    fun `N3 - izbrisan klic gre racunalniku kot izbris in se ob novi epohi ne vrne na telefon`() {
+        val shramba = PomnilniskaShramba()
+        val d = DnevnikKlicev(shramba)
+        val z = zapisSPrepisom()
+        assertTrue(d.dodaj(z))
+        val reviziji = PomnilniskaShramba()
+        assertTrue(SinhronLine.izmenjaj(d, reviziji, poslji = { ODGOVOR_STAR }))
+        assertTrue(d.izbrisi(z.id, potrditevUporabnika = true))
+        val nazaj = z.zaSinhronizacijo()
+        val poslano = mutableListOf<String>()
+        // Racunalnik je bil ponastavljen (nova epoha) in vrne vse, tudi izbrisani klic.
+        val odgovor = """{"epoha":"00112233aabbccdd","rev":5,"klici":[${json.encodeToString(nazaj)}]}"""
+        assertTrue(SinhronLine.izmenjaj(DnevnikKlicev(shramba), reviziji, poslji = { poslano.add(it); odgovor }))
+        assertTrue(poslano.first().contains("\"izbrisani\":[\"${z.id}\"]"), "izbris ni bil poslan: ${poslano.first()}")
+        assertTrue(DnevnikKlicev(shramba).seznam().none { it.id == z.id }, "izbrisan klic (s prepisom) se je vrnil na telefon")
+    }
+
+    @Test
+    fun `N3 - izbris ostane v vrsti, dokler ga racunalnik ne potrdi`() {
+        val shramba = PomnilniskaShramba()
+        val d = DnevnikKlicev(shramba)
+        val z = zapisSPrepisom()
+        assertTrue(d.dodaj(z))
+        assertTrue(d.izbrisi(z.id, potrditevUporabnika = true))
+        val reviziji = PomnilniskaShramba()
+        val poslano = mutableListOf<String>()
+        assertTrue(SinhronLine.izmenjaj(DnevnikKlicev(shramba), reviziji, poslji = { poslano.add(it); ODGOVOR_STAR }))
+        assertTrue(SinhronLine.izmenjaj(DnevnikKlicev(shramba), reviziji, poslji = { poslano.add(it); ODGOVOR_NOV }))
+        assertTrue(SinhronLine.izmenjaj(DnevnikKlicev(shramba), reviziji, poslji = { poslano.add(it); ODGOVOR_NOV }))
+        assertEquals(listOf(true, true, false), poslano.map { it.contains("\"izbrisani\":[\"${z.id}\"]") })
+    }
+
 }
