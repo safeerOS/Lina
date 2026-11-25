@@ -35,6 +35,7 @@ import { nastaviDodatekZaTelefon, opisStanjaDodatkov, stanjeDodatkovZaTelefon } 
 import { kanalSeznamN8n, kanalUstvariN8n, kanalZazeniN8n, telefonPotrdiN8n, telefonPredlogN8n, telefonStanjeN8n } from "./n8n.server.ts";
 import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gradnje-github.server.ts";
 import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
+import { telefonOdgovor, telefonVprasanja } from "./vprasanja-agentov.server.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 
 export const NASTAVITVE_ASISTENTA = "asistent-telefon.json";
@@ -318,7 +319,12 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         dodeli: (agent: string, mapa: string, besedilo: string, pogoj: string) => telefonDodeli(root, agent, mapa, besedilo, pogoj),
         preklici: (id: string) => telefonPreklici(root, id),
       };
-      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje, agentiNaloge });
+      // Vprasanja agentov (naloga 23): odprta vprasanja in dnevnik dela; odgovor s podpisom naprave (streznik ga preveri)
+      const vprasanjaAgentov = {
+        stanje: async () => telefonVprasanja(root),
+        odgovori: (id: string, odlocitev: string, zgostitev: string, naprava: string) => telefonOdgovor(root, id, odlocitev, zgostitev, naprava),
+      };
+      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje, agentiNaloge, vprasanjaAgentov });
       try {
         const { naslov, vrata, odtis } = await streznik.zazeni();
         stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka };

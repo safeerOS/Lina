@@ -2,7 +2,7 @@
  * Lina odpre Claude Code na racunalniku z nalogo (lastnik 23. 11. 2026; AGENTS.md »Lina sama odpre Claude Code na racunalniku«).
  * Potek: predlog (lastnik v zavihku Racunalnik ali Lina z oznako v pogovoru) -> lastnik vidi mapo in CELO besedilo -> potrdi ->
  * Lina zapise <mapa>/.lina-naloge/<id>/NALOGA.md (nova mapa, nikoli prepis) in odpre terminal z ukazom `claude` in stalnim
- * pozivom (samo id). Porocilo POROCILO.md iz iste mape se pokaze v zavihku Racunalnik kot besedilo.
+ * pozivom (samo id). Od naloge 23 (25. 11. 2026) claude brez peskovnika tece v Lini brez okna (vprasanja-agentov.server.ts). Porocilo POROCILO.md iz iste mape se pokaze v zavihku Racunalnik kot besedilo.
  * Vsak javni ukaz zahteva sejo lastnika (requireOwner); brez gesla (lokalna seja brez prijave) sta priprava in zagon zavrnjena.
  * Brez sudo, brez --dangerously-*, brez lupine (argv, cwd = mapa). Tajnica (klici) te datoteke ne uvaza (claude-naloge.test.ts).
  *
@@ -109,7 +109,7 @@ import {
   type IzidTocke,
   type PovzetekTock,
 } from "./tocke-naloge.ts";
-import { platformaZdaj, programPeskovnika, ukazTerminala, type Platforma } from "./platforma.server.ts";
+import { jeWindows, platformaZdaj, programPeskovnika, ukazTerminala, type Platforma } from "./platforma.server.ts";
 import { jeNovProjekt, sestaviPregledProjekta } from "./pregled-projekta.server.ts";
 import { kazaloZaProjekt, zapisiOpazanjeNaloge } from "./spomin-nalog.server.ts";
 import { resolveDataDir, writeJson } from "./store.server.ts";
@@ -118,6 +118,7 @@ import { casZagonaProcesa } from "./tunel.server.ts";
 export type { DogodekNalogaKoncana } from "./claude-naloge.ts";
 import { najdiDovoljenje, zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { jeTveganoDejanje } from "./dovoljenja-podobne.ts";
+import { zazeniVLini } from "./vprasanja-agentov.server.ts";
 
 export const DATOTEKA_STANJA = "claude-naloge.json";
 const NAJVEC_MAP = 10;
@@ -173,6 +174,11 @@ export type Odvisnosti = {
   /** Lina kot vodja: git, diff in patch (privzeto pravi programi brez lupine) in ukazi preizkusov (ze z mejo pomnilnika). */
   izvedi?: Izvedi;
   izvediPreizkus?: Izvedi;
+  /**
+   * Naloga 23: Claude Code v Lini (brez okna, stream-json, vprasanja za dovoljenje v Lini). Privzeto zazeniVLini na Linuxu; kdor poda svoj
+   * zagon terminala (o.zazeni, preizkusi) in tega ne, ostane pri terminalu.
+   */
+  zazeniVLini?: (root: string, naloga: string, program: string, poziv: string, cwd: string, okolje: NodeJS.ProcessEnv) => Promise<number>;
 };
 
 export type JavnaNaloga = {
@@ -922,6 +928,10 @@ async function zazeniZapis(root: string, s: Stanje, z: ZapisNaloge, o: Odvisnost
   const najdi = o.najdi ?? ((ime: string) => najdiNaPoti(ime));
   const terminal = ukazTerminala(najdi, o.platforma ?? platformaZdaj(), o.razresi);
   const argv = argvAgenta(agent, pozivZaClaude(z.id));
+  // Naloga 23: Claude Code brez peskovnika (Linux, macOS; Windows nima Unix vticnice) tece v Lini (vprasanja za dovoljenje in dnevnik dela v Lini), ne v terminalu
+  const vLini = agent === "claude" && !peskovnik.length && !jeWindows(o.platforma ?? platformaZdaj())
+    ? (o.zazeniVLini ?? (o.zazeni ? null : zazeniVLini))
+    : null;
   if ("razlog" in terminal || !argv) throw new ClaudeNalogaNapaka("ni-terminala");
   z.potrjeno = zdaj.toISOString();
   z.mapaId = await idMape(mapaNaloge);
@@ -935,7 +945,9 @@ async function zazeniZapis(root: string, s: Stanje, z: ZapisNaloge, o: Odvisnost
   z.razlog = null;
   await zapisi(root, s);
   try {
-    const pid = await (o.zazeni ?? privzetiZagonTerminala)(terminal.program, [...terminal.predpona, ...peskovnik, program, ...argv], delovna, okoljeZaAgenta());
+    const pid = vLini
+      ? await vLini(root, z.id, program, pozivZaClaude(z.id), delovna, okoljeZaAgenta())
+      : await (o.zazeni ?? privzetiZagonTerminala)(terminal.program, [...terminal.predpona, ...peskovnik, program, ...argv], delovna, okoljeZaAgenta());
     z.stanje = "tece";
     if (typeof pid === "number") {
       z.pid = pid;

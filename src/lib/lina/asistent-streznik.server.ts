@@ -48,6 +48,8 @@ import {
   nizStanjaGradenj,
   nizDodelitveAgentNaloge,
   nizPreklicaAgentNaloge,
+  nizOdgovoraVprasanja,
+  nizStanjaVprasanj,
   nizStanjaAgentNalog,
   zgostitevDodelitve,
   nizUstavitve,
@@ -338,6 +340,14 @@ export type MoznostiStreznika = {
     dodeli(agent: string, mapa: string, besedilo: string, pogoj: string): Promise<{ id: string }>;
     preklici(id: string): Promise<void>;
   };
+  /**
+   * Vprasanja agentov (naloga 23, vprasanja-agentov.server.ts): stanje (odprta vprasanja, zadnje vrstice dela) in odgovor s podpisom naprave,
+   * ki veze id, odlocitev in zgostitev prikazanega. Brez njih poti /agent-vprasanja* odgovorijo 404. Samo domace omrezje.
+   */
+  vprasanjaAgentov?: {
+    stanje(): Promise<unknown>;
+    odgovori(id: string, odlocitev: string, zgostitev: string, naprava: string): Promise<void>;
+  };
 };
 
 class Napaka extends Error {
@@ -485,6 +495,7 @@ export class AsistentStreznik {
       if (req.method === "GET" && url.pathname === `${POT}/gradnje`) return this.poslji(res, 200, await this.stanjeGradenj(url));
       if (req.method === "GET" && url.pathname === `${POT}/gradnja/apk`) return await this.apkGradnje(url, res);
       if (req.method === "GET" && url.pathname === `${POT}/agent-naloge`) return this.poslji(res, 200, await this.stanjeAgentNalog(url));
+      if (req.method === "GET" && url.pathname === `${POT}/agent-vprasanja`) return this.poslji(res, 200, await this.stanjeVprasanjAgentov(url));
       if (req.method !== "POST") throw new Napaka(url.pathname.startsWith(POT) ? 405 : 404, "ni", "Ni take poti.");
       if (url.pathname === POT_SLIKA_KONTROLE) return this.poslji(res, 200, await this.slikaKontrole(req));
       const telo = await this.telo(req, url.pathname === `${POT}/sinhron` ? NAJVEC_TELO_SINHRON : NAJVEC_TELO);
@@ -506,6 +517,7 @@ export class AsistentStreznik {
                               : url.pathname === `${POT}/gradnja/potrdi` ? await this.potrdiGradnjo(telo)
                                 : url.pathname === `${POT}/agent-naloga/dodeli` ? await this.dodeliAgentNalogo(telo)
                                   : url.pathname === `${POT}/agent-naloga/preklici` ? await this.prekliciAgentNalogo(telo)
+                                    : url.pathname === `${POT}/agent-vprasanje/odgovor` ? await this.odgovorVprasanjaAgenta(telo)
                                     : null;
       if (!izid) throw new Napaka(404, "ni", "Ni take poti.");
       this.poslji(res, izid.status, izid.telo);
@@ -1029,6 +1041,30 @@ export class AsistentStreznik {
     if (typeof id !== "string" || !/^[a-f0-9]{16}$/.test(id)) throw new Napaka(400, "oblika", "Neveljaven id.");
     await this.preveri(posiljatelj, t, (c, e) => nizPreklicaAgentNaloge(posiljatelj as string, id, c, e));
     await this.zaledjeGradenj(() => a.preklici(id));
+    return { status: 202, telo: { id } };
+  }
+
+  private vprasanjaStreznika() {
+    if (!this.m.vprasanjaAgentov) throw new Napaka(404, "ni", "Ni take poti.");
+    return this.m.vprasanjaAgentov;
+  }
+
+  /** Vprasanja agentov in zadnje vrstice dela (podpisana poizvedba); samo branje. */
+  private async stanjeVprasanjAgentov(url: URL) {
+    const a = this.vprasanjaStreznika();
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    await this.preveri(posiljatelj, t, (c, e) => nizStanjaVprasanj(posiljatelj as string, c, e));
+    return await a.stanje();
+  }
+
+  /** Odgovor s telefona: podpis veze id, odlocitev (dovoli/zavrni) in zgostitev prikazanega; velja enkrat, samo za odprto vprasanje. */
+  private async odgovorVprasanjaAgenta(t: Record<string, unknown>) {
+    const a = this.vprasanjaStreznika();
+    const { posiljatelj, id, odlocitev, zgostitev } = t;
+    if (typeof id !== "string" || !/^[a-f0-9]{16}$/.test(id) || (odlocitev !== "dovoli" && odlocitev !== "zavrni")
+      || typeof zgostitev !== "string" || !/^[a-f0-9]{64}$/.test(zgostitev)) throw new Napaka(400, "oblika", "Neveljaven id, odlocitev ali zgostitev.");
+    await this.preveri(posiljatelj, t, (c, e) => nizOdgovoraVprasanja(posiljatelj as string, id, odlocitev, zgostitev, c, e));
+    await this.zaledjeGradenj(() => a.odgovori(id, odlocitev, zgostitev, posiljatelj as string));
     return { status: 202, telo: { id } };
   }
 

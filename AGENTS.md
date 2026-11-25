@@ -964,6 +964,27 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   predvidljivim imenom; Node ne zna nastaviti ACL cevi - varujeta jo samo vzajemna prijava in podpis naprave, NEPREVERJENO).
   Ustavitev je sporocilo v sejo: Claude Code ga dobi ob naslednjem obratu, trenutnega orodja ne prekine.
 
+## Vprasanja in delo agenta v Lini (naloga 23, del 1; 25. 11. 2026; vprasanja-agentov.ts, vprasanja-agentov.server.ts)
+- Lastnik 23. 11. in 25. 11. 2026: »neposreden vpogled v vprasanja in delo Claude Code-a«. Naloga za claude (brez peskovnika, ne Windows)
+  tece v Lini brez okna: `claude -p <poziv> --output-format stream-json --verbose --permission-mode default --setting-sources user
+  --permission-prompt-tool mcp__linavprasanja__dovoljenje --mcp-config <podatki>/vpr/<id>.json --strict-mcp-config`. Drugi agenti in
+  claude v peskovniku ostanejo v terminalu (del 2: pty).
+- Narocnina: Claude Code je se vedno Anthropicov program z lastnikovo prijavo na lastnikovem racunalniku (kot v terminalu); Lina ne dobi
+  ne prijave ne kljuca, samo bere njegov izpis in odgovarja na vprasanja za dovoljenje. Odlocitev 13. 11. (Lina nima prijave Claude) velja.
+- MCP Line za vprasanja je majhen stdio program (PROGRAM_POMOCNIKA, Lina ga zapise ob zagonu); vprasanje gre Lini prek Unix vticnice
+  <podatki>/vpr/<id>.s (mapa 0700, vticnica 0600) z nakljucnim zetonom zagona. Po vticnici gre SAMO vprasanje; odgovor da lastnik.
+- Samodejnega »da« NI: vsako vprasanje caka lastnika; rok 10 min -> zavrnitev; konec agenta, prekinjena povezava in izhod Line -> zavrnitev
+  (ob izhodu Line ali SIGTERM/SIGINT/SIGHUP se agenti ustavijo - cela skupina; SIGKILL Line agenta ne ustavi). Razvrstitev (brisanje, push, sudo, omrezje, namescanje, pisanje zunaj mape, nastavitve .claude/.git,
+  sestavljen ukaz, neznano orodje) je samo oznaka za prikaz.
+- Racunalnik: »Dovoli« samo z geslom lastnika, ki je obstajalo ze ob zagonu agenta (agent lahko sam nastavi geslo prek lokalnega API);
+  »Zavrni« vedno. Telefon: GET /agent-vprasanja (nizStanjaVprasanj) in POST /agent-vprasanje/odgovor (nizOdgovoraVprasanja veze id,
+  odlocitev in zgostitev prikazanega + celega vnosa); samo domace omrezje. Odgovor velja enkrat. Vnos, ki ni ves viden (racunalnik nad
+  200 000 znakov ali skriti znaki, telefon nad 4000 znakov), se lahko samo zavrne. Odobritev gre agentu sele po zapisu v dnevnik odlocitev (vprasanja-agentov-odlocitve.jsonl, 0600, predogled brez ocitnih
+  skrivnosti + zgostitev vnosa); brez zapisa je zavrnitev.
+- PREOSTALO: kar dovolijo lastnikove nastavitve Claude Code (~/.claude/settings.json allow), ne pride v Lino. Stanje zagonov je v pomnilniku
+  procesa Line. Pogodba orodja za dovoljenja (vnos tool_name/input, odgovor behavior allow+updatedInput / deny+message) in MCP_TOOL_TIMEOUT
+  nista preverjena s pravim Claude Code (preizkusi z laznim Claude: vprasanja-agentov.test.ts). Telefonski zaslon je locena naloga.
+
 ## Koncna tocka asistentke za telefon (14. 11. 2026; asistent-streznik.server.ts) - POGODBA za Lino na telefonu
 - Pot: kot telefon <-> OpenLine (openline/server lan.ts, tls.ts, tls-pin.ts; telefon PinnedHttp/TlsPin): HTTPS s samopodpisanim
   potrdilom (EC P-256, SAN localhost, 127.0.0.1; <mapa podatkov>/asistent-tls, kljuc 0600), telefon pripne SHA-256 lista (64 hex, male

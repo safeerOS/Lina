@@ -223,6 +223,14 @@ export function nizDodelitveAgentNaloge(posiljatelj: string, zgostitev: string, 
 export function nizPreklicaAgentNaloge(posiljatelj: string, id: string, cas: number, enkratni: string): string {
   return `safeer-lina-agent-preklici-v1\n${posiljatelj}\n${id}\n${cas}\n${enkratni}`;
 }
+/** Vprasanja agentov na racunalniku (GET /agent-vprasanja, naloga 23): samo branje. */
+export function nizStanjaVprasanj(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-agent-vprasanja-stanje-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+/** Odgovor na vprasanje agenta (POST /agent-vprasanje/odgovor): podpis veze id, odlocitev in zgostitev prikazanega (zgostitevVprasanja). */
+export function nizOdgovoraVprasanja(posiljatelj: string, id: string, odlocitev: string, zgostitev: string, cas: number, enkratni: string): string {
+  return `safeer-lina-agent-vprasanje-v1\n${posiljatelj}\n${id}\n${odlocitev}\n${zgostitev}\n${cas}\n${enkratni}`;
+}
 /** Prenos APK zadnje potrjene gradnje (GET /gradnja/apk). */
 export function nizApkGradnje(posiljatelj: string, cas: number, enkratni: string): string {
   return `safeer-lina-gradnja-apk-v1\n${posiljatelj}\n${cas}\n${enkratni}`;

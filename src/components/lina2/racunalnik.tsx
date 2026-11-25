@@ -5,6 +5,8 @@ import {
   nacrtClaudeNalogeFn,
   nastaviPregledProjektaFn,
   nastaviSpominNalogFn,
+  odgovorVprasanjaAgentaFn,
+  stanjeVprasanjAgentovFn,
   stanjeAgentPomociFn,
   stanjeClaudeNalogFn,
   stanjeGradenjFn,
@@ -17,6 +19,8 @@ import { t2 } from "./besedila.ts";
 import type { JavnaNaloga, JavnaZdruzitev, JavnoStanjeNalog, StanjeAgenta } from "@/lib/lina/claude-naloge.server.ts";
 import { OZNAKA_NACRTA, type AgentId, type RazlogNaloge, type StanjeNaloge } from "@/lib/lina/claude-naloge.ts";
 import type { PovzetekTock, RazlogTocke } from "@/lib/lina/tocke-naloge.ts";
+import type { JavnoVprasanje, StanjeVprasanj } from "@/lib/lina/vprasanja-agentov.server.ts";
+import type { RazlogNevarnosti } from "@/lib/lina/vprasanja-agentov.ts";
 import type { FazaVodje, OpisNapake, RazlogVodje, VlogaNaloge, VodjaNaloge } from "@/lib/lina/claude-naloge-vodja.ts";
 import type { JavnaGradnja, JavnoStanjeGradenj } from "@/lib/lina/gradnje-github.server.ts";
 import type { RazlogGradnje, StanjeGradnje, Tok } from "@/lib/lina/gradnje-github.ts";
@@ -209,6 +213,8 @@ export function RacunalnikPanel() {
         <GradnjeKartica />
       </div>
 
+      <div className="flex min-w-0 flex-col gap-5">
+      <VprasanjaAgentaKartica />
       <div className="lina-kartica min-w-0">
         <h3><Ikona ime="racunalnik" /> {t("rcNaslov")}</h3>
         {!stanje || stanje.naloge.length === 0 ? (
@@ -221,7 +227,92 @@ export function RacunalnikPanel() {
           </ul>
         )}
       </div>
+      </div>
     </section>
+  );
+}
+
+const RAZLOG_NEVARNOSTI: Record<RazlogNevarnosti, Beseda> = {
+  brisanje: "vaRbrisanje", "git-push": "vaRgitPush", sudo: "vaRsudo", omrezje: "vaRomrezje", namescanje: "vaRnamescanje",
+  "zunaj-mape": "vaRzunajMape", nastavitve: "vaRnastavitve", sestavljen: "vaRsestavljen", neznano: "vaRneznano",
+};
+
+/**
+ * Naloga 23: vprasanja Claude Code (Dovoli/Zavrni) in dnevnik dela. Med delom ali cakanjem se osvezuje vsake 3 s (agent stoji, dokler
+ * lastnik ne odgovori), sicer vsakih 30 s. Predogled je samo besedilo (React ga ubeze).
+ */
+export function VprasanjaAgentaKartica() {
+  const [st, setSt] = useState<StanjeVprasanj | null>(null);
+  const [napaka, setNapaka] = useState("");
+  const [zaposlen, setZaposlen] = useState(false);
+  const osvezi = useCallback(() => {
+    void stanjeVprasanjAgentovFn().then(setSt).catch(() => undefined);
+  }, []);
+  useEffect(osvezi, [osvezi]);
+  const dejavno = !!st && (st.teki.some((x) => x.stanje === "tece") || st.vprasanja.some((v) => v.stanje === "caka"));
+  useEffect(() => {
+    const c = setInterval(osvezi, dejavno ? 3000 : 30_000);
+    return () => clearInterval(c);
+  }, [dejavno, osvezi]);
+
+  async function odgovori(v: JavnoVprasanje, odlocitev: "dovoli" | "zavrni") {
+    setNapaka("");
+    setZaposlen(true);
+    try {
+      const r = await odgovorVprasanjaAgentaFn({ data: { id: v.id, odlocitev, zgostitev: v.zgostitev } });
+      if (r.ok) setSt(r.stanje);
+      else {
+        setNapaka(r.razlog === "geslo" ? t("vaGeslo") : r.razlog === "odrezano" ? t("vaOdrezano") : t("vaZastarelo"));
+        osvezi();
+      }
+    } catch {
+      setNapaka(t("rcRSplosno"));
+    } finally {
+      setZaposlen(false);
+    }
+  }
+
+  const odprta = st?.vprasanja.filter((v) => v.stanje === "caka") ?? [];
+  const teki = st?.teki ?? [];
+  if (!teki.length && !odprta.length) return null;
+  return (
+    <div className="lina-kartica min-w-0">
+      <h3><Ikona ime="racunalnik" /> {t("vaNaslov")}</h3>
+      <p className="text-sm text-[var(--color-moss)]">{t("vaNamig")}</p>
+      {napaka ? <p role="alert" className="mt-2 text-sm text-[var(--color-signal)]">{napaka}</p> : null}
+      {odprta.length === 0 ? <p className="mt-3 text-sm text-[var(--color-moss)]">{t("vaPrazno")}</p> : (
+        <ul className="mt-3 flex flex-col gap-3" aria-live="polite">
+          {odprta.map((v) => (
+            <li key={v.id} className="rounded-xl border border-[var(--color-rule)] p-3">
+              <p className="text-sm font-medium">
+                {v.orodje}
+                {v.nevarno ? <span className="ml-2 text-[var(--color-signal)]">{t("vaNevarno")}: {v.razlogi.map((r) => t(RAZLOG_NEVARNOSTI[r])).join(", ")}</span> : null}
+              </p>
+              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">{v.predogled}</pre>
+              <p className="mt-1 text-xs text-[var(--color-moss)]">{t("vaRok")}: {ura(v.rok)}</p>
+              <div className="mt-2 flex gap-2">
+                {v.odrezano ? <p className="text-sm text-[var(--color-signal)]">{t("vaOdrezano")}</p> : (
+                  <button type="button" disabled={zaposlen} onClick={() => void odgovori(v, "dovoli")} className="rounded-full bg-[var(--color-signal)] px-4 py-1.5 text-sm text-[var(--color-on-ink)] disabled:opacity-50">
+                    {t("vaDovoli")}
+                  </button>
+                )}
+                <button type="button" disabled={zaposlen} onClick={() => void odgovori(v, "zavrni")} className="lina-gumb-majhen">
+                  {t("vaZavrni")}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {teki.map((x) => (
+        <details key={x.naloga} className="mt-3" open={x.stanje === "tece"}>
+          <summary className="cursor-pointer text-sm">
+            {t("vaDnevnik")} {x.naloga} - {t(x.stanje === "tece" ? "vaTece" : x.stanje === "koncano" ? "vaKoncano" : "vaNapaka")}
+          </summary>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{x.vrstice.slice(-40).join("\n")}</pre>
+        </details>
+      ))}
+    </div>
   );
 }
 

@@ -56,6 +56,8 @@ import {
 import { dnevnikAvtonomije, stanjeAvtonomije, ukazAvtonomije } from "./avtonomija.server.ts";
 import { jeNacrtVklopljen, nacrtClaudeNaloge, nastaviNacrt, stanjeClaudeNalog, ukazClaudeNalog } from "./claude-naloge.server.ts";
 import { ClaudeNalogaNapaka } from "./claude-naloge.ts";
+import { odgovorVprasanja, stanjeVprasanj } from "./vprasanja-agentov.server.ts";
+import { VprasanjeNapaka } from "./vprasanja-agentov.ts";
 import { stanjeGradenj, ukazGradenj } from "./gradnje-github.server.ts";
 import { GradnjaNapaka } from "./gradnje-github.ts";
 import { pravilaZaVmesnik, preberiNujne, shraniNujne } from "./nujni.server.ts";
@@ -1184,6 +1186,26 @@ export const ukazClaudeNalogFn = createServerFn({ method: "POST" })
       return { ok: true as const, stanje: await ukazClaudeNalog(await sessionToken(), data?.ukaz) };
     } catch (e) {
       if (e instanceof ClaudeNalogaNapaka) return { ok: false as const, razlog: e.razlog };
+      throw e;
+    }
+  });
+
+/** Vprasanja agenta (naloga 23): odprta vprasanja in dnevnik dela; odgovor lastnika (»dovoli« samo z geslom). */
+export const stanjeVprasanjAgentovFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  return stanjeVprasanj(await sessionToken());
+});
+
+export const odgovorVprasanjaAgentaFn = createServerFn({ method: "POST" })
+  .validator((data: { id?: unknown; odlocitev?: unknown; zgostitev?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    try {
+      return { ok: true as const, stanje: await odgovorVprasanja(await sessionToken(), data ?? {}) };
+    } catch (e) {
+      if (e instanceof VprasanjeNapaka) return { ok: false as const, razlog: e.razlog };
       throw e;
     }
   });
