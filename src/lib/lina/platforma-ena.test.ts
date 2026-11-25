@@ -17,7 +17,6 @@ const ZAKLENJENO: Record<string, number> = {
   "lib/lina/glas.server.ts": 1,
   "lib/lina/kanal-claude.server.ts": 7,
   "lib/lina/kanal-claude.ts": 4,
-  "lib/lina/keys.server.ts": 1,
   "lib/lina/mdns-oglas.server.ts": 1,
   "lib/lina/neposredno.server.ts": 9,
   "lib/lina/openline-zagon.server.ts": 1,

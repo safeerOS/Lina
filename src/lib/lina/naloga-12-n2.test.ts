@@ -122,16 +122,18 @@ describe("#2: verzija stanja in indeks", () => {
 });
 
 describe("#2: zavrnjen kljuc ob branju indeksa", { skip: process.platform === "win32" }, () => {
-  it("po popravku pravic .kljuc zapis deluje brez ponovnega zagona", async () => {
-    const { chmod, mkdir } = await import("node:fs/promises");
+  // naloga 14 N1: 0644 se zdaj popravi sam; zavrnjen kljuc je simbolna povezava, popravek = prava datoteka namesto nje
+  it("po popravku .kljuc (simbolna povezava -> datoteka) zapis deluje brez ponovnega zagona", async () => {
+    const { mkdir, rename, symlink } = await import("node:fs/promises");
     const root = await mapa();
     await mkdir(path.join(root, "orkestrator"), { recursive: true });
     await writeFile(path.join(root, "orkestrator", "indeks.json"), JSON.stringify({ verzije: {}, podpis: "x" }));
-    await writeFile(path.join(root, ".kljuc"), Buffer.alloc(32, 4), { mode: 0o600 });
-    await chmod(path.join(root, ".kljuc"), 0o644);
+    const prava = path.join(await mapa(), "kljuc");
+    await writeFile(prava, Buffer.alloc(32, 4), { mode: 0o600 });
+    await symlink(prava, path.join(root, ".kljuc"));
     const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
     await assert.rejects(o.nova({ cilj: "Naloga ob zavrnjenem kljucu." }));
-    await chmod(path.join(root, ".kljuc"), 0o600);
+    await rename(prava, path.join(root, ".kljuc"));
     const n = await o.nova({ cilj: "Naloga." });
     assert.ok(await o.preberi(n.id));
   });

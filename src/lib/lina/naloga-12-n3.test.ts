@@ -124,16 +124,18 @@ describe("#3: enkratna selitev nepodpisanih nalog", () => {
 
 describe("#3: selitev ob napaki ni porabljena", { skip: process.platform === "win32" }, () => {
   it("ce selitev datoteke pade (kljuc zavrnjen), se ob naslednjem zagonu ponovi", async () => {
-    const { chmod, copyFile, mkdir } = await import("node:fs/promises");
+    const { copyFile, mkdir, rename, symlink } = await import("node:fs/promises");
     const vir = await mapa();
     const id = await staro(vir, [], koncana);
     const root = await mapa();
     await mkdir(path.join(root, "orkestrator"), { recursive: true });
     await copyFile(path.join(vir, "orkestrator", `${id}.json`), path.join(root, "orkestrator", `${id}.json`));
-    await writeFile(path.join(root, ".kljuc"), Buffer.alloc(32, 4), { mode: 0o600 });
-    await chmod(path.join(root, ".kljuc"), 0o644);
+    // naloga 14 N1: zavrnjen kljuc je simbolna povezava (0644 se zdaj popravi sam)
+    const prava = path.join(await mapa(), "kljuc");
+    await writeFile(prava, Buffer.alloc(32, 4), { mode: 0o600 });
+    await symlink(prava, path.join(root, ".kljuc"));
     await ustvariOrkestrator(root, { ...brez, klicModela: koncni }).nadaljujPoZagonu().catch(() => undefined);
-    await chmod(path.join(root, ".kljuc"), 0o600);
+    await rename(prava, path.join(root, ".kljuc"));
     const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
     await o.nadaljujPoZagonu();
     assert.equal((await o.preberi(id))?.nepreverjeno, true);

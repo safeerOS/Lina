@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { chmod, link, lstat, mkdir, open, unlink } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, open, unlink, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
@@ -56,10 +56,15 @@ function zaporedno<T>(root: string, delo: () => Promise<T>): Promise<T> {
   return izid;
 }
 
+/**
+ * Pravice 0600 na sifriranih datotekah (kljuci.json, ponudniki.json). Naloga 14 N1: ista preverba platforme kot preberiKljuc
+ * (imaPosixDovoljenja iz platforma.server.ts); FS brez pravic (EPERM, ENOTSUP, EROFS) ni trda napaka - vsebina ostane sifrirana.
+ */
 async function lock(file: string): Promise<void> {
-  // Na Windows chmod ne velja. Podatki so v mapi uporabnika, ključ ostane šifriran.
-  if (process.platform === "win32") return;
-  await chmod(file, 0o600);
+  if (!imaPosixDovoljenja()) return;
+  await chmod(file, 0o600).catch((e: NodeJS.ErrnoException) => {
+    if (!["EPERM", "ENOTSUP", "EOPNOTSUPP", "EROFS"].includes(e.code ?? "")) throw e;
+  });
 }
 
 async function zapisiKljuc(file: string, key: Buffer, flags: "w" | "wx"): Promise<void> {
@@ -72,11 +77,24 @@ async function zapisiKljuc(file: string, key: Buffer, flags: "w" | "wx"): Promis
   }
 }
 
+/** Naloga 14 N1: popravek pravic na odprtem rocaju (fchmod, brez TOCTOU). Zamenljivo samo v preizkusu (FS brez pravic brez root ni mogoc). */
+export const praviceKljuca = { popravi: (h: FileHandle): Promise<void> => h.chmod(0o600) };
+
+/** Mape podatkov, kjer .kljuc po popravku ostane berljiv drugim (FS brez POSIX pravic): Lina deluje, vmesnik opozori. */
+const brezPravic = new Set<string>();
+
+/** Naloga 14 N1: ali je bil .kljuc v tej mapi ob zadnjem branju berljiv drugim, ker datotecni sistem pravic ne podpira. */
+export function kljucBrezPravic(dir?: string): boolean {
+  return brezPravic.has(resolveDataDir(dir));
+}
+
 /**
- * Naloga 12 #1: .kljuc se prebere samo, ce je prava datoteka (O_NOFOLLOW: simbolna povezava se ne odpre), na POSIX last procesa in
- * brez pravic skupine/drugih; sicer napaka z opozorilom. Napaka ni ENOENT, zato masterKey kljuca NE ustvari znova (izguba vseh
- * sifriranih kljucev API). Windows: samo simbolna povezava (uid in mode tam nista meja). Meja: TOCTOU med preverbo mape in odprtjem ni
- * pokrit; kdor sme pisati v mapo podatkov kot isti uporabnik, je zunaj tega modela.
+ * Naloga 12 #1: .kljuc se prebere samo, ce je prava datoteka (O_NOFOLLOW: simbolna povezava se ne odpre) in na POSIX last procesa;
+ * sicer napaka z opozorilom. Napaka ni ENOENT, zato masterKey kljuca NE ustvari znova (izguba vseh sifriranih kljucev API).
+ * Naloga 14 N1 (edina preverba pravic, tudi po zapisu): pravice skupine/drugih na lastnem kljucu se popravijo na rocaju na 0600; ce
+ * ostanejo (NTFS, exFAT, vfat, drvfs: fchmod brez ucinka ali EPERM), se kljuc uporabi in mapa dobi opozorilo v vmesniku - nikoli trda
+ * napaka, ki Lini vzame mozgane. Windows: samo simbolna povezava (uid in mode tam nista meja). Meja: TOCTOU med preverbo mape in
+ * odprtjem ni pokrit; kdor sme pisati v mapo podatkov kot isti uporabnik, je zunaj tega modela.
  */
 async function preberiKljuc(file: string): Promise<Buffer> {
   const nevaren = (zakaj: string) => {
@@ -93,7 +111,17 @@ async function preberiKljuc(file: string): Promise<Buffer> {
     const st = await h.stat();
     if (!st.isFile()) throw nevaren("ni navadna datoteka");
     if (posix && typeof process.getuid === "function" && st.uid !== process.getuid()) throw nevaren("drug lastnik");
-    if (posix && (st.mode & 0o077) !== 0) throw nevaren("pravice za skupino ali druge");
+    if (posix) {
+      const mapa = path.dirname(file);
+      let odprto = (st.mode & 0o077) !== 0;
+      if (odprto) {
+        await praviceKljuca.popravi(h).catch(() => undefined);
+        odprto = ((await h.stat()).mode & 0o077) !== 0;
+      }
+      if (odprto && !brezPravic.has(mapa)) console.error("lina: .kljuc je berljiv drugim, datotecni sistem mape podatkov pravic ne podpira; premaknite mapo podatkov.");
+      if (odprto) brezPravic.add(mapa);
+      else brezPravic.delete(mapa);
+    }
     return await h.readFile();
   } finally {
     await h.close();
@@ -122,12 +150,9 @@ async function ustvariKljuc(file: string): Promise<Buffer> {
     await unlink(zacasna).catch(() => undefined);
   }
   const koncni = await preberiKljuc(file);
-  if (koncni.length === 32) {
-    await lock(file);
-    return koncni;
-  }
+  if (koncni.length === 32) return koncni;
   await zapisiKljuc(file, key, "w");
-  await lock(file);
+  await preberiKljuc(file); // pravice prepisane datoteke: ista preverba in popravek kot ob branju (naloga 14 N1)
   return key;
 }
 
@@ -137,10 +162,7 @@ async function masterKey(dir: string): Promise<Buffer> {
   const file = path.join(dir, ".kljuc");
   try {
     const existing = await preberiKljuc(file);
-    if (existing.length === 32) {
-      await lock(file);
-      return existing;
-    }
+    if (existing.length === 32) return existing;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }

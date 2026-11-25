@@ -3,7 +3,7 @@
  * sicer bere ob vsakem stanju: branje .kljuc + chmod). Komentarji brez sumnikov.
  */
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rename, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -36,13 +36,15 @@ describe("#4: kljuc celovitosti v pomnilniku", { skip: process.platform === "win
     assert.notDeepEqual(await kljucCelovitosti("a", dir), await kljucCelovitosti("b", dir));
   });
 
-  it("zavrnjen kljuc se ne shrani: po popravku pravic deluje", async () => {
+  // naloga 14 N1: 0644 se zdaj popravi sam; zavrnjen kljuc je simbolna povezava, popravek = prava datoteka namesto nje
+  it("zavrnjen kljuc se ne shrani: po popravku (simbolna povezava -> datoteka) deluje", async () => {
     const dir = await mapa();
     const pot = path.join(dir, ".kljuc");
-    await writeFile(pot, Buffer.alloc(32, 1), { mode: 0o644 });
-    await chmod(pot, 0o644);
+    const prava = path.join(await mapa(), "kljuc");
+    await writeFile(prava, Buffer.alloc(32, 1), { mode: 0o600 });
+    await symlink(prava, pot);
     await assert.rejects(kljucCelovitosti("orkestrator", dir));
-    await chmod(pot, 0o600);
+    await rename(prava, pot);
     assert.equal((await kljucCelovitosti("orkestrator", dir)).length, 32);
   });
 });

@@ -2,6 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { chmod, copyFile, mkdir, open, readFile, stat, statfs, unlink } from "node:fs/promises";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
+import { t } from "./besedila.ts";
+import { kljucBrezPravic } from "./keys.server.ts";
 import { defaultDataDir, NASTAVITVE_DATOTEKA, readChosenDir, resolveDataDir, writeJson } from "./store.server.ts";
 import type { StorageView } from "./types.ts";
 
@@ -156,7 +158,10 @@ export async function moveDataDir(
 export async function readStorage(token: string | null, dir?: string): Promise<StorageView> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  return { ok: true, mapa: root, razlog: "", opozorila: await opozorilaMape(root) };
+  const opozorila = await opozorilaMape(root);
+  // naloga 14 N1: .kljuc ostane berljiv drugim (FS brez pravic) - Lina deluje, lastnik dobi navodilo za premik mape
+  if (kljucBrezPravic(root)) opozorila.push(t("kljucBrezPravic"));
+  return { ok: true, mapa: root, razlog: "", opozorila };
 }
 
 export async function chooseStorage(target: unknown, token: string | null): Promise<StorageView> {
