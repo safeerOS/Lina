@@ -73,6 +73,21 @@ class PrepisPogovoraTest {
     }
 
     @Test
+    fun `prepis, ki ga seja ne okrni dodatno, gre na racunalnik cel (meji v znakih in bajtih sta usklajeni)`() {
+        val s = SejaKlica(0L, "+99955501001") { 1_700_000_000_000L }
+        var i = 0
+        while (i < SejaKlica.MEJA_IZMENJAV) {
+            if (i % 2 == 0) s.dodajVhod("Dober dan, želim naročiti štiri hrastove mize za čajnico.") else s.dodajIzhod("Zapisala sem, še kaj?")
+            s.konecObrata(); i++
+        }
+        val z = s.zakljuci(1_700_000_000_001L)
+        val p = z.zaSinhronizacijo()
+        assertEquals(z.prepisPogovora, p.prepisPogovora)
+        assertEquals(z.prepisOkrnjen, p.prepisOkrnjen)
+        assertTrue(json.encodeToString(p.prepisPogovora).toByteArray(Charsets.UTF_8).size <= MEJA_PREPISA_SINHRON_B)
+    }
+
+    @Test
     fun `dolg izrek se razdeli na izmenjave do meje znakov`() {
         val s = SejaKlica(0L, "+99955501001") { 1L }
         s.dodajVhod("a".repeat(SejaKlica.MEJA_IZMENJAVE_ZNAKOV + 10))

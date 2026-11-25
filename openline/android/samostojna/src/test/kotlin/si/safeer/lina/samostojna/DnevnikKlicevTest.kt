@@ -327,7 +327,7 @@ class DnevnikKlicevTest {
     }
 
     @Test
-    fun `zasebnostPrepisOstaneNaTelefonu - vrsta za sinhronizacijo ne vsebuje prepisa`() {
+    fun `zasebnostPrepisOstaneNaTelefonu - vrsta za sinhronizacijo ne vsebuje starega polja prepis (prepis pogovora gre v prepisPogovora, naloga 17)`() {
         val shramba = PomnilniskaShramba()
         val dnevnik = DnevnikKlicev(shramba)
 

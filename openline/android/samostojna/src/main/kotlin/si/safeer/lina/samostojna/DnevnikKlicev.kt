@@ -156,7 +156,7 @@ data class IzmenjavaKlica(val govorec: String, val cas: Long, val besedilo: Stri
  * Najvec bajtov (UTF-8, JSON) prepisa v enem zapisu za racunalnik. Utemeljitev: racunalnik vraca klice v odgovorih do 48 KiB
  * (MEJA_ODGOVORA_B v sinhron-telefon.server.ts), telefon sprejme najvec 64 KiB (AsistentProtokol.NAJVEC_ODGOVORA), zahteva telefona
  * pa ima 400 000 B za klice. Ostala polja zapisa imajo obicajno manj kot 14 KB, zato 24 KiB prepisa pusti en zapis v enem odgovoru.
- * 24 KiB je okoli 20 000 znakov slovenskega besedila, priblizno 20 minut pogovora.
+ * Seja klica (SejaKlica.MEJA_PREPISA_ZNAKOV z OVOJ_IZMENJAVE) zbere do ~17 000 znakov besedila v 50 izmenjavah (~15 min pogovora), kar je v JSON pod to mejo.
  */
 const val MEJA_PREPISA_SINHRON_B = 24 * 1024
 
@@ -473,7 +473,7 @@ class DnevnikKlicev(
         return true
     }
 
-    // Vrne zapise, ki cakajo v vrsti za sinhronizacijo z racunalnikom (brez prepisa).
+    // Vrne zapise, ki cakajo v vrsti za sinhronizacijo z racunalnikom (s prepisPogovora, brez starega polja prepis).
     @Synchronized
     fun cakajociZaSinhronizacijo(): List<ZapisKlicaSinhronizacija> {
         return vrstaSinhronizacije.values.sortedWith(
@@ -483,7 +483,7 @@ class DnevnikKlicev(
         )
     }
 
-    // Serializira vrsto za sinhronizacijo v JSON (brez prepisa pogovora).
+    // Serializira vrsto za sinhronizacijo v JSON (s prepisPogovora v mejah, brez starega polja prepis).
     @Synchronized
     fun vJsonZaSinhronizacijo(): String {
         val paket = DnevnikKlicevSinhronizacijaPaket(
@@ -539,7 +539,7 @@ class DnevnikKlicev(
         }
     }
 
-    // Zapisi klicev, ki jih racunalnik pozna, telefon pa ne (npr. ob ponovni namestitvi): se dodajo brez prepisa in NE gredo v vrsto za posiljanje.
+    // Zapisi klicev, ki jih racunalnik pozna, telefon pa ne (npr. ob ponovni namestitvi): se dodajo s prepisom v mejah (ce ga racunalnik poslje) in NE gredo v vrsto za posiljanje.
     @Synchronized
     fun sprejmiIzRacunalnika(prejeti: List<ZapisKlicaSinhronizacija>): Int {
         if (branjeSpodletelo) return 0
@@ -547,11 +547,13 @@ class DnevnikKlicev(
         var dodanih = 0
         for (p in prejeti) {
             if (predlagani.containsKey(p.id)) continue
+            // Prepis z racunalnika je nezaupan: iste meje kot za posiljanje (govorec, dolzina, bajti).
+            val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(p.prepisPogovora)
             val zapis = ZapisKlica(
                 id = p.id, casZacetka = p.casZacetka, stevilka = p.stevilka, trajanjeS = p.trajanjeS, nujno = p.nujno,
                 povzetek = p.povzetek, nacin = p.nacin, klicatelj = p.klicatelj, podjetje = p.podjetje, sporocilo = p.sporocilo,
                 sporociloDobesedno = p.sporociloDobesedno, brezSporocilaRazlog = p.brezSporocilaRazlog,
-                prepisPogovora = p.prepisPogovora, prepisOkrnjen = p.prepisOkrnjen,
+                prepisPogovora = prepis, prepisOkrnjen = p.prepisOkrnjen || skrajsan,
             )
             if (!jeVeljavenZapisKlica(zapis)) continue
             predlagani[zapis.id] = zapis

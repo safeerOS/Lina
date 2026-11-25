@@ -744,6 +744,23 @@ class GeminiLiveOdjemalecTest {
     }
 
     @Test
+    fun `naloga 17 - zapis klica ima prepis po vrsti z govorcem iz toka prepisov Gemini Live`() {
+        val dn = DnevnikKlicev(si.safeer.lina.samostojna.PomnilniskaShramba())
+        val f = LaznaFabrika()
+        val odj = klicPaketa(f, dn = dn)
+        f.poslusalec!!.onText("""{"serverContent":{"outputTranscription":{"text":"Kdo kliče?"}}}""")
+        f.poslusalec!!.onText("""{"serverContent":{"turnComplete":true}}""")
+        f.izrek("Tukaj Ana", konec = false)
+        f.izrek(" Novak.")
+        f.poslusalec!!.onText("""{"serverContent":{"outputTranscription":{"text":"Hvala, Ana."}}}""")
+        odj.konecKlica()
+        val zapis = dn.seznam().single { it.stevilka == "+99955501003" }
+        assertEquals(listOf("lina" to "Kdo kliče?", "klicatelj" to "Tukaj Ana Novak.", "lina" to "Hvala, Ana."), zapis.prepisPogovora.map { it.govorec to it.besedilo })
+        assertTrue(zapis.prepisPogovora.zipWithNext().all { (a, b) -> a.cas <= b.cas })
+        assertEquals(zapis.prepisPogovora, dn.cakajociZaSinhronizacijo().single { it.id == zapis.id }.prepisPogovora)
+    }
+
+    @Test
     fun `po koncaj_klic ni stavka, zapis klica pove, da je klicala dostava`() {
         val f = LaznaFabrika()
         val odj = klicPaketa(f)

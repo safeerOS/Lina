@@ -56,7 +56,8 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
             val zadnja = izmenjave.lastOrNull()
             val nadaljuj = zadnja != null && !novaIzmenjava && zadnja.first == govorec && zadnja.third.length < MEJA_IZMENJAVE_ZNAKOV
             if (!nadaljuj && izmenjave.size >= MEJA_IZMENJAV) { prepisOkrnjen = true; return }
-            val cilj = if (nadaljuj) zadnja!!.third else StringBuilder().also { izmenjave.add(Triple(govorec, ura(), it)) }
+            if (!nadaljuj && znakovPrepisa + OVOJ_IZMENJAVE >= MEJA_PREPISA_ZNAKOV) { prepisOkrnjen = true; return }
+            val cilj = if (nadaljuj) zadnja!!.third else StringBuilder().also { izmenjave.add(Triple(govorec, ura(), it)); znakovPrepisa += OVOJ_IZMENJAVE }
             novaIzmenjava = false
             val prostor = minOf(MEJA_IZMENJAVE_ZNAKOV - cilj.length, MEJA_PREPISA_ZNAKOV - znakovPrepisa)
             if (prostor <= 0) { prepisOkrnjen = true; return }
@@ -138,10 +139,15 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
         const val MEJA_SPOROCILA = 2000
         const val MEJA_DOBESEDNO = 6000
         const val MEJA_OBRATA = 600
-        /** Meje prepisa pogovora: izmenjava do 2000 znakov (kot sporocilo), najvec 400 izmenjav in 20 000 znakov (~20 min, MEJA_PREPISA_SINHRON_B). */
+        /**
+         * Meje prepisa pogovora: izmenjava do 2000 znakov (kot sporocilo), najvec 400 izmenjav in 20 000 enot, kjer vsaka izmenjava steje
+         * se OVOJ_IZMENJAVE za kljuce JSON ({"govorec":"klicatelj","cas":1700000000000,"besedilo":""} = 59 B). Tako slovenski prepis, ki
+         * ga seja ne okrni, ostane pod MEJA_PREPISA_SINHRON_B (24 KiB) in ga projekcija za racunalnik ne skrajsa (preizkus).
+         */
         const val MEJA_IZMENJAVE_ZNAKOV = 2000
         const val MEJA_IZMENJAV = 400
         const val MEJA_PREPISA_ZNAKOV = 20_000
+        const val OVOJ_IZMENJAVE = 60
     }
 }
 
