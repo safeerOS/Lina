@@ -74,6 +74,8 @@ export type ProviderCall = {
   rezervniBrezplacni?: string;
   /** Brez samodejne zamenjave modela (preizkusni klic, preverba kljuca): napaka »model ni na voljo« se samo vrne. */
   brezZamenjave?: boolean;
+  /** Naloga 9 V11: vsebina ni pogovor lastnika (npr. izid orkestratorja) - deny tudi za :free s stikalom (izjema B2 ne velja). */
+  vednoDeny?: boolean;
 };
 
 export const PRIVZETA_MEJA_ZNAKOV = 500;
@@ -430,7 +432,7 @@ function readText(json: {
 
 /** B2: deny izpade samo, ce so izpolnjeni VSI pogoji: OpenRouter, stikalo, izrecno pogovor z asistentko, tocen brezplacen model. */
 function smeBrezDeny(input: ProviderCall, model: string): boolean {
-  return input.provider === "openrouter" && input.brezplacniDovoljeni === true && input.vsebinaKlica === false && !input.audio && jeTocnoBrezplacen(model);
+  return input.provider === "openrouter" && input.brezplacniDovoljeni === true && input.vsebinaKlica === false && !input.audio && input.vednoDeny !== true && jeTocnoBrezplacen(model);
 }
 
 export async function callProvider(input: ProviderCall): Promise<RezultatPonudnika> {
@@ -971,7 +973,6 @@ export function providerRequestZOrodji(
     Math.min(NAJVEC_ZETONOV_ORODJA, Math.floor(Number.isFinite(moznosti.maxTokens) ? (moznosti.maxTokens as number) : PRIVZETI_MAX_ZETONOV_ORODJA)),
   );
   const temperatura = typeof moznosti.temperatura === "number" && Number.isFinite(moznosti.temperatura) ? moznosti.temperatura : 0;
-  const vsebinaKlica = moznosti.vsebinaKlica === true;
   const headers: Record<string, string> = { "content-type": "application/json" };
   let url = "";
   let body: unknown;
@@ -1038,11 +1039,7 @@ export function providerRequestZOrodji(
       headers.authorization = `Bearer ${ponudnik.key}`;
       if (ponudnik.provider === "openrouter") headers["X-Title"] = "Lina";
     }
-    const brezDeny =
-      ponudnik.provider === "openrouter" &&
-      ponudnik.brezplacniDovoljeni === true &&
-      !vsebinaKlica &&
-      jeTocnoBrezplacen(model);
+    // naloga 9 V11 (B9): klic z orodji nosi izide orodij (datoteke, splet), ne samo pogovor lastnika - deny vedno, tudi za :free
     body = {
       model,
       max_tokens: maxTokens,
@@ -1056,7 +1053,7 @@ export function providerRequestZOrodji(
             })),
           }
         : {}),
-      ...(ponudnik.provider === "openrouter" && !brezDeny ? { provider: { data_collection: "deny" } } : {}),
+      ...(ponudnik.provider === "openrouter" ? { provider: { data_collection: "deny" } } : {}),
     };
   } else {
     url = "https://api.anthropic.com/v1/messages";

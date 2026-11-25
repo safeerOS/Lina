@@ -221,7 +221,13 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const rokVprasanja = o.rokVprasanjaMs;
   let klicModela: KlicModela | null = o.klicModela ?? null;
   let ucenje: UcenjeVmesnik | null | undefined = o.ucenje;
-  const oceni: Oceni | null = o.oceni === undefined ? oceniZModelom() : o.oceni;
+  // naloga 9 V11: samopregled dobi izid, sestavljen iz izidov orodij - OpenRouter vedno z deny (tudi :free s stikalom)
+  const oceni: Oceni | null = o.oceni === undefined
+    ? oceniZModelom(async () => {
+        const b = await (await import("./keys.server.ts")).pogovorBrain(root);
+        return b ? { ...b, vednoDeny: true } : null;
+      })
+    : o.oceni;
   const predlagajPomocniku = o.predlagajPomocniku ?? (async (m: string, b: string, agent: string) => {
     const { predlagajClaudeNalogo } = await import("./claude-naloge.server.ts");
     // pregled V2 (naloga 8): predlog vedno potrdi lastnik, tudi ob dovoljenju »podobne« (besedilo izbere model)
