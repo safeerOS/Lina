@@ -247,7 +247,7 @@ export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime
         : m.vloga === "orodje" && niz(m.id) && niz(m.ime) && (niz(m.rezultat) || obj(m.rezultat)) && (m.napaka === undefined || typeof m.napaka === "boolean")))) return "sporocila";
   // argumenti odprtega klica so model izbral (lahko ne-objekt): zavrne jih preveriArgumente ob izvedbi (izid »Napacni argumenti«)
   if (!Array.isArray(x.odprti) || !x.odprti.every((k) => obj(k) && niz(k.id) && niz(k.ime)
-    && (k.zacet === undefined || typeof k.zacet === "boolean") && (k.potrjeno === undefined || (k.potrjeno === true && imaOrodje(k.ime as string))))) return "odprti";
+    && (k.zacet === undefined || typeof k.zacet === "boolean"))) return "odprti";
   const odprti = x.odprti as Array<{ id: string; ime: string }>;
   const cakajoca = x.faza === "caka-potrditev" || x.faza === "caka-lastnika" || x.faza === "caka-pomocnika";
   if (x.cakanje === null) {
@@ -277,6 +277,12 @@ export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime
   if (!nizi(x.delovalo) || !nizi(x.ni) || ![...(x.delovalo as string[]), ...(x.ni as string[])].every(imaOrodje)) return "delovalo/ni";
   if (!niz(x.zacetek) || !niz(x.posodobljeno)) return "cas";
   return null;
+}
+
+/** Naloga 12 #12: potrjeno z diska nikoli ne velja (N1): polje se po preverbi podpisa odstrani, shema ga ne preverja (dosledno prezrto). */
+function odstraniPotrjeno(x: object): void {
+  const odprti = (x as { odprti?: unknown }).odprti;
+  if (Array.isArray(odprti)) for (const k of odprti) if (k && typeof k === "object") delete (k as { potrjeno?: unknown }).potrjeno;
 }
 
 /** Kanonicni zapis (urejeni kljuci) za podpis: enak pred zapisom in po branju z diska. */
@@ -340,7 +346,10 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     const pricakovan = Buffer.from(await podpisStanja(root, x));
     const dobljen = Buffer.from(typeof podpis === "string" ? podpis : "");
     const podpisan = dobljen.length === pricakovan.length && timingSafeEqual(dobljen, pricakovan);
-    if (podpisan) delete (x as { podpis?: unknown }).podpis;
+    if (podpisan) {
+      delete (x as { podpis?: unknown }).podpis;
+      odstraniPotrjeno(x);
+    }
     const razlog = podpisan ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
     if (razlog === null) return x as StanjeNaloge;
     // pregled V7: neveljavno stanje se ne nadaljuje in ne pokaze; v dnevnik enkrat na nalogo (seznam bere ob vsakem osvezenju)
@@ -390,6 +399,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     s.razlog = razlog;
     s.odprti = [];
     s.cakanje = null;
+    // naloga 12 #12: potrditev v pomnilniku ne prezivi konca naloge (vrnjeno stanje z istim klicem bi jo porabilo)
+    for (const k of potrjeniVProcesu) if (k.startsWith(`${s.id}/`)) potrjeniVProcesu.delete(k);
     dogodek(s, faza === "koncano" ? "konec" : "napaka", besedilo);
     koncajTekVLini(root, s.id, faza === "koncano");
     await zapisi(s);
@@ -716,6 +727,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       await vVrsti(id, async () => {
         const x = await readJsonFile<unknown>(mapa, ime).catch(() => null);
         if (!x || typeof x !== "object" || Array.isArray(x) || "podpis" in x) return;
+        odstraniPotrjeno(x);
         if (razlogNeveljavnegaStanja(x, id, (i) => register.has(i)) !== null) return;
         const s = x as StanjeNaloge;
         s.nepreverjeno = true;
