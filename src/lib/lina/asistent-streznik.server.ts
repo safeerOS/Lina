@@ -247,6 +247,12 @@ export const ROK_ROKOVANJA_MS = 5_000;
 export const NAJVEC_ZAHTEV_NA_MINUTO = 120;
 export const NAJVEC_ZAVRNITEV_NA_MINUTO = 20;
 /**
+ * Pregled 0213 A2: rele ne pove, katera naprava je odprla kanal, zato zgornji meji veljata po KANALU (en kanal s slabimi podpisi ne
+ * zapre poti drugim), vsi kanali istega transporta skupaj pa imajo visjo skupno mejo (menjava kanalov ne obide T1-N6).
+ */
+export const NAJVEC_ZAHTEV_ODDALJENO_SKUPAJ = 5 * NAJVEC_ZAHTEV_NA_MINUTO;
+export const NAJVEC_ZAVRNITEV_ODDALJENO_SKUPAJ = 5 * NAJVEC_ZAVRNITEV_NA_MINUTO;
+/**
  * Oddaljeni prehod (F5): glavi, ki ju nastavi samo prehod v ISTEM procesu (oddaljeni-prehod.server.ts) z zetonom, ki ga zna samo
  * streznik. Brez omogocenega prehoda ali z napacnim zetonom je zahteva z njima zavrnjena (nikoli ne spremeni vira omejitve).
  */
@@ -264,6 +270,8 @@ export const POTI_ODDALJENO: ReadonlyMap<string, string> = new Map([
   // Naloge agentov in gradnje prek Global Linka: lastnik 25. 11. 2026 »da« (»more tudi global link delovati«); isti podpis naprave.
   [`${POT}/agent-naloge`, "GET"], [`${POT}/agent-naloga/dodeli`, "POST"], [`${POT}/agent-naloga/preklici`, "POST"],
   [`${POT}/gradnje`, "GET"], [`${POT}/gradnja/apk`, "GET"], [`${POT}/gradnja/predlog`, "POST"], [`${POT}/gradnja/potrdi`, "POST"],
+  // Pregled 0213 A10: naloga, dodeljena od zunaj, caka na vprasanja agenta - brez teh poti bi jo rok (10 min) zavrnil; isti podpis naprave.
+  [`${POT}/agent-vprasanja`, "GET"], [`${POT}/agent-vprasanje/odgovor`, "POST"],
 ]);
 
 type DogodekTelefona = Dogodek & { st: number };
@@ -354,7 +362,7 @@ export type MoznostiStreznika = {
   };
   /**
    * Vprasanja agentov (naloga 23, vprasanja-agentov.server.ts): stanje (odprta vprasanja, zadnje vrstice dela) in odgovor s podpisom naprave,
-   * ki veze id, odlocitev in zgostitev prikazanega. Brez njih poti /agent-vprasanja* odgovorijo 404. Samo domace omrezje.
+   * ki veze id, odlocitev in zgostitev prikazanega. Brez njih poti /agent-vprasanja* odgovorijo 404. Doma in prek Global Linka (pregled 0213 A10).
    */
   vprasanjaAgentov?: {
     stanje(): Promise<unknown>;
@@ -393,9 +401,10 @@ export class AsistentStreznik {
   private readonly zetonPrehoda: string | null;
   private cilj: { naslov: string; vrata: number; cert: string; odtis: string } | null = null;
   /** Global Link: vticnice TLS iz kanala releja -> vir (overjen s strani transporta); samo te so »oddaljene«. */
-  private readonly oddaljeni = new WeakMap<object, string>();
+  private readonly oddaljeni = new WeakMap<object, { vir: string; kanal: number }>();
   private readonly oddaljeneVticnice = new Set<TLSSocket>();
   private readonly oddaljeniNaVir = new Map<string, number>();
+  private stevecKanalov = 0;
   private kontekst: SecureContext | null = null;
   private readonly zagnan: number;
   private readonly zdaj: () => number;
@@ -479,7 +488,7 @@ export class AsistentStreznik {
       v.destroy();
       return false;
     }
-    this.oddaljeni.set(t, vir);
+    this.oddaljeni.set(t, { vir, kanal: ++this.stevecKanalov });
     this.oddaljeneVticnice.add(t);
     this.oddaljeniNaVir.set(vir, naVir + 1);
     let sproscen = false;
@@ -546,15 +555,21 @@ export class AsistentStreznik {
 
   private async zahteva(req: IncomingMessage, res: ServerResponse): Promise<void> {
     let vir = req.socket.remoteAddress ?? "";
+    // A2: skupni vir vseh kanalov istega transporta (samo oddaljena pot); omejitve tecejo po kanalu IN skupno
+    let skupni: string | null = null;
     try {
       // tujec z javnega naslova (preusmeritev vrat, posrednik) ne pride naprej, tudi ce bi streznik kdo izpostavil
       // Global Link: oznako »oddaljena« ima samo vticnica iz sprejmiOddaljeno (nikoli glava ali naslov odjemalca)
       const oddaljen = this.oddaljeni.get(req.socket);
       if (oddaljen === undefined && !zasebenOdjemalec(req.socket.remoteAddress)) throw new Napaka(403, "zavrnjeno", "Samo domace omrezje.");
       if (oddaljen !== undefined && (req.headers[GLAVA_PREHOD] !== undefined || req.headers[GLAVA_VIR] !== undefined)) throw zavrnjeno();
-      const prehod = oddaljen !== undefined ? `r:${oddaljen}` : this.virPrehoda(req);
+      const prehod = oddaljen !== undefined ? `r:${oddaljen.vir}#${oddaljen.kanal}` : this.virPrehoda(req);
       if (prehod !== null) vir = prehod;
       this.viri.set(req, vir);
+      if (oddaljen !== undefined) {
+        skupni = `r:${oddaljen.vir}`;
+        this.omeji(skupni, NAJVEC_ZAVRNITEV_ODDALJENO_SKUPAJ, NAJVEC_ZAHTEV_ODDALJENO_SKUPAJ);
+      }
       this.omeji(vir);
       const url = new URL(req.url ?? "/", "https://lina.invalid");
       // oddaljena naprava: samo beli seznam poti (seznanjanje zahteva lastnika pri racunalniku), tudi ce bi prehod napacno posredoval
@@ -595,7 +610,10 @@ export class AsistentStreznik {
       this.poslji(res, izid.status, izid.telo);
     } catch (e) {
       const n = e instanceof Napaka ? e : e instanceof NapakaKode ? new Napaka(e.status, e.koda, e.message) : new Napaka(500, "notranja", "Notranja napaka.");
-      if ((n.status === 401 || n.status === 403) && !(e instanceof NiOddaljeno)) this.zabeleziZavrnitev(vir);
+      if ((n.status === 401 || n.status === 403) && !(e instanceof NiOddaljeno)) {
+        this.zabeleziZavrnitev(vir);
+        if (skupni !== null) this.zabeleziZavrnitev(skupni);
+      }
       if (!(e instanceof Napaka) && !(e instanceof NapakaKode)) this.dnevnik(`napaka: ${(e as Error).message}`);
       this.poslji(res, n.status, { napaka: n.koda, sporocilo: n.message, ...n.dodatno });
     }
@@ -656,9 +674,9 @@ export class AsistentStreznik {
   }
 
   /** T1-N6: zahtev z naslova, ki je presegel mejo zahtev ali zavrnitev, dobi 429 PRED vsakim branjem diska ali preverbo podpisa. */
-  private omeji(naslov: string): void {
-    if (this.oknoMinute(this.zavrnitve, naslov, false) >= NAJVEC_ZAVRNITEV_NA_MINUTO) throw new Napaka(429, "prevec", "Prevec zavrnjenih zahtev.");
-    if (this.oknoMinute(this.zahteve, naslov, true) > NAJVEC_ZAHTEV_NA_MINUTO) throw new Napaka(429, "prevec", "Prevec zahtev.");
+  private omeji(naslov: string, mejaZavrnitev = NAJVEC_ZAVRNITEV_NA_MINUTO, mejaZahtev = NAJVEC_ZAHTEV_NA_MINUTO): void {
+    if (this.oknoMinute(this.zavrnitve, naslov, false) >= mejaZavrnitev) throw new Napaka(429, "prevec", "Prevec zavrnjenih zahtev.");
+    if (this.oknoMinute(this.zahteve, naslov, true) > mejaZahtev) throw new Napaka(429, "prevec", "Prevec zahtev.");
   }
 
   private zabeleziZavrnitev(naslov: string): void {

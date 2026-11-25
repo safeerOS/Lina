@@ -294,6 +294,8 @@ export class AgentReleja {
   private ustavljen = true;
   private ws: WsPovezava | null = null;
   private kanali = 0;
+  /** Pregled 0213 A12: sprejeti kanali, da jih ustavi() zapre (ne samo poslusalca). */
+  private readonly odprtiKanali = new Set<{ destroy(): void }>();
   private budilka: (() => void) | null = null;
   private readonly m: MoznostiAgenta;
   private readonly dnevnik: (s: string) => void;
@@ -315,6 +317,8 @@ export class AgentReleja {
     this.ws?.zapri();
     this.ws?.vticnica.destroy();
     this.ws = null;
+    for (const k of this.odprtiKanali) k.destroy();
+    this.odprtiKanali.clear();
     this.budilka?.();
   }
 
@@ -358,6 +362,8 @@ export class AgentReleja {
     odpriWs(pot, podpisaneGlave("GET", pot, Buffer.alloc(0), this.m.kljuc), this.m.povezava).then((ws) => {
       ws.vticnica.once("close", sprosti);
       if (this.ustavljen) { ws.zapri(); return; }
+      this.odprtiKanali.add(ws.vticnica);
+      ws.vticnica.once("close", () => this.odprtiKanali.delete(ws.vticnica));
       const d = kotDuplex(ws);
       if (!this.m.sprejmi(d)) d.destroy();
     }, () => { sprosti(); this.dnevnik("kanala ni bilo mogoce odpreti"); });

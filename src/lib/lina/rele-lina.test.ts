@@ -13,7 +13,9 @@ import { Duplex } from "node:stream";
 import { test } from "node:test";
 import type { Dogodek, Izvajalec, Naloga } from "./asistent.server.ts";
 import { AsistentStreznik, POT, potrdiloAsistenta, ustvariPotrdilo } from "./asistent-streznik.server.ts";
-import { idIzKljuca, nizNaloge, nizStanja } from "./kanal-claude.ts";
+import { idIzKljuca, nizNaloge, nizOdgovoraVprasanja, nizStanja, nizStanjaVprasanj } from "./kanal-claude.ts";
+// samo konstante, ki obstajajo tudi na izvirniku: rdeci tek pade na trditvi, ne na uvozu
+import { NAJVEC_ZAVRNITEV_NA_MINUTO, type MoznostiStreznika } from "./asistent-streznik.server.ts";
 import { pripraviKanal } from "./kanal-claude.server.ts";
 import { NASTAVITVE_ASISTENTA, globalLinkVklopljen, ponastaviAsistenta, registrirajRele, shraniAsistenta, stanjeAsistenta } from "./asistent-telefon.server.ts";
 import { setupOwner } from "./auth.server.ts";
@@ -183,12 +185,12 @@ function lazniIzvajalec() {
   return { iz, klici };
 }
 
-async function linaZRelejem(rele: LazenRele, o: { oddaljeno?: boolean } = {}) {
+async function linaZRelejem(rele: LazenRele, o: { oddaljeno?: boolean; vprasanjaAgentov?: MoznostiStreznika["vprasanjaAgentov"] } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "lk-rele-"));
   await pripraviKanal([{ id: ANA.id, kljuc: ANA.kljuc }], dir);
   const l = lazniIzvajalec();
   const kljuc = await kljucReleja(dir);
-  const s = new AsistentStreznik({ root: dir, izvajalec: l.iz, dnevnik: () => {}, omogociOddaljeno: o.oddaljeno ?? true, rele: () => kljuc.id });
+  const s = new AsistentStreznik({ root: dir, izvajalec: l.iz, dnevnik: () => {}, omogociOddaljeno: o.oddaljeno ?? true, rele: () => kljuc.id, vprasanjaAgentov: o.vprasanjaAgentov });
   const { odtis, vrata } = await s.zazeni();
   const { cert } = await potrdiloAsistenta(dir);
   const povezava: MoznostiPovezave = { host: "127.0.0.1", port: rele.vrata, servername: "localhost", ca: rele.cert };
@@ -332,6 +334,138 @@ test("oddaljena pot izklopljena: kanal se zavrze, stanje ne izda id releja; usta
     lina.agent.ustavi();
     await caka(() => p.s.destroyed);
     assert.equal(lina.agent.stanje, "izklopljen");
+  } finally {
+    await lina.pospravi();
+    await rele.ustavi();
+  }
+});
+
+// ------------------------------------------------------------------ pregled 0213 (A2, A10)
+
+/** En kanal releja s TLS do Line; vec zahtev zaporedno po isti vticnici (HTTP/1.1 cevovod), da omejitve kanala res veljajo za kanal. */
+async function kanalReleja(rele: LazenRele, lina: { kljuc: KljucReleja; cert: string; odtis: string; povezava: MoznostiPovezave }, kdo: Naprava): Promise<TLSSocket> {
+  const k = `/v1/connect?to=${lina.kljuc.id}&kanal=${randomBytes(16).toString("hex")}`;
+  const ws = await odpriWs(k, podpisaneGlave("GET", k, Buffer.alloc(0), kdo.rele), lina.povezava);
+  await new Promise<void>((ok, ne) => {
+    const t = setTimeout(() => ne(new Error("ni ready")), 5000);
+    ws.naSporocilo = (op, p) => { if (op === 1 && p.toString() === "ready") { clearTimeout(t); ok(); } };
+    ws.naKoncu = () => { clearTimeout(t); ne(new Error("kanal zaprt")); };
+  });
+  return new Promise((ok, ne) => {
+    const s = tlsConnect({
+      socket: kotDuplex(ws), ca: lina.cert, rejectUnauthorized: true,
+      checkServerIdentity: (_h, c) => (c.fingerprint256.replace(/:/g, "").toLowerCase() === lina.odtis ? undefined : new Error("odtis")),
+    }, () => ok(s));
+    s.on("error", ne);
+  });
+}
+/** Zahteve ZAPOREDNO po isti vticnici (naslednja sele po odgovoru; cevovod bi Node obdelal hkrati, pred zapisom zavrnitev). */
+async function zahteveNaKanalu(s: TLSSocket, zahteve: { metoda: string; pot: string; telo?: unknown }[]): Promise<number[]> {
+  let b = "";
+  let cakam: (() => void) | null = null;
+  s.setEncoding("utf8");
+  s.on("data", (d: string) => { b += d; cakam?.(); });
+  const st: number[] = [];
+  for (const z of zahteve) {
+    const telo = z.telo === undefined ? "" : JSON.stringify(z.telo);
+    s.write(`${z.metoda} ${z.pot} HTTP/1.1\r\nhost: lina\r\n${telo ? `content-type: application/json\r\ncontent-length: ${Buffer.byteLength(telo)}\r\n` : ""}\r\n${telo}`);
+    await new Promise<void>((ok, ne) => {
+      const t = setTimeout(() => ne(new Error(`rok: ${b.slice(0, 200)}`)), 10_000);
+      const preveri = () => {
+        // odgovor je cel, ko je prebrana glava in telo dolzine content-length
+        const m = /^HTTP\/1\.1 (\d{3})[\s\S]*?content-length: (\d+)\r\n[\s\S]*?\r\n\r\n/i.exec(b);
+        if (!m || b.length < m[0].length + Number(m[2])) return;
+        clearTimeout(t);
+        st.push(Number(m[1]));
+        b = b.slice(m[0].length + Number(m[2]));
+        cakam = null;
+        ok();
+      };
+      cakam = preveri;
+      preveri();
+    });
+  }
+  return st;
+}
+/** Naloga v imenu ANE, podpisana s tujim kljucem: podpis ne velja (403, steje med zavrnitve). */
+function slabaNaloga() {
+  const n = podpisanaNaloga(TUJEC, "x");
+  return { ...n, posiljatelj: ANA.id };
+}
+
+test("pregled 0213 A2: kanal releja s slabimi podpisi dobi 429, drug kanal z veljavnim podpisom pa uspe (omejitve po kanalu)", async () => {
+  const rele = await lazenRele();
+  const lina = await linaZRelejem(rele);
+  try {
+    const napadalec = await kanalReleja(rele, lina, ANA);
+    const slabe = Array.from({ length: NAJVEC_ZAVRNITEV_NA_MINUTO + 1 }, () => ({ metoda: "POST", pot: `${POT}/naloga`, telo: slabaNaloga() }));
+    const st = await zahteveNaKanalu(napadalec, slabe);
+    assert.deepEqual(st.slice(0, NAJVEC_ZAVRNITEV_NA_MINUTO), Array(NAJVEC_ZAVRNITEV_NA_MINUTO).fill(403));
+    assert.equal(st[NAJVEC_ZAVRNITEV_NA_MINUTO], 429, "kanal, ki je presegel mejo zavrnitev, je omejen");
+    napadalec.destroy();
+    const r = await prekoReleja(rele, lina, ANA, "GET", podpisanoStanje(ANA));
+    assert.equal(r.status, 200, `drug kanal ne sme dobiti 429 zaradi tujih zavrnitev: ${JSON.stringify(r.telo)}`);
+    assert.equal(lina.l.klici.length, 0);
+  } finally {
+    await lina.pospravi();
+    await rele.ustavi();
+  }
+});
+
+test("pregled 0213 A2: menjava kanalov ne obide skupne meje zavrnitev releja (5x meja kanala)", async () => {
+  const rele = await lazenRele();
+  const lina = await linaZRelejem(rele);
+  try {
+    const skupaj = 5 * NAJVEC_ZAVRNITEV_NA_MINUTO;
+    for (let i = 0; i < skupaj; i++) assert.equal((await prekoReleja(rele, lina, ANA, "POST", `${POT}/naloga`, slabaNaloga())).status, 403, `zahteva ${i}`);
+    assert.equal((await prekoReleja(rele, lina, ANA, "GET", podpisanoStanje(ANA))).status, 429, "skupna meja releja velja tudi za nov kanal");
+  } finally {
+    await lina.pospravi();
+    await rele.ustavi();
+  }
+});
+
+test("pregled 0213 A10: vprasanja agenta prek releja - stanje in odgovor samo s podpisom naprave ozjega kroga", async () => {
+  const rele = await lazenRele();
+  const odgovori: string[][] = [];
+  const lina = await linaZRelejem(rele, {
+    vprasanjaAgentov: {
+      stanje: async () => ({ vprasanja: [], teki: [] }),
+      odgovori: async (id, odl, zg, nap) => { odgovori.push([id, odl, zg, nap]); },
+    },
+  });
+  try {
+    const cas = Date.now();
+    const e = enkratni();
+    const pd = sign("sha256", Buffer.from(nizStanjaVprasanj(ANA.id, cas, e)), ANA.zasebni).toString("base64");
+    const st = await prekoReleja(rele, lina, ANA, "GET", `${POT}/agent-vprasanja?posiljatelj=${ANA.id}&cas=${cas}&enkratni=${e}&podpis=${encodeURIComponent(pd)}`);
+    assert.equal(st.status, 200, JSON.stringify(st.telo));
+    const id = "0123456789abcdef";
+    const zg = "a".repeat(64);
+    const telo = (kdo: Naprava) => {
+      const c = Date.now();
+      const n = enkratni();
+      return { posiljatelj: ANA.id, id, odlocitev: "zavrni", zgostitev: zg, cas: c, enkratni: n, podpis: sign("sha256", Buffer.from(nizOdgovoraVprasanja(ANA.id, id, "zavrni", zg, c, n)), kdo.zasebni).toString("base64") };
+    };
+    assert.equal((await prekoReleja(rele, lina, ANA, "POST", `${POT}/agent-vprasanje/odgovor`, telo(TUJEC))).status, 403, "podpis tujega kljuca");
+    assert.equal(odgovori.length, 0);
+    const r = await prekoReleja(rele, lina, ANA, "POST", `${POT}/agent-vprasanje/odgovor`, telo(ANA));
+    assert.equal(r.status, 202, JSON.stringify(r.telo));
+    assert.deepEqual(odgovori, [[id, "zavrni", zg, ANA.id]]);
+  } finally {
+    await lina.pospravi();
+    await rele.ustavi();
+  }
+});
+
+test("pregled 0213 A12: AgentReleja.ustavi zapre tudi ze sprejete kanale (ne samo poslusalca)", async () => {
+  const rele = await lazenRele();
+  const lina = await linaZRelejem(rele);
+  try {
+    const kanal = await kanalReleja(rele, lina, ANA);
+    assert.deepEqual(await zahteveNaKanalu(kanal, [{ metoda: "GET", pot: podpisanoStanje(ANA) }]), [200]);
+    lina.agent.ustavi();
+    await caka(() => kanal.destroyed || kanal.closed, 3000);
   } finally {
     await lina.pospravi();
     await rele.ustavi();
