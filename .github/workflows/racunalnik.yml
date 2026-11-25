@@ -42,9 +42,9 @@ jobs:
       NITRO_PRESET: node-server
       CI: "true"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24  # unpdf 2.x: engines node >=24; paket tece na Node 24 (Electron 45)
           cache: npm
@@ -162,7 +162,7 @@ jobs:
           ELECTRON_RUN_AS_NODE=1 timeout 120 "$L" "$GITHUB_WORKSPACE/scripts/preverba-paketa.mjs" "$X/opt/Lina/resources/lina" "$RUNNER_TEMP/vzorec.pdf" "Pozdrav Lina PDF" 2>&1 | tee "$GITHUB_WORKSPACE/preverba-paketa.log"
           echo "### Preverba paketa z lupino: OK (PDF in moduli po imenu)" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: lina-deb
@@ -183,9 +183,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24  # unpdf 2.x: engines node >=24; paket tece na Node 24 (Electron 45)
           cache: npm
@@ -227,7 +227,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit $KODA
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: lina-preizkusi

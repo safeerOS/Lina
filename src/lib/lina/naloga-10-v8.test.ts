@@ -34,3 +34,18 @@ describe("V8: racunalnik.yml z zaklenjenimi odvisnostmi", () => {
     assert.match(tok, /^\s*- "jazz-paket\/\*\*"$/m);
   });
 });
+
+describe("Naloga 10 (2): akcije v racunalnik.yml pripete na celoten sha, enako kot windows.yml", () => {
+  const uses = (t: string) => [...t.matchAll(/^\s*- uses: (\S+)(.*)$/gm)].map((m) => ({ ref: m[1]!, opomba: m[2]!.trim() }));
+  const deb = uses(beri("../../../.github/workflows/racunalnik.yml"));
+  const win = new Map(uses(beri("../../../.github/workflows/windows.yml")).map((u) => [u.ref.split("@")[0], u.ref]));
+
+  it("vsaka akcija @<40 hex> z oznako razlicice v komentarju, isti sha kot windows.yml", () => {
+    assert.ok(deb.length >= 6);
+    for (const u of deb) {
+      assert.match(u.ref, /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/, u.ref);
+      assert.match(u.opomba, /^# v\d+\.\d+\.\d+$/, u.ref);
+      assert.equal(u.ref, win.get(u.ref.split("@")[0]), `${u.ref} enako kot windows.yml`);
+    }
+  });
+});
