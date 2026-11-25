@@ -9,14 +9,24 @@ const KLJUC = Symbol.for("lina.zetoni.lupine");
 
 export type ZetoniLupine = { lupina?: string; koncaj?: string };
 
+/**
+ * Naloga 12 #6: prevzem velja ENKRAT (prvi klic: vticnik ob zagonu ali prvi getter); kasnejsa vrednost v okolju (nalaganje okolja,
+ * vticnik, orodje) zetona ne prepise - iz okolja se samo odstrani z opozorilom.
+ */
 export function prevzemiZetone(env: NodeJS.ProcessEnv = process.env): ZetoniLupine {
-  const g = globalThis as { [KLJUC]?: ZetoniLupine };
+  const g = globalThis as { [KLJUC]?: ZetoniLupine & { prevzeto?: boolean } };
   const z = (g[KLJUC] ??= {});
-  if (env.LINA_LUPINA_ZETON) z.lupina = env.LINA_LUPINA_ZETON;
-  if (env.LINA_KONCAJ_ZETON) z.koncaj = env.LINA_KONCAJ_ZETON;
+  if (!z.prevzeto) {
+    if (env.LINA_LUPINA_ZETON) z.lupina = env.LINA_LUPINA_ZETON;
+    if (env.LINA_KONCAJ_ZETON) z.koncaj = env.LINA_KONCAJ_ZETON;
+    z.prevzeto = true;
+  } else if (env.LINA_LUPINA_ZETON || env.LINA_KONCAJ_ZETON) {
+    console.error("lina: zeton lupine v okolju po zagonu je prezrt in odstranjen");
+  }
   delete env.LINA_LUPINA_ZETON;
   delete env.LINA_KONCAJ_ZETON;
-  return { ...z };
+  const { prevzeto: _, ...zetoni } = z;
+  return zetoni;
 }
 
 export const zetonLupine = (): string | undefined => prevzemiZetone().lupina;

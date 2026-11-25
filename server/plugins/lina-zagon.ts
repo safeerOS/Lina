@@ -7,13 +7,16 @@ const NASLOV = "http://127.0.0.1/api/zagon";
 
 const ZETONI = Symbol.for("lina.zetoni.lupine");
 
-type Globalno = { [KLJUC]?: string; [ZETONI]?: { lupina?: string; koncaj?: string } };
+type Globalno = { [KLJUC]?: string; [ZETONI]?: { lupina?: string; koncaj?: string; prevzeto?: boolean } };
 
-/** Naloga 11 N2: kot prevzemiZetone v zetoni-lupine.server.ts (isti kljuc); vticnik ne uvaza kode Line (G3b). */
+/** Naloga 11 N2: kot prevzemiZetone v zetoni-lupine.server.ts (isti kljuc); vticnik ne uvaza kode Line (G3b). Naloga 12 #6: samo enkrat. */
 function prevzemiZetone(): void {
   const z = ((globalThis as Globalno)[ZETONI] ??= {});
-  if (process.env.LINA_LUPINA_ZETON) z.lupina = process.env.LINA_LUPINA_ZETON;
-  if (process.env.LINA_KONCAJ_ZETON) z.koncaj = process.env.LINA_KONCAJ_ZETON;
+  if (!z.prevzeto) {
+    if (process.env.LINA_LUPINA_ZETON) z.lupina = process.env.LINA_LUPINA_ZETON;
+    if (process.env.LINA_KONCAJ_ZETON) z.koncaj = process.env.LINA_KONCAJ_ZETON;
+    z.prevzeto = true;
+  }
   delete process.env.LINA_LUPINA_ZETON;
   delete process.env.LINA_KONCAJ_ZETON;
 }
