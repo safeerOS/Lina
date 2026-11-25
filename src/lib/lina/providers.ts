@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ADC_MANJKA, pozabiZeton, vertexAccessToken } from "./adc.server.ts";
 import {
   filtrirajIzhod,
@@ -14,6 +14,18 @@ import { topliFetch } from "./povezave.server.ts";
 import { naslovKlica, OMNIROUTE_PRIVZETI_NASLOV, smePrekPrehoda, veljavenNaslovOmniroute, veljavenNaslovPrehoda, type PrehodNastavitve } from "./omniroute.ts";
 import { prehodZaKlic } from "./omniroute.server.ts";
 import { lastniOdgovor, lastniZahtevek, normirajNaslov } from "./lastni-streznik.ts";
+import {
+  pocistiPorabo,
+  posnetekPorabe,
+  razberiPorabo,
+  razberiPoraboIzBesedila,
+  zabeleziPorabo,
+  type PorabaZetonov,
+  type PosnetekPorabe,
+  type ZapisPorabe,
+} from "./poraba-modelov.ts";
+
+export { pocistiPorabo, posnetekPorabe, razberiPorabo, type PorabaZetonov, type PosnetekPorabe, type ZapisPorabe };
 
 /** Klici ponudnikov so omejeni, da obešena povezava ne drži tajnice. */
 export const PROVIDER_TIMEOUT_MS = 25_000;
@@ -186,7 +198,11 @@ async function klicPrekPrehoda(input: ProviderCall): Promise<{ text: string } | 
     if (!odg.ok) return { napaka: `Prehod je zavrnil klic (${odg.status}).` };
     const surovo = await besediloZMejo(odg, NAJVEC_BAJTOV_ODGOVORA);
     let besedilo = "";
-    try { besedilo = readText(JSON.parse(surovo) as Parameters<typeof readText>[0]); } catch { /* ni JSON */ }
+    try {
+      const parsed = JSON.parse(surovo) as Parameters<typeof readText>[0];
+      besedilo = readText(parsed);
+      zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(parsed), "pogovor");
+    } catch { /* ni JSON */ }
     return besedilo ? { text: hideSecret(besedilo.slice(0, mejaZnakov(input.najvecZnakov)), prehod.kljuc) } : { napaka: "Prehod ni vrnil besedila." };
   } catch (error) {
     const besedilo = String(error);
@@ -522,10 +538,15 @@ export function razlogOpenRouter(status: number, kontekst?: { model: string; bre
 }
 
 /** Lasten streznik: http samo na tem racunalniku ali v domacem omrezju (normirajNaslov), brez preusmeritev, rok kot pri drugih. */
-async function lastniFetch(url: string, init: RequestInit, timeoutMs: number = PROVIDER_TIMEOUT_MS): Promise<Response> {
+async function lastniFetch(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = PROVIDER_TIMEOUT_MS,
+  zgornjaMeja: number = PROVIDER_TIMEOUT_MS,
+): Promise<Response> {
   const osnova = normirajNaslov(url.replace(/\/chat\/completions$/, ""));
   if (!osnova.ok) throw new Error(osnova.razlog);
-  const rok = Math.max(500, Math.min(PROVIDER_TIMEOUT_MS, Math.round(timeoutMs)));
+  const rok = Math.max(500, Math.min(Math.min(zgornjaMeja, PROVIDER_TIMEOUT_PRIPONKE_MS), Math.round(timeoutMs)));
   return fetch(url, {
     ...init,
     redirect: "error",
@@ -552,6 +573,7 @@ async function callLastni(input: ProviderCall): Promise<RezultatPonudnika> {
     if (!response.ok) return { ok: false, sporocilo: hideSecret(`Strežnik je zavrnil klic (${response.status}).`, secret) };
     const izid = lastniOdgovor(raw);
     if (!izid.ok) return { ok: false, sporocilo: hideSecret(izid.sporocilo, secret) };
+    zabeleziPorabo("custom", cleanModel(input.model, "custom"), razberiPoraboIzBesedila(raw), "pogovor");
     return { ok: true, text: hideSecret(izid.text.slice(0, mejaZnakov(input.najvecZnakov)), secret) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Klic strežnika ni uspel.";
@@ -694,7 +716,9 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
     }
     let text = raw.trim();
     try {
-      text = readText(JSON.parse(raw) as Parameters<typeof readText>[0]) || text;
+      const parsed = JSON.parse(raw) as Parameters<typeof readText>[0];
+      text = readText(parsed) || text;
+      zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(parsed), "pogovor");
     } catch {
       /* Kratek odgovor je lahko golo besedilo. */
     }
@@ -702,6 +726,655 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
   } catch (error) {
     const message = error instanceof Error ? error.message : "Klic ponudnika ni uspel.";
     if (message === ADC_MANJKA) return { ok: false, sporocilo: ADC_MANJKA };
+    if (/redirect/i.test(message)) return { ok: false, sporocilo: "Preusmeritev ni dovoljena." };
+    return { ok: false, sporocilo: hideSecret(message, secret) };
+  }
+}
+
+// --- Klic modela z orodji (Lina programerka F1: vecobratni pogovor, orodja, poraba zetonov) ---------------------------
+
+/** Privzeta meja izhodnih zetonov za klic z orodji (DIZAJN.md razdelek 3). */
+export const PRIVZETI_MAX_ZETONOV_ORODJA = 8_000;
+export const NAJVEC_ZETONOV_ORODJA = 16_384;
+
+export type PonudnikZOrodji = {
+  provider: BrainProvider;
+  model: string;
+  key: string;
+  project?: string;
+  location?: string;
+  /** Naslov za »custom« ali »omniroute«. */
+  naslov?: string;
+  /** Stikalo »brezplacni modeli (samo asistentka)« za OpenRouter :free modele. */
+  brezplacniDovoljeni?: boolean;
+};
+
+export type JsonShemaOrodja = {
+  type: "object";
+  properties?: Record<string, unknown>;
+  required?: ReadonlyArray<string>;
+  additionalProperties?: boolean;
+  [kljuc: string]: unknown;
+};
+
+export type DefinicijaOrodja = {
+  ime: string;
+  opis: string;
+  parametri: JsonShemaOrodja;
+};
+
+export type KlicOrodja = {
+  /** Enolicen ID klica orodja. */
+  id: string;
+  /** Ime orodja. */
+  ime: string;
+  /** Preverjeni argumenti kot JSON objekt (nikoli polje ali primitiv). */
+  argumenti: Record<string, unknown>;
+  /** Gemini 3 thoughtSignature: mora se vrniti v naslednjem obratu, sicer Vertex/Gemini vrne 400. */
+  podpis?: string;
+};
+
+/** Gemini functionDeclarations so OpenAPI shema: kljuca additionalProperties ne pozna; preverbo naredi orkestrator. */
+function shemaZaGemini(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(shemaZaGemini);
+  if (!jeJsonObjekt(v)) return v;
+  const izhod: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v)) if (k !== "additionalProperties" && k !== "$schema") izhod[k] = shemaZaGemini(x);
+  return izhod;
+}
+
+/** Nadomestni id, kadar ga ponudnik ne da: enolicen tudi med obrati (prej se je stevilo zacelo z 1 v vsakem odgovoru). */
+const nadomestniId = (pred: string, n: number) => `${pred}-${randomUUID().slice(0, 8)}-${n}`;
+
+export type SporociloOrodja =
+  | { vloga: "uporabnik"; besedilo: string }
+  | { vloga: "asistent"; besedilo?: string; klici?: ReadonlyArray<KlicOrodja> }
+  | { vloga: "orodje"; id: string; ime: string; rezultat: string | Record<string, unknown>; napaka?: boolean };
+
+export type MoznostiOrodij = {
+  system?: string;
+  /** Najvec izhodnih zetonov (privzeto 8000, najvec 16384). */
+  maxTokens?: number;
+  /** Najvec skupnih znakov vhodnih sporocil in sistema (privzeto in najvec NAJVEC_ZNAKOV_VHODA). */
+  najvecVhoda?: number;
+  /** Temperatura (privzeto 0). */
+  temperatura?: number;
+  /** Rok klica v ms (privzeto PROVIDER_TIMEOUT_PRIPONKE_MS = 120 s). */
+  timeoutMs?: number;
+  /** Prekinitev od zunaj. */
+  signal?: AbortSignal;
+  /** Ali zahteva nosi vsebino telefonskega klica (privzeto false). */
+  vsebinaKlica?: boolean;
+  /** Pri Claude doda cache_control na system in zadnje orodje (predpomnjenje stalne predpone). */
+  predpomniPredpono?: boolean;
+};
+
+export type RazlogKoncaOrodij = "konec" | "orodje" | "dolzina" | "varnost" | "drugo";
+
+export type RezultatOrodij =
+  | {
+      ok: true;
+      besedilo: string;
+      klici: KlicOrodja[];
+      usage: PorabaZetonov | null;
+      razlogKonca: RazlogKoncaOrodij;
+    }
+  | {
+      ok: false;
+      sporocilo: string;
+      vzrok?: VzrokNapake;
+    };
+
+function jeJsonObjekt(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function dolzinaVhodaOrodij(sporocila: ReadonlyArray<SporociloOrodja>, system?: string): number {
+  let skupaj = system ? system.length : 0;
+  for (const s of sporocila) {
+    if (s.vloga === "uporabnik") {
+      skupaj += s.besedilo.length;
+    } else if (s.vloga === "asistent") {
+      if (s.besedilo) skupaj += s.besedilo.length;
+      if (s.klici) {
+        for (const k of s.klici) {
+          skupaj += k.ime.length + JSON.stringify(k.argumenti).length;
+        }
+      }
+    } else {
+      skupaj += s.ime.length + (typeof s.rezultat === "string" ? s.rezultat.length : JSON.stringify(s.rezultat).length);
+    }
+  }
+  return skupaj;
+}
+
+function sporocilaZaGemini(sporocila: ReadonlyArray<SporociloOrodja>): Array<{ role: string; parts: Array<Record<string, unknown>> }> {
+  const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [];
+  let i = 0;
+  while (i < sporocila.length) {
+    const s = sporocila[i]!;
+    if (s.vloga === "uporabnik") {
+      contents.push({ role: "user", parts: [{ text: s.besedilo }] });
+      i += 1;
+    } else if (s.vloga === "asistent") {
+      const parts: Array<Record<string, unknown>> = [];
+      if (s.besedilo) parts.push({ text: s.besedilo });
+      for (const k of s.klici ?? []) {
+        parts.push({ functionCall: { name: k.ime, args: k.argumenti }, ...(k.podpis ? { thoughtSignature: k.podpis } : {}) });
+      }
+      if (parts.length === 0) parts.push({ text: "" });
+      contents.push({ role: "model", parts });
+      i += 1;
+    } else {
+      // Zaporedni rezultati orodij gredo v en obrat user z vec functionResponse deli (zahteva Gemini/Vertex).
+      const parts: Array<Record<string, unknown>> = [];
+      while (i < sporocila.length && sporocila[i]!.vloga === "orodje") {
+        const o = sporocila[i] as Extract<SporociloOrodja, { vloga: "orodje" }>;
+        const response =
+          typeof o.rezultat === "string"
+            ? o.napaka
+              ? { error: o.rezultat }
+              : { result: o.rezultat }
+            : o.napaka
+              ? { error: o.rezultat }
+              : o.rezultat;
+        parts.push({ functionResponse: { name: o.ime, response } });
+        i += 1;
+      }
+      contents.push({ role: "user", parts });
+    }
+  }
+  return contents;
+}
+
+function sporocilaZaOpenAI(sporocila: ReadonlyArray<SporociloOrodja>, system?: string): Array<Record<string, unknown>> {
+  const messages: Array<Record<string, unknown>> = [];
+  if (system) messages.push({ role: "system", content: system });
+  for (const s of sporocila) {
+    if (s.vloga === "uporabnik") {
+      messages.push({ role: "user", content: s.besedilo });
+    } else if (s.vloga === "asistent") {
+      messages.push({
+        role: "assistant",
+        content: s.besedilo ?? null,
+        ...(s.klici?.length
+          ? {
+              tool_calls: s.klici.map((k) => ({
+                id: k.id,
+                type: "function",
+                function: { name: k.ime, arguments: JSON.stringify(k.argumenti) },
+              })),
+            }
+          : {}),
+      });
+    } else {
+      messages.push({
+        role: "tool",
+        tool_call_id: s.id,
+        name: s.ime,
+        content: typeof s.rezultat === "string" ? s.rezultat : JSON.stringify(s.rezultat),
+      });
+    }
+  }
+  return messages;
+}
+
+function sporocilaZaClaude(sporocila: ReadonlyArray<SporociloOrodja>): Array<Record<string, unknown>> {
+  const messages: Array<Record<string, unknown>> = [];
+  let i = 0;
+  while (i < sporocila.length) {
+    const s = sporocila[i]!;
+    if (s.vloga === "uporabnik") {
+      messages.push({ role: "user", content: s.besedilo });
+      i += 1;
+    } else if (s.vloga === "asistent") {
+      if (!s.klici?.length) {
+        messages.push({ role: "assistant", content: s.besedilo ?? "" });
+      } else {
+        const bloki: Array<Record<string, unknown>> = [];
+        if (s.besedilo) bloki.push({ type: "text", text: s.besedilo });
+        for (const k of s.klici) {
+          bloki.push({ type: "tool_use", id: k.id, name: k.ime, input: k.argumenti });
+        }
+        messages.push({ role: "assistant", content: bloki });
+      }
+      i += 1;
+    } else {
+      // Zaporedni rezultati orodij gredo v ENO user sporocilo z vec tool_result bloki (zahteva Anthropic API).
+      const bloki: Array<Record<string, unknown>> = [];
+      while (i < sporocila.length && sporocila[i]!.vloga === "orodje") {
+        const o = sporocila[i] as Extract<SporociloOrodja, { vloga: "orodje" }>;
+        bloki.push({
+          type: "tool_result",
+          tool_use_id: o.id,
+          content: typeof o.rezultat === "string" ? o.rezultat : JSON.stringify(o.rezultat),
+          ...(o.napaka ? { is_error: true } : {}),
+        });
+        i += 1;
+      }
+      messages.push({ role: "user", content: bloki });
+    }
+  }
+  return messages;
+}
+
+/** Sestavi HTTP zahtevo za klic modela z orodji (Vertex/Gemini, OpenAI-zdruzljivi, Claude). Kljuc je samo v glavi. */
+export function providerRequestZOrodji(
+  ponudnik: PonudnikZOrodji,
+  sporocila: ReadonlyArray<SporociloOrodja>,
+  orodja: ReadonlyArray<DefinicijaOrodja>,
+  moznosti: MoznostiOrodij = {},
+): { url: string; init: RequestInit } {
+  const model = cleanModel(ponudnik.model, ponudnik.provider);
+  const maxTokens = Math.max(
+    1,
+    Math.min(NAJVEC_ZETONOV_ORODJA, Math.floor(Number.isFinite(moznosti.maxTokens) ? (moznosti.maxTokens as number) : PRIVZETI_MAX_ZETONOV_ORODJA)),
+  );
+  const temperatura = typeof moznosti.temperatura === "number" && Number.isFinite(moznosti.temperatura) ? moznosti.temperatura : 0;
+  const vsebinaKlica = moznosti.vsebinaKlica === true;
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  let url = "";
+  let body: unknown;
+
+  if (ponudnik.provider === "gemini" || ponudnik.provider === "vertex") {
+    if (ponudnik.provider === "gemini") {
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      headers["x-goog-api-key"] = ponudnik.key;
+    } else {
+      const project = gcpProject(ponudnik.project);
+      if (!project) throw new Error("Vpišite ID projekta Google Cloud.");
+      const location = gcpLocation(ponudnik.location);
+      if (!ponudnik.key) throw new Error(ADC_MANJKA);
+      const razlicica = podpiraMinimalniRazmislek(model) ? "v1beta1" : "v1";
+      url = `https://aiplatform.googleapis.com/${razlicica}/projects/${project}/locations/${location}/publishers/google/models/${encodeURIComponent(model)}:generateContent`;
+      headers.authorization = `Bearer ${ponudnik.key}`;
+      headers["x-goog-user-project"] = project;
+    }
+    body = {
+      ...(moznosti.system ? { systemInstruction: { parts: [{ text: moznosti.system }] } } : {}),
+      contents: sporocilaZaGemini(sporocila),
+      ...(orodja.length > 0
+        ? {
+            tools: [
+              {
+                functionDeclarations: orodja.map((o) => ({
+                  name: o.ime,
+                  description: o.opis,
+                  parameters: shemaZaGemini(o.parametri),
+                })),
+              },
+            ],
+          }
+        : {}),
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature: temperatura,
+      },
+    };
+  } else if (
+    ponudnik.provider === "openai" ||
+    ponudnik.provider === "grok" ||
+    ponudnik.provider === "openrouter" ||
+    ponudnik.provider === "omniroute" ||
+    ponudnik.provider === "custom"
+  ) {
+    if (ponudnik.provider === "custom") {
+      const izid = normirajNaslov(ponudnik.naslov);
+      if (!izid.ok) throw new Error(izid.razlog);
+      url = `${izid.naslov}/chat/completions`;
+      if (ponudnik.key) headers.authorization = `Bearer ${ponudnik.key}`;
+    } else if (ponudnik.provider === "omniroute") {
+      const omniroute = veljavenNaslovOmniroute(ponudnik.naslov ?? OMNIROUTE_PRIVZETI_NASLOV);
+      if (!omniroute) throw new Error("Naslov OmniRoute ni veljaven: http samo za 127.0.0.1 ali localhost, sicer https.");
+      url = `${omniroute}/chat/completions`;
+      headers.authorization = `Bearer ${ponudnik.key}`;
+    } else {
+      url =
+        ponudnik.provider === "openai"
+          ? "https://api.openai.com/v1/chat/completions"
+          : ponudnik.provider === "openrouter"
+            ? "https://openrouter.ai/api/v1/chat/completions"
+            : "https://api.x.ai/v1/chat/completions";
+      headers.authorization = `Bearer ${ponudnik.key}`;
+      if (ponudnik.provider === "openrouter") headers["X-Title"] = "Lina";
+    }
+    const brezDeny =
+      ponudnik.provider === "openrouter" &&
+      ponudnik.brezplacniDovoljeni === true &&
+      !vsebinaKlica &&
+      jeTocnoBrezplacen(model);
+    body = {
+      model,
+      max_tokens: maxTokens,
+      temperature: temperatura,
+      messages: sporocilaZaOpenAI(sporocila, moznosti.system),
+      ...(orodja.length > 0
+        ? {
+            tools: orodja.map((o) => ({
+              type: "function",
+              function: { name: o.ime, description: o.opis, parameters: o.parametri },
+            })),
+          }
+        : {}),
+      ...(ponudnik.provider === "openrouter" && !brezDeny ? { provider: { data_collection: "deny" } } : {}),
+    };
+  } else {
+    url = "https://api.anthropic.com/v1/messages";
+    headers["x-api-key"] = ponudnik.key;
+    headers["anthropic-version"] = "2023-06-01";
+    const predpomni = moznosti.predpomniPredpono === true;
+    const systemField = moznosti.system
+      ? predpomni
+        ? [{ type: "text", text: moznosti.system, cache_control: { type: "ephemeral" } }]
+        : moznosti.system
+      : undefined;
+    body = {
+      model,
+      max_tokens: maxTokens,
+      temperature: temperatura,
+      ...(systemField !== undefined ? { system: systemField } : {}),
+      messages: sporocilaZaClaude(sporocila),
+      ...(orodja.length > 0
+        ? {
+            tools: orodja.map((o, idx) => ({
+              name: o.ime,
+              description: o.opis,
+              input_schema: o.parametri,
+              ...(predpomni && idx === orodja.length - 1 ? { cache_control: { type: "ephemeral" } } : {}),
+            })),
+          }
+        : {}),
+    };
+  }
+
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" && ponudnik.provider !== "omniroute" && ponudnik.provider !== "custom") {
+    throw new Error("Klic ponudnika je dovoljen samo prek https.");
+  }
+  if (ponudnik.key && parsed.href.includes(ponudnik.key)) throw new Error("Ključ ne sme biti v naslovu.");
+  if (ponudnik.provider === "openrouter" && parsed.hostname !== "openrouter.ai") {
+    throw new Error("OpenRouter sme klicati samo openrouter.ai.");
+  }
+  if (ponudnik.provider === "vertex" && parsed.hostname !== "aiplatform.googleapis.com") {
+    throw new Error("Vertex sme klicati samo aiplatform.googleapis.com.");
+  }
+
+  return {
+    url,
+    init: {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    },
+  };
+}
+
+function besediloIzOpenAIVsebine(vsebina: unknown): string {
+  if (typeof vsebina === "string") return vsebina;
+  if (Array.isArray(vsebina)) {
+    return vsebina
+      .map((d) => (jeJsonObjekt(d) && typeof d.text === "string" ? d.text : ""))
+      .join("");
+  }
+  return "";
+}
+
+/**
+ * Razbere odgovor klica z orodji v enotno obliko.
+ * Ce so argumenti kateregakoli klica orodja napacen JSON ali ne-objekt, vrne { ok: false } (brez izvedbe orodij).
+ */
+export function razberiOdgovorZOrodji(provider: BrainProvider, surovo: string): RezultatOrodij {
+  let json: unknown;
+  try {
+    json = JSON.parse(surovo);
+  } catch {
+    return { ok: false, sporocilo: "Ponudnik ni vrnil veljavnega JSON odgovora." };
+  }
+  if (!jeJsonObjekt(json)) {
+    return { ok: false, sporocilo: "Ponudnik ni vrnil veljavnega JSON odgovora." };
+  }
+  const usage = razberiPorabo(json);
+
+  if (provider === "gemini" || provider === "vertex") {
+    const candidates = Array.isArray(json.candidates) ? json.candidates : null;
+    const prvi = candidates && jeJsonObjekt(candidates[0]) ? candidates[0] : null;
+    if (!prvi) return { ok: false, sporocilo: "Ponudnik ni vrnil odgovora." };
+    const finishReason = typeof prvi.finishReason === "string" ? prvi.finishReason : "";
+    if (finishReason === "MALFORMED_FUNCTION_CALL") {
+      return { ok: false, sporocilo: "Model je vrnil neveljaven klic orodja." };
+    }
+    const content = jeJsonObjekt(prvi.content) ? prvi.content : null;
+    const parts = content && Array.isArray(content.parts) ? content.parts : [];
+    const besediloDeli: string[] = [];
+    const klici: KlicOrodja[] = [];
+    for (const part of parts) {
+      if (!jeJsonObjekt(part)) continue;
+      if (typeof part.text === "string") besediloDeli.push(part.text);
+      if (part.functionCall !== undefined) {
+        if (!jeJsonObjekt(part.functionCall)) {
+          return { ok: false, sporocilo: "Klic orodja v odgovoru ni veljaven." };
+        }
+        const ime = typeof part.functionCall.name === "string" ? part.functionCall.name.trim() : "";
+        if (!ime) return { ok: false, sporocilo: "Klic orodja nima imena." };
+        const args = part.functionCall.args;
+        if (args !== undefined && !jeJsonObjekt(args)) {
+          return { ok: false, sporocilo: "Argumenti orodja morajo biti veljaven JSON objekt." };
+        }
+        const id =
+          typeof part.functionCall.id === "string" && part.functionCall.id.trim()
+            ? part.functionCall.id.trim()
+            : nadomestniId("gemini", klici.length + 1);
+        const podpis = typeof part.thoughtSignature === "string" && part.thoughtSignature ? part.thoughtSignature : undefined;
+        klici.push({ id, ime, argumenti: args ?? {}, ...(podpis ? { podpis } : {}) });
+      }
+    }
+    let razlogKonca: RazlogKoncaOrodij;
+    if (finishReason === "STOP") {
+      razlogKonca = klici.length > 0 ? "orodje" : "konec";
+    } else if (finishReason === "MAX_TOKENS") {
+      razlogKonca = "dolzina";
+    } else if (/^(SAFETY|RECITATION|BLOCKLIST|PROHIBITED_CONTENT|SPII)$/.test(finishReason)) {
+      razlogKonca = "varnost";
+    } else {
+      razlogKonca = klici.length > 0 ? "orodje" : "drugo";
+    }
+    return { ok: true, besedilo: besediloDeli.join("").trim(), klici, usage, razlogKonca };
+  }
+
+  if (provider === "claude") {
+    const content = Array.isArray(json.content) ? json.content : null;
+    if (!content) return { ok: false, sporocilo: "Ponudnik ni vrnil vsebine odgovora." };
+    const besediloDeli: string[] = [];
+    const klici: KlicOrodja[] = [];
+    for (const blok of content) {
+      if (!jeJsonObjekt(blok)) continue;
+      if (blok.type === "text" && typeof blok.text === "string") {
+        besediloDeli.push(blok.text);
+      } else if (blok.type === "tool_use") {
+        const ime = typeof blok.name === "string" ? blok.name.trim() : "";
+        if (!ime) return { ok: false, sporocilo: "Klic orodja nima imena." };
+        if (!jeJsonObjekt(blok.input)) {
+          return { ok: false, sporocilo: "Argumenti orodja morajo biti veljaven JSON objekt." };
+        }
+        const id = typeof blok.id === "string" && blok.id.trim() ? blok.id.trim() : nadomestniId("claude", klici.length + 1);
+        klici.push({ id, ime, argumenti: blok.input });
+      }
+    }
+    const stopReason = typeof json.stop_reason === "string" ? json.stop_reason : "";
+    let razlogKonca: RazlogKoncaOrodij;
+    if (stopReason === "tool_use") {
+      razlogKonca = "orodje";
+    } else if (stopReason === "end_turn" || stopReason === "stop_sequence") {
+      razlogKonca = klici.length > 0 ? "orodje" : "konec";
+    } else if (stopReason === "max_tokens") {
+      razlogKonca = "dolzina";
+    } else if (stopReason === "refusal") {
+      razlogKonca = "varnost";
+    } else {
+      razlogKonca = klici.length > 0 ? "orodje" : "drugo";
+    }
+    return { ok: true, besedilo: besediloDeli.join("").trim(), klici, usage, razlogKonca };
+  }
+
+  // OpenAI-zdruzljivi: openai, grok, openrouter, omniroute, custom.
+  if (jeJsonObjekt(json.error) && typeof json.error.message === "string" && json.error.message.trim()) {
+    return { ok: false, sporocilo: `Ponudnik: ${json.error.message.trim().slice(0, 200)}` };
+  }
+  const choices = Array.isArray(json.choices) ? json.choices : null;
+  const izbira = choices && jeJsonObjekt(choices[0]) ? choices[0] : null;
+  if (!izbira) return { ok: false, sporocilo: "Ponudnik ni vrnil odgovora." };
+  const message = jeJsonObjekt(izbira.message) ? izbira.message : null;
+  if (!message) return { ok: false, sporocilo: "Ponudnik ni vrnil sporočila." };
+
+  const besedilo = besediloIzOpenAIVsebine(message.content).trim();
+  const klici: KlicOrodja[] = [];
+  if (message.tool_calls !== undefined && message.tool_calls !== null) {
+    if (!Array.isArray(message.tool_calls)) {
+      return { ok: false, sporocilo: "Polje tool_calls v odgovoru ni seznam." };
+    }
+    for (const tc of message.tool_calls) {
+      if (!jeJsonObjekt(tc) || !jeJsonObjekt(tc.function)) {
+        return { ok: false, sporocilo: "Klic orodja v odgovoru ni veljaven." };
+      }
+      const ime = typeof tc.function.name === "string" ? tc.function.name.trim() : "";
+      if (!ime) return { ok: false, sporocilo: "Klic orodja nima imena." };
+      const suroviArg = tc.function.arguments;
+      let argumenti: Record<string, unknown>;
+      if (typeof suroviArg === "string") {
+        if (!suroviArg.trim()) {
+          return { ok: false, sporocilo: "Argumenti orodja niso veljaven JSON." };
+        }
+        let razclenjeno: unknown;
+        try {
+          razclenjeno = JSON.parse(suroviArg);
+        } catch {
+          return { ok: false, sporocilo: "Argumenti orodja niso veljaven JSON." };
+        }
+        if (!jeJsonObjekt(razclenjeno)) {
+          return { ok: false, sporocilo: "Argumenti orodja morajo biti veljaven JSON objekt." };
+        }
+        argumenti = razclenjeno;
+      } else if (jeJsonObjekt(suroviArg)) {
+        argumenti = suroviArg;
+      } else {
+        return { ok: false, sporocilo: "Argumenti orodja morajo biti veljaven JSON objekt." };
+      }
+      const id = typeof tc.id === "string" && tc.id.trim() ? tc.id.trim() : nadomestniId("openai", klici.length + 1);
+      klici.push({ id, ime, argumenti });
+    }
+  }
+
+  const finishReason = typeof izbira.finish_reason === "string" ? izbira.finish_reason : "";
+  let razlogKonca: RazlogKoncaOrodij;
+  if (finishReason === "tool_calls" || finishReason === "function_call") {
+    razlogKonca = "orodje";
+  } else if (finishReason === "stop") {
+    razlogKonca = klici.length > 0 ? "orodje" : "konec";
+  } else if (finishReason === "length") {
+    razlogKonca = "dolzina";
+  } else if (finishReason === "content_filter") {
+    razlogKonca = "varnost";
+  } else {
+    razlogKonca = klici.length > 0 ? "orodje" : "drugo";
+  }
+
+  return { ok: true, besedilo, klici, usage, razlogKonca };
+}
+
+/**
+ * Vecobratni klic modela z orodji za Vertex/Gemini, OpenAI-zdruzljive (OpenAI, Grok, OpenRouter, OmniRoute, custom) in Claude.
+ * Ne uporablja 6000-znakovne meje pogovora (velja meja bajtov NAJVEC_BAJTOV_ODGOVORA); zabelezi porabo zetonov.
+ */
+export async function callProviderZOrodji(
+  ponudnik: PonudnikZOrodji,
+  sporocila: ReadonlyArray<SporociloOrodja>,
+  orodja: ReadonlyArray<DefinicijaOrodja>,
+  moznosti: MoznostiOrodij = {},
+): Promise<RezultatOrodij> {
+  if (!sporocila.length) {
+    return { ok: false, sporocilo: "Manjkajo sporočila za klic modela." };
+  }
+  const mejaVhoda = Math.max(1, Math.min(NAJVEC_ZNAKOV_VHODA, Math.floor(moznosti.najvecVhoda ?? NAJVEC_ZNAKOV_VHODA)));
+  if (dolzinaVhodaOrodij(sporocila, moznosti.system) > mejaVhoda) {
+    return { ok: false, sporocilo: "Vhod presega največjo dovoljeno dolžino." };
+  }
+
+  const model = cleanModel(ponudnik.model, ponudnik.provider);
+  const vsebinaKlica = moznosti.vsebinaKlica === true;
+  if (jeBrezplacenModel(model) && vsebinaKlica) {
+    return { ok: false, sporocilo: BREZPLACNI_SAMO_ASISTENTKA };
+  }
+  if (jeBrezplacenModel(model) && ponudnik.brezplacniDovoljeni !== true) {
+    return { ok: false, sporocilo: "OpenRouter: vklopite stikalo za brezplačne modele." };
+  }
+  if (ponudnik.provider === "custom" && vsebinaKlica) {
+    return { ok: false, sporocilo: "Lasten strežnik je dovoljen samo za pogovor z asistentko, ne za klice." };
+  }
+
+  let zNaslovom = ponudnik;
+  if (ponudnik.provider === "omniroute" && !ponudnik.naslov) {
+    const { naslovOmniroute } = await import("./keys.server.ts");
+    zNaslovom = { ...ponudnik, naslov: (await naslovOmniroute().catch(() => null)) ?? OMNIROUTE_PRIVZETI_NASLOV };
+  }
+
+  let secret = zNaslovom.key;
+  try {
+    if (zNaslovom.provider === "vertex") {
+      secret = await vertexAccessToken();
+    }
+    const { url, init } = providerRequestZOrodji(
+      zNaslovom.provider === "vertex" ? { ...zNaslovom, key: secret } : zNaslovom,
+      sporocila,
+      orodja,
+      moznosti,
+    );
+    const reqInit = moznosti.signal ? { ...init, signal: moznosti.signal } : init;
+    const rok = moznosti.timeoutMs ?? PROVIDER_TIMEOUT_PRIPONKE_MS;
+    const response =
+      zNaslovom.provider === "custom"
+        ? await lastniFetch(url, reqInit, rok, PROVIDER_TIMEOUT_PRIPONKE_MS)
+        : zNaslovom.provider === "omniroute"
+          ? await omnirouteFetch(url, reqInit, rok, PROVIDER_TIMEOUT_PRIPONKE_MS)
+          : await httpsFetch(url, reqInit, rok, PROVIDER_TIMEOUT_PRIPONKE_MS);
+
+    if (zNaslovom.provider === "vertex" && response.status === 401) pozabiZeton();
+    if (response.status >= 300 && response.status < 400) {
+      return { ok: false, sporocilo: "Preusmeritev ni dovoljena." };
+    }
+    const raw = await besediloZMejo(response, NAJVEC_BAJTOV_ODGOVORA);
+    if (!response.ok) {
+      const vzrok = vzrokNapake(response.status, raw);
+      if (zNaslovom.provider === "openrouter") {
+        const sporocilo =
+          razlogOpenRouter(response.status, {
+            model,
+            brezplacniDovoljeni: zNaslovom.brezplacniDovoljeni === true,
+            asistentka: !vsebinaKlica,
+          }) ?? `Ponudnik je zavrnil klic (${response.status}).`;
+        return { ok: false, sporocilo: hideSecret(sporocilo, secret), ...(vzrok ? { vzrok } : {}) };
+      }
+      return {
+        ok: false,
+        sporocilo: hideSecret(`Ponudnik je zavrnil klic (${response.status}).`, secret),
+        ...(vzrok ? { vzrok } : {}),
+      };
+    }
+
+    const izid = razberiOdgovorZOrodji(zNaslovom.provider, raw);
+    if (!izid.ok) {
+      return { ok: false, sporocilo: hideSecret(izid.sporocilo, secret) };
+    }
+    zabeleziPorabo(zNaslovom.provider, model, izid.usage, "orodja");
+    return {
+      ...izid,
+      besedilo: hideSecret(izid.besedilo, secret),
+      // model lahko kljuc ponovi tudi v argumentih; JSON.stringify ubezi narekovaje, zato zamenjava ostane veljaven JSON
+      klici: izid.klici.map((k) => ({ ...k, argumenti: JSON.parse(hideSecret(JSON.stringify(k.argumenti), secret)) as Record<string, unknown> })),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Klic ponudnika ni uspel.";
+    if (message === ADC_MANJKA) return { ok: false, sporocilo: ADC_MANJKA };
+    if (error instanceof Error && error.name === "TimeoutError") return { ok: false, sporocilo: "Ponudnik ni odgovoril pravočasno." };
     if (/redirect/i.test(message)) return { ok: false, sporocilo: "Preusmeritev ni dovoljena." };
     return { ok: false, sporocilo: hideSecret(message, secret) };
   }

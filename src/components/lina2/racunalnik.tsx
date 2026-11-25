@@ -28,6 +28,7 @@ import type { JavnoStanjeN8n } from "@/lib/lina/n8n.server.ts";
 import { opisRazlogaN8n, type RazlogN8n } from "@/lib/lina/n8n.ts";
 import { jezikVmesnika } from "@/lib/lina/besedila.ts";
 import { Ikona } from "./domov.tsx";
+import { OrkestratorKartica } from "./orkestrator-kartica.tsx";
 import { StanjeNapaka } from "./ui-lina.tsx";
 import { datumInUra, uraGlave } from "@/lib/lina/ui-videz.ts";
 
@@ -214,6 +215,7 @@ export function RacunalnikPanel() {
       </div>
 
       <div className="flex min-w-0 flex-col gap-5">
+      <OrkestratorKartica />
       <VprasanjaAgentaKartica />
       <div className="lina-kartica min-w-0">
         <h3><Ikona ime="racunalnik" /> {t("rcNaslov")}</h3>

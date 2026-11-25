@@ -477,7 +477,7 @@ test("4.4 pot tajnice (vsi vhodi klica) nima nobene poti do kanala ali asistentk
 });
 
 /** Moduli poti telefona/asistentke in njuna vhoda (zagon in streznikske funkcije); pot klica ne sme doseci nobenega. */
-const PREPOVEDANO_ZA_KLIC = /src\/lib\/lina\/(kanal-claude[^/]*|claude-naloge[^/]*|asistent[.-][^/]*|openline-povabilo\.server\.ts|openline-(?:zagon|veza)[^/]*|oddaljeni-prehod\.server\.ts|koda-seznanitev\.ts|varovalka-kode\.ts|spake2\.ts|mdns-oglas\.server\.ts|qr\.ts|zagon\.server\.ts|functions\.ts)$|src\/routes\/api\/zagon\.ts$/;
+const PREPOVEDANO_ZA_KLIC = /src\/lib\/lina\/(kanal-claude[^/]*|claude-naloge[^/]*|orkestrator[^/]*|asistent[.-][^/]*|openline-povabilo\.server\.ts|openline-(?:zagon|veza)[^/]*|oddaljeni-prehod\.server\.ts|koda-seznanitev\.ts|varovalka-kode\.ts|spake2\.ts|mdns-oglas\.server\.ts|qr\.ts|zagon\.server\.ts|functions\.ts)$|src\/routes\/api\/zagon\.ts$/;
 
 test("4.4 T1-S2: pot telefona ne uvaza poti klica, in poti klica v ISTEM procesu doseze samo vhodni tocki zagon.ts in functions.ts", () => {
   const telefon = dosegljive([
