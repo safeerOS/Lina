@@ -75,7 +75,19 @@ describe("N1: potrjeno z diska ne velja", () => {
     const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
     await o.nadaljujPoZagonu();
     await cakaj(async () => (await o.preberi(id))?.faza === "koncano");
-    assert.equal((await o.preberi(id))?.okuzeno, true);
+    const st = await o.preberi(id);
+    assert.equal(st?.okuzeno, true);
+    // lastnik vidi pravi razlog (ne »zaznano vrinjeno navodilo«)
+    assert.ok(st!.dogodki.some((d) => /ponovn\w* zagon/i.test(d.besedilo)), JSON.stringify(st!.dogodki.map((d) => d.besedilo)));
+  });
+
+  it("oznaka okuzene naloge v vmesniku ne trdi, da je bilo navodilo zaznano (velja tudi za ponovni zagon), sl in en", async () => {
+    const { besedila } = await import("./besedila.ts") as unknown as { besedila: Record<string, Record<string, string>> };
+    const sl = besedila.sl?.orkOkuzeno ?? "";
+    const en = besedila.en?.orkOkuzeno ?? "";
+    assert.ok(sl && en, "kljuc obstaja v obeh jezikih");
+    assert.match(sl, /ponovn\w* zagon/i);
+    assert.match(en, /restart/i);
   });
 
   it("kontrola: naloga brez izidov orodij po zagonu ni okuzena", async () => {

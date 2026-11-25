@@ -821,7 +821,10 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           const s = await preberi(s0.id);
           if (!s) return;
           // naloga 11 N1: izidov orodij z diska ni mogoce preveriti za vbrizg za nazaj - konzervativno okuzeno
-          if (imaPodatke(s)) s.okuzeno = true;
+          if (imaPodatke(s) && !s.okuzeno) {
+            s.okuzeno = true;
+            dogodek(s, "napaka", "Po ponovnem zagonu Line prebranih izidov ni mogoce znova preveriti; od zdaj vsa tvegana orodja cakajo potrditev.");
+          }
           // zacet klic brez izida: branje se ponovi, vse drugo ne (izid neznan) - razen cakajoce potrditve, ki se zastavi znova
           for (const k of [...s.odprti]) {
             if (!k.zacet || (s.cakanje && s.cakanje.klicId === k.id)) continue;
