@@ -142,4 +142,19 @@ class NajdbeSlepi17tTest {
         assertEquals(z.prepisOkrnjen, p.prepisOkrnjen)
     }
 
+    // N9: vhod in izhod seje sta omejena ze med klicem.
+    @Test
+    fun `N9 - dobesedni vhod in izhod ne rasteta brez meje med klicem`() {
+        val s = SejaKlica(0L, "+99955501001") { 1L }
+        repeat(50) { s.dodajVhod("a".repeat(10_000)); s.dodajIzhod("b".repeat(10_000)) }
+        for (ime in listOf("vhod", "izhod")) {
+            val f = SejaKlica::class.java.getDeclaredField(ime).apply { isAccessible = true }
+            val dolzina = (f.get(s) as StringBuilder).length
+            assertTrue(dolzina <= 2 * SejaKlica.MEJA_DOBESEDNO, "$ime ima $dolzina znakov")
+        }
+        val z = s.zakljuci(2L)
+        assertEquals(SejaKlica.MEJA_DOBESEDNO, z.sporociloDobesedno.length)
+        assertEquals(SejaKlica.MEJA_DOBESEDNO, z.linaDobesedno.length)
+    }
+
 }

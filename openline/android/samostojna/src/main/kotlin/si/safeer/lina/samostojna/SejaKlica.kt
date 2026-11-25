@@ -84,9 +84,12 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
      * Odlomek z malo crko ali s presledkom (nadaljevanje besede ali stavka) ostane nespremenjen.
      */
     private fun dodajLocenoZaNovStavek(cilj: StringBuilder, besedilo: String) {
+        // N9: dobesedno je v zakljuci omejeno na MEJA_DOBESEDNO; surovi medpomnilnik ne raste med klicem cez MEJA_SUROVO (rezerva za presledke).
+        val prostor = MEJA_SUROVO - cilj.length
+        if (prostor <= 1) return
         if (cilj.isNotEmpty() && besedilo.first().isUpperCase() &&
             (cilj.last().isLetter() || cilj.last() in ".!?")) cilj.append('\n')
-        cilj.append(besedilo)
+        cilj.append(kosVMejah(besedilo, MEJA_SUROVO - cilj.length, Int.MAX_VALUE))
     }
 
     /** Konec obrata (model je koncal): naslednji govor klicatelja gre v nov odstavek. */
@@ -145,6 +148,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
         const val MEJA_SPOROCILA = 2000
         const val MEJA_DOBESEDNO = 6000
         const val MEJA_OBRATA = 600
+        const val MEJA_SUROVO = 2 * MEJA_DOBESEDNO
         /**
          * Meje prepisa pogovora: izmenjava do 2000 znakov (kot sporocilo), najvec 400 izmenjav in MEJA_PREPISA_B bajtov JSON UTF-8 (N8: bajti,
          * ne znaki - c/s/z in narekovaji so 2 B), kjer vsaka izmenjava steje se OVOJ_IZMENJAVE za kljuce in vejico
