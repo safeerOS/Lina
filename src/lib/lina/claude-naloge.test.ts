@@ -365,6 +365,9 @@ describe("claude-naloge: locitev", () => {
       "lib/lina/claude-naloge-vodja.server.ts",
       "lib/lina/claude-naloge-vodja.ts",
       "lib/lina/functions.ts",
+      // 25. 11. 2026 (orkestrator): vidniZnaki za ovojnico podatkov, dodeli_pomocniku prek predlagajClaudeNalogo; pot klica ga ne uvaza
+      "lib/lina/orkestrator.server.ts",
+      "lib/lina/orkestrator.ts",
       "lib/lina/zagon.server.ts",
     ]);
   });

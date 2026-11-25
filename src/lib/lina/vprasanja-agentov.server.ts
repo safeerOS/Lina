@@ -340,6 +340,82 @@ export async function zazeniVLini(
   return otrok.pid as number;
 }
 
+// ------------------------------------------------------------------ orkestrator v istem procesu (Lina sama)
+
+/**
+ * Tek brez podprocesa: orkestrator (orkestrator.server.ts) pokaze vrstice dela in vprasanja po ISTI poti kot Claude Code v Lini, zato jih
+ * vidita znacka na Racunalniku, obvestilo namizja (B7) in telefon (/agent-vprasanja, /agent-vprasanje/odgovor) brez nove poti omrezja.
+ * gesloObZagonu je zapisan ob nastanku naloge (preziviti mora ponovni zagon Line), »Dovoli« pa velja samo, ce geslo obstaja tudi zdaj.
+ */
+export function odpriTekVLini(root0: string, naloga: string, mapa: string, gesloObZagonu: boolean): void {
+  const root = path.resolve(root0);
+  const s = shramba(root);
+  const t = s.teki.get(naloga);
+  if (t) {
+    t.stanje = "tece";
+    t.konec = null;
+    return;
+  }
+  s.teki.set(naloga, { naloga, mapa, stanje: "tece", zacetek: new Date().toISOString(), konec: null, vrstice: [], vticnica: null, proces: null, streznik: null, datoteke: [], gesloObZagonu });
+  const koncani = [...s.teki.values()].filter((x) => x.stanje !== "tece");
+  for (const x of koncani.slice(0, Math.max(0, s.teki.size - NAJVEC_TEKOV))) s.teki.delete(x.naloga);
+}
+
+export function vrsticaTekaVLini(root0: string, naloga: string, besedilo: string): void {
+  const t = shramba(path.resolve(root0)).teki.get(naloga);
+  if (t) dodajVrstico(t, cisto(besedilo, 500).trim() || null);
+}
+
+/** Konec teka zapre tudi njegova odprta vprasanja (kot ob koncu agenta). */
+export function koncajTekVLini(root0: string, naloga: string, ok: boolean): void {
+  const root = path.resolve(root0);
+  const s = shramba(root);
+  const t = s.teki.get(naloga);
+  if (!t || t.stanje !== "tece") return;
+  t.stanje = ok ? "koncano" : "napaka";
+  t.konec = new Date().toISOString();
+  for (const v of s.vprasanja.values()) if (v.naloga === naloga) void zapriVprasanje(root, v, "zavrni", "konec", "Naloga je koncana.");
+}
+
+export type OdgovorVLini = { dovoli: boolean; kdo: string; sporocilo: string };
+
+/**
+ * Vprasanje orkestratorja: enaka razvrstitev, predogled, zgostitev, rok (= zavrnitev) in dnevnik odlocitev kot pri Claude Code v Lini.
+ * Vrne id (za vezavo v vmesniku) in obljubo odgovora. Brez odprtega teka ali nad mejo odprtih vprasanj = takojsnja zavrnitev.
+ */
+export function zastaviVprasanjeVLini(root0: string, naloga: string, orodje0: string, vnos: Record<string, unknown>, rokMs = ROK_VPRASANJA_MS): { id: string; odgovor: Promise<OdgovorVLini> } {
+  const root = path.resolve(root0);
+  const s = shramba(root);
+  const t = s.teki.get(naloga);
+  const orodje = cisto(orodje0, 100);
+  const id = randomBytes(8).toString("hex");
+  if (!t || t.stanje !== "tece" || !orodje || [...s.vprasanja.values()].filter((x) => x.stanje === "caka" && x.naloga === naloga).length >= NAJVEC_ODPRTIH_VPRASANJ) {
+    return { id, odgovor: Promise.resolve({ dovoli: false, kdo: "lina", sporocilo: "Vprasanja ni mogoce zastaviti." }) };
+  }
+  let razresi!: (o: OdgovorVLini) => void;
+  const odgovor = new Promise<OdgovorVLini>((r) => (razresi = r));
+  const { predogled, odrezano } = predogledVnosa(vnos);
+  const { nevarno, razlogi } = razvrstiDejanje(orodje, vnos, t.mapa);
+  const zdaj = Date.now();
+  const v: Vprasanje = {
+    id, naloga, orodje, predogled, odrezano, razlogi, nevarno, cas: new Date(zdaj).toISOString(), rok: new Date(zdaj + rokMs).toISOString(),
+    zgostitev: zgostitevVprasanja({ id, naloga, orodje, predogled, vnos: zgostitevVnosa(vnos) }), stanje: "caka", kdo: null, vnos,
+    odgovori: (o) => razresi(o.behavior === "allow" ? { dovoli: true, kdo: v.kdo ?? "", sporocilo: "" } : { dovoli: false, kdo: v.kdo ?? "", sporocilo: o.message }),
+    casovnik: setTimeout(() => void zapriVprasanje(root, v, "zavrni", "rok", "Rok za odgovor lastnika je potekel; dejanje je zavrnjeno."), rokMs),
+  };
+  v.casovnik.unref?.();
+  s.vprasanja.set(id, v);
+  dodajVrstico(t, `Vprasanje: ${orodje}${nevarno ? ` (${razlogi.join(", ")})` : ""}`);
+  return { id, odgovor };
+}
+
+/** Preklic (ustavitev naloge): odprto vprasanje se zapre kot zavrnjeno. */
+export function prekliciVprasanjeVLini(root0: string, id: string): void {
+  const root = path.resolve(root0);
+  const v = shramba(root).vprasanja.get(id);
+  if (v) void zapriVprasanje(root, v, "zavrni", "preklic", "Naloga je ustavljena.");
+}
+
 // ------------------------------------------------------------------ racunalnik (seja lastnika)
 
 export async function stanjeVprasanj(token: string | null, dir?: string): Promise<StanjeVprasanj> {

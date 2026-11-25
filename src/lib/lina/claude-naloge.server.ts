@@ -971,6 +971,19 @@ export function obNalogaKoncana(fn: (d: DogodekNalogaKoncana) => void): () => vo
   };
 }
 
+/**
+ * Za orkestrator (dodeli pomocniku): stanje naloge in, ko je koncana, njeno porocilo po isti varni poti kot zavihek Racunalnik.
+ * null = naloge ni. Koncna stanja so vsa, ki ne cakajo vec (koncano, nepopolno, odklonjeno, poteklo, napaka, preklicano).
+ */
+export async function izidNalogePomocnika(dir: string | undefined, id: string): Promise<{ koncano: boolean; stanje: string; porocilo: string | null } | null> {
+  const root = resolveDataDir(dir);
+  const z = (await preberi(root)).naloge.find((n) => n.id === id);
+  if (!z) return null;
+  const koncano = ["koncano", "nepopolno", "odklonjeno", "poteklo", "napaka", "preklicano"].includes(z.stanje);
+  const p = koncano ? await preberiPorocilo(root, z).catch(() => null) : null;
+  return { koncano, stanje: z.stanje, porocilo: p?.besedilo ?? null };
+}
+
 // ------------------------------------------------------------------ Lina kot vodja: pregled in zdruzitev dela vec agentov
 
 /**
