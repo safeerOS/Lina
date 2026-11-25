@@ -189,6 +189,12 @@ fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>, mejaB: Int = MEJA_
 /** Najvec zapomnjenih izbrisov (N3; ~30 B na id): toliko klicev hrani tudi racunalnik (MEJA_KLICEV). */
 const val MEJA_IZBRISANIH = 1000
 
+/** Najvec zapisov klicev na telefonu (N4): kot racunalnik (MEJA_KLICEV v sinhron-telefon.server.ts). */
+const val MEJA_ZAPISOV_TELEFON = 1000
+
+/** Rok hrambe prepisa podjetniskega klica (lastnik 22. 11. 2026: podjetniski zapis 90 dni); osebni prepis ostane do izbrisa. */
+const val ROK_PREPISA_PODJETJE_MS = 90L * 24 * 60 * 60 * 1000
+
 const val GOVOREC_KLICATELJ = "klicatelj"
 const val GOVOREC_LINA = "lina"
 
@@ -410,7 +416,8 @@ fun smemSinhroniziratiDnevnik(
 // Dnevnik klicev na telefonu: deluje samostojno brez racunalnika, sinhronizacijo pa zbira v vrsti za ozadje.
 class DnevnikKlicev(
     private val shramba: Shramba,
-    @Suppress("UNUSED_PARAMETER") private val odjemalec: LokalniPreizkusniOdjemalec? = null
+    @Suppress("UNUSED_PARAMETER") private val odjemalec: LokalniPreizkusniOdjemalec? = null,
+    private val ura: () -> Long = System::currentTimeMillis
 ) {
     private val zapisi = linkedMapOf<String, ZapisKlica>()
     private val vrstaSinhronizacije = linkedMapOf<String, ZapisKlicaSinhronizacija>()
@@ -442,8 +449,10 @@ class DnevnikKlicev(
         val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
         predlaganiZapisi[zapis.id] = zapis
         predlaganiCakajoci[zapis.id] = zapis.zaSinhronizacijo()
+        uveljaviHrambo(predlaganiZapisi, predlaganiCakajoci.keys + zadrzaniPrepisi)
         shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values)
-        zapisi[zapis.id] = zapis
+        zapisi.clear()
+        zapisi.putAll(predlaganiZapisi)
         vrstaSinhronizacije[zapis.id] = zapis.zaSinhronizacijo()
         return true
     }
@@ -614,12 +623,33 @@ class DnevnikKlicev(
             predlagani[zapis.id] = zapis
             dodanih++
         }
-        if (dodanih > 0) {
+        if (uveljaviHrambo(predlagani, vrstaSinhronizacije.keys + zadrzaniPrepisi) || dodanih > 0) {
             shraniVShrambo(predlagani.values, vrstaSinhronizacije.values)
             zapisi.clear()
             zapisi.putAll(predlagani)
         }
         return dodanih
+    }
+
+    /**
+     * Rok hrambe in meja rasti (slepi pregled 17t, N4; pravila hrambe lastnika 22. 11. 2026): prepis podjetniskega klica 90 dni, osebni do
+     * izbrisa uporabnika; dnevnik najvec MEJA_ZAPISOV_TELEFON zapisov (kot racunalnik MEJA_KLICEV), odstranijo se najstarejsi. Zapisi v [varni]
+     * (vrsta za racunalnik, zadrzani prepisi) se ne spremenijo, da racunalnik ne izgubi niti zapisa niti prepisa. true = sprememba.
+     */
+    private fun uveljaviHrambo(predlagani: MutableMap<String, ZapisKlica>, varni: Set<String>): Boolean {
+        var sprememba = false
+        val meja = ura() - ROK_PREPISA_PODJETJE_MS
+        for (z in predlagani.values.toList()) {
+            if (z.nacin == NacinKlica.PODJETJE && z.casZacetka < meja && z.prepisPogovora.isNotEmpty() && z.id !in varni) {
+                predlagani[z.id] = z.copy(prepisPogovora = emptyList()); sprememba = true
+            }
+        }
+        val presezek = predlagani.size - MEJA_ZAPISOV_TELEFON
+        if (presezek > 0) {
+            predlagani.values.filter { it.id !in varni }.sortedWith(compareBy<ZapisKlica> { it.casZacetka }.thenBy { it.id })
+                .take(presezek).forEach { predlagani.remove(it.id); sprememba = true }
+        }
+        return sprememba
     }
 
     // Prebere zapise iz lokalne shrambe; poskodovano datoteko ali poskodovane posamezne vnose varno zavrne brez izgube ostalih zapisov.

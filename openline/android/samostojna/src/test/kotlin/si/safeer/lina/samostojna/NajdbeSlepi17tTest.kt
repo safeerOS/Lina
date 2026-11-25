@@ -89,4 +89,29 @@ class NajdbeSlepi17tTest {
         assertEquals(listOf(true, true, false), poslano.map { it.contains("\"izbrisani\":[\"${z.id}\"]") })
     }
 
+    // N4: rok hrambe prepisa (osebni do izbrisa, podjetniski 90 dni) in omejitev rasti dnevnika.
+    @Test
+    fun `N4 - podjetniski prepis starejsi od 90 dni se ne hrani, osebni ostane`() {
+        val d = DnevnikKlicev(PomnilniskaShramba())
+        val star = 1_000L // 1970: davno cez rok
+        val podjetje = zapisSPrepisom("rac-p", star, NacinKlica.PODJETJE).zaSinhronizacijo()
+        val osebni = zapisSPrepisom("rac-o", star, NacinKlica.OSEBNA).zaSinhronizacijo()
+        assertEquals(2, d.sprejmiIzRacunalnika(listOf(podjetje, osebni)))
+        assertTrue(d.seznam().single { it.id == "rac-p" }.prepisPogovora.isEmpty(), "podjetniski prepis po roku ostal")
+        assertEquals(2, d.seznam().single { it.id == "rac-o" }.prepisPogovora.size, "osebni prepis se hrani do izbrisa")
+    }
+
+    @Test
+    fun `N4 - dnevnik na telefonu ne raste cez 1000 zapisov, cakajoci v vrsti pa se ne izgubijo`() {
+        val zapisi = (1..1000).joinToString(",") { """{"id":"k-$it","casZacetka":$it,"stevilka":"+99955501001","trajanjeS":1,"povzetek":"p"}""" }
+        val shramba = PomnilniskaShramba("""{"verzija":1,"zapisi":[$zapisi],"cakajoci":[]}""")
+        val d = DnevnikKlicev(shramba)
+        assertEquals(1000, d.seznam().size)
+        assertTrue(d.dodaj(zapisSPrepisom("nov", 5_000L)))
+        val ostali = DnevnikKlicev(shramba).seznam()
+        assertEquals(1000, ostali.size, "dnevnik je presegel mejo")
+        assertTrue(ostali.any { it.id == "nov" } && ostali.none { it.id == "k-1" }, "odstraniti se mora najstarejsi, nov ostane")
+        assertEquals(listOf("nov"), DnevnikKlicev(shramba).cakajociZaSinhronizacijo().map { it.id })
+    }
+
 }
