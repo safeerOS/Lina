@@ -9,7 +9,7 @@
  * dodajo v register; brez njih Lina dela samo z vgrajenimi orodji. Tajnica (klici) te datoteke ne uvaza.
  * Komentarji brez sumnikov.
  */
-import { appendFile, chmod, mkdir, readdir, unlink } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readdir, rename, unlink } from "node:fs/promises";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
@@ -669,22 +669,31 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     }
   };
 
-  /** Samo lastni datoteki veljavne naloge (id preverjen z VELJAVEN_ID); manjkajoca datoteka ni napaka. */
-  const izbrisiDatoteke = async (id: string) => {
-    for (const ime of [pot(id), `${id}.dnevnik.jsonl`]) {
-      await unlink(path.join(mapa, ime)).catch((e: NodeJS.ErrnoException) => { if (e.code !== "ENOENT") throw e; });
-    }
+  const brezNapake = (e: NodeJS.ErrnoException) => { if (e.code !== "ENOENT") throw e; };
+  /** Samo lastni datoteki veljavne naloge (id preverjen z VELJAVEN_ID); manjkajoca datoteka ni napaka. arhiviraj: dnevnik v arhiv/. */
+  const izbrisiDatoteke = async (id: string, arhiviraj = false) => {
+    await unlink(path.join(mapa, pot(id))).catch(brezNapake);
+    const dnevnik = `${id}.dnevnik.jsonl`;
+    if (!arhiviraj) return void (await unlink(path.join(mapa, dnevnik)).catch(brezNapake));
+    // naloga 11 N5: zapis izvedenih dejanj ostane (AGENTS.md); arhiv ni na seznamu nalog
+    await mkdir(path.join(mapa, "arhiv"), { recursive: true, mode: 0o700 });
+    await rename(path.join(mapa, dnevnik), path.join(mapa, "arhiv", dnevnik)).catch(brezNapake);
+  };
+  /** Naloga 11 N5: cas v prihodnosti ali neberljiv ne steje kot novejsi (najstarejsi), sicer podtaknjene naloge izrinejo prave. */
+  const casPosodobitve = (s: StanjeNaloge) => {
+    const t = Date.parse(s.posodobljeno);
+    return Number.isFinite(t) && t <= zdaj() ? t : 0;
   };
   /** Pregled V5: koncane starejse od HRANI_KONCANE_MS in najstarejse cez NAJVEC_KONCANIH; neveljavne in tuje datoteke ostanejo. */
   const pocisti = async () => {
     const koncane = (await seznamVeljavnih()).filter((s) => KONCNE_FAZE.includes(s.faza))
-      .sort((a, b) => b.posodobljeno.localeCompare(a.posodobljeno));
+      .sort((a, b) => casPosodobitve(b) - casPosodobitve(a));
     for (const [i, s] of koncane.entries()) {
-      const star = zdaj() - Date.parse(s.posodobljeno) > HRANI_KONCANE_MS;
+      const star = zdaj() - casPosodobitve(s) > HRANI_KONCANE_MS;
       if (!star && i < NAJVEC_KONCANIH) continue;
       await vVrsti(s.id, async () => {
         const sveze = await preberi(s.id);
-        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id);
+        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id, true);
       });
     }
   };
