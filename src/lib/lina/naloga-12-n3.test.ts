@@ -10,7 +10,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { OrodjeOrkestratorja } from "./orkestrator.ts";
-import { javnaNaloga, ustvariOrkestrator, type KlicModela } from "./orkestrator.server.ts";
+import { setupOwner } from "./auth.server.ts";
+import { javnaNaloga, stanjeOrkestratorja, ustvariOrkestrator, type KlicModela } from "./orkestrator.server.ts";
 
 const mapa = () => mkdtemp(path.join(tmpdir(), "lina-n12-n3-"));
 const brez = { oceni: null, ucenje: null, imaGeslo: async () => true } as const;
@@ -104,6 +105,30 @@ describe("N3: stanje brez podpisa samo za branje, nikoli podpisano", () => {
     // meja NAJVEC_NALOG (50): 50 nepodpisanih nedokoncanih ne zapre nalog lastniku
     for (let i = 0; i < 50; i++) await staro(root, [], () => undefined);
     assert.ok(await o.nova({ cilj: "Nova naloga lastnika." }));
+  });
+
+  // naloga 14 N3 dopolnitev: nepodpisane so zdaj na seznamu - ciscenje in prvih 20 vrstic vmesnika jih ne smeta upostevati
+  it("ciscenje: 50 podtaknjenih nepodpisanih koncanih s svezim casom ne izrine prave koncane naloge in se ne izbrise samo", async () => {
+    const root = await mapa();
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
+    const prava = await o.nova({ cilj: "Prava naloga." });
+    await o.teci(prava.id);
+    const podtaknjene: string[] = [];
+    // cas novejsi od prave naloge, a ne v prihodnosti (sicer ga ciscenje ze tako da na konec vrste, naloga 11 N5)
+    for (let i = 0; i < 50; i++) podtaknjene.push(await staro(root, [], (x) => { koncana(x); x.posodobljeno = new Date().toISOString(); }));
+    await o.nova({ cilj: "Nova naloga sprozi ciscenje." });
+    assert.equal((await o.preberi(prava.id))?.faza, "koncano", "prava naloga ostane");
+    assert.equal((await o.seznam()).filter((x) => podtaknjene.includes(x.id)).length, 50, "nepreverjene brise samo lastnik");
+  });
+
+  it("vmesnik: 20 podtaknjenih nepodpisanih z novejsim zacetkom ne skrije prave naloge", async () => {
+    const root = await mapa();
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
+    const prava = await o.nova({ cilj: "Prava naloga." });
+    for (let i = 0; i < 20; i++) await staro(root, [], (x) => { koncana(x); x.zacetek = "9999-12-31T00:00:00.000Z"; });
+    const token = await setupOwner("geslo-test-1234", root);
+    const st = await stanjeOrkestratorja(token, root);
+    assert.ok(st.naloge.some((x) => x.id === prava.id), "prava naloga je med prikazanimi");
   });
 
   it("kontrola: naloga, ki jo je zapisala Lina, ni oznacena (ni nepreverjeno)", async () => {

@@ -819,7 +819,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   };
   /** Pregled V5: koncane starejse od HRANI_KONCANE_MS in najstarejse cez NAJVEC_KONCANIH; neveljavne in tuje datoteke ostanejo. */
   const pocisti = async () => {
-    const koncane = (await seznamVeljavnih()).filter((s) => KONCNE_FAZE.includes(s.faza))
+    // naloga 14 N3: nepreverjene (lahko podtaknjene, poljuben cas) ne stejejo v mejo in se ne brisejo same - izbrise jih lastnik
+    const koncane = (await seznamVeljavnih()).filter((s) => KONCNE_FAZE.includes(s.faza) && !s.nepreverjeno)
       .sort((a, b) => (veljavenCas(b) ?? 0) - (veljavenCas(a) ?? 0));
     for (const [i, s] of koncane.entries()) {
       // star samo po berljivem preteklem casu: ura, premaknjena nazaj, ne pocisti pravih nalog takoj (te gredo le cez mejo stevila)
@@ -1035,7 +1036,8 @@ export async function stanjeOrkestratorja(token: string | null, dir?: string): P
   await requireOwner(token, root);
   const { stanjeVprasanjZaRoot } = await import("./vprasanja-agentov.server.ts");
   const vprasanja = stanjeVprasanjZaRoot(root).vprasanja;
-  const naloge = (await orkestrator(dir).seznam()).slice(0, 20).map((s) => {
+  // naloga 14 N3: preverjene najprej (stabilno, po zacetku), da podtaknjene nepreverjene z novejsim zacetkom ne skrijejo pravih
+  const naloge = (await orkestrator(dir).seznam()).sort((a, b) => Number(!!a.nepreverjeno) - Number(!!b.nepreverjeno)).slice(0, 20).map((s) => {
     const j = javnaNaloga(s);
     const v = j.cakanje?.vprasanjeId && !j.nepreverjeno ? vprasanja.find((x) => x.id === j.cakanje!.vprasanjeId && x.stanje === "caka") : undefined;
     // potrditev veze zgostitev prikazanega vnosa (ista kot pri vprasanjih agentov): lastnik potrdi natanko to, kar vidi
