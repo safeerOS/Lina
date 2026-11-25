@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ADC_MANJKA, pozabiZeton, vertexAccessToken } from "./adc.server.ts";
 import {
   filtrirajIzhod,
@@ -770,7 +770,21 @@ export type KlicOrodja = {
   ime: string;
   /** Preverjeni argumenti kot JSON objekt (nikoli polje ali primitiv). */
   argumenti: Record<string, unknown>;
+  /** Gemini 3 thoughtSignature: mora se vrniti v naslednjem obratu, sicer Vertex/Gemini vrne 400. */
+  podpis?: string;
 };
+
+/** Gemini functionDeclarations so OpenAPI shema: kljuca additionalProperties ne pozna; preverbo naredi orkestrator. */
+function shemaZaGemini(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(shemaZaGemini);
+  if (!jeJsonObjekt(v)) return v;
+  const izhod: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v)) if (k !== "additionalProperties" && k !== "$schema") izhod[k] = shemaZaGemini(x);
+  return izhod;
+}
+
+/** Nadomestni id, kadar ga ponudnik ne da: enolicen tudi med obrati (prej se je stevilo zacelo z 1 v vsakem odgovoru). */
+const nadomestniId = (pred: string, n: number) => `${pred}-${randomUUID().slice(0, 8)}-${n}`;
 
 export type SporociloOrodja =
   | { vloga: "uporabnik"; besedilo: string }
@@ -846,7 +860,7 @@ function sporocilaZaGemini(sporocila: ReadonlyArray<SporociloOrodja>): Array<{ r
       const parts: Array<Record<string, unknown>> = [];
       if (s.besedilo) parts.push({ text: s.besedilo });
       for (const k of s.klici ?? []) {
-        parts.push({ functionCall: { name: k.ime, args: k.argumenti } });
+        parts.push({ functionCall: { name: k.ime, args: k.argumenti }, ...(k.podpis ? { thoughtSignature: k.podpis } : {}) });
       }
       if (parts.length === 0) parts.push({ text: "" });
       contents.push({ role: "model", parts });
@@ -986,7 +1000,7 @@ export function providerRequestZOrodji(
                 functionDeclarations: orodja.map((o) => ({
                   name: o.ime,
                   description: o.opis,
-                  parameters: o.parametri,
+                  parameters: shemaZaGemini(o.parametri),
                 })),
               },
             ],
@@ -1149,8 +1163,9 @@ export function razberiOdgovorZOrodji(provider: BrainProvider, surovo: string): 
         const id =
           typeof part.functionCall.id === "string" && part.functionCall.id.trim()
             ? part.functionCall.id.trim()
-            : `gemini-${klici.length + 1}`;
-        klici.push({ id, ime, argumenti: args ?? {} });
+            : nadomestniId("gemini", klici.length + 1);
+        const podpis = typeof part.thoughtSignature === "string" && part.thoughtSignature ? part.thoughtSignature : undefined;
+        klici.push({ id, ime, argumenti: args ?? {}, ...(podpis ? { podpis } : {}) });
       }
     }
     let razlogKonca: RazlogKoncaOrodij;
@@ -1181,7 +1196,7 @@ export function razberiOdgovorZOrodji(provider: BrainProvider, surovo: string): 
         if (!jeJsonObjekt(blok.input)) {
           return { ok: false, sporocilo: "Argumenti orodja morajo biti veljaven JSON objekt." };
         }
-        const id = typeof blok.id === "string" && blok.id.trim() ? blok.id.trim() : `claude-${klici.length + 1}`;
+        const id = typeof blok.id === "string" && blok.id.trim() ? blok.id.trim() : nadomestniId("claude", klici.length + 1);
         klici.push({ id, ime, argumenti: blok.input });
       }
     }
@@ -1244,7 +1259,7 @@ export function razberiOdgovorZOrodji(provider: BrainProvider, surovo: string): 
       } else {
         return { ok: false, sporocilo: "Argumenti orodja morajo biti veljaven JSON objekt." };
       }
-      const id = typeof tc.id === "string" && tc.id.trim() ? tc.id.trim() : `openai-${klici.length + 1}`;
+      const id = typeof tc.id === "string" && tc.id.trim() ? tc.id.trim() : nadomestniId("openai", klici.length + 1);
       klici.push({ id, ime, argumenti });
     }
   }
@@ -1353,6 +1368,8 @@ export async function callProviderZOrodji(
     return {
       ...izid,
       besedilo: hideSecret(izid.besedilo, secret),
+      // model lahko kljuc ponovi tudi v argumentih; JSON.stringify ubezi narekovaje, zato zamenjava ostane veljaven JSON
+      klici: izid.klici.map((k) => ({ ...k, argumenti: JSON.parse(hideSecret(JSON.stringify(k.argumenti), secret)) as Record<string, unknown> })),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Klic ponudnika ni uspel.";

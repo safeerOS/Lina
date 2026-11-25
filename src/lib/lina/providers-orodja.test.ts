@@ -694,3 +694,65 @@ describe("F1: varovala in belezenje porabe (callProvider in callProviderZOrodji)
     assert.equal(jsonPosnetek.includes("sk-1"), false);
   });
 });
+
+describe("F1 pregled (orkestrator): popravki klica z orodji", () => {
+  it("Gemini 3: thoughtSignature klica orodja se ohrani in vrne v naslednjem obratu (brez njega Gemini 3 vrne 400)", async () => {
+    const zajeto: ZajetaZahteva[] = [];
+    const odg = {
+      telo: {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ functionCall: { name: "beri", args: { pot: "a.ts" } }, thoughtSignature: "PODPIS-123" }] },
+            finishReason: "STOP",
+          },
+        ],
+      },
+    };
+    globalThis.fetch = lazniFetch([odg, odg], zajeto);
+    const p = { provider: "gemini" as const, model: "gemini-3.8-flash", key: "AIza-x" };
+    const r = await callProviderZOrodji(p, [{ vloga: "uporabnik", besedilo: "beri" }], ORODJA);
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.klici[0]!.podpis, "PODPIS-123");
+    const sporocila: SporociloOrodja[] = [
+      { vloga: "uporabnik", besedilo: "beri" },
+      { vloga: "asistent", klici: r.klici },
+      { vloga: "orodje", id: r.klici[0]!.id, ime: "beri", rezultat: "vsebina" },
+    ];
+    await callProviderZOrodji(p, sporocila, ORODJA);
+    const telo = zajeto[1]!.telo as { contents: Array<{ parts: Array<Record<string, unknown>> }> };
+    assert.equal(telo.contents[1]!.parts[0]!.thoughtSignature, "PODPIS-123");
+    assert.ok(telo.contents[1]!.parts[0]!.functionCall);
+  });
+
+  it("Gemini: parametri brez additionalProperties (OpenAPI shema Gemini tega kljuca ne pozna)", async () => {
+    const zajeto: ZajetaZahteva[] = [];
+    globalThis.fetch = lazniFetch([{ telo: { candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }] } }], zajeto);
+    const shema = { type: "object" as const, properties: { a: { type: "object", properties: {}, additionalProperties: false } }, additionalProperties: false };
+    await callProviderZOrodji({ provider: "gemini", model: "gemini-3.8-flash", key: "AIza-x" }, [{ vloga: "uporabnik", besedilo: "x" }], [
+      { ime: "o", opis: "o", parametri: shema },
+    ]);
+    assert.equal(JSON.stringify(zajeto[0]!.telo).includes("additionalProperties"), false);
+    assert.equal(shema.additionalProperties, false, "izvirna definicija ostane nespremenjena");
+  });
+
+  it("nadomestni id klica orodja je enolicen med obrati (prej gemini-1 v vsakem obratu)", async () => {
+    const zajeto: ZajetaZahteva[] = [];
+    const odg = { telo: { candidates: [{ content: { parts: [{ functionCall: { name: "beri", args: { pot: "a" } } }] }, finishReason: "STOP" }] } };
+    globalThis.fetch = lazniFetch([odg, odg], zajeto);
+    const p = { provider: "gemini" as const, model: "gemini-3.8-flash", key: "AIza-x" };
+    const a = await callProviderZOrodji(p, [{ vloga: "uporabnik", besedilo: "x" }], ORODJA);
+    const b = await callProviderZOrodji(p, [{ vloga: "uporabnik", besedilo: "x" }], ORODJA);
+    assert.ok(a.ok && b.ok);
+    if (a.ok && b.ok) assert.notEqual(a.klici[0]!.id, b.klici[0]!.id);
+  });
+
+  it("kljuc v argumentih klica orodja je skrit", async () => {
+    const zajeto: ZajetaZahteva[] = [];
+    const tc = [{ id: "c1", type: "function", function: { name: "isci", arguments: JSON.stringify({ vzorec: "sk-or-skrivni-kljuc-123" }) } }];
+    globalThis.fetch = lazniFetch([{ telo: { choices: [{ message: { content: null, tool_calls: tc }, finish_reason: "tool_calls" }] } }], zajeto);
+    const r = await callProviderZOrodji({ provider: "openrouter", model: "openai/gpt-x", key: "sk-or-skrivni-kljuc-123" }, [{ vloga: "uporabnik", besedilo: "x" }], ORODJA);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(JSON.stringify(r.klici).includes("sk-or-skrivni-kljuc-123"), false);
+  });
+});
