@@ -906,9 +906,21 @@ describe("viri znanja (streznik)", () => {
     modelPredlaga();
     const a = await naloziVir("a.docx", b64(DOKUMENT), token, dir);
     assert.ok(a.predlog);
-    const [izbris, potrditev] = await Promise.allSettled([izbrisiVir(a.vir.id, token, dir), potrdiPredlogDatoteke([a.predlog.vrstice[0].id], token, dir)]);
-    assert.equal(izbris.status, "fulfilled");
-    assert.equal(potrditev.status, "rejected", "potrjen je bil predlog izbrisanega vira");
+    // Deterministicno: potrditev najde predlog, ki se kaze na izbrisan vir (izbris je tekel med njenim cakanjem); preverba vira pod
+    // vrsto ga zavrne. Predlog se vrne na disk, ker ga izbris sicer zavrze in potrditev pade ze na »ni predloga«.
+    const predlogNaDisku = await readFile(path.join(dir, PREDLOG_DATOTEKE));
+    await izbrisiVir(a.vir.id, token, dir);
+    await writeFile(path.join(dir, PREDLOG_DATOTEKE), predlogNaDisku);
+    await assert.rejects(potrdiPredlogDatoteke([a.predlog.vrstice[0].id], token, dir), "potrjen je bil predlog izbrisanega vira");
     assert.deepEqual((await loadLine(dir)).catalog.products, []);
+    // Socasno (naloga 13): v vrsto vstopi prej tisti klic, ki prej konca requireOwner (branje sej), ne tisti, ki je bil prej klican -
+    // vrstnega reda klicev koda ne obljublja (tudi HTTP ga ne). Obljuba je: noben preplet; potrditev je cela pred izbrisom ali zavrnjena.
+    const b = await naloziVir("b.docx", b64(DOKUMENT), token, dir);
+    assert.ok(b.predlog);
+    const [izbris, potrditev] = await Promise.allSettled([izbrisiVir(b.vir.id, token, dir), potrdiPredlogDatoteke([b.predlog.vrstice[0].id], token, dir)]);
+    assert.equal(izbris.status, "fulfilled");
+    const izdelki = (await loadLine(dir)).catalog.products.map((p) => p.name);
+    assert.deepEqual(izdelki, potrditev.status === "fulfilled" ? ["Jedilne mize"] : []);
+    assert.deepEqual(await seznamVirov(token, dir), { viri: [], predlog: null });
   });
 });
