@@ -15,9 +15,12 @@ import {
   NAJVEC_KORAKOV,
   NAJVEC_ZNAKOV_KORAKA,
   NAJVEC_ZNAKOV_NASLOVA,
+  NAJVEC_IZKUSENJ,
+  NAJVEC_IZKUSENJ_NA_TIP,
   cisto,
   zacetniNapredek,
   type Enota,
+  type IzkusnjaLH,
   type NapredekKoraka,
   type Seja,
   type StanjeLH,
@@ -40,9 +43,27 @@ export function vVrsti<T>(root: string, delo: () => Promise<T>): Promise<T> {
   return zdaj;
 }
 
-const privzeto = (): StanjeLH => ({ vklopljen: true, enote: [], seja: null });
+const privzeto = (): StanjeLH => ({ vklopljen: true, enote: [], seja: null, izkusnje: [] });
 /** Nepricakovana datoteka (simbolna povezava, prevelika): izklopljeno, nic se ne bere. */
-const zaprto = (): StanjeLH => ({ vklopljen: false, enote: [], seja: null });
+const zaprto = (): StanjeLH => ({ vklopljen: false, enote: [], seja: null, izkusnje: [] });
+
+/** Izkusnje orkestratorja (naloga 8): tip v obliki normirajTip, besedilo ocisceno ([[, nevidni znaki), meje stevila in dolzine. */
+function veljavneIzkusnje(x: unknown): IzkusnjaLH[] {
+  if (!Array.isArray(x)) return [];
+  const po: Map<string, number> = new Map();
+  const out: IzkusnjaLH[] = [];
+  for (const i of x.slice(-NAJVEC_IZKUSENJ)) {
+    const v = i as Partial<IzkusnjaLH> | null;
+    if (!v || typeof v.tip !== "string" || !/^[a-z0-9-]{1,40}$/.test(v.tip)) continue;
+    const besedilo = cisto(v.besedilo, 600);
+    if (!besedilo) continue;
+    const n = po.get(v.tip) ?? 0;
+    if (n >= NAJVEC_IZKUSENJ_NA_TIP) continue;
+    po.set(v.tip, n + 1);
+    out.push({ tip: v.tip, naslov: cisto(v.naslov, 80) || "Izkusnja", besedilo });
+  }
+  return out;
+}
 
 function veljavenNapredek(x: unknown): NapredekKoraka {
   const n = x as Partial<NapredekKoraka> | null;
@@ -111,9 +132,9 @@ export async function preberiStanjeLH(root: string): Promise<StanjeLH> {
     if (!st2.isFile() || st2.size > MEJA_DATOTEKE_B) return zaprto();
     const buf = Buffer.allocUnsafe(st2.size);
     const { bytesRead } = await h.read(buf, 0, st2.size, 0);
-    const raw = JSON.parse(buf.subarray(0, bytesRead).toString("utf8")) as { vklopljen?: unknown; enote?: unknown; seja?: unknown };
+    const raw = JSON.parse(buf.subarray(0, bytesRead).toString("utf8")) as { vklopljen?: unknown; enote?: unknown; seja?: unknown; izkusnje?: unknown };
     const enote = Array.isArray(raw.enote) ? raw.enote.map(veljavnaEnota).filter((e): e is Enota => e !== null).slice(-NAJVEC_ENOT) : [];
-    return { vklopljen: raw.vklopljen !== false, enote, seja: veljavnaSeja(raw.seja, enote) };
+    return { vklopljen: raw.vklopljen !== false, enote, seja: veljavnaSeja(raw.seja, enote), izkusnje: veljavneIzkusnje(raw.izkusnje) };
   } catch {
     // pokvarjena datoteka: izklopljeno, da je samodejni zapis ne prepise (lastnik jo vidi kot izklopljeno in odloci sam)
     return zaprto();

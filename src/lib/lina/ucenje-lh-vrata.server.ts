@@ -24,6 +24,8 @@ type ModulLH = {
   nastavi(root: string, vklop: boolean): Promise<Pregled>;
   izbrisi(root: string, id: string): Promise<Pregled>;
   izbrisiVse(root: string): Promise<Pregled>;
+  zaNalogo?(root: string, tip: string, cilj: string): Promise<Array<{ naslov: string; besedilo: string }>>;
+  zapisiIzkusnjo?(root: string, i: { tip: string; naslov: string; besedilo: string }): Promise<boolean>;
 };
 
 type Nalagalnik = () => Promise<{ ucenjeLH: ModulLH | null }>;
@@ -71,6 +73,29 @@ export async function ucenjeLHOdsek(root: string, besedilo: string): Promise<str
   } catch {
     return "";
   }
+}
+
+/**
+ * Orkestrator (naloga 8, orkestrator-ucenje.ts): ucne enote in izkusnje za nalogo. null = modula ni (gradnja brez njega, napaka
+ * nalaganja ali starejsi modul brez te funkcije) - orkestrator takrat uporabi privzeto samoucenje. Ob napaki modula prazno.
+ * Vrata ne uvazajo orkestratorja (brez kroga, pot klica ostane locena).
+ */
+export async function ucenjeLHZaNalogo(dir: string | undefined, tip: string, cilj: string): Promise<Array<{ naslov: string; besedilo: string }> | null> {
+  const m = await modul();
+  if (!m?.zaNalogo) return null;
+  return m.zaNalogo(resolveDataDir(dir), tip, cilj).catch(() => []);
+}
+
+export async function ucenjeLHZapisiIzkusnjo(dir: string | undefined, i: { tip: string; naslov: string; besedilo: string }): Promise<boolean | null> {
+  const m = await modul();
+  if (!m?.zapisiIzkusnjo) return null;
+  return m.zapisiIzkusnjo(resolveDataDir(dir), i).catch(() => false);
+}
+
+/** Ali je modul nalozen in zna delati z orkestratorjem (izbira ucenja ob prvem koraku). */
+export async function ucenjeLHZaOrkestrator(): Promise<boolean> {
+  const m = await modul();
+  return typeof m?.zaNalogo === "function" && typeof m?.zapisiIzkusnjo === "function";
 }
 
 const brezModula = (): StanjeUcenjaLH => ({ naVoljo: false, vklopljen: false, enote: [] });

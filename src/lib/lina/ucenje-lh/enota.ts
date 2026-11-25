@@ -24,7 +24,11 @@ export type Seja = {
   vrsta: number[];
   zadnjic: string;
 };
-export type StanjeLH = { vklopljen: boolean; enote: Enota[]; seja: Seja | null };
+/** Izkusnja orkestratorja (naloga 8): besedilo sestavi Linina koda iz strukturiranih polj, modul ga samo hrani in vrne. */
+export type IzkusnjaLH = { tip: string; naslov: string; besedilo: string };
+export type StanjeLH = { vklopljen: boolean; enote: Enota[]; seja: Seja | null; izkusnje: IzkusnjaLH[] };
+export const NAJVEC_IZKUSENJ_NA_TIP = 10;
+export const NAJVEC_IZKUSENJ = 200;
 
 export const NAJVEC_ENOT = 50;
 export const NAJMANJ_KORAKOV = 2;

@@ -11,8 +11,11 @@
 import { randomUUID } from "node:crypto";
 import {
   NAJVEC_ENOT,
+  NAJVEC_IZKUSENJ,
+  NAJVEC_IZKUSENJ_NA_TIP,
   ROK_SEJE_MS,
   besediloEnote,
+  cisto,
   jeKonec,
   jeNameraSestave,
   jeNameraUre,
@@ -29,6 +32,7 @@ import {
   zapadliKoraki,
   znanih,
   type Enota,
+  type IzkusnjaLH,
   type StanjeLH,
 } from "./enota.ts";
 import { BESEDILO_MERJENJA, BESEDILO_NEPREVERJENO, NAVODILO_OCENE, NAVODILO_SESTAVE, UVOD_ODSEKA } from "./pozivi.ts";
@@ -182,9 +186,37 @@ async function odsekPogovora(root: string, besedilo: string): Promise<string> {
   return `\n\n${UVOD_ODSEKA} (lastnik jih lahko vadi z »preveri me iz <postopek>«):\n${rel.map(besediloEnote).join("\n\n")}`;
 }
 
+/**
+ * Orkestrator (naloga 8): ucne enote lastnika, ki ustrezajo cilju, in zadnje izkusnje istega tipa naloge, kot podatek. Prazno ob izklopu.
+ * Tip je ze normiran (Linina koda), besedila so ociscena ob branju (shramba).
+ */
+async function zaNalogo(root: string, tip: string, cilj: string): Promise<Array<{ naslov: string; besedilo: string }>> {
+  const s = await preberiStanjeLH(root);
+  if (!s.vklopljen) return [];
+  const enote = s.enote.filter((e) => jeRelevantna(e, cilj)).slice(-2).map((e) => ({ naslov: `Postopek ${e.naslov}`, besedilo: besediloEnote(e) }));
+  const izk = s.izkusnje.filter((i) => i.tip === tip).slice(-5).reverse().map((i) => ({ naslov: i.naslov, besedilo: i.besedilo }));
+  return [...enote, ...izk];
+}
+
+/** Zapis izkusnje orkestratorja (besedilo sestavi Linina koda iz polj). Ob izklopu ali nepricakovani datoteki nic. */
+function zapisiIzkusnjo(root: string, i: IzkusnjaLH): Promise<boolean> {
+  return vVrsti(root, async () => {
+    const s = await preberiStanjeLH(root);
+    const besedilo = cisto(i.besedilo, 600);
+    if (!s.vklopljen || !/^[a-z0-9-]{1,40}$/.test(i.tip) || !besedilo) return false;
+    const istega = s.izkusnje.filter((x) => x.tip === i.tip).slice(-(NAJVEC_IZKUSENJ_NA_TIP - 1));
+    const drugi = s.izkusnje.filter((x) => x.tip !== i.tip);
+    s.izkusnje = [...drugi, ...istega, { tip: i.tip, naslov: cisto(i.naslov, 80) || "Izkusnja", besedilo }].slice(-NAJVEC_IZKUSENJ);
+    await zapisiStanjeLH(root, s);
+    return true;
+  });
+}
+
 export const ucenjeLH = {
   obdelajSporocilo,
   odsekPogovora,
+  zaNalogo,
+  zapisiIzkusnjo,
   stanje: async (root: string): Promise<PregledLH> => pregled(await preberiStanjeLH(root)),
   nastavi: (root: string, vklop: boolean): Promise<PregledLH> =>
     vVrsti(root, async () => {
@@ -208,6 +240,7 @@ export const ucenjeLH = {
       const s = await preberiStanjeLH(root);
       s.enote = [];
       s.seja = null;
+      s.izkusnje = [];
       await zapisiStanjeLH(root, s);
       return pregled(s);
     }),
