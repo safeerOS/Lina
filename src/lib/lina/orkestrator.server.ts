@@ -88,6 +88,8 @@ export type StanjeNaloge = {
   okuzeno: boolean;
   /** Naloga 12 #3: stanje iz izdaje pred podpisom (selitev ob nadgradnji): samo branje, vsebina ni preverjena. */
   nepreverjeno?: boolean;
+  /** Naloga 12 #2: monotona verzija (podpisana); starejsa od znane (pomnilnik, indeks.json) = vrnjeno stanje. Brez polja = 0. */
+  verzija?: number;
   ucenje: boolean;
   enoteUcenja: string[];
   cilja: StanjeCilja;
@@ -271,6 +273,7 @@ export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime
   if (!obj(x.ponovitve) || !Object.values(x.ponovitve).every(st)) return "ponovitve";
   for (const p of ["okuzeno", "ucenje", "gesloObZacetku"]) if (typeof x[p] !== "boolean") return p;
   if (x.nepreverjeno !== undefined && typeof x.nepreverjeno !== "boolean") return "nepreverjeno";
+  if (x.verzija !== undefined && !(Number.isSafeInteger(x.verzija) && (x.verzija as number) >= 0)) return "verzija";
   if (!nizi(x.enoteUcenja)) return "enoteUcenja";
   const ci = x.cilja;
   if (!obj(ci) || !st(ci.nadaljevanj) || !st(ci.brezNapredka) || !niz(ci.zadnjiIzid)) return "cilja";
@@ -297,10 +300,18 @@ function kanonicno(v: unknown): string {
  * je neveljavno (stanje pred to izdajo preseli preseli). Meja: podpis NE varuje pred bralcem mape podatkov - kdor prebere .kljuc (mapa v
  * oblaku ali dostopna drugim), podpise sam; varuje samo pred tistim, ki sme pisati, a ne brati (naloga 12 #1).
  */
-export async function podpisStanja(root: string, stanje: unknown): Promise<string> {
+export async function podpisStanja(root: string, stanje: unknown, namen = "orkestrator"): Promise<string> {
   const { kljucCelovitosti } = await import("./keys.server.ts");
   const { podpis: _, ...brez } = JSON.parse(JSON.stringify(stanje)) as Record<string, unknown>;
-  return createHmac("sha256", await kljucCelovitosti("orkestrator", root)).update(kanonicno(brez)).digest("hex");
+  return createHmac("sha256", await kljucCelovitosti(namen, root)).update(kanonicno(brez)).digest("hex");
+}
+
+/** Podpis enak pricakovanemu (podpis je hex niz ali kar koli z diska). */
+async function podpisVelja(root: string, x: object, namen?: string): Promise<boolean> {
+  const podpis = "podpis" in x ? (x as { podpis: unknown }).podpis : undefined;
+  const pricakovan = Buffer.from(await podpisStanja(root, x, namen));
+  const dobljen = Buffer.from(typeof podpis === "string" ? podpis : "");
+  return dobljen.length === pricakovan.length && timingSafeEqual(dobljen, pricakovan);
 }
 
 export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}): Orkestrator {
@@ -333,25 +344,55 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   // naloga 11 N1: potrditev velja samo v procesu, ki jo je dobil od lastnika (zastavica z diska je lahko podtaknjena)
   const potrjeniVProcesu = new Set<string>();
   const kljucPotrditve = (s: StanjeNaloge, k: KlicOrodja) => `${s.id}/${k.id}`;
+  // naloga 12 #2: klici, ki jih je odprl ta proces (odgovor modela); klic z diska (po zagonu, vrnjeno stanje), ki ni branje, caka potrditev
+  const odprtiVProcesu = new Set<string>();
 
   const pot = (id: string) => {
     if (!VELJAVEN_ID.test(id)) throw new OrkestratorNapaka("ni-naloge");
     return `${id}.json`;
+  };
+  // naloga 12 #2: zadnja znana verzija vsake naloge (izbrisana: verzija vec od zadnje). Nalozi se enkrat iz podpisanega indeksa, nato
+  // samo pomnilnik; indeks se zapise PO stanju (prekinitev med zapisoma: stanje je novejse od indeksa in velja, ker velja >= znana).
+  // Meja: po ponovnem zagonu vrnjen indeks skupaj s starim stanjem ostane veljaven - zato klic z diska po zagonu caka potrditev.
+  const INDEKS = "indeks.json";
+  let verzije: Promise<Map<string, number>> | null = null;
+  const znaneVerzije = () => (verzije ??= (async () => {
+    const m = new Map<string, number>();
+    const x = await readJsonFile<unknown>(mapa, INDEKS).catch(() => null);
+    if (!x || typeof x !== "object" || Array.isArray(x)) return m;
+    if (!(await podpisVelja(root, x, "orkestrator-indeks"))) {
+      console.error("lina: indeks verzij nalog nima veljavnega podpisa; vrnjena stanja se zaznajo samo v tem procesu.");
+      return m;
+    }
+    const v = (x as { verzije?: unknown }).verzije;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      for (const [id, n] of Object.entries(v)) if (VELJAVEN_ID.test(id) && Number.isSafeInteger(n) && (n as number) >= 0) m.set(id, n as number);
+    }
+    return m;
+  })());
+  let zapisIndeksa: Promise<unknown> = Promise.resolve();
+  /** En zapis indeksa naenkrat (vVrsti je po nalogi, indeks je skupen). */
+  const shraniIndeks = async () => {
+    const m = await znaneVerzije();
+    const p = zapisIndeksa.catch(() => undefined).then(async () => {
+      const telo = { verzije: Object.fromEntries(m) };
+      await writeJson(mapa, INDEKS, { ...telo, podpis: await podpisStanja(root, telo, "orkestrator-indeks") });
+    });
+    zapisIndeksa = p;
+    await p;
   };
   const zeJavljeno = new Set<string>();
   const preberi = async (id: string): Promise<StanjeNaloge | null> => {
     if (!VELJAVEN_ID.test(id)) return null;
     const x = await readJsonFile<unknown>(mapa, pot(id)).catch(() => null);
     if (x === null) return null;
-    const podpis = x && typeof x === "object" && "podpis" in x ? (x as { podpis: unknown }).podpis : undefined;
-    const pricakovan = Buffer.from(await podpisStanja(root, x));
-    const dobljen = Buffer.from(typeof podpis === "string" ? podpis : "");
-    const podpisan = dobljen.length === pricakovan.length && timingSafeEqual(dobljen, pricakovan);
+    const podpisan = !!x && typeof x === "object" && await podpisVelja(root, x);
     if (podpisan) {
       delete (x as { podpis?: unknown }).podpis;
       odstraniPotrjeno(x);
     }
-    const razlog = podpisan ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
+    let razlog = podpisan ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
+    if (razlog === null && ((x as StanjeNaloge).verzija ?? 0) < ((await znaneVerzije()).get(id) ?? 0)) razlog = "verzija";
     if (razlog === null) return x as StanjeNaloge;
     // pregled V7: neveljavno stanje se ne nadaljuje in ne pokaze; v dnevnik enkrat na nalogo (seznam bere ob vsakem osvezenju)
     if (!zeJavljeno.has(id)) {
@@ -361,8 +402,12 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     return null;
   };
   const zapisi = async (s: StanjeNaloge) => {
+    const m = await znaneVerzije();
+    s.verzija = Math.max(s.verzija ?? 0, m.get(s.id) ?? 0) + 1;
     s.posodobljeno = iso();
     await writeJson(mapa, pot(s.id), { ...s, podpis: await podpisStanja(root, s) });
+    m.set(s.id, s.verzija);
+    await shraniIndeks();
   };
   /** Dnevnik naloge: samo metapodatki (vrsta, orodje, odtis argumentov, uspeh), nikoli vsebina izidov. */
   const vDnevnik = async (s: StanjeNaloge, zapis: Record<string, unknown>) => {
@@ -401,7 +446,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     s.odprti = [];
     s.cakanje = null;
     // naloga 12 #12: potrditev v pomnilniku ne prezivi konca naloge (vrnjeno stanje z istim klicem bi jo porabilo)
-    for (const k of potrjeniVProcesu) if (k.startsWith(`${s.id}/`)) potrjeniVProcesu.delete(k);
+    for (const mn of [potrjeniVProcesu, odprtiVProcesu]) for (const k of mn) if (k.startsWith(`${s.id}/`)) mn.delete(k);
     dogodek(s, faza === "koncano" ? "konec" : "napaka", besedilo);
     koncajTekVLini(root, s.id, faza === "koncano");
     await zapisi(s);
@@ -494,7 +539,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         return false;
       }
       const potrjeno = potrjeniVProcesu.delete(kljucPotrditve(s, k));
-      if (!potrjeno && zahtevaPotrditev(orodje, s.okuzeno, imaPodatke(s))) {
+      const zDiska = !odprtiVProcesu.has(kljucPotrditve(s, k)) && orodje.razred !== "branje";
+      if (!potrjeno && (zDiska || zahtevaPotrditev(orodje, s.okuzeno, imaPodatke(s)))) {
         s.faza = "caka-potrditev";
         s.cakanje = { klicId: k.id, vprasanjeId: null };
         k.zacet = true;
@@ -637,6 +683,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           if (vsi.length > klici.length) dogodek(s, "napaka", `Model je v enem odgovoru poslal ${vsi.length} klicev orodij; izvedenih je prvih ${klici.length}.`);
           s.sporocila.push({ vloga: "asistent", ...(r.besedilo ? { besedilo: r.besedilo } : {}), klici });
           s.odprti = klici.map((k) => ({ ...k }));
+          for (const k of s.odprti) odprtiVProcesu.add(kljucPotrditve(s, k));
           if (s.koraki === 1 && r.besedilo) dogodek(s, "nacrt", r.besedilo);
           await zapisi(s);
           continue;
@@ -686,8 +733,12 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
 
   const brezNapake = (e: NodeJS.ErrnoException) => { if (e.code !== "ENOENT") throw e; };
   /** Samo lastni datoteki veljavne naloge (id preverjen z VELJAVEN_ID); manjkajoca datoteka ni napaka. arhiviraj: dnevnik v arhiv/. */
-  const izbrisiDatoteke = async (id: string, arhiviraj = false) => {
+  const izbrisiDatoteke = async (id: string, arhiviraj = false, zadnja = 0) => {
     await unlink(path.join(mapa, pot(id))).catch(brezNapake);
+    // naloga 12 #2: verzija izbrisane naloge ostane v indeksu (vec od zadnje): kopija se ne vrne
+    const m = await znaneVerzije();
+    m.set(id, Math.max(m.get(id) ?? 0, zadnja) + 1);
+    await shraniIndeks();
     const dnevnik = `${id}.dnevnik.jsonl`;
     if (!arhiviraj) return void (await unlink(path.join(mapa, dnevnik)).catch(brezNapake));
     // naloga 11 N5: zapis izvedenih dejanj ostane (AGENTS.md); arhiv ni na seznamu nalog
@@ -710,7 +761,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       if (!star && i < NAJVEC_KONCANIH) continue;
       await vVrsti(s.id, async () => {
         const sveze = await preberi(s.id);
-        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id, true);
+        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id, true, sveze.verzija);
       });
     }
   };
@@ -853,7 +904,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           return void (await izbrisiDatoteke(id));
         }
         if (!KONCNE_FAZE.includes(s.faza)) throw new OrkestratorNapaka("faza");
-        await izbrisiDatoteke(id);
+        await izbrisiDatoteke(id, false, s.verzija);
       });
     },
     async nadaljujPoZagonu() {

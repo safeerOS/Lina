@@ -65,7 +65,7 @@ describe("#12: potrjeno z diska in potrditev v pomnilniku", () => {
     const st = { n: 0 };
     let i = 0;
     const model: KlicModela = async () => (i++ === 0
-      ? { ok: true, besedilo: "", klici: [{ id: "k1-1", ime: "poslji", argumenti: { komu: "A" } }], usage: null, razlogKonca: "orodja" }
+      ? { ok: true, besedilo: "", klici: [{ id: "k1-1", ime: "poslji", argumenti: { komu: "A" } }], usage: null, razlogKonca: "orodje" }
       : { ok: true, besedilo: "Koncano.", klici: [], usage: null, razlogKonca: "konec" });
     const o = ustvariOrkestrator(root, { ...brez, klicModela: model, orodja: [poslji(st)] });
     const n = await o.nova({ cilj: "Poslji A." });
