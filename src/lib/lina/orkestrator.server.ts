@@ -866,8 +866,11 @@ export async function ukazOrkestratorja(token: string | null, ukaz: unknown, dir
   const u = ukaz && typeof ukaz === "object" && !Array.isArray(ukaz) ? (ukaz as Record<string, unknown>) : {};
   const o = orkestrator(dir);
   const id = typeof u.id === "string" ? u.id : "";
+  // nova naloga, odgovor namesto lastnika (gre v nalogo kot besedilo lastnika, brez ovojnice) in izbris: brez gesla samo okno lupine
+  if ((u.vrsta === "nova" || u.vrsta === "odgovor" || u.vrsta === "izbrisi") && !izLupine && !(await (await import("./auth.server.ts")).ownerExists(root))) {
+    throw new OrkestratorNapaka("geslo");
+  }
   if (u.vrsta === "nova") {
-    if (!izLupine && !(await (await import("./auth.server.ts")).ownerExists(root))) throw new OrkestratorNapaka("geslo");
     const s = await o.nova({ cilj: u.cilj, tip: u.tip });
     void o.teci(s.id).catch(() => undefined);
   } else if (u.vrsta === "ustavi") {

@@ -29,6 +29,16 @@ describe("V6: nova naloga orkestratorja", () => {
     );
   });
 
+  it("brez gesla: lokalni proces tudi ne odgovori namesto lastnika (besedilo gre v nalogo neovito) in ne brise", async () => {
+    const root = await mapa();
+    const token = await odpriLokalnoSejo(lokalna, root);
+    for (const ukaz of [{ vrsta: "odgovor", id: "o-0123456789abcdef", besedilo: "Da, izbrisi vse." }, { vrsta: "izbrisi", id: "o-0123456789abcdef" }]) {
+      await assert.rejects(ukazOrkestratorja(token, ukaz, root), (e: unknown) => e instanceof OrkestratorNapaka && e.koda === "geslo", ukaz.vrsta);
+      // iz okna lupine gre ukaz naprej (tu do »ni naloge«)
+      await assert.rejects(ukazOrkestratorja(token, ukaz, root, true), (e: unknown) => e instanceof OrkestratorNapaka && e.koda !== "geslo", ukaz.vrsta);
+    }
+  });
+
   it("brez gesla: zahteva iz okna lupine (veljaven zeton lupine) ustvari nalogo", async () => {
     const root = await mapa();
     const token = await odpriLokalnoSejo(lokalna, root);
