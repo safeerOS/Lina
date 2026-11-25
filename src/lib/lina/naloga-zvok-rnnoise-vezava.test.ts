@@ -182,6 +182,28 @@ describe("(c) telefon kot prehod 16 kHz (naPcm16k): RNNoise za stikalom", { time
       assert.equal(o.kode.filter((d) => d === "rnnoise-ni-na-voljo").length, koda);
     }
   });
+
+  it("pregled 0213 C4: napaka RNNoise sredi klica ne konca klica - cistilnik se unici, naprej gre surov zvok, dnevnik rnnoise-napaka", async () => {
+    const dn: string[] = [];
+    let klicev = 0;
+    // samo 16 kHz (pot telefona); 8 kHz cistilnik bi zgradila pot Twilio v tem lazniku in ga ob koncu prav tako unicila
+    const o = most({}, (fs) => fs !== 16000 ? null : ({
+      obdelaj(pcm: Int16Array): Int16Array {
+        klicev += 1;
+        if (klicev === 3) throw new Error("RuntimeError: unreachable (abort WASM)");
+        return obrni(pcm);
+      },
+      unici() { dn.push("unici"); },
+    }));
+    await nared(o);
+    for (const k of kosi) assert.doesNotThrow(() => o.m.naPcm16k(k), "izjema cistilnika ne sme iz naPcm16k (klic bi se koncal)");
+    await o.m.zakljuci("stop");
+    const pricakovano = zdruzi(kosi.map((k, i) => (i < 2 ? pcmVBajte(obrni(new Int16Array(new Uint8Array(k).buffer))) : k)));
+    jednako(Buffer.concat(o.poslano), pricakovano, "po napaki surov zvok");
+    assert.equal(klicev, 3, "po napaki se pokvarjen modul ne klice vec");
+    assert.deepEqual(dn, ["unici"]);
+    assert.equal(o.kode.filter((d) => d === "rnnoise-napaka").length, 1);
+  });
 });
 
 describe("pravaOdvisnost: RNNoise se nalozi v nalozi() in tovarna da CiscenjeRnnoise z izbrano mesanico", { timeout: 30000 }, () => {

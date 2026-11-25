@@ -489,7 +489,25 @@ export class LiveMost {
       // Stikalo vklopljeno, RNNoise ni (npr. vendor manjka v svezenju): klic gre brez filtra, a to mora biti vidno v dnevniku.
       if (!this.ciscenje16k) this.dnevnik("rnnoise-ni-na-voljo");
     }
-    this.naVhodPcm(this.ciscenje16k ? pcmVBajte(this.ciscenje16k.obdelaj(bajtiVPcm(pcm))) : pcm);
+    this.naVhodPcm(this.ociscen16k(pcm));
+  }
+
+  /** Pregled 0213 C4: napaka RNNoise med klicem ne konca klica - cistilnik se pospravi, klic gre naprej s surovim zvokom. */
+  private ociscen16k(pcm: Uint8Array): Uint8Array {
+    if (!this.ciscenje16k) return pcm;
+    try {
+      return pcmVBajte(this.ciscenje16k.obdelaj(bajtiVPcm(pcm)));
+    } catch {
+      const c = this.ciscenje16k;
+      this.ciscenje16k = null;
+      try {
+        c.unici();
+      } catch {
+        /* pokvarjen modul: nic vec ne klicemo */
+      }
+      this.dnevnik("rnnoise-napaka");
+      return pcm;
+    }
   }
 
   private naVhodPcm(pcm: Uint8Array): void {
