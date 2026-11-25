@@ -17,7 +17,8 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
     private val izmenjave = ArrayList<Triple<String, Long, StringBuilder>>()
     /** Bajti prepisa v JSON UTF-8 (z [] in ovojem izmenjav), kot jih steje projekcija za racunalnik (N8). */
     private var bajtiPrepisa = 2
-    private var novaIzmenjava = true
+    /** Prva izmenjava trenutnega obrata (N11: v obratu gre odlomek k zadnji izmenjavi istega govorca, tudi ce je vmes govoril drugi). */
+    private var zacetekObrata = 0
     private var prepisOkrnjen = false
     private var ime = ""
     private var priimek = ""
@@ -49,17 +50,20 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
         dodajVPrepis(GOVOREC_LINA, besedilo)
     }
 
-    /** Odlomek gre k zadnji izmenjavi istega govorca v istem obratu, sicer v novo; cez mejo se prepis oznaci kot okrnjen. */
+    /**
+     * Odlomek gre k zadnji izmenjavi istega govorca v istem obratu, sicer v novo; cez mejo se prepis oznaci kot okrnjen.
+     * Gemini Live poslje prepis klicatelja in Line v locenih, prepletenih sporocilih (zakasnjen vhod med Lininim odgovorom): brez tega bi
+     * vsak preklop odprl novo izmenjavo (slepi pregled 17t, N11).
+     */
     private fun dodajVPrepis(govorec: String, besedilo: String) {
         if (prepisOkrnjen) return
         var ostanek = besedilo
         var vsiliNovo = false
         while (ostanek.isNotEmpty()) {
-            val zadnja = izmenjave.lastOrNull()
-            val nadaljuj = !vsiliNovo && zadnja != null && !novaIzmenjava && zadnja.first == govorec && zadnja.third.length < MEJA_IZMENJAVE_ZNAKOV
+            val zadnja = if (vsiliNovo) null else izmenjave.subList(zacetekObrata, izmenjave.size).lastOrNull { it.first == govorec }
+            val nadaljuj = zadnja != null && zadnja.third.length < MEJA_IZMENJAVE_ZNAKOV
             if (!nadaljuj && (izmenjave.size >= MEJA_IZMENJAV || bajtiPrepisa + OVOJ_IZMENJAVE >= MEJA_PREPISA_B)) { prepisOkrnjen = true; return }
             val cilj = if (nadaljuj) zadnja!!.third else StringBuilder().also { izmenjave.add(Triple(govorec, ura(), it)); bajtiPrepisa += OVOJ_IZMENJAVE }
-            novaIzmenjava = false
             vsiliNovo = false
             // Odlomka brez presledka med stavkoma (»slovensko.Pa ni«) locimo s presledkom, kot dodajLocenoZaNovStavek z vrstico.
             if (cilj.isNotEmpty() && ostanek.first().isUpperCase() && (cilj.last().isLetter() || cilj.last() in ".!?")) {
@@ -95,9 +99,14 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
     /** Konec obrata (model je koncal): naslednji govor klicatelja gre v nov odstavek. */
     @Synchronized fun konecObrata() {
         obratKlicatelja.setLength(0)
-        novaIzmenjava = true
+        zacetekObrata = izmenjave.size
         if (vhod.isNotEmpty() && vhod.last() != '\n') vhod.append('\n')
         if (izhod.isNotEmpty() && izhod.last() != '\n') izhod.append('\n')
+    }
+
+    /** Model je prekinil Linin govor (interrupted): za prepis se zacne nov obrat, da se nov odgovor ne pripne k prekinjenemu (N11). */
+    @Synchronized fun prekinjenObrat() {
+        zacetekObrata = izmenjave.size
     }
 
     /** Orodje shrani_sporocilo; poznejsi klic dopolni prejsnjega (prazno polje ne izbrise ze zapisanega). */

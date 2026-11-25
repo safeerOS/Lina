@@ -510,6 +510,7 @@ class GeminiLiveOdjemalec(
         }
         if (msg.contains("\"interrupted\"")) {
             casovniZapis("model je prekinil Linin govor (interrupted)")
+            seja?.prekinjenObrat()
             nepopolnOkvir = ByteArray(0)
             naPrekinitev?.invoke()
         }

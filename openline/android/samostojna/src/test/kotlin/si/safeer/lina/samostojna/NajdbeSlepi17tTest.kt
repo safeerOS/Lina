@@ -169,4 +169,31 @@ class NajdbeSlepi17tTest {
         }
     }
 
+    // N11: prepleteni odlomki obeh govorcev v istem obratu ne razbijejo prepisa.
+    @Test
+    fun `N11 - prepleteni odlomki v istem obratu so ena izmenjava na govorca`() {
+        var ura = 10L
+        val s = SejaKlica(0L, "+99955501001") { ura++ }
+        s.dodajVhod("Tukaj Ana")
+        s.dodajIzhod("Dober")
+        s.dodajVhod(" Novak.")
+        s.dodajIzhod(" dan.")
+        s.konecObrata()
+        s.dodajVhod("Hvala.")
+        assertEquals(
+            listOf(IzmenjavaKlica("klicatelj", 10L, "Tukaj Ana Novak."), IzmenjavaKlica("lina", 11L, "Dober dan."), IzmenjavaKlica("klicatelj", 12L, "Hvala.")),
+            s.zakljuci(20L).prepisPogovora,
+        )
+    }
+
+    @Test
+    fun `N11 - po prekinitvi Line gre nov odgovor v novo izmenjavo, ne k prekinjenemu`() {
+        val s = SejaKlica(0L, "+99955501001") { 1L }
+        s.dodajIzhod("Zapisala sem vase")
+        s.prekinjenObrat()
+        s.dodajVhod("Pocakajte.")
+        s.dodajIzhod("Seveda.")
+        assertEquals(listOf("lina", "klicatelj", "lina"), s.zakljuci(2L).prepisPogovora.map { it.govorec })
+    }
+
 }
