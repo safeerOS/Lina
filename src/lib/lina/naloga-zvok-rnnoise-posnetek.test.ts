@@ -1,5 +1,6 @@
 /**
- * Naloga 17a, pot (a): posnetek asistentke -> ffmpeg (16 kHz WAV) -> RNNoise -> RSDO (namig za Gemini). ffmpeg zapise blok LIST
+ * Naloga 17a/17d, pot (a): posnetek asistentke -> ffmpeg (16 kHz WAV) -> 16 -> 8 kHz, Wiener, RNNoise 8 kHz 50/50, 8 -> 16 kHz
+ * (17d, w8_rnn50) -> RSDO (namig za Gemini). ffmpeg zapise blok LIST
  * pred data (preverjeno z ffmpeg 6, 25. 11. 2026), zato razclenjevalnik isce bloke. Stikalo »Zmanjsanje hrupa« izklopljeno ali
  * RNNoise ni na voljo = datoteka za RSDO nespremenjena. Gemini dobi izvirni posnetek (ta pot ga ne spremeni). Brez omrezja.
  * Komentarji so brez sumnikov.
@@ -7,9 +8,40 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
+import { Prevzorcevalnik } from "./live/zvok.ts";
 import { prepisiRsdo, type Izvajalec } from "./rsdo-motor.server.ts";
-import { MESANICA_RNNOISE_POSNETEK, nalozRnnoise, ocistiPosnetekRnnoise, ocistiWav16k } from "./zvok-rnnoise.server.ts";
+import { CiscenjeZvoka8k, ZAKASNITEV_VZORCEV } from "./zvok-ciscenje.ts";
+import { CiscenjeRnnoise, MESANICA_RNNOISE_POSNETEK, nalozRnnoise, ocistiPosnetekRnnoise, ocistiWav16k, type RnnoiseModul } from "./zvok-rnnoise.server.ts";
 import { belSum, sinteticniGovor, zmesaj } from "./zvok-sinteticno.ts";
+
+/**
+ * Naloga 17d: referenca verige w8_rnn50 iz gradnikov, korak za korakom kot meritev 17c (obdelaj17c.mjs, OZKO): rep 1600 vzorcev tisine,
+ * 16 -> 8 kHz, Wiener, RNNoise 8 kHz z mesanico, zakasnitev odstranjena, 8 -> 16 kHz, dolzina kot vhod.
+ */
+function referencaOzko(m: RnnoiseModul, x: Int16Array, mesanica: number, wiener = true): Int16Array {
+  const rep = new Int16Array(x.length + 1600);
+  rep.set(x);
+  const x8 = new Prevzorcevalnik(16000, 8000).process(rep);
+  const w = new CiscenjeZvoka8k();
+  const r = new CiscenjeRnnoise(m, { frekvenca: 8000, mesanica });
+  const zamik = (wiener ? ZAKASNITEV_VZORCEV : 0) + r.zakasnitev;
+  const v = new Int16Array(x8.length + zamik);
+  v.set(x8);
+  const y8 = new Int16Array(v.length);
+  for (let i = 0; i < v.length; i += 160) {
+    const kos = v.subarray(i, Math.min(v.length, i + 160));
+    y8.set(r.obdelaj(wiener ? w.obdelaj(kos) : kos), i);
+  }
+  r.unici();
+  return new Prevzorcevalnik(8000, 16000).process(y8.subarray(zamik)).slice(0, x.length);
+}
+
+/** Stevilo razlicnih vzorcev (skalar, brez izpisa tabel); razlika v dolzini steje kot razlika. */
+function razlik(a: Int16Array, b: Int16Array): number {
+  let n = Math.abs(a.length - b.length);
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) n++;
+  return n;
+}
 
 function wavZListom(pcm: Int16Array, fs = 16000, kanalov = 1, bitov = 16, oblika = 1): Buffer {
   const list = Buffer.concat([Buffer.from("LIST"), Buffer.from([26, 0, 0, 0]), Buffer.from("INFOISFT"), Buffer.from([14, 0, 0, 0]), Buffer.from("Lavf60.16.100\0")]);
@@ -86,10 +118,21 @@ describe("prepisiRsdo: ciscenje pred RSDO za stikalom", { timeout: 30000 }, () =
     return prebrano as Buffer;
   }
 
-  it("vklopljeno: RSDO dobi ociscen posnetek (mesanica za posnetek)", async () => {
+  it("naloga 17d: vklopljeno - RSDO dobi 16 -> 8 kHz, Wiener, RNNoise 8 kHz 50/50, 8 -> 16 kHz (w8_rnn50), enako dolg posnetek", async () => {
     const m = await nalozRnnoise();
     assert.ok(m);
-    assert.deepEqual(vzorci(await prepis(true)), ocistiPosnetekRnnoise(m, govor16, 16000, MESANICA_RNNOISE_POSNETEK));
+    const dobljeno = vzorci(await prepis(true));
+    const ref = referencaOzko(m, govor16, MESANICA_RNNOISE_POSNETEK);
+    assert.equal(dobljeno.length, govor16.length, "enako stevilo vzorcev kot izhod ffmpeg");
+    assert.equal(razlik(dobljeno, ref), 0, "pot (a) ne gre skozi 8 kHz Wiener in RNNoise 50/50");
+  });
+
+  it("naloga 17d: kontrola - referenca se loci od RNNoise 16 kHz in od verige 8 kHz brez Wienerja", async () => {
+    const m = await nalozRnnoise();
+    assert.ok(m);
+    const ref = referencaOzko(m, govor16, MESANICA_RNNOISE_POSNETEK);
+    assert.ok(razlik(ref, ocistiPosnetekRnnoise(m, govor16, 16000, MESANICA_RNNOISE_POSNETEK)) > 1000, "ni isto kot RNNoise 16 kHz");
+    assert.ok(razlik(ref, referencaOzko(m, govor16, MESANICA_RNNOISE_POSNETEK, false)) > 1000, "ni isto kot 8 kHz brez Wienerja");
   });
 
   it("izklopljeno, ni podano ali RNNoise ni na voljo: datoteka za RSDO je bajt za bajtom izhod ffmpeg", async () => {

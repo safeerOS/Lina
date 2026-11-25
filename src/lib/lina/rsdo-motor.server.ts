@@ -6,7 +6,7 @@ import { freemem, homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { odlociPotPrepisa, type PotPrepisa } from "./live/rsdo-namig.ts";
 import { ocistiBesedilo, prepisiPrekStreznika, rsdoNalaga, rsdoPripravljen, rsdoVklopljen } from "./rsdo-streznik.server.ts";
-import { nalozRnnoise, ocistiWav16k, type RnnoiseModul } from "./zvok-rnnoise.server.ts";
+import { MESANICA_RNNOISE_POSNETEK, nalozRnnoise, ocistiWav16k, type RnnoiseModul } from "./zvok-rnnoise.server.ts";
 
 /**
  * Lokalni slovenski prepoznavalnik RSDO (dodatek »slovenski«). Lastnik 19. 11. 2026: »Gemini + namig RSDO«; 23. 11. 2026: »moral bi
@@ -43,7 +43,7 @@ export type OdvisnostiRsdo = {
   prostiRamMB?: () => number | null;
   ffmpeg?: string;
   streznik?: StreznikRsdo;
-  /** Stikalo »Zmanjsanje hrupa« (zvok.json): RNNoise na 16 kHz WAV pred RSDO (naloga 17a). Ni podano = brez ciscenja. */
+  /** Stikalo »Zmanjsanje hrupa« (zvok.json): pred RSDO 16 -> 8 kHz, Wiener, RNNoise 8 kHz 50/50, 8 -> 16 kHz (naloga 17d). Ni podano = brez ciscenja. */
   ciscenje?: boolean;
   /** RNNoise (preizkusi); privzeto modul procesa. */
   rnnoise?: () => Promise<RnnoiseModul | null>;
@@ -52,7 +52,7 @@ export type OdvisnostiRsdo = {
 };
 
 /**
- * RNNoise na WAV za RSDO; ob kakrsni koli napaki ostane izhod ffmpeg (prepis gre naprej). Pregled 0213 C3: ociscen posnetek gre v
+ * Wiener in RNNoise na 8 kHz (w8_rnn50, naloga 17d) na WAV za RSDO; ob kakrsni koli napaki ostane izhod ffmpeg (prepis gre naprej). Pregled 0213 C3: ociscen posnetek gre v
  * novo datoteko (wx, 0600) in sele cel zamenja izvirnik (rename) - napaka med pisanjem (ENOSPC) ne okrni posnetka, ki gre v RSDO.
  */
 async function ocistiZaRsdo(wav: string, odv: OdvisnostiRsdo): Promise<void> {
@@ -63,7 +63,7 @@ async function ocistiZaRsdo(wav: string, odv: OdvisnostiRsdo): Promise<void> {
     const modul = await (odv.rnnoise ?? nalozRnnoise)();
     // C5: stikalo vklopljeno, RNNoise ni na voljo - prepis gre brez filtra, a to mora biti vidno v dnevniku
     if (!modul) { dnevnik("rnnoise-ni-na-voljo"); return; }
-    const ociscen = await ocistiWav16k(modul, await readFile(wav));
+    const ociscen = await ocistiWav16k(modul, await readFile(wav), MESANICA_RNNOISE_POSNETEK, true);
     if (!ociscen) return;
     await writeFile(zacasna, ociscen, { mode: 0o600, flag: "wx" });
     await rename(zacasna, wav);

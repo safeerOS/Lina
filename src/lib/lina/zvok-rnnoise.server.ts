@@ -12,6 +12,8 @@
  * Komentarji so brez sumnikov.
  */
 import { setImmediate as naslednjiKrog } from "node:timers/promises";
+import { Prevzorcevalnik } from "./live/zvok.ts";
+import { CiscenjeZvoka8k, ZAKASNITEV_VZORCEV } from "./zvok-ciscenje.ts";
 
 export type StanjeRnnoise = { processFrame(okvir: Float32Array): number; destroy(): void };
 export type RnnoiseModul = { readonly frameSize: number; createDenoiseState(): StanjeRnnoise };
@@ -294,14 +296,50 @@ export async function ocistiPosnetekRnnoiseAsinhrono(
 
 /** Delez ociscenega zvoka za posnetek asistentke pred RSDO (pot a); izbrano po meritvi WER (POROCILO.md naloge 17a). */
 export const MESANICA_RNNOISE_POSNETEK = 0.5;
+/** Rep tisine pred 16 -> 8 kHz (kot meritev 17c): prevzorcevalnika in zakasnitev 8 kHz verige ne odrezeta konca govora. */
+const REP_OZKO = 1600;
+
+/**
+ * Naloga 17d, pot (a) (veriga w8_rnn50, najboljsa v vseh stolpcih meritve 17c): 16 -> 8 kHz, Wiener (CiscenjeZvoka8k), RNNoise
+ * 8 kHz z mesanico, 8 -> 16 kHz (Prevzorcevalnik kot VhodTwilioVLive). Izhod poravnan z vhodom in enako dolg. Kosi po 0,1 s z
+ * odstopom zanke dogodkov (Prevzorcevalnik racuna utezi sproti, dolg posnetek ne sme zadrzati klicev v teku).
+ */
+export async function ocistiPosnetekOzkoAsinhrono(modul: RnnoiseModul, pcm: Int16Array, mesanica = MESANICA_RNNOISE_POSNETEK): Promise<Int16Array> {
+  const dol = new Prevzorcevalnik(16000, 8000);
+  const gor = new Prevzorcevalnik(8000, 16000);
+  const wiener = new CiscenjeZvoka8k();
+  const rnn = new CiscenjeRnnoise(modul, { frekvenca: 8000, mesanica });
+  try {
+    const vhod = new Int16Array(pcm.length + REP_OZKO);
+    vhod.set(pcm);
+    const izid = new Int16Array(pcm.length);
+    let preskoci = ZAKASNITEV_VZORCEV + rnn.zakasnitev;
+    let zapisano = 0;
+    for (let i = 0; i < vhod.length && zapisano < izid.length; i += 1600) {
+      let y8 = rnn.obdelaj(wiener.obdelaj(dol.process(vhod.subarray(i, Math.min(vhod.length, i + 1600)))));
+      const odrezi = Math.min(preskoci, y8.length);
+      y8 = y8.subarray(odrezi);
+      preskoci -= odrezi;
+      const y16 = gor.process(y8);
+      const n = Math.min(y16.length, izid.length - zapisano);
+      izid.set(y16.subarray(0, n), zapisano);
+      zapisano += n;
+      await naslednjiKrog();
+    }
+    return izid;
+  } finally {
+    rnn.unici();
+  }
+}
 /** Najvec bajtov WAV za ciscenje (60 s pri 16 kHz = 1,92 MB; rezerva za glavo). */
 const NAJVEC_WAV = 4 * 1024 * 1024;
 
 /**
  * WAV 16 kHz mono 16-bit PCM (tudi z bloki LIST, kot ga zapise ffmpeg) -> ociscen WAV s preprosto 44-bajtno glavo.
  * Druga oblika, pokvarjena ali prevelika datoteka: null (klicatelj uporabi izvirnik). Asinhrono v kosih po 0,1 s.
+ * ozko = false: RNNoise 16 kHz; ozko = true: veriga w8_rnn50 (ocistiPosnetekOzkoAsinhrono, pot a pred RSDO, naloga 17d).
  */
-export async function ocistiWav16k(modul: RnnoiseModul, wav: Uint8Array, mesanica = MESANICA_RNNOISE_POSNETEK): Promise<Buffer | null> {
+export async function ocistiWav16k(modul: RnnoiseModul, wav: Uint8Array, mesanica = MESANICA_RNNOISE_POSNETEK, ozko = false): Promise<Buffer | null> {
   if (wav.length < 12 || wav.length > NAJVEC_WAV) return null;
   const b = Buffer.from(wav.buffer, wav.byteOffset, wav.byteLength);
   if (b.toString("latin1", 0, 4) !== "RIFF" || b.toString("latin1", 8, 12) !== "WAVE") return null;
@@ -326,7 +364,7 @@ export async function ocistiWav16k(modul: RnnoiseModul, wav: Uint8Array, mesanic
     o = telo + n + (n % 2);
   }
   if (!pcm) return null;
-  const y = await ocistiPosnetekRnnoiseAsinhrono(modul, pcm, 16000, mesanica);
+  const y = ozko ? await ocistiPosnetekOzkoAsinhrono(modul, pcm, mesanica) : await ocistiPosnetekRnnoiseAsinhrono(modul, pcm, 16000, mesanica);
   const izhod = Buffer.alloc(44 + y.length * 2);
   izhod.write("RIFF", 0, "latin1");
   izhod.writeUInt32LE(36 + y.length * 2, 4);

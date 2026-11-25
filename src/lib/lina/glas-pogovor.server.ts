@@ -68,7 +68,7 @@ export async function prepisiZvok(zvokB64: string, mime: string, token: string |
     // Dodatek »slovenski« (RSDO): lokalni prepis gre Geminiju kot nezaupan namig; ob napaki prepis brez namiga.
     const pravila = await loadPravila(root).catch(() => null);
     const pot = await potPrepisaZa({ dodatekVklopljen: pravila?.dodatki?.slovenski === true, rsdoNamig: pravila?.rsdoNamig }, rsdo);
-    // Stikalo »Zmanjsanje hrupa«: RNNoise na posnetek za RSDO (naloga 17a); Gemini dobi izvirni posnetek (ni izmerjeno z Gemini).
+    // Stikalo »Zmanjsanje hrupa«: 16 -> 8 kHz, Wiener, RNNoise 8 kHz 50/50, 8 -> 16 kHz na posnetek za RSDO (naloga 17d); Gemini dobi izvirni posnetek (ni izmerjeno z Gemini).
     const ciscenje = rsdo.ciscenje ?? (pot.pot === "gemini-rsdo" ? await ciscenjeKlicevVklopljeno(root) : false);
     const namig = pot.pot === "gemini-rsdo" ? await prepisiRsdo(Buffer.from(zvokB64, "base64"), mime, { ...rsdo, ciscenje }) : null;
     const stroke = await preberiStanjeStrok(root).catch(() => null);
