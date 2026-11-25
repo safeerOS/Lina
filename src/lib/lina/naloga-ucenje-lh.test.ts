@@ -203,7 +203,8 @@ describe("ucenje-lh: merilo (kontrola tiska na majice, 5 korakov)", () => {
       const o = await recem(NAVODILO, token, dir);
       assert.equal(o, "V redu.", "obicajen odgovor modela");
       const s = await stanjeUcenjaLH(token, dir);
-      assert.deepEqual(s, { naVoljo: false, vklopljen: false, enote: [] });
+      // naloga 8: stanje steje tudi izkusnje orkestratorja (vidne in izbrisljive v Nastavitvah); brez modula 0
+      assert.deepEqual(s, { naVoljo: false, vklopljen: false, enote: [], izkusenj: 0 });
     }
   });
 });

@@ -44,11 +44,12 @@ export { UCENJE_LH_DATOTEKA };
 export type KlicModela = (z: { system: string; text: string; maxTokens: number; najvecZnakov: number }) => Promise<string | null>;
 
 export type PregledEnote = { id: string; naslov: string; korakov: number; znanih: number; ustvarjeno: string; koraki: string[] };
-export type PregledLH = { vklopljen: boolean; enote: PregledEnote[] };
+export type PregledLH = { vklopljen: boolean; enote: PregledEnote[]; izkusenj: number };
 
 const pregled = (s: StanjeLH): PregledLH => ({
   vklopljen: s.vklopljen,
   enote: s.enote.map((e) => ({ id: e.id, naslov: e.naslov, korakov: e.koraki.length, znanih: znanih(e), ustvarjeno: e.ustvarjeno, koraki: e.koraki.map((k) => k.besedilo) })),
+  izkusenj: s.izkusnje.length,
 });
 
 const datum = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("sl-SI", { timeZone: "Europe/Ljubljana" }) : "");

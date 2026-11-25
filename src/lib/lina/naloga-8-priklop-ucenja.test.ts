@@ -74,12 +74,15 @@ describe("naloga 8: orkestrator + ucenje-lh (priklop)", () => {
       koraki: [
         { besedilo: "Preveri, da je majica suha.", razlaga: "r", vprasanje: "Kaj najprej?", bistvo: ["suha"] },
         { besedilo: "Primerjaj barvo z vzorcem.", razlaga: "r", vprasanje: "S cim primerjas?", bistvo: ["vzorec"] },
+        { besedilo: "Raztegni tiskano mesto in preveri, da tisk ne poka.", razlaga: "r", vprasanje: "Kako preveris pokanje?", bistvo: ["raztegn"] },
+        { besedilo: "Napake zapiši v list kontrole, slabo majico izloči in označi z nalepko; staro nalepko odstrani.", razlaga: "r", vprasanje: "Kam zapises napake?", bistvo: ["list"] },
       ],
       napredek: [],
     };
     await writeFile(path.join(root, UCENJE_LH_DATOTEKA), JSON.stringify({ vklopljen: true, enote: [enota], seja: null }), { mode: 0o600 });
     const n = await naloga(root, "Naredi kontrolo tiska na majice za stranko");
     assert.match(n.vhod, /Primerjaj barvo z vzorcem/);
+    assert.equal(n.s.okuzeno, false, "obicajen postopek lastnika ne sprozi zaznave vbrizga (V1 v obratno smer)");
     const disk = JSON.parse(await readFile(path.join(root, UCENJE_LH_DATOTEKA), "utf8")) as { enote: unknown[] };
     assert.equal(disk.enote.length, 1, "zapis izkusnje ne izgubi enot");
   });
@@ -200,5 +203,21 @@ describe("naloga 8 (pregled V4)", () => {
     const asistent = s.sporocila.find((x) => x.vloga === "asistent" && (x.klici?.length ?? 0) > 0) as unknown as { klici: unknown[] };
     assert.equal(asistent.klici.length, 8, "v zgodovini samo izvedeni klici (vsak ima izid)");
     assert.ok(s.dogodki.some((d) => d.vrsta === "napaka" && /500 klicev/.test(d.besedilo)));
+  });
+});
+
+describe("naloga 8 (svetovalec): izkusnje so v Nastavitvah vidne in izbrisljive tudi brez ucnih enot", () => {
+  it("stanje ucenja-lh steje izkusnje; kartica pokaze vrstico in gumb izbrisi vse tudi ob 0 enotah", async () => {
+    const root = await mapa();
+    const token = await setupOwner("geslo-test-1234", root);
+    assert.equal((await stanjeUcenjaLH(token, root)).izkusenj, 0);
+    await naloga(root, "Kontrola tiska 1");
+    const st = await stanjeUcenjaLH(token, root);
+    assert.equal(st.enote.length, 0);
+    assert.equal(st.izkusenj, 1);
+    assert.equal((await izbrisiVseLH(token, root)).izkusenj, 0);
+    const kartica = await readFile(path.join(import.meta.dirname, "..", "..", "components", "lina2", "ucenje-lh-kartica.tsx"), "utf8");
+    assert.match(kartica, /s\.enote\.length > 0 \|\| s\.izkusenj > 0/, "gumb izbrisi vse tudi ob samih izkusnjah");
+    assert.match(kartica, /lhIzkusenj/);
   });
 });

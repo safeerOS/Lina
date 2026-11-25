@@ -41,6 +41,7 @@ export function UcenjeLHStikalo({ razred }: { razred: string }) {
       </label>
       <p className="mt-1 text-xs text-[var(--color-moss)]">{t2("lhOpis")}</p>
       {s.enote.length === 0 ? <p className="mt-1 text-xs">{t2("lhPrazno")}</p> : null}
+      {s.izkusenj > 0 ? <p className="mt-1 text-xs">{t2("lhIzkusenj")}: {s.izkusenj}</p> : null}
       <ul className="mt-1 grid gap-1 text-xs">
         {s.enote.map((e) => (
           <li key={e.id} className="flex items-start gap-2">
@@ -65,7 +66,7 @@ export function UcenjeLHStikalo({ razred }: { razred: string }) {
           </li>
         ))}
       </ul>
-      {s.enote.length > 0 ? (
+      {s.enote.length > 0 || s.izkusenj > 0 ? (
         potrdi ? (
           <p className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             {t2("lhPotrdi")}

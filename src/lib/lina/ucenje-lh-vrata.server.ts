@@ -14,7 +14,7 @@ import { resolveDataDir } from "./store.server.ts";
 export const UCENJE_LH_DATOTEKA = "ucenje-lh.json";
 
 type PregledEnote = { id: string; naslov: string; korakov: number; znanih: number; ustvarjeno: string; koraki: string[] };
-type Pregled = { vklopljen: boolean; enote: PregledEnote[] };
+type Pregled = { vklopljen: boolean; enote: PregledEnote[]; izkusenj: number };
 export type StanjeUcenjaLH = Pregled & { naVoljo: boolean };
 type KlicModela = (z: { system: string; text: string; maxTokens: number; najvecZnakov: number }) => Promise<string | null>;
 type ModulLH = {
@@ -98,7 +98,7 @@ export async function ucenjeLHZaOrkestrator(): Promise<boolean> {
   return typeof m?.zaNalogo === "function" && typeof m?.zapisiIzkusnjo === "function";
 }
 
-const brezModula = (): StanjeUcenjaLH => ({ naVoljo: false, vklopljen: false, enote: [] });
+const brezModula = (): StanjeUcenjaLH => ({ naVoljo: false, vklopljen: false, enote: [], izkusenj: 0 });
 
 export async function stanjeUcenjaLH(token: string | null, dir?: string): Promise<StanjeUcenjaLH> {
   const root = resolveDataDir(dir);
