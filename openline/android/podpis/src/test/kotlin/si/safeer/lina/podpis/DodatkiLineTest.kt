@@ -87,6 +87,11 @@ class DodatkiLineTest {
         assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.NEDOSEGLJIV), DodatkiLine.stanje(Lazna(OdgovorLine.Nedosegljiva), id, 1, e) { _, _ -> "P" })
         assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.ZAVRNJENO), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(403, "zavrnjeno")), id, 1, e) { _, _ -> "P" })
         assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.STARA_LINA), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(404, "ni")), id, 1, e) { _, _ -> "P" })
+        // starejsa Lina na racunalniku vrne 405 {"napaka":"ni","sporocilo":"Ni take poti."} (lastnik 25. 11. 2026)
+        assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.STARA_LINA), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(405, "ni")), id, 1, e) { _, _ -> "P" })
+        assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.STARA_LINA), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(405, null)), id, 1, e) { _, _ -> "P" })
+        assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.STARA_LINA), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(400, "ni")), id, 1, e) { _, _ -> "P" })
+        assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.NAPAKA), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(500, null)), id, 1, e) { _, _ -> "P" })
         assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.PREVEC), DodatkiLine.stanje(Lazna(OdgovorLine.Napaka(429, "prevec")), id, 1, e) { _, _ -> "P" })
         assertEquals(IzidDodatkov.Napaka(NapakaDodatkov.NAPAKA), DodatkiLine.stanje(Lazna(OdgovorLine.Ok("{}")), id, 1, e) { _, _ -> "P" })
 

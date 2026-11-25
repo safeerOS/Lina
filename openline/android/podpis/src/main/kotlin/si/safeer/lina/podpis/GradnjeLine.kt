@@ -180,10 +180,11 @@ object GradnjeLine {
         OdgovorLine.Nedosegljiva -> IzidGradenj.Napaka(NapakaGradenj.NEDOSEGLJIV)
         is OdgovorLine.Napaka -> when (o.status) {
             403 -> IzidGradenj.Napaka(NapakaGradenj.ZAVRNJENO)
-            404 -> IzidGradenj.Napaka(NapakaGradenj.STARA_LINA)
+            // starejsa Lina vrne 404 ali 405 {"napaka":"ni"} (»Ni take poti.«), lastnik 25. 11. 2026
+            404, 405 -> IzidGradenj.Napaka(NapakaGradenj.STARA_LINA)
             429 -> IzidGradenj.Napaka(NapakaGradenj.PREVEC)
             409 -> o.koda?.takeIf { RAZLOG.matches(it) }?.let { IzidGradenj.Napaka(NapakaGradenj.RACUNALNIK, it) } ?: IzidGradenj.Napaka(NapakaGradenj.NAPAKA)
-            else -> IzidGradenj.Napaka(NapakaGradenj.NAPAKA)
+            else -> IzidGradenj.Napaka(if (o.koda == "ni") NapakaGradenj.STARA_LINA else NapakaGradenj.NAPAKA)
         }
     }
 

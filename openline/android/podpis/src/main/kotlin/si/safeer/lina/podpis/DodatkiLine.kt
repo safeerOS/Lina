@@ -13,7 +13,7 @@ import kotlinx.serialization.json.put
 /** En dodatek na racunalniku: shranjeno stikalo in dejansko stanje (izklopljen, se_zaganja, deluje, napaka, ni_na_voljo). */
 data class DodatekRacunalnika(val id: String, val vklopljen: Boolean, val stanje: String, val razlog: String)
 
-/** Kaj uporabnik izve ob neuspehu (kljuc besedila v aplikaciji). STARA_LINA = Lina na racunalniku te poti se nima (404). */
+/** Kaj uporabnik izve ob neuspehu (kljuc besedila v aplikaciji). STARA_LINA = Lina na racunalniku te poti se nima (404, 405 ali koda "ni"). */
 enum class NapakaDodatkov { NEDOSEGLJIV, ZAVRNJENO, PREVEC, STARA_LINA, NAPAKA }
 
 sealed class IzidDodatkov {
@@ -61,8 +61,9 @@ object DodatkiLine {
         is OdgovorLine.Napaka -> when (o.status) {
             403 -> NapakaDodatkov.ZAVRNJENO
             429 -> NapakaDodatkov.PREVEC
-            404 -> NapakaDodatkov.STARA_LINA
-            else -> NapakaDodatkov.NAPAKA
+            // starejsa Lina vrne 404 ali 405 {"napaka":"ni"} (»Ni take poti.«), lastnik 25. 11. 2026
+            404, 405 -> NapakaDodatkov.STARA_LINA
+            else -> if (o.koda == "ni") NapakaDodatkov.STARA_LINA else NapakaDodatkov.NAPAKA
         }
     }
 

@@ -45,6 +45,8 @@ class DodatkiRacunalnikaPogled(private val a: Activity, starsi: LinearLayout) {
         koren.addView(stanje)
         for (id in NiziLine.DODATKI) {
             val st = Switch(a).apply {
+                // Gw.Body = ena barva (ink) za vsa stanja: napis berljiv tudi, ko je stikalo onemogoceno (lastnik 25. 11. 2026)
+                setTextAppearance(R.style.Gw_Body)
                 text = ime(id); minHeight = dp(48); isEnabled = false
                 setOnClickListener { obKliku(id, isChecked) }
             }
