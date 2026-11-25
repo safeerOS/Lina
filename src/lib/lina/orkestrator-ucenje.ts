@@ -18,6 +18,8 @@ export type Izkusnja = {
   /** Razlog ustavitve ali ocena samopregleda (stalna koda). */
   razlog: string;
   koraki: number;
+  /** Dokaz: id naloge (dnevnik <podatki>/orkestrator/<id>.dnevnik.jsonl ima vsak klic z izidom). */
+  naloga: string;
   cas: string;
 };
 
@@ -46,7 +48,8 @@ export function temaIzkusenj(tip: string): string {
 export function besediloIzkusnje(i: Izkusnja): string {
   const imena = (s: string[]) => s.filter((x) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(x)).slice(0, 12).join(", ") || "-";
   return `Izid: ${i.izid}. Razlog: ${i.razlog.replace(/[^a-z0-9-]/gi, "").slice(0, 40)}. Korakov: ${Math.max(0, Math.floor(i.koraki))}. ` +
-    `Delovalo: ${imena(i.delovalo)}. Ni delovalo: ${imena(i.ni)}.`;
+    `Delovalo: ${imena(i.delovalo)}. Ni delovalo: ${imena(i.ni)}.` +
+    (/^o-[a-f0-9]{16}$/.test(i.naloga) ? ` Dokaz: dnevnik naloge ${i.naloga}.` : "");
 }
 
 const NAJVEC_IZKUSENJ_NA_TIP = 10;

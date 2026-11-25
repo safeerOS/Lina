@@ -28,6 +28,13 @@ export type OrodjeOrkestratorja = {
   razred: RazredTveganja;
   /** Zahteva lastnikove potrditve. Privzeto: zunanje = da, ostalo = ne. Branje nikoli. Okuzena naloga: vse razen branja = da. */
   potrditev?: boolean;
+  /**
+   * Potrditev, kadar je v zgodovini ze kak izid orodja (podatek, ki bi lahko vseboval vrinjeno navodilo, ki ga zaznava vzorcev zgresi).
+   * Za orodja brez lastne potrditve, ki pa vodijo v dejanje drugje (dodeli_pomocniku: podobne naloge se tam lahko potrdijo same).
+   */
+  potrditevPoPodatkih?: boolean;
+  /** Rok izvedbe orodja (privzeto ROK_ORODJA_MS); po roku se signal prekine in izid je napaka. */
+  rokMs?: number;
   izvedi: (argumenti: Record<string, unknown>, k: KontekstOrodja) => Promise<IzidOrodja>;
 };
 
@@ -49,11 +56,14 @@ export function ustvariRegister(orodja: ReadonlyArray<OrodjeOrkestratorja>): Reg
   return r;
 }
 
-export function zahtevaPotrditev(o: OrodjeOrkestratorja, okuzeno: boolean): boolean {
+export function zahtevaPotrditev(o: OrodjeOrkestratorja, okuzeno: boolean, imaPodatke = false): boolean {
   if (o.razred === "branje") return false;
   if (okuzeno) return true;
+  if (imaPodatke && o.potrditevPoPodatkih) return true;
   return o.potrditev ?? o.razred === "zunanje";
 }
+
+export const ROK_ORODJA_MS = 10 * 60_000;
 
 // --- preverba argumentov (podmnozica JSON Schema, ki jo uporabljajo nasa orodja) -------------------------------------
 
@@ -140,7 +150,7 @@ export function ocenaZetonov(znakov: number): number {
   return Math.ceil(znakov / 4);
 }
 
-export type RazlogUstavitve = "koraki" | "zetoni" | "cas" | "ponovitev" | "preklic" | "napaka" | "varnost";
+export type RazlogUstavitve = "koraki" | "zetoni" | "cas" | "ponovitev" | "preklic" | "napaka" | "varnost" | "izklopljeno" | "rok-pomocnika";
 
 export function presezenaMeja(p: Proracun, poraba: Poraba, casMs: number, koraki: number): RazlogUstavitve | null {
   if (koraki >= p.najvecKorakov) return "koraki";
