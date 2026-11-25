@@ -34,19 +34,27 @@ jobs:
           LINA_PODPIS_GESLO: ${{ secrets.LINA_PODPIS_GESLO }}
         run: |
           set -euo pipefail
-          if [ -z "${LINA_PODPIS_JKS}" ]; then echo "::warning::Stalni kljuc ni nastavljen: APK ostane s podpisom debug (posodobitev cez staro ne bo mogoca)"; exit 0; fi
+          # Brez stalnega kljuca gradnja PADE: APK s podpisom debug (drug odtis) se ne namesti cez Lino in ne sme v izdajo.
+          if [ -z "${LINA_PODPIS_JKS}" ] || [ -z "${LINA_PODPIS_GESLO}" ]; then echo "::error::Stalni kljuc (LINA_PODPIS_JKS, LINA_PODPIS_GESLO) ni na voljo: gradnja ustavljena"; exit 1; fi
+          # Javni odtis certifikata Line (ni skrivnost); vsak drug odtis ustavi gradnjo.
+          PRICAKOVAN=166efb0a3c4afd12b036010eac681581d6821256ffb21565109074e52e8247bd
           KS="$RUNNER_TEMP/lina-podpis.jks"
           echo "${LINA_PODPIS_JKS}" | base64 -d > "$KS"
           AS="$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/*/apksigner | sort -V | tail -1)"
-          for apk in app/build/outputs/apk/debug/*.apk; do
+          shopt -s nullglob
+          apki=(app/build/outputs/apk/debug/*.apk)
+          [ ${#apki[@]} -gt 0 ] || { echo "::error::Ni APK za podpis"; rm -f "$KS"; exit 1; }
+          for apk in "${apki[@]}"; do
             "$AS" sign --ks "$KS" --ks-key-alias lina --ks-pass env:LINA_PODPIS_GESLO --key-pass env:LINA_PODPIS_GESLO "$apk"
-            "$AS" verify --print-certs "$apk" | grep -E "SHA-256|Verifies"
+            odtis="$("$AS" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+            [ "$odtis" = "$PRICAKOVAN" ] || { echo "::error::Napacen odtis podpisa ($odtis) v $apk"; rm -f "$KS"; exit 1; }
+            echo "Podpis OK: $apk"
           done
           rm -f "$KS"
       - name: Izid
         run: |
           mkdir -p ../../izid
-          cp app/build/outputs/apk/debug/*.apk ../../izid/ || true
+          cp app/build/outputs/apk/debug/*.apk ../../izid/
           sha256sum ../../izid/*.apk | tee ../../izid/SHA256SUMS
       - uses: actions/upload-artifact@v7
         with:
