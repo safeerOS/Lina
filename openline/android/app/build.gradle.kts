@@ -13,8 +13,8 @@ android {
         applicationId = "si.safeer.lina"
         minSdk = 29
         targetSdk = 35
-        versionCode = 213
-        versionName = "0.2.13"
+        versionCode = 214
+        versionName = "0.2.14"
 
         val defaultWsUrl = providers.gradleProperty("GATEWAY_WS_URL")
             .orElse("")

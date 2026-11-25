@@ -10,9 +10,14 @@ import java.util.concurrent.atomic.AtomicLong
  * Ob koncu iz tega nastane ZapisKlica (ime, stevilka, podjetje, cas, sporocilo povzeto in dobesedno ali razlog, zakaj ga ni).
  * Cista logika brez Androida, zato preizkusljiva.
  */
-class SejaKlica(val casZacetka: Long, val stevilka: String) {
+class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () -> Long = System::currentTimeMillis) {
     private val vhod = StringBuilder()
     private val izhod = StringBuilder()
+    /** Prepis po vrsti (govorec, cas prvega odlomka, besedilo); omejen ze med klicem, da dolg klic ne raste v pomnilniku. */
+    private val izmenjave = ArrayList<Triple<String, Long, StringBuilder>>()
+    private var znakovPrepisa = 0
+    private var novaIzmenjava = true
+    private var prepisOkrnjen = false
     private var ime = ""
     private var priimek = ""
     private var podjetje = ""
@@ -26,6 +31,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
         if (besedilo.isEmpty()) return
         zvokSlisan = true
         dodajLocenoZaNovStavek(vhod, besedilo)
+        dodajVPrepis(GOVOREC_KLICATELJ, besedilo)
         if (obratKlicatelja.length < MEJA_OBRATA) obratKlicatelja.append(besedilo)
     }
 
@@ -39,6 +45,30 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
     @Synchronized fun dodajIzhod(besedilo: String) {
         if (besedilo.isEmpty()) return
         dodajLocenoZaNovStavek(izhod, besedilo)
+        dodajVPrepis(GOVOREC_LINA, besedilo)
+    }
+
+    /** Odlomek gre k zadnji izmenjavi istega govorca v istem obratu, sicer v novo; cez mejo se prepis oznaci kot okrnjen. */
+    private fun dodajVPrepis(govorec: String, besedilo: String) {
+        if (prepisOkrnjen) return
+        var ostanek = besedilo
+        while (ostanek.isNotEmpty()) {
+            val zadnja = izmenjave.lastOrNull()
+            val nadaljuj = zadnja != null && !novaIzmenjava && zadnja.first == govorec && zadnja.third.length < MEJA_IZMENJAVE_ZNAKOV
+            if (!nadaljuj && izmenjave.size >= MEJA_IZMENJAV) { prepisOkrnjen = true; return }
+            val cilj = if (nadaljuj) zadnja!!.third else StringBuilder().also { izmenjave.add(Triple(govorec, ura(), it)) }
+            novaIzmenjava = false
+            val prostor = minOf(MEJA_IZMENJAVE_ZNAKOV - cilj.length, MEJA_PREPISA_ZNAKOV - znakovPrepisa)
+            if (prostor <= 0) { prepisOkrnjen = true; return }
+            // Odlomka brez presledka med stavkoma (»slovensko.Pa ni«) locimo s presledkom, kot dodajLocenoZaNovStavek z vrstico.
+            if (nadaljuj && cilj.isNotEmpty() && ostanek.first().isUpperCase() && (cilj.last().isLetter() || cilj.last() in ".!?")) {
+                cilj.append(' '); znakovPrepisa++
+                continue
+            }
+            val kos = ostanek.take(prostor)
+            cilj.append(kos); znakovPrepisa += kos.length
+            ostanek = ostanek.substring(kos.length)
+        }
     }
 
     /**
@@ -55,6 +85,7 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
     /** Konec obrata (model je koncal): naslednji govor klicatelja gre v nov odstavek. */
     @Synchronized fun konecObrata() {
         obratKlicatelja.setLength(0)
+        novaIzmenjava = true
         if (vhod.isNotEmpty() && vhod.last() != '\n') vhod.append('\n')
         if (izhod.isNotEmpty() && izhod.last() != '\n') izhod.append('\n')
     }
@@ -96,6 +127,8 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
             sporociloDobesedno = dobesedno,
             linaDobesedno = linaDobesedno,
             brezSporocilaRazlog = razlog,
+            prepisPogovora = izmenjave.mapNotNull { (g, c, b) -> b.toString().trim().takeIf { it.isNotEmpty() }?.let { IzmenjavaKlica(g, c, it) } },
+            prepisOkrnjen = prepisOkrnjen,
         )
     }
 
@@ -105,6 +138,10 @@ class SejaKlica(val casZacetka: Long, val stevilka: String) {
         const val MEJA_SPOROCILA = 2000
         const val MEJA_DOBESEDNO = 6000
         const val MEJA_OBRATA = 600
+        /** Meje prepisa pogovora: izmenjava do 2000 znakov (kot sporocilo), najvec 400 izmenjav in 20 000 znakov (~20 min, MEJA_PREPISA_SINHRON_B). */
+        const val MEJA_IZMENJAVE_ZNAKOV = 2000
+        const val MEJA_IZMENJAV = 400
+        const val MEJA_PREPISA_ZNAKOV = 20_000
     }
 }
 

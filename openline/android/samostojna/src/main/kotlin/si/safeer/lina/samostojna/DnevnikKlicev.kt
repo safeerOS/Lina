@@ -77,10 +77,17 @@ data class ZapisKlica(
     val sporociloDobesedno: String = "",
     /** Zakaj sporocila ni (klicatelj je prekinil, zvok ni deloval ...); prazno, kadar sporocilo obstaja. */
     val brezSporocilaRazlog: String = "",
-    /** Dobesedno, kar je rekla Lina (prepis njenega govora; glasu klicatelja se ne snema). Zadnje polje (pozicijski klici); ZapisKlicaSinhronizacija ga ne nosi, torej ne gre na racunalnik. */
+    /** Dobesedno, kar je rekla Lina (prepis njenega govora; glasu klicatelja se ne snema). Na racunalnik gre kot del prepisPogovora. */
     val linaDobesedno: String = "",
     /** Ime iz imenika telefona za to stevilko ob koncu klica (lastnik 23. 11. 2026); prazno = ni v imeniku ali ni dovoljenja. Samo lokalno: ZapisKlicaSinhronizacija ga ne nosi. */
-    val imeImenik: String = ""
+    val imeImenik: String = "",
+    /**
+     * Celoten prepis pogovora po vrsti (lastnik 25. 11. 2026: racunalnik naj zapise in shrani tudi pogovore klicev s telefona).
+     * Samo besedilo, nikoli zvok. Ni pod pravilom o cenah in obljubah (jeVeljavenZapisKlica): izrek klicatelja ne sme izgubiti klica.
+     */
+    val prepisPogovora: List<IzmenjavaKlica> = emptyList(),
+    /** true = prepis je bil zaradi meje skrajsan (konec pogovora manjka). */
+    val prepisOkrnjen: Boolean = false
 ) {
     constructor(
         id: String,
@@ -116,8 +123,14 @@ data class ZapisKlica(
             Jezik.EN -> "Urgent"
         }
 
-    // Pretvori zapis v obliko za sinhronizacijo z racunalnikom: brez celotnega prepisa pogovora (ta ostane na telefonu), s sporocilom klicatelja (lastnik 20. 11. 2026).
-    fun zaSinhronizacijo(): ZapisKlicaSinhronizacija = ZapisKlicaSinhronizacija(
+    // Oblika za sinhronizacijo z racunalnikom: sporocilo klicatelja (lastnik 20. 11. 2026) in prepis pogovora v mejah (25. 11. 2026);
+    // staro polje prepis (prost niz) in imeImenik ostaneta samo na telefonu.
+    fun zaSinhronizacijo(): ZapisKlicaSinhronizacija {
+        val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(prepisPogovora)
+        return projekcija(prepis, prepisOkrnjen || skrajsan)
+    }
+
+    private fun projekcija(prepis: List<IzmenjavaKlica>, okrnjen: Boolean) = ZapisKlicaSinhronizacija(
         id = id,
         casZacetka = casZacetka,
         stevilka = skrajsajZaSinhronizacijo(stevilka, 60),
@@ -129,9 +142,46 @@ data class ZapisKlica(
         podjetje = skrajsajZaSinhronizacijo(podjetje, 240),
         sporocilo = skrajsajZaSinhronizacijo(sporocilo, 2000),
         sporociloDobesedno = skrajsajZaSinhronizacijo(sporociloDobesedno, 6000),
-        brezSporocilaRazlog = skrajsajZaSinhronizacijo(brezSporocilaRazlog, 2000)
+        brezSporocilaRazlog = skrajsajZaSinhronizacijo(brezSporocilaRazlog, 2000),
+        prepisPogovora = prepis,
+        prepisOkrnjen = okrnjen
     )
 }
+
+/** Ena izmenjava v prepisu klica: govorec ("klicatelj" ali "lina"), cas (epoch ms, ko je prisel prvi odlomek prepisa) in besedilo. */
+@Serializable
+data class IzmenjavaKlica(val govorec: String, val cas: Long, val besedilo: String)
+
+/**
+ * Najvec bajtov (UTF-8, JSON) prepisa v enem zapisu za racunalnik. Utemeljitev: racunalnik vraca klice v odgovorih do 48 KiB
+ * (MEJA_ODGOVORA_B v sinhron-telefon.server.ts), telefon sprejme najvec 64 KiB (AsistentProtokol.NAJVEC_ODGOVORA), zahteva telefona
+ * pa ima 400 000 B za klice. Ostala polja zapisa imajo obicajno manj kot 14 KB, zato 24 KiB prepisa pusti en zapis v enem odgovoru.
+ * 24 KiB je okoli 20 000 znakov slovenskega besedila, priblizno 20 minut pogovora.
+ */
+const val MEJA_PREPISA_SINHRON_B = 24 * 1024
+
+private val jsonPrepis = Json { encodeDefaults = true }
+
+/** Prepis v mejah za racunalnik: samo znana govorca, besedilo do MEJA_IZMENJAVE_ZNAKOV, skupaj do MEJA_PREPISA_SINHRON_B; ohrani zacetek. */
+fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>): Pair<List<IzmenjavaKlica>, Boolean> {
+    val izhod = ArrayList<IzmenjavaKlica>()
+    var bajti = 2
+    var skrajsan = false
+    for (i in prepis) {
+        if (i.govorec != GOVOREC_KLICATELJ && i.govorec != GOVOREC_LINA) { skrajsan = true; continue }
+        val b = skrajsajZaSinhronizacijo(i.besedilo, SejaKlica.MEJA_IZMENJAVE_ZNAKOV)
+        if (b.isBlank()) continue
+        if (b.length != i.besedilo.length) skrajsan = true
+        val e = IzmenjavaKlica(i.govorec, i.cas.coerceAtLeast(0L), b)
+        val velikost = jsonPrepis.encodeToString(e).toByteArray(Charsets.UTF_8).size + 1
+        if (izhod.size >= SejaKlica.MEJA_IZMENJAV || bajti + velikost > MEJA_PREPISA_SINHRON_B) { skrajsan = true; break }
+        izhod.add(e); bajti += velikost
+    }
+    return izhod to skrajsan
+}
+
+const val GOVOREC_KLICATELJ = "klicatelj"
+const val GOVOREC_LINA = "lina"
 
 /** Besedilo v mejah, ki jih racunalnik sprejme (dolzina, brez osamljenih nadomestnih znakov): en zapis ne sme zatakniti sinhronizacije. */
 fun skrajsajZaSinhronizacijo(s: String, meja: Int): String {
@@ -151,7 +201,7 @@ fun skrajsajZaSinhronizacijo(s: String, meja: Int): String {
     return r
 }
 
-// Zapis klica za sinhronizacijo z racunalnikom: brez polja prepis, a s sporocilom klicatelja in razlogom, ce ga ni.
+// Zapis klica za sinhronizacijo z racunalnikom: s sporocilom klicatelja, razlogom, ce ga ni, in prepisom pogovora (prepisPogovora).
 @Serializable
 data class ZapisKlicaSinhronizacija(
     val id: String,
@@ -165,7 +215,9 @@ data class ZapisKlicaSinhronizacija(
     val podjetje: String = "",
     val sporocilo: String = "",
     val sporociloDobesedno: String = "",
-    val brezSporocilaRazlog: String = ""
+    val brezSporocilaRazlog: String = "",
+    val prepisPogovora: List<IzmenjavaKlica> = emptyList(),
+    val prepisOkrnjen: Boolean = false
 )
 
 @Serializable
@@ -499,6 +551,7 @@ class DnevnikKlicev(
                 id = p.id, casZacetka = p.casZacetka, stevilka = p.stevilka, trajanjeS = p.trajanjeS, nujno = p.nujno,
                 povzetek = p.povzetek, nacin = p.nacin, klicatelj = p.klicatelj, podjetje = p.podjetje, sporocilo = p.sporocilo,
                 sporociloDobesedno = p.sporociloDobesedno, brezSporocilaRazlog = p.brezSporocilaRazlog,
+                prepisPogovora = p.prepisPogovora, prepisOkrnjen = p.prepisOkrnjen,
             )
             if (!jeVeljavenZapisKlica(zapis)) continue
             predlagani[zapis.id] = zapis
