@@ -1,0 +1,106 @@
+name: Podpis izdaje
+# Pregled 0213 A7 (25. 11. 2026): Lina (posodobitev.server.ts) namesti paket z GitHuba samo, ce je SHA256SUMS izdaje podpisan
+# s kljucem Safeer (Ed25519). Ta tok podpise SHA256SUMS objavljene izdaje in naloži SHA256SUMS.sig.
+# Ista datoteka velja za safeerOS/Lina in safeerOS/Safeer-linux (en kljuc za oba).
+# Oblika SHA256SUMS.sig: SUROV 64-bajtni podpis Ed25519 cez tocne bajte SHA256SUMS (openssl pkeyutl -sign -rawin), brez base64.
+# Pravila (ne spreminjaj brez neodvisnega pregleda):
+#  - zasebni kljuc je samo v okolju »podpis-izdaj« (skrivnost PODPIS_IZDAJ_KLJUC, PEM), okolje dovoli samo oznake v*;
+#    rocni zagon mora zato teci NA OZNAKI: gh workflow run podpis-izdaje.yml --ref v0.2.13 -f oznaka=v0.2.13
+#  - brez checkouta in brez akcij tretjih (samo gh in openssl tekaca): v poslu s kljucem ne tece koda iz repozitorija;
+#  - kljuc samo v zacasni datoteki 600, izbrisan v trap; pred podpisom preverimo, da je to pravi kljuc (odtis javnega dela);
+#  - izrazi ${{ }} gredo v ukaze samo prek env (oznaka se preveri z vzorcem), nikoli neposredno v lupino;
+#  - podpise se samo, ce SHA256SUMS natanko pokrije VSA sredstva .deb/.apk izdaje in se vse vsote ujemajo.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      oznaka:
+        description: 'Oznaka izdaje (npr. v0.2.13); tok zazenite na isti oznaki (--ref)'
+        required: true
+        type: string
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: podpis-izdaje-${{ github.event.release.tag_name || inputs.oznaka }}
+  cancel-in-progress: false
+env:
+  # SHA-256 oblike DER javnega kljuca (enako kot JAVNI_KLJUC_IZDAJ v src/lib/lina/posodobitev.server.ts)
+  ODTIS_KLJUCA: a3ae3bcb5b6de559199ee5212bf04d9b25c9e45ea499b635f7869821971a0b56
+jobs:
+  podpis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: podpis-izdaj
+    permissions:
+      contents: write
+    steps:
+      - name: Oznaka izdaje
+        env:
+          OZNAKA_IZDAJE: ${{ github.event.release.tag_name }}
+          OZNAKA_VNOS: ${{ inputs.oznaka }}
+          REF_IME: ${{ github.ref_name }}
+          DOGODEK: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$DOGODEK" = "release" ]; then oznaka="$OZNAKA_IZDAJE"; else oznaka="$OZNAKA_VNOS"; fi
+          [[ "$oznaka" =~ ^v[0-9A-Za-z._-]{1,63}$ ]] || { echo "::error::neveljavna oznaka"; exit 1; }
+          # okolje podpis-izdaj je omejeno na oznake v*: rocni zagon mora teci na tej oznaki
+          [ "$DOGODEK" = "release" ] || [ "$REF_IME" = "$oznaka" ] || { echo "::error::zazenite tok na oznaki (--ref $oznaka)"; exit 1; }
+          echo "OZNAKA=$oznaka" >> "$GITHUB_ENV"
+      - name: Prenos SHA256SUMS in paketov izdaje
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mapa="$RUNNER_TEMP/izdaja"
+          mkdir -p "$mapa"
+          # vsa sredstva: sha256sum --check mora najti vsako datoteko, nasteto v SHA256SUMS
+          gh release download "$OZNAKA" --dir "$mapa"
+          echo "IZDAJA=$mapa" >> "$GITHUB_ENV"
+      - name: Vsote pokrijejo vsa sredstva .deb/.apk in se ujemajo
+        run: |
+          set -euo pipefail
+          cd "$IZDAJA"
+          [ -s SHA256SUMS ] || { echo "::error::izdaja nima SHA256SUMS"; exit 1; }
+          shopt -s nullglob
+          paketi=(*.deb *.apk)
+          [ "${#paketi[@]}" -gt 0 ] || { echo "::error::izdaja nima paketov .deb ali .apk"; exit 1; }
+          # vsak paket mora biti v SHA256SUMS natanko enkrat
+          for p in "${paketi[@]}"; do
+            n=$(awk -v ime="$p" '{ f=$2; sub(/^\*/, "", f); if (f == ime) c++ } END { print c+0 }' SHA256SUMS)
+            [ "$n" = 1 ] || { echo "::error::$p ni v SHA256SUMS natanko enkrat ($n)"; exit 1; }
+          done
+          # vsaka vrstica: 64 hex, ime brez poti; vsa nastreta sredstva obstajajo in se ujemajo
+          if grep -vqE '^[0-9a-f]{64} [ *][A-Za-z0-9._+~-]+$' SHA256SUMS; then echo "::error::neveljavna vrstica v SHA256SUMS"; exit 1; fi
+          sha256sum --check --strict SHA256SUMS
+      - name: Podpis SHA256SUMS (kljuc samo v zacasni datoteki, izbrisan v trap)
+        env:
+          PODPIS_IZDAJ_KLJUC: ${{ secrets.PODPIS_IZDAJ_KLJUC }}
+        run: |
+          set -euo pipefail
+          umask 077
+          kljuc=$(mktemp "$RUNNER_TEMP/kljuc.XXXXXX")
+          trap 'rm -f "$kljuc"' EXIT
+          chmod 600 "$kljuc"
+          [ -n "$PODPIS_IZDAJ_KLJUC" ] || { echo "::error::skrivnost PODPIS_IZDAJ_KLJUC ni nastavljena"; exit 1; }
+          printf '%s\n' "$PODPIS_IZDAJ_KLJUC" > "$kljuc"
+          unset PODPIS_IZDAJ_KLJUC
+          odtis=$(openssl pkey -in "$kljuc" -pubout -outform DER | sha256sum | cut -d' ' -f1)
+          [ "$odtis" = "$ODTIS_KLJUCA" ] || { echo "::error::skrivnost ni kljuc izdaj Safeer (napacen odtis)"; exit 1; }
+          openssl pkeyutl -sign -rawin -inkey "$kljuc" -in "$IZDAJA/SHA256SUMS" -out "$IZDAJA/SHA256SUMS.sig"
+          openssl pkey -in "$kljuc" -pubout -out "$RUNNER_TEMP/javni.pem"
+          rm -f "$kljuc"
+          [ "$(stat -c %s "$IZDAJA/SHA256SUMS.sig")" = 64 ] || { echo "::error::podpis ni 64 bajtov"; exit 1; }
+          openssl pkeyutl -verify -rawin -pubin -inkey "$RUNNER_TEMP/javni.pem" -in "$IZDAJA/SHA256SUMS" -sigfile "$IZDAJA/SHA256SUMS.sig"
+      - name: Nalaganje SHA256SUMS.sig
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release upload "$OZNAKA" "$IZDAJA/SHA256SUMS.sig" --clobber

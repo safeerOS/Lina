@@ -7,9 +7,11 @@
  * 25. 11. 2026 (lastnik: »z programom lina kar klikneš posodobi«): enako za druge Safeer programe s SEZNAMA DOVOLJENIH (PAKETI),
  * samo ce so namesceni - Lina deluje tudi brez njih (pravilo lastnika 25. 11. 06:45). Safeer OS Lina po namestitvi ne poslje
  * nobenega signala: zamenjavo procesa naredi Safeer OS sam (nova_razlicica, koda 75); Lina jo samo opazuje (ps, samo branje).
+ * Pregled 0213 A7 (25. 11. 2026): vsota iz iste izdaje ne scit pred ponarejeno izdajo, zato mora biti SHA256SUMS podpisan s
+ * kljucem Safeer (JAVNI_KLJUC_IZDAJ); podpis se preveri PRED prenosom paketa in pred uporabo katerekoli vsote.
  */
 import { execFile, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { constants, createReadStream, existsSync } from "node:fs";
 import { chmod, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -22,6 +24,15 @@ export const IME_PAKETA = "lina-lupina";
 /** Seznam dovoljenih paketov in vir izdaj (javni repozitorij, sredstvo <paket>_<razlicica>_amd64.deb + SHA256SUMS). */
 export const PAKETI = { "lina-lupina": "safeerOS/Lina", "safeer-os": "safeerOS/Safeer-linux" } as const;
 export type ImePaketa = keyof typeof PAKETI;
+/**
+ * Javni kljuc izdaj Safeer (Ed25519, SPKI PEM), skupen za vse pakete s seznama. SHA-256 oblike DER:
+ * a3ae3bcb5b6de559199ee5212bf04d9b25c9e45ea499b635f7869821971a0b56 (preizkus to preveri). Zasebni kljuc je samo v okolju GitHub
+ * »podpis-izdaj« (skrivnost PODPIS_IZDAJ_KLJUC), podpisuje ga .github/workflows/podpis-izdaje.yml.
+ * Oblika sredstva SHA256SUMS.sig: SUROV 64-bajtni podpis Ed25519 cez tocne bajte SHA256SUMS (izhod `openssl pkeyutl -sign
+ * -rawin`), brez base64 in brez nove vrstice.
+ */
+export const JAVNI_KLJUC_IZDAJ = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAFcFUbdyiO8cO0+32opSFwKaIslAPdVK5rt5tYNiH328=\n-----END PUBLIC KEY-----\n";
+export const IME_PODPISA = "SHA256SUMS.sig";
 /** Own-key preverba: `in` bi sprejel tudi constructor, __proto__ ... */
 export const jeDovoljenPaket = (p: unknown): p is ImePaketa => typeof p === "string" && Object.hasOwn(PAKETI, p);
 /** Toliko casa ima Safeer OS, da sam zamenja proces z novo razlicico; nato Lina ponudi gumb (potrdi uporabnik). */
@@ -41,7 +52,8 @@ const datotekaIzida = (paket: ImePaketa) => (paket === IME_PAKETA ? DATOTEKA_IZI
 const NADZORNI = /[\u0000-\u001f\u007f-\u009f]/;
 
 export type Vir = "github" | "mapa";
-export type Kandidat = { razlicica: string; vir: Vir; ime: string; url?: string; urlVsot?: string; pot?: string };
+/** urlPodpisa samo, ce izdaja ima SHA256SUMS.sig (brez njega zagon vrne razlog »podpis«). */
+export type Kandidat = { razlicica: string; vir: Vir; ime: string; url?: string; urlVsot?: string; urlPodpisa?: string; pot?: string };
 export type KodaIzida = "namesceno" | "preklicano" | "napaka" | "ni_novejsa" | "napacen_paket" | "vsota";
 export type IzidPosodobitve = { cas: string; razlicica: string; ok: boolean; koda: KodaIzida };
 export type RazlogNiNaVoljo = "platforma" | "ni_skripte" | "ni_namescena";
@@ -57,7 +69,7 @@ export type StanjePosodobitve =
       napakaVira: boolean;
       zadnjiIzid: IzidPosodobitve | null;
     };
-export type RazlogZavrnitve = "neznan_paket" | "platforma" | "ni_skripte" | "ni_namescena" | "ze_tece" | "ni_vira" | "ni_novejsa" | "napacen_paket" | "vsota" | "prenos" | "pot";
+export type RazlogZavrnitve = "neznan_paket" | "platforma" | "ni_skripte" | "ni_namescena" | "ze_tece" | "ni_vira" | "ni_novejsa" | "napacen_paket" | "vsota" | "podpis" | "prenos" | "pot";
 export type IzidZagona = { ok: true; razlicica: string } | { ok: false; razlog: RazlogZavrnitve };
 
 /** Zagnan otrok: samo kar potrebujemo (dogodka konca, odveza). */
@@ -77,6 +89,8 @@ export type Odvisnosti = {
   zazeni?: (program: string, argumenti: string[], env: Record<string, string>) => Otrok;
   env?: NodeJS.ProcessEnv;
   zdaj?: () => number;
+  /** Samo za preizkuse (preizkusni kljuc); privzeto JAVNI_KLJUC_IZDAJ. */
+  javniKljuc?: string;
 };
 
 // --- Primerjava razlicic kot dpkg (lib/dpkg/version.c: verrevcmp), da odlocitev v TS in v skripti ne more biti razlicna.
@@ -161,6 +175,17 @@ export function vsotaIzSeznama(besedilo: string, ime: string): string | null {
   return null;
 }
 
+/** Ali je podpis surov 64-bajtni podpis Ed25519 kljuca `kljucPem` cez tocno te bajte. Nikoli ne vrze. */
+export function podpisVeljaven(vsebina: Buffer, podpis: Buffer, kljucPem: string): boolean {
+  if (podpis.length !== 64) return false;
+  try {
+    const kljuc = createPublicKey(kljucPem);
+    return kljuc.asymmetricKeyType === "ed25519" && verify(null, vsebina, kljuc, podpis);
+  } catch {
+    return false;
+  }
+}
+
 // --- Privzete odvisnosti (v preizkusih se vse vbrizgajo; pravi spawn se v preizkusu ne sme sproziti).
 function privzetoIzvedi(program: string, argumenti: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -211,6 +236,7 @@ function odv(o: Odvisnosti) {
     zazeni: o.zazeni ?? privzetoZazeni,
     env: o.env ?? process.env,
     zdaj: o.zdaj ?? Date.now,
+    javniKljuc: o.javniKljuc ?? JAVNI_KLJUC_IZDAJ,
   };
 }
 type Odv = ReturnType<typeof odv>;
@@ -271,6 +297,7 @@ export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = I
     if (typeof oznaka === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(oznaka) && deb && imena.includes("SHA256SUMS")) {
       const osnova = `https://github.com/${PAKETI[paket]}/releases/download/${oznaka}/`;
       kandidat = { razlicica: deb.razlicica, vir: "github", ime: deb.ime, url: osnova + deb.ime, urlVsot: osnova + "SHA256SUMS" };
+      if (imena.includes(IME_PODPISA)) kandidat.urlPodpisa = osnova + IME_PODPISA;
     }
   }
   predpomnilnik.set(paket, { cas: o.zdaj(), kandidat });
@@ -335,24 +362,37 @@ export async function stanjePosodobitve(token: string | null, dir?: string, odvi
   };
 }
 
-/** Prenese in preveri paket z GitHuba v <podatki>/posodobitev (0700); vrne pot in vsoto preverjene datoteke. */
+/**
+ * Prenese in preveri paket z GitHuba v <podatki>/posodobitev (0700); vrne pot in vsoto preverjene datoteke.
+ * Vrstni red (A7): SHA256SUMS in SHA256SUMS.sig -> preverba podpisa -> sele nato prenos paketa in primerjava vsote.
+ */
 async function pripraviGithub(o: Odv, root: string, k: Kandidat): Promise<{ pot: string; vsota: string } | RazlogZavrnitve> {
   const mapa = path.join(root, MAPA_PRENOSA);
   await mkdir(mapa, { recursive: true, mode: 0o700 });
   await chmod(mapa, 0o700);
   const zacasnaDeb = path.join(mapa, `.prenos-${process.pid}.deb`);
   const zacasneVsote = path.join(mapa, `.vsote-${process.pid}.txt`);
+  const zacasniPodpis = path.join(mapa, `.vsote-${process.pid}.sig`);
+  if (!k.urlPodpisa) return "podpis";
   try {
-    let vsota: string;
-    let seznam: string;
+    let vsote: Buffer;
+    let podpis: Buffer;
     try {
       await o.prenesi(k.urlVsot!, zacasneVsote);
-      seznam = await readFile(zacasneVsote, "utf8");
+      await o.prenesi(k.urlPodpisa, zacasniPodpis);
+      vsote = await readFile(zacasneVsote);
+      podpis = await readFile(zacasniPodpis);
+    } catch {
+      return "prenos";
+    }
+    if (!podpisVeljaven(vsote, podpis, o.javniKljuc)) return "podpis";
+    let vsota: string;
+    try {
       vsota = await o.prenesi(k.url!, zacasnaDeb);
     } catch {
       return "prenos";
     }
-    const pricakovana = vsotaIzSeznama(seznam, k.ime);
+    const pricakovana = vsotaIzSeznama(vsote.toString("utf8"), k.ime);
     if (!pricakovana || !vsotaEnaka(vsota, pricakovana)) return "vsota";
     const koncna = path.join(mapa, k.ime);
     await rename(zacasnaDeb, koncna);
@@ -360,6 +400,7 @@ async function pripraviGithub(o: Odv, root: string, k: Kandidat): Promise<{ pot:
   } finally {
     await rm(zacasnaDeb, { force: true });
     await rm(zacasneVsote, { force: true });
+    await rm(zacasniPodpis, { force: true });
   }
 }
 

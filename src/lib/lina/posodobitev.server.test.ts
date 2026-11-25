@@ -6,15 +6,17 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setupOwner } from "./auth.server.ts";
 import {
+  JAVNI_KLJUC_IZDAJ,
   najnovejsiPaket,
   okoljeSkripte,
+  podpisVeljaven,
   ponastaviPredpomnilnik,
   posodobitevTece,
   primerjajRazlicici,
@@ -30,6 +32,10 @@ const KOREN = mkdtempSync(path.join(tmpdir(), "lina-posodobitev-"));
 after(() => rmSync(KOREN, { recursive: true, force: true }));
 const SKRIPTA = path.resolve("scripts/lina-posodobi.sh");
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+/** Preizkusni kljuc izdaj (pregled 0213 A7): ustvarjen v preizkusu, nikoli pravi. */
+const PREIZKUSNI = generateKeyPairSync("ed25519");
+const PREIZKUSNI_JAVNI = PREIZKUSNI.publicKey.export({ type: "spki", format: "pem" }).toString();
+const podpisi = (b: Buffer | string, kljuc = PREIZKUSNI.privateKey) => sign(null, Buffer.from(b), kljuc);
 
 async function novaMapa(): Promise<{ dir: string; token: string }> {
   const dir = mkdtempSync(path.join(KOREN, "p-"));
@@ -67,6 +73,7 @@ function lazno(o: { namescena?: string; paketi?: Record<string, { paket: string;
     fetchFn: async () => {
       throw new Error("omrezje v preizkusu ni dovoljeno");
     },
+    javniKljuc: PREIZKUSNI_JAVNI,
     ...o.dodatno,
   };
   return { odv, zagoni };
@@ -206,8 +213,10 @@ test("pot z nadzornim znakom se ne preda skripti", async () => {
 });
 
 // --- Vir A: GitHub prek laznega fetch, pravi prenesiPreverjeno (dovoljeni gostitelji, preusmeritve).
-function github(o: { deb: Buffer; vsote: string; preusmeri?: string; downloadUrl?: string; status?: number }) {
+/** podpis: privzeto preizkusni podpis cez vsote; null = izdaja brez SHA256SUMS.sig. */
+function github(o: { deb: Buffer; vsote: string; preusmeri?: string; downloadUrl?: string; status?: number; podpis?: Buffer | null }) {
   const klici: string[] = [];
+  const podpis = o.podpis === undefined ? podpisi(o.vsote) : o.podpis;
   const fetchFn = (async (u: string | URL) => {
     const url = String(u);
     klici.push(url);
@@ -218,6 +227,7 @@ function github(o: { deb: Buffer; vsote: string; preusmeri?: string; downloadUrl
         assets: [
           { name: "lina-lupina_0.3.0_amd64.deb", browser_download_url: o.downloadUrl ?? "https://zlonamerno.example/x.deb" },
           { name: "SHA256SUMS", browser_download_url: "https://zlonamerno.example/SHA256SUMS" },
+          ...(podpis ? [{ name: "SHA256SUMS.sig" }] : []),
         ],
       });
     }
@@ -227,6 +237,7 @@ function github(o: { deb: Buffer; vsote: string; preusmeri?: string; downloadUrl
       return new Response(null, { status: 302, headers: { location: kam + path.basename(new URL(url).pathname) } });
     }
     if (gost === "release-assets.githubusercontent.com") {
+      if (url.endsWith("SHA256SUMS.sig")) return podpis ? new Response(new Uint8Array(podpis)) : new Response("ni", { status: 404 });
       return new Response(url.endsWith("SHA256SUMS") ? o.vsote : new Uint8Array(o.deb));
     }
     if (gost === "zlonamerno.example") return new Response(new Uint8Array(o.deb));
@@ -473,17 +484,21 @@ test("pregled 0213 A6: vir »mapa« za safeer-os - skripta dobi zasebno kopijo (
   zagoni[0]!.otrok.emit("exit", 0);
 });
 
-function githubSafeer(o: { deb: Buffer; vsote: string }) {
+function githubSafeer(o: { deb: Buffer; vsote: string; podpis?: Buffer | null }) {
   const klici: string[] = [];
+  const podpis = o.podpis === undefined ? podpisi(o.vsote) : o.podpis;
   const fetchFn = (async (u: string | URL) => {
     const url = String(u);
     klici.push(url);
     if (url === "https://api.github.com/repos/safeerOS/Safeer-linux/releases/latest") {
-      return Response.json({ tag_name: "v0.4.97", assets: [{ name: "safeer-os-tema_9.9.9_all.deb" }, { name: "safeer-os_0.4.97_amd64.deb" }, { name: "lina-lupina_9.9.9_amd64.deb" }, { name: "SHA256SUMS" }] });
+      return Response.json({ tag_name: "v0.4.97", assets: [{ name: "safeer-os-tema_9.9.9_all.deb" }, { name: "safeer-os_0.4.97_amd64.deb" }, { name: "lina-lupina_9.9.9_amd64.deb" }, { name: "SHA256SUMS" }, ...(podpis ? [{ name: "SHA256SUMS.sig" }] : [])] });
     }
     const gost = new URL(url).hostname;
     if (gost === "github.com") return new Response(null, { status: 302, headers: { location: "https://release-assets.githubusercontent.com/" + path.basename(new URL(url).pathname) } });
-    if (gost === "release-assets.githubusercontent.com") return new Response(url.endsWith("SHA256SUMS") ? o.vsote : new Uint8Array(o.deb));
+    if (gost === "release-assets.githubusercontent.com") {
+      if (url.endsWith("SHA256SUMS.sig")) return podpis ? new Response(new Uint8Array(podpis)) : new Response("ni", { status: 404 });
+      return new Response(url.endsWith("SHA256SUMS") ? o.vsote : new Uint8Array(o.deb));
+    }
     return new Response("ni", { status: 404 });
   }) as typeof fetch;
   return { fetchFn, klici };
@@ -590,4 +605,133 @@ test("skripta --preveri za safeer-os: neznan paket (4. argument), tuje ime v pak
     assert.equal(r.status, 1, "nenamescen safeer-os se ne namesti");
   }
   assert.deepEqual(execFileSync("/bin/ls", ["-A", podatki], { encoding: "utf8" }), "");
+});
+
+// --- Pregled 0213 A7 (25. 11. 2026): SHA256SUMS mora biti podpisan s kljucem Safeer (Ed25519), preden se uporabi katerakoli vsota.
+const ODTIS_KLJUCA = "a3ae3bcb5b6de559199ee5212bf04d9b25c9e45ea499b635f7869821971a0b56";
+const URL_DEB_LINE = "https://github.com/safeerOS/Lina/releases/download/v0.3.0/lina-lupina_0.3.0_amd64.deb";
+
+test("A7: vgrajeni javni kljuc izdaj je Ed25519 s pricakovanim odtisom (SHA-256 DER)", () => {
+  const k = createPublicKey(JAVNI_KLJUC_IZDAJ);
+  assert.equal(k.asymmetricKeyType, "ed25519");
+  assert.equal(sha(k.export({ type: "spki", format: "der" })), ODTIS_KLJUCA);
+});
+
+test("A7: podpisVeljaven - samo surov 64-bajtni podpis pravega kljuca cez tocne bajte", () => {
+  const vsote = Buffer.from(`${"a".repeat(64)}  lina-lupina_0.3.0_amd64.deb\n`);
+  const pravi = podpisi(vsote);
+  assert.equal(podpisVeljaven(vsote, pravi, PREIZKUSNI_JAVNI), true);
+  assert.equal(podpisVeljaven(Buffer.concat([vsote, Buffer.from("\n")]), pravi, PREIZKUSNI_JAVNI), false, "spremenjen SHA256SUMS");
+  assert.equal(podpisVeljaven(vsote, podpisi(vsote, generateKeyPairSync("ed25519").privateKey), PREIZKUSNI_JAVNI), false, "drug kljuc");
+  assert.equal(podpisVeljaven(vsote, Buffer.alloc(64, 7), PREIZKUSNI_JAVNI), false, "nakljucni podpis");
+  assert.equal(podpisVeljaven(vsote, pravi.subarray(0, 63), PREIZKUSNI_JAVNI), false, "prekratek");
+  assert.equal(podpisVeljaven(vsote, Buffer.from(pravi.toString("base64")), PREIZKUSNI_JAVNI), false, "base64 ni dogovorjena oblika");
+  assert.equal(podpisVeljaven(vsote, Buffer.alloc(0), PREIZKUSNI_JAVNI), false, "prazen");
+  assert.equal(podpisVeljaven(vsote, pravi, "ni kljuc"), false, "pokvarjen kljuc ne vrze");
+  const rsa = generateKeyPairSync("rsa", { modulusLength: 1024 }).publicKey.export({ type: "spki", format: "pem" }).toString();
+  assert.equal(podpisVeljaven(vsote, pravi, rsa), false, "samo Ed25519");
+});
+
+test("A7: podpis iz `openssl pkeyutl -sign -rawin` (kot v podpis-izdaje.yml) Lina sprejme", { skip: !existsSync("/usr/bin/openssl") && "openssl ni na voljo" }, () => {
+  const mapa = mkdtempSync(path.join(KOREN, "openssl-"));
+  const zasebni = path.join(mapa, "k.pem");
+  const vsote = path.join(mapa, "SHA256SUMS");
+  writeFileSync(vsote, `${"b".repeat(64)}  safeer-os_0.4.97_amd64.deb\n`);
+  execFileSync("/usr/bin/openssl", ["genpkey", "-algorithm", "ed25519", "-out", zasebni]);
+  execFileSync("/usr/bin/openssl", ["pkeyutl", "-sign", "-rawin", "-inkey", zasebni, "-in", vsote, "-out", vsote + ".sig"]);
+  const javni = execFileSync("/usr/bin/openssl", ["pkey", "-in", zasebni, "-pubout"], { encoding: "utf8" });
+  assert.equal(readFileSync(vsote + ".sig").length, 64);
+  assert.equal(podpisVeljaven(readFileSync(vsote), readFileSync(vsote + ".sig"), javni), true);
+  assert.equal(podpisVeljaven(readFileSync(vsote), readFileSync(vsote + ".sig"), PREIZKUSNI_JAVNI), false);
+});
+
+/** Zavrnjena izdaja: razlog podpis, paket .deb se NE prenese (vsota se ni uporabila), ni zagona, zaklep sproscen. */
+async function zavrnjenoZaradiPodpisa(gh: { podpis?: Buffer | null; vsote?: string; deb?: Buffer }, dodatno: Partial<Odvisnosti> = {}) {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  const deb = gh.deb ?? Buffer.from("paket 0.3.0");
+  const { fetchFn, klici } = github({ deb, vsote: gh.vsote ?? `${sha(deb)}  lina-lupina_0.3.0_amd64.deb\n`, podpis: gh.podpis });
+  const koncna = path.join(path.resolve(dir), "posodobitev", "lina-lupina_0.3.0_amd64.deb");
+  const { odv, zagoni } = lazno({ namescena: "0.2.8", paketi: { [koncna]: { paket: "lina-lupina", razlicica: "0.3.0" } }, dodatno: { fetchFn, ...dodatno } });
+  assert.deepEqual(await zacniPosodobitev(token, dir, odv), { ok: false, razlog: "podpis" });
+  assert.ok(!klici.includes(URL_DEB_LINE), "paket se ne prenese pred veljavnim podpisom");
+  assert.equal(zagoni.length, 0);
+  assert.equal(existsSync(koncna), false);
+  assert.equal(posodobitevTece(), false);
+  return klici;
+}
+
+test("A7: izdaja brez SHA256SUMS.sig -> zavrnjeno (podpis), paket se ne prenese", async () => {
+  const klici = await zavrnjenoZaradiPodpisa({ podpis: null });
+  assert.ok(!klici.some((k) => k.endsWith(".sig")), "sredstva .sig ni, zato ga ne prenasamo");
+});
+
+test("A7: napacen podpis (nakljucni bajti) -> zavrnjeno", async () => {
+  await zavrnjenoZaradiPodpisa({ podpis: Buffer.alloc(64, 1) });
+});
+
+test("A7: podpis drugega kljuca -> zavrnjeno", async () => {
+  const deb = Buffer.from("paket 0.3.0");
+  const vsote = `${sha(deb)}  lina-lupina_0.3.0_amd64.deb\n`;
+  await zavrnjenoZaradiPodpisa({ deb, vsote, podpis: podpisi(vsote, generateKeyPairSync("ed25519").privateKey) });
+});
+
+test("A7: spremenjen SHA256SUMS (podpis je za izvirnik) -> zavrnjeno, ceprav nova vsota ustreza paketu", async () => {
+  const pravi = Buffer.from("pravi paket");
+  const podtaknjen = Buffer.from("podtaknjen paket");
+  const podpis = podpisi(`${sha(pravi)}  lina-lupina_0.3.0_amd64.deb\n`);
+  await zavrnjenoZaradiPodpisa({ deb: podtaknjen, vsote: `${sha(podtaknjen)}  lina-lupina_0.3.0_amd64.deb\n`, podpis });
+});
+
+test("A7: privzeto velja SAMO vgrajeni kljuc Safeer (preizkusni podpis brez vbrizganega kljuca je zavrnjen)", async () => {
+  await zavrnjenoZaradiPodpisa({}, { javniKljuc: undefined });
+});
+
+test("A7: safeer-os brez podpisa ali s tujim podpisom -> zavrnjeno, s pravim gre v skripto", async () => {
+  const deb = Buffer.from("safeer-os 0.4.97");
+  const vsote = `${sha(deb)}  safeer-os_0.4.97_amd64.deb\n`;
+  for (const podpis of [null, podpisi(vsote, generateKeyPairSync("ed25519").privateKey)]) {
+    ponastaviPredpomnilnik();
+    const { dir, token } = await novaMapa();
+    const koncna = path.join(path.resolve(dir), "posodobitev", "safeer-os_0.4.97_amd64.deb");
+    const gh = githubSafeer({ deb, vsote, podpis });
+    const a = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [koncna]: { paket: "safeer-os", razlicica: "0.4.97" } }, dodatno: { fetchFn: gh.fetchFn } });
+    assert.deepEqual(await zacniPosodobitev(token, dir, a.odv, "safeer-os"), { ok: false, razlog: "podpis" });
+    assert.ok(!gh.klici.some((k) => k.endsWith(".deb")), "paket safeer-os se ne prenese");
+    assert.equal(a.zagoni.length, 0);
+  }
+});
+
+test("A7: nepodpisana izdaja se v stanju se vedno pokaze (razlog pove sele zagon), vir mapa ostane brez podpisa", async () => {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  const { fetchFn } = github({ deb: Buffer.from("x"), vsote: "", podpis: null });
+  const s = await stanjePosodobitve(token, dir, lazno({ namescena: "0.2.8", dodatno: { fetchFn } }).odv);
+  assert.equal(s.naVoljo && s.razpolozljiva, "0.3.0");
+  assert.equal(s.naVoljo && s.napakaVira, false);
+});
+
+test("A7: vmesnik - razlog podpis ima svoje besedilo (sl+en), vir mapa in gradnja povesta, da podpisa ni", () => {
+  const besedila = readFileSync(path.resolve("src/lib/lina/besedila.ts"), "utf8");
+  assert.match(besedila, /posNapakaPodpis: "Izdaja ni podpisana s ključem Safeer/);
+  assert.match(besedila, /posNapakaPodpis: "The release is not signed with the Safeer key/);
+  assert.equal(besedila.match(/posBrezPodpisa: "/g)?.length, 2);
+  assert.match(besedila, /ghNamestiPotrdi: "[^"]*nima podpisa Safeer/);
+  assert.match(besedila, /ghNamestiPotrdi: "[^"]*not signed with the Safeer key/);
+  const desk = readFileSync(path.resolve("src/components/lina-desk.tsx"), "utf8");
+  assert.match(desk, /r === "podpis" \? t\("posNapakaPodpis"\)/);
+  assert.equal(desk.match(/t\("posBrezPodpisa"\)/g)?.length, 2, "Lina in drugi programi");
+});
+
+test("A7: podpis-izdaje.yml - okolje podpis-izdaj, odtis kljuca, oznaka ne gre v lupino neposredno, kljuc v trap", () => {
+  const yml = readFileSync(path.resolve(".github/workflows/podpis-izdaje.yml"), "utf8");
+  assert.match(yml, /environment: podpis-izdaj/);
+  assert.match(yml, new RegExp(ODTIS_KLJUCA));
+  assert.match(yml, /openssl pkeyutl -sign -rawin/);
+  assert.match(yml, /trap /);
+  assert.match(yml, /PODPIS_IZDAJ_KLJUC/);
+  for (const v of yml.split("\n").filter((l) => /^\s+(run:|[^:#]*\$\{\{)/.test(l) && !/^\s+[A-Z_]+: \$\{\{/.test(l) && !/^\s+(if|group|environment|run-name):/.test(l))) {
+    assert.doesNotMatch(v, /\$\{\{/, `izraz GitHub naravnost v ukazu: ${v.trim()}`);
+  }
+  for (const u of yml.match(/uses: \S+/g) ?? []) assert.match(u, /@[0-9a-f]{40}$/, `akcija ni pripeta na SHA: ${u}`);
 });

@@ -3830,7 +3830,7 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
     return `${t("posZadnjiIzid")}: ${i.razlicica}, ${opis}${Number.isNaN(cas.getTime()) ? "" : ` (${casKlica(i.cas)})`}`;
   };
   const napisNapake = (r: RazlogZavrnitve): string =>
-    r === "neznan_paket" ? t("posNeznanPaket") : r === "ze_tece" ? t("posNapakaZeTece") : r === "napacen_paket" || r === "vsota" ? t("posNapakaPreverba") : r === "prenos" || r === "ni_vira" ? t("posNapakaPrenos") : r === "ni_novejsa" ? t("posNiNovejse") : t("posNapaka");
+    r === "neznan_paket" ? t("posNeznanPaket") : r === "ze_tece" ? t("posNapakaZeTece") : r === "podpis" ? t("posNapakaPodpis") : r === "napacen_paket" || r === "vsota" ? t("posNapakaPreverba") : r === "prenos" || r === "ni_vira" ? t("posNapakaPrenos") : r === "ni_novejsa" ? t("posNiNovejse") : t("posNapaka");
   const posodobi = () => {
     setDelam(true);
     setSporocilo(t("posZacenjam"));
@@ -3867,6 +3867,7 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
         </dl>
       )}
       {naVoljo && naVoljo.razpolozljiva && !naVoljo.novejsa ? <p className="mt-2 text-sm">{t("posNiNovejse")}</p> : null}
+      {naVoljo?.vir === "mapa" ? <p className="mt-2 max-w-prose text-xs text-[var(--color-moss)]">{t("posBrezPodpisa")}</p> : null}
       <p className="mt-3 max-w-prose text-xs text-[var(--color-moss)]">{t("posPojasnilo")}</p>
       <button type="button" className="lina-gumb-majhen mt-3" disabled={delam || !naVoljo?.novejsa || naVoljo.tece} onClick={posodobi}>
         {t("posGumb")}
@@ -3929,6 +3930,7 @@ function DrugiPaketi({ onError, napisNapake, napisIzida }: { onError: (s: string
                   : t("posNiNovejse")}
             </dd>
           </dl>
+          {p.vir === "mapa" ? <p className="mt-2 max-w-prose text-xs text-[var(--color-moss)]">{t("posBrezPodpisa")}</p> : null}
           {p.paket === "safeer-os" ? <p className="mt-2 max-w-prose text-xs text-[var(--color-moss)]">{t("posPojasniloSafeerOs")}</p> : null}
           <button type="button" className="lina-gumb-majhen mt-2" disabled={delam || !p.novejsa || p.tece} onClick={() => posodobi(p.paket)}>
             {t("posGumbPaket")} {IME_PROGRAMA[p.paket]}
