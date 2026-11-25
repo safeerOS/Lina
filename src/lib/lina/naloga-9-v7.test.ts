@@ -8,7 +8,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { ustvariOrkestrator, type KlicModela, type StanjeNaloge } from "./orkestrator.server.ts";
+import { podpisStanja, ustvariOrkestrator, type KlicModela, type StanjeNaloge } from "./orkestrator.server.ts";
 import type { RezultatOrodij } from "./providers.ts";
 
 const mapa = () => mkdtemp(path.join(tmpdir(), "lina-n9-v7-"));
@@ -36,10 +36,12 @@ async function podtakni(root: string, id: string, sprememba: (s: Record<string, 
   const n = await o.nova({ cilj: "Preberi datoteko." });
   const s = JSON.parse(await readFile(path.join(root, "orkestrator", `${n.id}.json`), "utf8")) as Record<string, unknown>;
   // izvirnik naj ne tece ob nadaljevanju: koncan
-  await writeFile(path.join(root, "orkestrator", `${n.id}.json`), JSON.stringify({ ...s, faza: "koncano" }), { mode: 0o600 });
+  // naloga 11 N1: stanje je podpisano; preizkus shema podpise kot Lina (sicer bi vse zavrnil podpis, ne shema)
+  const koncan = { ...s, faza: "koncano" };
+  await writeFile(path.join(root, "orkestrator", `${n.id}.json`), JSON.stringify({ ...koncan, podpis: await podpisStanja(root, koncan) }), { mode: 0o600 });
   const kopija = { ...s, id };
   sprememba(kopija);
-  await writeFile(path.join(root, "orkestrator", `${id}.json`), JSON.stringify(kopija), { mode: 0o600 });
+  await writeFile(path.join(root, "orkestrator", `${id}.json`), JSON.stringify({ ...kopija, podpis: await podpisStanja(root, kopija) }), { mode: 0o600 });
 }
 
 const NEVELJAVNA: Array<[string, (s: Record<string, unknown>) => void]> = [

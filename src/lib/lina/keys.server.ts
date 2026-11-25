@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import { chmod, link, mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
@@ -118,6 +118,11 @@ async function masterKey(dir: string): Promise<Buffer> {
     kljuciVTeku.set(file, vTeku);
   }
   return vTeku;
+}
+
+/** Naloga 11 N1: podkljuc za celovitost podatkov na disku (HMAC), izpeljan iz glavnega kljuca po namenu (glavni se ne uporabi neposredno). */
+export async function kljucCelovitosti(namen: string, dir?: string): Promise<Buffer> {
+  return createHmac("sha256", await masterKey(resolveDataDir(dir))).update(`lina-celovitost:${namen}`).digest();
 }
 
 function encrypt(secret: string, key: Buffer, aad?: string): Pick<KeyFile, "iv" | "tag" | "ciphertext"> {

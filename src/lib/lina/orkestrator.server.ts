@@ -10,7 +10,7 @@
  * Komentarji brez sumnikov.
  */
 import { appendFile, chmod, mkdir, readdir, unlink } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
 import { NAJVEC_ZNAKOV_NALOGE_LINE } from "./claude-naloge.ts";
@@ -224,7 +224,7 @@ const ORODJE_CAKANJA: Partial<Record<Faza, string>> = { "caka-lastnika": "vprasa
 /**
  * Naloga 9 V7: oblika stanja z diska (datoteko lahko podtakne ali pokvari kdor koli z dostopom do mape podatkov). Vrne razlog ali
  * null. Orodja: delovalo/ni, potrjen klic in klic, na katerega naloga caka, samo iz registra; odprt klic z izmisljenim imenom je
- * veljaven (dobi izid »ne obstaja«, pregled V1). Vsebine (npr. podtaknjene zastavice potrjeno pri orodju iz registra) shema ne loci.
+ * veljaven (dobi izid »ne obstaja«, pregled V1). Vsebine shema ne loci: zato podpis (podpisStanja) in potrjeno z diska ne velja (naloga 11 N1).
  */
 export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime: string) => boolean): string | null {
   const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -276,6 +276,23 @@ export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime
   return null;
 }
 
+/** Kanonicni zapis (urejeni kljuci) za podpis: enak pred zapisom in po branju z diska. */
+function kanonicno(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(kanonicno).join(",")}]`;
+  if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${kanonicno((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  return JSON.stringify(v) ?? "null";
+}
+
+/**
+ * Naloga 11 N1: podpis stanja naloge (HMAC-SHA256 s podkljucem iz glavnega kljuca Line, keys.server). Stanje brez veljavnega podpisa
+ * je neveljavno (tudi stanje, zapisano pred to izdajo). Meja: kdor bere .kljuc v mapi podatkov, lahko podpise sam.
+ */
+export async function podpisStanja(root: string, stanje: unknown): Promise<string> {
+  const { kljucCelovitosti } = await import("./keys.server.ts");
+  const { podpis: _, ...brez } = JSON.parse(JSON.stringify(stanje)) as Record<string, unknown>;
+  return createHmac("sha256", await kljucCelovitosti("orkestrator", root)).update(kanonicno(brez)).digest("hex");
+}
+
 export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}): Orkestrator {
   const root = resolveDataDir(dir);
   const mapa = path.join(root, MAPA_ORKESTRATORJA);
@@ -303,6 +320,9 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const tecejo = new Map<string, Promise<StanjeNaloge>>();
   const prekinitve = new Map<string, AbortController>();
   const vrste = new Map<string, Promise<unknown>>();
+  // naloga 11 N1: potrditev velja samo v procesu, ki jo je dobil od lastnika (zastavica z diska je lahko podtaknjena)
+  const potrjeniVProcesu = new Set<string>();
+  const kljucPotrditve = (s: StanjeNaloge, k: KlicOrodja) => `${s.id}/${k.id}`;
 
   const pot = (id: string) => {
     if (!VELJAVEN_ID.test(id)) throw new OrkestratorNapaka("ni-naloge");
@@ -313,7 +333,12 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     if (!VELJAVEN_ID.test(id)) return null;
     const x = await readJsonFile<unknown>(mapa, pot(id)).catch(() => null);
     if (x === null) return null;
-    const razlog = razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime));
+    const podpis = x && typeof x === "object" && "podpis" in x ? (x as { podpis: unknown }).podpis : undefined;
+    const pricakovan = Buffer.from(await podpisStanja(root, x));
+    const dobljen = Buffer.from(typeof podpis === "string" ? podpis : "");
+    const podpisan = dobljen.length === pricakovan.length && timingSafeEqual(dobljen, pricakovan);
+    if (podpisan) delete (x as { podpis?: unknown }).podpis;
+    const razlog = podpisan ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
     if (razlog === null) return x as StanjeNaloge;
     // pregled V7: neveljavno stanje se ne nadaljuje in ne pokaze; v dnevnik enkrat na nalogo (seznam bere ob vsakem osvezenju)
     if (!zeJavljeno.has(id)) {
@@ -324,7 +349,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   };
   const zapisi = async (s: StanjeNaloge) => {
     s.posodobljeno = iso();
-    await writeJson(mapa, pot(s.id), s);
+    await writeJson(mapa, pot(s.id), { ...s, podpis: await podpisStanja(root, s) });
   };
   /** Dnevnik naloge: samo metapodatki (vrsta, orodje, odtis argumentov, uspeh), nikoli vsebina izidov. */
   const vDnevnik = async (s: StanjeNaloge, zapis: Record<string, unknown>) => {
@@ -348,6 +373,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     void p.finally(() => { if (vrste.get(id) === p) vrste.delete(id); }).catch(() => undefined);
     return p;
   };
+
+  const imaPodatke = (s: StanjeNaloge) => s.sporocila.some((x) => x.vloga === "orodje" && x.ime !== "porocaj_vmesno" && x.ime !== "vprasaj_lastnika");
 
   const ucenjeZa = async (s: StanjeNaloge): Promise<UcenjeVmesnik | null> => {
     if (!s.ucenje) return null;
@@ -409,7 +436,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       if (odg.dovoli) {
         dogodek(s, "korak-zacet", `Lastnik je potrdil ${k.ime}.`, { orodje: k.ime, klicId: k.id });
         k.zacet = true;
-        (k as OdprtKlic & { potrjeno?: boolean }).potrjeno = true;
+        potrjeniVProcesu.add(kljucPotrditve(s, k));
         await zapisi(s);
       } else {
         await dodajIzid(s, k, { ok: false, besedilo: `Lastnik dejanja ni dovolil (${odg.kdo || "rok"}). ${odg.sporocilo}` });
@@ -451,9 +478,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         await koncaj(s, "ustavljeno", "ponovitev", `Ustavljeno: isti klic ${k.ime} vec kot ${s.proracun.najvecPonovitev}-krat.`);
         return false;
       }
-      const potrjeno = (k as OdprtKlic & { potrjeno?: boolean }).potrjeno === true;
-      const imaPodatke = s.sporocila.some((x) => x.vloga === "orodje" && x.ime !== "porocaj_vmesno" && x.ime !== "vprasaj_lastnika");
-      if (!potrjeno && zahtevaPotrditev(orodje, s.okuzeno, imaPodatke)) {
+      const potrjeno = potrjeniVProcesu.delete(kljucPotrditve(s, k));
+      if (!potrjeno && zahtevaPotrditev(orodje, s.okuzeno, imaPodatke(s))) {
         s.faza = "caka-potrditev";
         s.cakanje = { klicId: k.id, vprasanjeId: null };
         k.zacet = true;
@@ -783,6 +809,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         await vVrsti(s0.id, async () => {
           const s = await preberi(s0.id);
           if (!s) return;
+          // naloga 11 N1: izidov orodij z diska ni mogoce preveriti za vbrizg za nazaj - konzervativno okuzeno
+          if (imaPodatke(s)) s.okuzeno = true;
           // zacet klic brez izida: branje se ponovi, vse drugo ne (izid neznan) - razen cakajoce potrditve, ki se zastavi znova
           for (const k of [...s.odprti]) {
             if (!k.zacet || (s.cakanje && s.cakanje.klicId === k.id)) continue;
