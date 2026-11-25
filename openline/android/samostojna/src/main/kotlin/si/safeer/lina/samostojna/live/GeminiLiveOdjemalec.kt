@@ -47,8 +47,6 @@ class GeminiLiveOdjemalec(
     private val imeSamoZnanim: () -> Boolean = { true },
     /** Casovni zapis poteka pozdrava (brez vsebine klica): »dvig«, »seja nared«, »uvod poslan«, »prvi zvok Line«, »konec obrata«. */
     private val casovniZapis: (String) -> Unit = {},
-    // Diagnosticni zajem tistega, kar klicatelj sliši (glas Line, 16 kHz s16le mono). Samo izhod Line, nikoli glas klicatelja.
-    private val zajemIzhoda: ((ByteArray) -> Unit)? = null,
     // Obdelava zvoka (lastnik 22. 11. 2026: privzeto vklopljena, z izklopom): filter suma klicatelja, omejevalnik Linine ravni, nizka obcutljivost zacetka govora.
     // Bere se sproti (stikalo »Zmanjsanje hrupa« v Nastavitvah, 24. 11. 2026): sprememba velja brez ponovnega zagona prehoda.
     private val obdelavaZvokaNastavitev: () -> Boolean = { true },
@@ -137,7 +135,7 @@ class GeminiLiveOdjemalec(
     private val MAKS_PREDPOMNJENIH_OKVIRJEV = 750 // 15 s
 
     private fun oddajIzhod(okvir: ByteArray) {
-        zajemIzhoda?.invoke(okvir)
+        // Brez zajema izhodnega zvoka (slepi pregled 17t, N10; lastnik 22. 11. 2026: osebni nacin = samo prepis, NIKOLI posnetek zvoka).
         synchronized(izhodMutex) {
             val cb = izhodniCallback
             if (cb != null) cb(okvir) else if (predpomnjenIzhod.size < MAKS_PREDPOMNJENIH_OKVIRJEV) predpomnjenIzhod.addLast(okvir)

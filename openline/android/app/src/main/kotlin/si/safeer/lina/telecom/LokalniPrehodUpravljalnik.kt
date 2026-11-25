@@ -79,7 +79,6 @@ object LokalniPrehodUpravljalnik {
             zaupanKlicatelj = { st -> si.safeer.lina.protocol.TakeoverPolicy.onAllowlist(st, si.safeer.lina.config.LinaSettingsStore(context).load().allowlist) },
             imeSamoZnanim = { si.safeer.lina.asistent.ImeUporabnika.samoZnanim(context) },
             casovniZapis = { android.util.Log.i("LinaPozdrav", "${System.currentTimeMillis() % 100000} ms: $it") },
-            zajemIzhoda = ZajemIzhodaLine(context.filesDir)::zapisi,
             obdelavaZvokaNastavitev = { si.safeer.lina.asistent.ZmanjsanjeHrupa.vklopljeno(context) },
             // Dostava paketa (lastnik 23. in 24. 11. 2026): nastavitev se prebere sele, ko se klicatelj predstavi kot dostava.
             odgovorPaketa = { si.safeer.lina.asistent.PaketDostave.odgovorZaKlic(context) },

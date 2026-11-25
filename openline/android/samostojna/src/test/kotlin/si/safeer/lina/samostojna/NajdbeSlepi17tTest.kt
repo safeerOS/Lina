@@ -196,4 +196,12 @@ class NajdbeSlepi17tTest {
         assertEquals(listOf("lina", "klicatelj", "lina"), s.zakljuci(2L).prepisPogovora.map { it.govorec })
     }
 
+    // N10: osebni nacin = samo prepis, nikoli posnetek zvoka (tudi ne Lininega izhoda).
+    @Test
+    fun `N10 - klic v osebnem nacinu ne zapisuje Lininega izhodnega zvoka`() {
+        val upravljalnik = File("../app/src/main/kotlin/si/safeer/lina/telecom/LokalniPrehodUpravljalnik.kt").readText()
+        val odjemalec = File("src/main/kotlin/si/safeer/lina/samostojna/live/GeminiLiveOdjemalec.kt").readText()
+        assertFalse(upravljalnik.contains("ZajemIzhodaLine("), "pot klica ustvari zajem Lininega zvoka")
+        assertFalse(odjemalec.contains("zajemIzhoda"), "GeminiLiveOdjemalec ima pot za zajem izhodnega zvoka")
+    }
 }
