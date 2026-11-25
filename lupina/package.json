@@ -19,6 +19,7 @@
     },
     "files": [
       "main.js",
+      "pomocniki.js",
       "ikona.png",
       "package.json"
     ],
@@ -65,6 +66,28 @@
       "icon": "ikona.png",
       "maintainer": "Safeer <info@safeer.si>",
       "synopsis": "Lina - AI telefonska tajnica"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "ikona.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lina",
+      "artifactName": "Lina-${version}-x64-namestitev.${ext}"
     }
   }
 }
