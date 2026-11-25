@@ -542,8 +542,10 @@ export async function telefonZaLinijo(token: string | null, dir?: string, telefo
   await requireOwner(token, root);
   const ol = await telefoni(root);
   if (ol && ol.povezanih > 0) return "povezan";
-  if ((ol && ol.naprav > 0) || (await preberiKanal(root)).dovoljene.size > 0) return "seznanjen";
-  return "ne";
+  if (ol && ol.naprav > 0) return "seznanjen";
+  // pregled 16 (6): napaka branja kanala ni »ni telefona« (to bi pokazalo »zaprta«): ne vemo -> seznanjen (nevtralno, ne »zaprta«)
+  const naprav = await preberiKanal(root).then((k) => k.dovoljene.size, () => -1);
+  return naprav !== 0 ? "seznanjen" : "ne";
 }
 
 /** Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. */

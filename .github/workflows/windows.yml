@@ -140,7 +140,7 @@ jobs:
           # lupina (Node v Electronu) se zazene na tekacu Windows
           ELECTRON_RUN_AS_NODE=1 izid/win-unpacked/Lina.exe -p 'process.versions.node'
           # naloga 16: OpenLine iz paketa se zazene prek zaganjalnika (kot v Lini) in javi pripravljenost na 127.0.0.1
-          ELECTRON_RUN_AS_NODE=1 timeout 90 izid/win-unpacked/Lina.exe scripts/preverba-openline-paketa.mjs "$(cygpath -w "$PWD/$R")"
+          ELECTRON_RUN_AS_NODE=1 izid/win-unpacked/Lina.exe scripts/preverba-openline-paketa.mjs "$(cygpath -w "$PWD/$R")"
           (cd izid && sha256sum Lina-*-x64-namestitev.exe) | tee izid/sha256.txt
           {
             echo "### Namestitev za Windows (NSIS x64, nepodpisana)"

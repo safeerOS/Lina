@@ -110,7 +110,9 @@ export function Lina2Okvir(props: Props) {
     };
     osvezi();
     const c = setInterval(osvezi, 20_000);
-    return () => { ziv = false; clearInterval(c); };
+    // pregled 16 (5): ob vrnitvi na zavihek takoj, ne sele ob naslednjem intervalu
+    document.addEventListener("visibilitychange", osvezi);
+    return () => { ziv = false; clearInterval(c); document.removeEventListener("visibilitychange", osvezi); };
   }, []);
 
   const novihKlicev = useMemo(() => steviloNovih(kliciZaPrikaz(props.calls, [], 50), ogled), [props.calls, ogled]);

@@ -44,6 +44,8 @@ export type PovezavaPloscaLastnosti = {
   onVklopi: () => void;
   onDodaj: (c: { koda: string; id: string }) => void;
   onZavrni: (koda: string) => void;
+  /** Napaka zadnjega dejanja ali samodejnega QR/kode (pregled 16): vidna ob QR, ne na dnu leve kartice. */
+  napaka?: string;
 };
 
 const GUMB = "w-fit rounded-xl border border-[var(--color-rule)] px-4 py-2 text-sm disabled:opacity-50";
@@ -56,7 +58,7 @@ const POLJE_KODE = "w-28 rounded-xl border border-[var(--color-rule)] bg-[var(--
  * prostor«): QR, koda tega racunalnika in vnos kode s telefona so VEDNO na zaslonu, drug ob drugem v desnem stolpcu, kot seznanitev
  * Safeer Linka. Ko del za telefon ne tece, je na mestu QR in kode jasen razlog; Lina poskusa sama in oboje se pokaze samo.
  */
-export function PovezavaPlosca({ s, povabilo, zaposlen, kodaTel, onKodaTel, onPotrdiKodo, onOdkleni, onVklopi, onDodaj, onZavrni }: PovezavaPloscaLastnosti) {
+export function PovezavaPlosca({ s, povabilo, zaposlen, kodaTel, onKodaTel, onPotrdiKodo, onOdkleni, onVklopi, onDodaj, onZavrni, napaka = "" }: PovezavaPloscaLastnosti) {
   const razlog = razlogBrezKode(s, povabilo);
   const qr = s?.tece && povabilo ? povabilo : null;
   const koda = s?.tece && s.sKodo.odprto ? s.sKodo.koda : "";
@@ -70,6 +72,7 @@ export function PovezavaPlosca({ s, povabilo, zaposlen, kodaTel, onKodaTel, onPo
           {s && !s.vklop ? <button type="button" disabled={zaposlen} className={GUMB_MAJHEN} onClick={onVklopi}>{t("telVklopiPovezavo")}</button> : null}
         </div>
       ) : null}
+      {napaka ? <p role="alert" className="text-sm text-[var(--color-signal)]">{napaka}</p> : null}
       {s && s.cakajo.map((c) => {
         // N5d: tudi clan ozjega kroga Safeer Linka vidi id in ga potrdi (telefon za Lino vedno zahteva dotik »ID se ujema«, zato bi
         // bilo potrjevanje brez primerjave slepo); opomba samo pove, zakaj. Streznik preskoka ne dovoli (PRESKOK_PRIMERJAVE_ZA_CLANE).
@@ -171,6 +174,8 @@ export function PovezavaPlosca({ s, povabilo, zaposlen, kodaTel, onKodaTel, onPo
 const QR_PREJ_MS = 30_000;
 /** Po neuspelem samodejnem poskusu (QR, okno s kodo) najprej cez toliko casa znova, da zaslon ne udarja po strezniku. */
 const PREMOR_PO_NAPAKI_MS = 15_000;
+/** Po toliko zaporednih neuspehih samodejnega QR ali kode zaslon pokaze napako streznika (prej je kazal »se pripravlja«). */
+const NAPAK_DO_PRIKAZA = 2;
 
 /**
  * Zaslon »Poveži telefon« (lastnik 14. 11. 2026): en QR za obe poti (klici OpenLine in asistentka), potrditev telefona z enim
@@ -189,6 +194,9 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
   const [zdaj, setZdaj] = useState(() => Date.now());
   const premorDo = useRef({ qr: 0, koda: 0 });
   const vTeku = useRef({ qr: false, koda: false, zagon: false });
+  // pregled 16 (1): odgovor, ki pride po zapustitvi zaslona, ne sme pustiti odprtega okna s kodo ali pisati v stanje
+  const ziv = useRef(true);
+  const neuspehov = useRef({ qr: 0, koda: 0 });
 
   function prevzemi(x: Stanje) {
     setS(x);
@@ -233,8 +241,15 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     if ((povabilo && povabilo.kljuc === kljucStreznika && povabilo.do - QR_PREJ_MS > zdaj) || vTeku.current.qr || premorDo.current.qr > zdaj) return;
     vTeku.current.qr = true;
     zacniSeznanitevFn()
-      .then((p) => setPovabilo({ ...p, do: Date.now() + p.velja, kljuc: kljucStreznika }))
-      .catch(() => { premorDo.current.qr = Date.now() + PREMOR_PO_NAPAKI_MS; })
+      .then((p) => {
+        neuspehov.current.qr = 0;
+        if (ziv.current) setPovabilo({ ...p, do: Date.now() + p.velja, kljuc: kljucStreznika });
+      })
+      .catch((e: unknown) => {
+        premorDo.current.qr = Date.now() + PREMOR_PO_NAPAKI_MS;
+        // pregled 16 (4): trajna napaka ni tiho »se pripravlja«
+        if (++neuspehov.current.qr >= NAPAK_DO_PRIKAZA && ziv.current) setLokalna(e instanceof Error ? e.message : "");
+      })
       .finally(() => { vTeku.current.qr = false; });
   }, [tece, kljucStreznika, povabilo, zdaj]);
 
@@ -245,13 +260,27 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     if (!tece || kodaOdprta || zaprtoSe > 0 || vTeku.current.koda || premorDo.current.koda > zdaj) return;
     vTeku.current.koda = true;
     zacniSeznanitevSKodoFn()
-      .then(() => stanjeAsistentaFn().then(setS))
-      .catch(() => { premorDo.current.koda = Date.now() + PREMOR_PO_NAPAKI_MS; })
+      .then(async () => {
+        neuspehov.current.koda = 0;
+        if (!ziv.current) { await zapriSeznanitevSKodoFn().catch(() => undefined); return; }
+        const x = await stanjeAsistentaFn();
+        if (ziv.current) setS(x);
+      })
+      .catch((e: unknown) => {
+        premorDo.current.koda = Date.now() + PREMOR_PO_NAPAKI_MS;
+        if (++neuspehov.current.koda >= NAPAK_DO_PRIKAZA && ziv.current) setLokalna(e instanceof Error ? e.message : "");
+      })
       .finally(() => { vTeku.current.koda = false; });
   }, [tece, kodaOdprta, zaprtoSe, zdaj]);
 
   // ob zapustitvi zaslona se okno s kodo zapre (koda ne velja vec, oglas mDNS se ustavi)
-  useEffect(() => () => { void zapriSeznanitevSKodoFn().catch(() => undefined); }, []);
+  useEffect(() => {
+    ziv.current = true;
+    return () => {
+      ziv.current = false;
+      void zapriSeznanitevSKodoFn().catch(() => undefined);
+    };
+  }, []);
 
   async function izvedi(delo: () => Promise<void>) {
     setZaposlen(true);
@@ -279,6 +308,7 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       onOdkleni={() => void izvedi(async () => setS(await odkleniPovezovanjeFn()))}
       onVklopi={() => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { vklop: true } })))}
       onDodaj={(c) => void izvedi(async () => { await potrdiIdSeznanitveFn({ data: { koda: c.koda, id: c.id } }); setS(await odlociSeznanitevFn({ data: { koda: c.koda, sprejmi: true } })); setPovabilo(null); })}
+      napaka={lokalna}
       onZavrni={(koda) => void izvedi(async () => setS(await odlociSeznanitevFn({ data: { koda, sprejmi: false } })))}
     />
   );
@@ -374,7 +404,6 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       <p className="text-sm" role="status">
         {s.klicevSePripravlja ? t("telOpenLinePripravlja") : s.openLine.povezan ? `${t("telOpenLinePovezan")} (${s.openLine.vrata})` : t("telOpenLineSama")}
       </p>
-      {lokalna ? <p role="alert" className="text-sm text-[var(--color-signal)]">{lokalna}</p> : null}
     </section>
     </div>
   );

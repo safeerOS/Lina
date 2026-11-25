@@ -82,6 +82,14 @@ describe("naloga 16: Poveži telefon - QR, koda in vnos kode vedno vidni", () =>
     expect(brez).toContain('id="pt-koda-prazno"');
   });
 
+  it("pregled 16: napaka samodejnega QR ali kode je vidna v plosci (role=alert), ne tiho »se pripravlja«", () => {
+    const html = renderToStaticMarkup(createElement(PovezavaPlosca, {
+      s: stanje(), povabilo: null, zaposlen: false, kodaTel: {}, onKodaTel: nic, onPotrdiKodo: nic, onOdkleni: nic, onVklopi: nic, onDodaj: nic, onZavrni: nic,
+      napaka: "OpenLine ni odgovoril v roku",
+    }));
+    expect(html).toMatch(/<p role="alert"[^>]*>OpenLine ni odgovoril v roku<\/p>/);
+  });
+
   it("razlog: null samo, ko sta QR in koda res na voljo (ali je koda zaprta zaradi poskusov - takrat svoje sporocilo)", () => {
     expect(razlogBrezKode(stanje(), POVABILO)).toBeNull();
     expect(razlogBrezKode(stanje(), null)).toBe(t("telPripravljam"));
