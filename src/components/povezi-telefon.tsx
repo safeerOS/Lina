@@ -102,6 +102,20 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
           {t("telOcenaIzida")}
         </label>
         <p id="pt-ocena-namig" className="text-xs text-[var(--color-moss)]">{t("telOcenaIzidaNamig")}</p>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={s.globalLink}
+            disabled={zaposlen}
+            aria-describedby="pt-global-namig"
+            onChange={(e) => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { globalLink: e.target.checked } })))}
+          />
+          {t("telGlobalLink")}
+        </label>
+        <p id="pt-global-namig" className="text-xs text-[var(--color-moss)]">{t("telGlobalLinkNamig")}</p>
+        {s.globalLink && (
+          <p className="text-xs" role="status">{t("telGlobalLinkStanje")}{t(`telGlobalLink_${s.globalLinkStanje}`)}</p>
+        )}
         <label htmlFor="pt-naslov-rac">
           {t("telNaslovRac")}
           <select id="pt-naslov-rac" value={naslov} onChange={(e) => setNaslov(e.target.value)} className={polje}>

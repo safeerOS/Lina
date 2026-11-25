@@ -16,6 +16,8 @@ import { createHash, generateKeyPairSync, randomBytes, sign, timingSafeEqual, X5
 import { constants as fsKonstante } from "node:fs";
 import { chmod, lstat, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:https";
+import { constants as cryptoKonstante } from "node:crypto";
+import { TLSSocket, createSecureContext, type SecureContext } from "node:tls";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Socket } from "node:net";
@@ -259,6 +261,9 @@ export const POTI_ODDALJENO: ReadonlyMap<string, string> = new Map([
   // Dodatki na racunalniku (23. 11. 2026) in n8n tokovi (24. 11. 2026): ista naprava ozjega kroga s podpisom kot za nalogo.
   [`${POT}/dodatki`, "GET"], [`${POT}/dodatek`, "POST"],
   [`${POT}/dodatki/n8n`, "GET"], [`${POT}/dodatki/n8n/predlog`, "POST"], [`${POT}/dodatki/n8n/potrdi`, "POST"],
+  // Naloge agentov in gradnje prek Global Linka: lastnik 25. 11. 2026 »da« (»more tudi global link delovati«); isti podpis naprave.
+  [`${POT}/agent-naloge`, "GET"], [`${POT}/agent-naloga/dodeli`, "POST"], [`${POT}/agent-naloga/preklici`, "POST"],
+  [`${POT}/gradnje`, "GET"], [`${POT}/gradnja/apk`, "GET"], [`${POT}/gradnja/predlog`, "POST"], [`${POT}/gradnja/potrdi`, "POST"],
 ]);
 
 type DogodekTelefona = Dogodek & { st: number };
@@ -308,6 +313,13 @@ export type MoznostiStreznika = {
   rokRokovanja?: number;
   /** F5: omogoci vhod za oddaljeni prehod (privzeto izklopljeno; streznik se vseeno veze samo na zasebni naslov). */
   omogociPrehod?: boolean;
+  /**
+   * Global Link (naloga 22): sprejem kanalov releja v istem procesu (sprejmiOddaljeno). Privzeto izklopljeno; brez tega se vsak
+   * predan kanal takoj zapre.
+   */
+  omogociOddaljeno?: boolean;
+  /** Id Line na releju (rele-lina.server.ts); telefon ga dobi v podpisanem odgovoru /stanje. null = rele izklopljen. */
+  rele?: () => string | null;
   /** Dodatki na racunalniku (dodatki-telefon.server.ts + n8n.server.ts); brez njih poti /dodatki, /dodatek in /dodatki/n8n* odgovorijo 404. */
   dodatki?: {
     stanje(): Promise<unknown>;
@@ -362,6 +374,8 @@ class Napaka extends Error {
   }
 }
 const zavrnjeno = () => new Napaka(403, "zavrnjeno", "Podpis, naprava, cas ali enkratni niz ne velja.");
+/** Pot ni na belem seznamu oddaljenih poti: 403 kot prej, a ne steje med zavrnitve (pregled 1: skupna omejitev releja). */
+class NiOddaljeno extends Napaka {}
 
 export function imeNaprave(ime: unknown): ime is string {
   return typeof ime === "string" && !!ime.trim() && ime.length <= 60 && praviUnicode(ime) && !/[\u0000-\u001f\u007f-\u009f]|\p{Cf}/u.test(ime);
@@ -378,6 +392,11 @@ export class AsistentStreznik {
   private readonly viri = new WeakMap<IncomingMessage, string>();
   private readonly zetonPrehoda: string | null;
   private cilj: { naslov: string; vrata: number; cert: string; odtis: string } | null = null;
+  /** Global Link: vticnice TLS iz kanala releja -> vir (overjen s strani transporta); samo te so »oddaljene«. */
+  private readonly oddaljeni = new WeakMap<object, string>();
+  private readonly oddaljeneVticnice = new Set<TLSSocket>();
+  private readonly oddaljeniNaVir = new Map<string, number>();
+  private kontekst: SecureContext | null = null;
   private readonly zagnan: number;
   private readonly zdaj: () => number;
   private readonly dnevnik: (s: string) => void;
@@ -398,6 +417,8 @@ export class AsistentStreznik {
     if (!zasebenNaslov(naslov)) throw new Error("Asistentka poslusa samo na 127.0.0.1 ali zasebnem naslovu domacega omrezja.");
     const { cert, key, odtis } = await potrdiloAsistenta(this.m.root);
     this.odtis = odtis;
+    // oddaljeni kanali: isto potrdilo; brez ponovnega rokovanja TLS 1.2 (AGENTS.md F5, pregled 18. 11. 2026)
+    if (this.m.omogociOddaljeno) this.kontekst = createSecureContext({ cert, key, minVersion: "TLSv1.2", secureOptions: cryptoKonstante.SSL_OP_NO_RENEGOTIATION });
     const lokalni = naslov;
     const s = createServer({ cert, key, minVersion: "TLSv1.2", handshakeTimeout: this.m.rokRokovanja ?? ROK_ROKOVANJA_MS }, (req, res) => { this.zahteva(req, res).catch(() => this.poslji(res, 500, { napaka: "notranja" })); });
     s.headersTimeout = 10_000;
@@ -436,6 +457,53 @@ export class AsistentStreznik {
     return { ...this.cilj, zeton: this.zetonPrehoda };
   }
 
+  /**
+   * Global Link (naloga 22): kanal releja (rele-lina.server.ts) postane povezava TEGA streznika. TLS opravi streznik sam z
+   * istim potrdilom (telefon pripne odtis kot doma), zato transport ne vidi vsebine. [vir] je identiteta, ki jo je overil
+   * transport (nikoli naslov na releju ali id iz telesa); omejitve tecejo po »r:<vir>«. Na vticnici je oznaka »oddaljena«:
+   * velja samo beli seznam POTI_ODDALJENO, podpis naprave, okno casa in enkratni niz kot doma. Stevca se povecata sele po
+   * uspesni gradnji TLSSocket. false = kanal je zavrnjen in zaprt.
+   */
+  sprejmiOddaljeno(v: Duplex, vir: string): boolean {
+    const s = this.streznik;
+    const naVir = this.oddaljeniNaVir.get(vir) ?? 0;
+    if (!s || !this.kontekst || !this.m.omogociOddaljeno || typeof vir !== "string" || !VIR_PREHODA.test(vir)
+      || this.oddaljeneVticnice.size >= NAJVEC_POVEZAV_PREHOD || naVir >= NAJVEC_POVEZAV_NA_NASLOV) {
+      v.destroy();
+      return false;
+    }
+    let t: TLSSocket;
+    try {
+      t = new TLSSocket(v as Socket, { isServer: true, secureContext: this.kontekst, requestCert: false });
+    } catch {
+      v.destroy();
+      return false;
+    }
+    this.oddaljeni.set(t, vir);
+    this.oddaljeneVticnice.add(t);
+    this.oddaljeniNaVir.set(vir, naVir + 1);
+    let sproscen = false;
+    const sprosti = () => {
+      if (sproscen) return;
+      sproscen = true;
+      clearTimeout(rok);
+      this.oddaljeneVticnice.delete(t);
+      const m = (this.oddaljeniNaVir.get(vir) ?? 1) - 1;
+      if (m <= 0) this.oddaljeniNaVir.delete(vir); else this.oddaljeniNaVir.set(vir, m);
+    };
+    const rok = setTimeout(() => t.destroy(), this.m.rokRokovanja ?? ROK_ROKOVANJA_MS);
+    t.once("close", sprosti);
+    v.once("close", () => t.destroy());
+    // obratno ni treba: unicenje TLSSocket na Node 22 zapre tudi zaviti kanal (izmerjeno: preizkus »pregled 3«, mutacija M11 25. 11. 2026)
+    t.on("error", () => t.destroy());
+    t.once("secure", () => {
+      clearTimeout(rok);
+      if (this.streznik !== s) { t.destroy(); return; }
+      s.emit("secureConnection", t);
+    });
+    return true;
+  }
+
   /** Zahteva prihaja z istega racunalnika (loopback ali lasten naslov poslusanja). */
   private jeLokalno(addr: string | undefined): boolean {
     if (!addr) return false;
@@ -463,6 +531,7 @@ export class AsistentStreznik {
     const s = this.streznik;
     this.streznik = null;
     for (const n of this.naloge.values()) for (const c of n.cakajo) c();
+    for (const t of this.oddaljeneVticnice) t.destroy();
     if (!s) return Promise.resolve();
     s.closeAllConnections?.();
     return new Promise((ok) => s.close(() => ok()));
@@ -479,14 +548,17 @@ export class AsistentStreznik {
     let vir = req.socket.remoteAddress ?? "";
     try {
       // tujec z javnega naslova (preusmeritev vrat, posrednik) ne pride naprej, tudi ce bi streznik kdo izpostavil
-      if (!zasebenOdjemalec(req.socket.remoteAddress)) throw new Napaka(403, "zavrnjeno", "Samo domace omrezje.");
-      const prehod = this.virPrehoda(req);
+      // Global Link: oznako »oddaljena« ima samo vticnica iz sprejmiOddaljeno (nikoli glava ali naslov odjemalca)
+      const oddaljen = this.oddaljeni.get(req.socket);
+      if (oddaljen === undefined && !zasebenOdjemalec(req.socket.remoteAddress)) throw new Napaka(403, "zavrnjeno", "Samo domace omrezje.");
+      if (oddaljen !== undefined && (req.headers[GLAVA_PREHOD] !== undefined || req.headers[GLAVA_VIR] !== undefined)) throw zavrnjeno();
+      const prehod = oddaljen !== undefined ? `r:${oddaljen}` : this.virPrehoda(req);
       if (prehod !== null) vir = prehod;
       this.viri.set(req, vir);
       this.omeji(vir);
       const url = new URL(req.url ?? "/", "https://lina.invalid");
       // oddaljena naprava: samo beli seznam poti (seznanjanje zahteva lastnika pri racunalniku), tudi ce bi prehod napacno posredoval
-      if (prehod !== null && POTI_ODDALJENO.get(url.pathname) !== req.method) throw new Napaka(403, "zavrnjeno", "Pot ni dovoljena prek oddaljene poti.");
+      if (prehod !== null && POTI_ODDALJENO.get(url.pathname) !== req.method) throw new NiOddaljeno(403, "zavrnjeno", "Pot ni dovoljena prek oddaljene poti.");
       if (req.method === "GET" && url.pathname === `${POT}/dogodki`) return await this.dogodki(req, res, url);
       if (req.method === "GET" && url.pathname === `${POT}/seznani`) return this.poslji(res, 200, this.stanjeSeznanitve(req, url));
       if (req.method === "GET" && url.pathname === `${POT}/stanje`) return this.poslji(res, 200, await this.stanjeSeje(url));
@@ -523,7 +595,7 @@ export class AsistentStreznik {
       this.poslji(res, izid.status, izid.telo);
     } catch (e) {
       const n = e instanceof Napaka ? e : e instanceof NapakaKode ? new Napaka(e.status, e.koda, e.message) : new Napaka(500, "notranja", "Notranja napaka.");
-      if (n.status === 401 || n.status === 403) this.zabeleziZavrnitev(vir);
+      if ((n.status === 401 || n.status === 403) && !(e instanceof NiOddaljeno)) this.zabeleziZavrnitev(vir);
       if (!(e instanceof Napaka) && !(e instanceof NapakaKode)) this.dnevnik(`napaka: ${(e as Error).message}`);
       this.poslji(res, n.status, { napaka: n.koda, sporocilo: n.message, ...n.dodatno });
     }
@@ -921,7 +993,9 @@ export class AsistentStreznik {
     const t = { cas: Number(q.get("cas")), enkratni: q.get("enkratni") ?? "", podpis: q.get("podpis") ?? "" };
     await this.preveri(posiljatelj, t, (c, e) => nizStanja(posiljatelj as string, c, e));
     const odprta = await this.m.izvajalec.razpolozljiv().catch(() => false);
-    return { claudeCode: odprta ? "odprta" : "zaprta" };
+    // id Line na releju samo podpisani napravi in samo, ce je Global Link vklopljen (telefon ga shrani za pot od zunaj)
+    const rele = this.m.omogociOddaljeno ? this.m.rele?.() ?? null : null;
+    return { claudeCode: odprta ? "odprta" : "zaprta", ...(rele ? { rele } : {}) };
   }
 
   private dodatkiStreznika() {

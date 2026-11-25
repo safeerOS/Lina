@@ -168,7 +168,7 @@ test("brez zaledja poti ne obstajajo (404); poti gradenj niso na seznamu oddalje
   } finally {
     await s.ustavi();
   }
-  for (const p of ["/gradnje", "/gradnja/predlog", "/gradnja/potrdi", "/gradnja/apk"]) assert.equal(POTI_ODDALJENO.has(`${POT}${p}`), false, p);
+  for (const p of ["/gradnje", "/gradnja/predlog", "/gradnja/potrdi", "/gradnja/apk"]) assert.equal(POTI_ODDALJENO.has(`${POT}${p}`), true, p); // lastnik 25. 11. 2026: tudi prek Global Linka
 });
 
 // ---- Pregled A (zdruzitev 0225): A-11, A-16 ----

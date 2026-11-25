@@ -5,6 +5,8 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { registrirajVezoKlicev, uskladiAsistenta } from "./asistent-telefon.server.ts";
+// locen uvoz: preizkus naloga-veza-openline zaklepa zgornjo vrstico dobesedno
+import { registrirajRele } from "./asistent-telefon.server.ts";
 import { zazeniAvtonomijo } from "./avtonomija-izvedba.server.ts";
 import { zazeniRazporejevalnik } from "./claude-naloge.server.ts";
 import { uskladiGlasTelefona } from "./glas-telefon.server.ts";
@@ -50,6 +52,7 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
   const stanje: StanjeZagona = await pripraviGlasObZagonu(dir);
   // pot klicev (OpenLine) za telefon asistentke: ob vklopu telefona se zazene sama (#17, uporabnik ne vpise nic); vezava sama nic ne vklopi
   registrirajVezoKlicev(ustvariVezoKlicev());
+  registrirajRele({}); // Global Link do pravega releja samo v tekocem programu, nikoli v preizkusih
   // vnaprej dodeljene naloge agentov (24. 11. 2026): casovnik razporejevalnika; zamujene ob zagonu se NE zazenejo (»zamujeno, potrdi«)
   zazeniRazporejevalnik(dir);
   // telefon za asistentko: zazene se samo, ce ga je lastnik vklopil (privzeto izklopljeno); napaka ne podre zagona glasu

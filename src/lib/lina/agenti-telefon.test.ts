@@ -140,7 +140,7 @@ test("brez zaledja poti ne obstajajo (404); poti niso dovoljene prek oddaljenega
   } finally {
     await s.ustavi();
   }
-  for (const p of ["/agent-naloge", "/agent-naloga/dodeli", "/agent-naloga/preklici"]) assert.equal(POTI_ODDALJENO.get(`${POT}${p}`), undefined);
+  for (const [p, m] of [["/agent-naloge", "GET"], ["/agent-naloga/dodeli", "POST"], ["/agent-naloga/preklici", "POST"]]) assert.equal(POTI_ODDALJENO.get(`${POT}${p}`), m); // lastnik 25. 11. 2026: tudi prek Global Linka
 });
 
 test("zaledje telefona: prava vrsta, izvor »telefon«, ocena in opomnik v stanju za telefon, preklic", async () => {

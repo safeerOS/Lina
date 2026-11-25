@@ -599,8 +599,17 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
 - Telefon zunaj doma doseze streznik asistentke samo tako, da transport Global Linka v ISTEM procesu (rele ali neposredna pot 48990) prevzame
   surovo povezavo in jo preda `sprejmiOddaljeno(vticnica, vir)`. Bajti so TLS od konca do konca s pripetim odtisom (rokovanje opravi
   streznik, transport ne vidi vsebine); streznik ostane na 127.0.0.1 ali zasebnem naslovu. Privzeto IZKLOPLJENO (`omogociOddaljeno`;
-  vklop v nastavitvah Line z jasnim opisom, po neodvisnem varnostnem pregledu in lastnikovem »da«). Transport in telefon se NISTA narejena:
-  brez njiju pot NI od konca do konca.
+  vklop v nastavitvah Line z jasnim opisom, po neodvisnem varnostnem pregledu in lastnikovem »da«).
+- Naloga 22 (25. 11. 2026, lastnik: »tudi global link mora delovati«; Lina deluje BREZ drugih Safeer izdelkov): `sprejmiOddaljeno` je
+  (po izgubi ob obnovi) znova v asistent-streznik.server.ts; transport je rele-lina.server.ts - Lina SAMA (svoj kljuc v <podatki>/rele-lina,
+  brez Safeer OS) poslusa na link.safeer.si po protokolu core/link_rele.py (presence/listen/accept), allow = samo id-ji naprav, ki jih je
+  lastnik dodal (kanal-claude). Nastavitev `globalLink` v asistent-telefon.json, privzeto VKLOPLJENA (lastnik 25. 11. 2026 »da«; stikalo v »Povezi telefon«;
+  agent releja tece samo, ce ga registrira zagon programa - registrirajRele v zagon.server.ts, v preizkusih nikoli);
+  vir na streznikovi strani je »rele« (rele ne pove, katera naprava je poklicala - omejitve so skupne vsem kanalom releja, podpis naprave
+  pa velja za vsako zahtevo). Telefon: id Line na releju dobi v podpisanem GET /stanje (polje rele), kanal odpre ReleKanal (modul podpis),
+  OkHttp gre prek ReleVrata (127.0.0.1 + 32-bajtna skrivnost procesa) z ISTIM pripetim odtisom; ena tovarna PovezavaLine.ustvari.
+  Neposredne poti za asistentko Lina nima (Caddy/tunel prepustita samo /api/voice/*). Preizkusi: rele-lina.test.ts, ReleLineTest.kt.
+  Naloge agentov in gradnje so od 25. 11. 2026 (lastnik »da«) tudi v POTI_ODDALJENO; seznanjanje, /koda/*, sinhronizacija in klici ostanejo samo doma.
 - `vir` mora biti identiteta, ki jo je transport OVERIL (naprava s seznama dovoljenih na relu), nikoli naslov odjemalca na relu in nikoli
   id iz telesa zahteve (napadalec bi izpraznil kvoto zrtve). Omejitve zahtev, zavrnitev in povezav (8 na vir, 32 skupaj, rok rokovanja)
   tecejo po `p:<vir>`, ne po naslovu 127.0.0.1.

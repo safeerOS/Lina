@@ -869,11 +869,11 @@ export const stanjeAsistentaFn = createServerFn({ method: "GET" }).handler(async
 });
 
 export const shraniAsistentaFn = createServerFn({ method: "POST" })
-  .validator((data: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown }) => data)
+  .validator((data: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown }) => data)
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
-    return shraniAsistenta(await sessionToken(), { vklop: data?.vklop, naslov: data?.naslov, vrata: data?.vrata, ocenaIzida: data?.ocenaIzida });
+    return shraniAsistenta(await sessionToken(), { vklop: data?.vklop, naslov: data?.naslov, vrata: data?.vrata, ocenaIzida: data?.ocenaIzida, globalLink: data?.globalLink });
   });
 
 export const zacniSeznanitevFn = createServerFn({ method: "POST" }).handler(async () => {

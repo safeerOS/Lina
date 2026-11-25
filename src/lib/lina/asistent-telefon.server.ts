@@ -37,6 +37,7 @@ import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gr
 import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
 import { telefonOdgovor, telefonVprasanja } from "./vprasanja-agentov.server.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
+import { AgentReleja, dovoljeniIzKanala, kljucReleja, type MoznostiPovezave, type StanjeAgenta } from "./rele-lina.server.ts";
 
 export const NASTAVITVE_ASISTENTA = "asistent-telefon.json";
 export const PRIVZETA_VRATA_ASISTENTA = 8446;
@@ -48,14 +49,15 @@ export const SHEMA_QR = "httpgateway://pair";
 export const VAROVALKA_KODE = "koda-varovalka.json";
 
 /** ocenaIzida: izid Claude Code gre k ponudniku modela za pogovor v oceno cilja (S1, drugi pregled 0.2.10); privzeto vklopljeno (odlocitev vodje). */
-type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean };
+/** globalLink: Lina poslusa na releju link.safeer.si za seznanjene telefone zunaj doma (naloga 22); privzeto VKLOPLJENO (lastnik 25. 11. 2026 »da« po neodvisnem pregledu). */
+type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean; globalLink: boolean };
 
 function cisteNastavitve(n: Partial<Nastavitve> | null): Nastavitve {
   const vrata = Number.isInteger(n?.vrata) && (n!.vrata as number) >= 1024 && (n!.vrata as number) <= 65535 ? (n!.vrata as number) : PRIVZETA_VRATA_ASISTENTA;
   const naslov = typeof n?.naslov === "string" && zasebenNaslov(n.naslov) ? n.naslov : "127.0.0.1";
   const imena: Record<string, string> = {};
   for (const [id, ime] of Object.entries(n?.imena ?? {})) if (ID_NAPRAVE.test(id) && typeof ime === "string") imena[id] = ime.slice(0, 60);
-  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false };
+  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false, globalLink: n?.globalLink !== false };
 }
 
 /**
@@ -76,6 +78,11 @@ async function preberiNastavitve(root: string): Promise<Nastavitve> {
   const c = cisteNastavitve(n as Partial<Nastavitve>);
   const ocena = (n as { ocenaIzida?: unknown }).ocenaIzida;
   return ocena === undefined || typeof ocena === "boolean" ? c : { ...c, ocenaIzida: false };
+}
+
+/** Global Link (naloga 22): ali Lina poslusa na releju; privzeto DA (lastnik 25. 11. 2026), tudi ob neberljivi datoteki; NE samo ob izrecnem false. */
+export async function globalLinkVklopljen(dir?: string): Promise<boolean> {
+  return (await preberiNastavitve(resolveDataDir(dir))).globalLink;
 }
 
 /** Ali sme izid Claude Code k ponudniku modela (ocena cilja); prebere se ob vsakem izidu, zato izklop velja takoj. */
@@ -100,6 +107,9 @@ type Tekoci = {
   odtis: string;
   koda: SeznanitevSKodo;
   varovalka: VarovalkaKode;
+  /** Global Link (naloga 22): agent releja, ce je nastavitev vklopljena; sicer null. */
+  rele: AgentReleja | null;
+  globalLink: boolean;
 };
 
 type Stanje = {
@@ -107,6 +117,8 @@ type Stanje = {
   oglas: OglasMdns | null;
   /** Vezava zagona poti klicev (OpenLine); vpise jo zagon programa (zagon.server.ts). Brez nje (preizkusi) se nic ne zazene. */
   klici?: VezaKlicev | null;
+  /** Global Link: povezava do releja; vpise jo SAMO zagon programa (zagon.server.ts). Brez nje (preizkusi) se agent releja ne zazene. */
+  rele?: MoznostiPovezave | null;
   /** Tekoca priprava poti klicev (ena obljuba za vse klice) in njeno opozorilo (prazno, ce je vse v redu). */
   pripravaKlicev?: Promise<void> | null;
   opozoriloPripraveKlicev?: string;
@@ -127,6 +139,10 @@ function stanje(): Stanje {
 export type VezaKlicev = { zagotovi: (root: string, naslov: string) => Promise<void>; ustavi: () => Promise<void> };
 export function registrirajVezoKlicev(veza: VezaKlicev | null): void {
   stanje().klici = veza;
+}
+/** Global Link: dovoli agenta releja (zagon programa); {} = pravi link.safeer.si, null = nikoli (privzeto v preizkusih). */
+export function registrirajRele(povezava: MoznostiPovezave | null): void {
+  stanje().rele = povezava;
 }
 /** Varovalka cakanja na pripravo poti klicev v zacniSeznanitev (priprava ima svoj rok; to je zgornja meja). */
 export const ROK_PRIPRAVE_KLICEV_MS = 25_000;
@@ -242,6 +258,7 @@ async function ustavi(): Promise<void> {
     t.koda.zapri(); // tudi casovnik izteka in oglas
     clearInterval(t.osvezi);
     t.izvajalec.zapri();
+    t.rele?.ustavi();
     await t.streznik.ustavi();
   }
   await ustaviPotKlicev();
@@ -253,7 +270,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
     const root = resolveDataDir(dir);
     const n = await preberiNastavitve(root);
     const t = stanje().tekoci;
-    if (t && (!n.vklop || t.naslov !== n.naslov || t.vrata !== n.vrata)) await ustavi();
+    if (t && (!n.vklop || t.naslov !== n.naslov || t.vrata !== n.vrata || t.globalLink !== n.globalLink)) await ustavi();
     if (!n.vklop || stanje().tekoci) {
       if (!n.vklop) stanje().napaka = "";
       // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi()
@@ -263,6 +280,8 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
     }
     try {
       const k = await preberiKanal(root);
+      // pregled 6: kljuc releja PRED izvajalcem in casovnikom (napaka tu ne pusti odprtih virov)
+      const kljucR = n.globalLink ? await kljucReleja(root) : null;
       let krog: ReadonlySet<string> = new Set(k.dovoljene.keys());
       const izvajalec = new IzvajalecClaudeCode({
         pot: potVticnice(root, process.platform, k.imeCevi),
@@ -324,10 +343,21 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         stanje: async () => telefonVprasanja(root),
         odgovori: (id: string, odlocitev: string, zgostitev: string, naprava: string) => telefonOdgovor(root, id, odlocitev, zgostitev, naprava),
       };
-      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje, agentiNaloge, vprasanjaAgentov });
+      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje, agentiNaloge, vprasanjaAgentov,
+        omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null });
       try {
         const { naslov, vrata, odtis } = await streznik.zazeni();
-        stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka };
+        const s = streznik;
+        // Global Link: na releju so dovoljene samo naprave, ki jih je lastnik dodal (id iz kljuca, kot v Safeer Linku)
+        const povezavaReleja = stanje().rele;
+        const rele = kljucR && povezavaReleja ? new AgentReleja({
+          kljuc: kljucR,
+          povezava: povezavaReleja,
+          dovoljeni: async () => dovoljeniIzKanala((await preberiKanal(root)).dovoljene),
+          sprejmi: (d) => s.sprejmiOddaljeno(d, "rele"),
+        }) : null;
+        rele?.zazeni();
+        stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka, rele, globalLink: n.globalLink };
         stanje().napaka = "";
         void pripraviPotKlicev(root, naslov); // v ozadju: uporabnik ne caka; napaka postane opozorilo
       } catch (e) {
@@ -344,6 +374,9 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
 
 export type StanjeAsistenta = {
   vklop: boolean;
+  /** Global Link (naloga 22): nastavitev in dejansko stanje povezave z relejem (izklopljen, povezujem, povezan, napaka). */
+  globalLink: boolean;
+  globalLinkStanje: StanjeAgenta;
   /** Izid Claude Code gre k ponudniku modela v oceno (S1). */
   ocenaIzida: boolean;
   naslov: string;
@@ -377,7 +410,7 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
   const ozjiKrog: string[] = [];
   for (const [koda, p] of stanje().prijave) if (p.stanje === "caka" && p.naprava && await jeClanKroga(p.naprava.kljuc, p.naprava.id)) ozjiKrog.push(koda);
   return {
-    vklop: n.vklop, ocenaIzida: n.ocenaIzida, naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t, napaka: stanje().napaka, odtis: t?.odtis ?? "",
+    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t, napaka: stanje().napaka, odtis: t?.odtis ?? "",
     claudeCode: t ? await t.izvajalec.razpolozljiv().catch(() => false) : false,
     cakajo,
     ozjiKrog,
@@ -390,7 +423,7 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
 }
 
 /** Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. */
-export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown }, dir?: string): Promise<StanjeAsistenta> {
+export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown }, dir?: string): Promise<StanjeAsistenta> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
   if (typeof vnos.naslov === "string" && !zasebniNaslovi().includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
@@ -402,6 +435,7 @@ export async function shraniAsistenta(token: string | null, vnos: { vklop?: unkn
     await writeJson(root, NASTAVITVE_ASISTENTA, {
       ...n, vklop: vnos.vklop === undefined ? n.vklop : vnos.vklop === true, naslov: typeof vnos.naslov === "string" ? vnos.naslov : n.naslov, vrata,
       ocenaIzida: typeof vnos.ocenaIzida === "boolean" ? vnos.ocenaIzida : n.ocenaIzida,
+      globalLink: typeof vnos.globalLink === "boolean" ? vnos.globalLink : n.globalLink,
     } satisfies Nastavitve);
   });
   await uskladiAsistenta(root);
