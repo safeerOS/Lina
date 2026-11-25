@@ -1448,7 +1448,7 @@ export async function predlagajClaudeNalogo(
   besedilo: unknown,
   o: Odvisnosti = {},
   zdaj = new Date(),
-  agent: { agent?: string; pogoj?: string } = {},
+  agent: { agent?: string; pogoj?: string; brezDovoljenjaPodobnih?: boolean } = {},
 ): Promise<ZapisNaloge | null> {
   try {
     const pogoj = agent.pogoj === undefined ? undefined : pogojIzOznake(agent.pogoj, zdaj);
@@ -1459,7 +1459,8 @@ export async function predlagajClaudeNalogo(
     // zato veljajo opozorilo, agent, prepovedane mape in meje. Ce potrditev ne uspe, predlog ostane in caka lastnika.
     // B1 (1750): obseg ne vsebuje besedila naloge, zato tvegano besedilo (brisanje, push, posiljanje, placilo, kljuci, sudo,
     // namestitev; lahko vbrizgano iz vsebine, ki jo bere model) vedno caka lastnika.
-    if (!jeTveganoDejanje(z.besedilo) && await najdiDovoljenje(root, "naloga-agentu", { agent: z.agent ?? "claude", mapa: z.mapa }, {}, zdaj)) {
+    // Naloga 8 (pregled V2): predlog orkestratorja (besedilo izbere model, ki bere izide orodij) dovoljenja podobnih ne uporabi.
+    if (!agent.brezDovoljenjaPodobnih && !jeTveganoDejanje(z.besedilo) && await najdiDovoljenje(root, "naloga-agentu", { agent: z.agent ?? "claude", mapa: z.mapa }, {}, zdaj)) {
       try {
         await potrdi(root, z.id, z.zgostitev, o, zdaj);
       } catch {

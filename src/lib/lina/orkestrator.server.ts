@@ -35,6 +35,7 @@ import {
   type RegisterOrodij,
 } from "./orkestrator.ts";
 import { izberiUcenje, normirajTip, type UcenjeVmesnik } from "./orkestrator-ucenje.ts";
+import { zaznajVbrizg } from "./vbrizg.ts";
 import type { DefinicijaOrodja, KlicOrodja, MoznostiOrodij, RezultatOrodij, SporociloOrodja } from "./providers.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { koncajTekVLini, odpriTekVLini, prekliciVprasanjeVLini, vrsticaTekaVLini, zastaviVprasanjeVLini, type OdgovorVLini } from "./vprasanja-agentov.server.ts";
@@ -46,6 +47,7 @@ const NAJVEC_ZNAKOV_CILJA = 4000;
 const NAJVEC_NALOG = 50;
 /** Najvec samopregledov, ki vrnejo »se ni dosezeno«, preden naloga konca z oceno (cilj-naloge.ts ima svoj strop). */
 const NAJVEC_SAMOPREGLEDOV = 2;
+const NAJVEC_KLICEV_NA_ODGOVOR = 8;
 
 export type Faza = "tece" | "caka-potrditev" | "caka-lastnika" | "caka-pomocnika" | "koncano" | "ustavljeno" | "napaka";
 
@@ -163,8 +165,8 @@ function vgrajenaOrodja(d: { predlagajPomocniku: NonNullable<OdvisnostiOrkestrat
       izvedi: async (a) => ({ caka: "lastnik", vprasanje: String(a.vprasanje) }),
     },
     {
-      // Naloga gre v obstojeci mehanizem claude-naloge (predlog, ki ga lastnik potrdi tam; enkratna potrditev podobnih velja samo za
-      // netvegano besedilo). Zato tu ni druge potrditve, razen ce je naloga okuzena (zahtevaPotrditev).
+      // Naloga gre v obstojeci mehanizem claude-naloge (predlog, ki ga lastnik VEDNO potrdi tam: dovoljenje podobnih za predloge
+      // orkestratorja ne velja, pregled V2). Zato tu ni druge potrditve, razen ce je naloga okuzena (zahtevaPotrditev).
       razred: "zunanje",
       potrditev: false,
       definicija: {
@@ -212,7 +214,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const oceni: Oceni | null = o.oceni === undefined ? oceniZModelom() : o.oceni;
   const predlagajPomocniku = o.predlagajPomocniku ?? (async (m: string, b: string, agent: string) => {
     const { predlagajClaudeNalogo } = await import("./claude-naloge.server.ts");
-    const z = await predlagajClaudeNalogo(dir, m, b, {}, new Date(zdaj()), { agent });
+    // pregled V2 (naloga 8): predlog vedno potrdi lastnik, tudi ob dovoljenju »podobne« (besedilo izbere model)
+    const z = await predlagajClaudeNalogo(dir, m, b, {}, new Date(zdaj()), { agent, brezDovoljenjaPodobnih: true });
     return z ? { id: z.id } : null;
   });
   const izidPomocnikaBeri = o.izidPomocnika ?? (async (id: string) => (await import("./claude-naloge.server.ts")).izidNalogePomocnika(dir, id));
@@ -281,7 +284,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       dogodek(s, "napaka", `V izidu orodja je zaznano vrinjeno navodilo (${ovito.vbrizg.join(", ")}); od zdaj vsa tvegana orodja cakajo potrditev.`, { orodje: k.ime, klicId: k.id });
     }
     s.sporocila.push({ vloga: "orodje", id: k.id, ime: k.ime, rezultat: ovito.besedilo, ...(izid.ok ? {} : { napaka: true }) });
-    (izid.ok ? s.delovalo : s.ni).push(k.ime);
+    // pregled V1: samo imena iz registra (ime neznanega orodja izbere model in bi sicer slo v trajno izkusnjo)
+    if (register.has(k.ime)) (izid.ok ? s.delovalo : s.ni).push(k.ime);
     s.odprti = s.odprti.filter((x) => x.id !== k.id);
     dogodek(s, "izid-orodja", `${izid.ok ? "uspeh" : "napaka"}: ${izid.besedilo.slice(0, 200)}`, { orodje: k.ime, klicId: k.id });
     void vDnevnik(s, { vrsta: "klic", orodje: k.ime, klic: k.id, odtis: odtisKlica(k.ime, k.argumenti), ok: izid.ok, znakov: izid.besedilo.length });
@@ -415,6 +419,12 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         if (u) {
           const enote = (await u.predKorakom({ tip: s.tip, cilj: s.cilj, korak: s.koraki }).catch(() => [])).filter((e) => !s!.enoteUcenja.includes(e.naslov)).slice(0, 5);
           if (enote.length) {
+            // pregled V1: izkusnje in enote so na disku (lahko podtaknjene) - vbrizg v njih okuzi nalogo kot vbrizg v izidu orodja
+            const v = zaznajVbrizg(enote.map((e) => `${e.naslov}\n${e.besedilo}`).join("\n"));
+            if (v.nezaupano && !s.okuzeno) {
+              s.okuzeno = true;
+              dogodek(s, "napaka", `V izkusnjah ucenja je zaznano vrinjeno navodilo (${v.vzorci.join(", ")}); od zdaj vsa tvegana orodja cakajo potrditev.`);
+            }
             s.enoteUcenja.push(...enote.map((e) => e.naslov));
             s.sporocila.push({ vloga: "uporabnik", besedilo: ovijUcenje(enote) });
             dogodek(s, "ucenje", `V kontekst: ${enote.length} izkusenj (${enote[0]!.vir}).`);
@@ -454,7 +464,11 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           continue;
         }
         if (r.klici.length) {
-          const klici = preimenujKlice(r.klici, s.koraki);
+          // pregled V4: najvec NAJVEC_KLICEV_NA_ODGOVOR klicev na odgovor (sicer tisoce zapisov stanja in rast datoteke pred preverbo meja);
+          // v zgodovino gredo samo izvedeni klici, zato ima vsak klic izid (paket cel)
+          const vsi = preimenujKlice(r.klici, s.koraki);
+          const klici = vsi.slice(0, NAJVEC_KLICEV_NA_ODGOVOR);
+          if (vsi.length > klici.length) dogodek(s, "napaka", `Model je v enem odgovoru poslal ${vsi.length} klicev orodij; izvedenih je prvih ${klici.length}.`);
           s.sporocila.push({ vloga: "asistent", ...(r.besedilo ? { besedilo: r.besedilo } : {}), klici });
           s.odprti = klici.map((k) => ({ ...k }));
           if (s.koraki === 1 && r.besedilo) dogodek(s, "nacrt", r.besedilo);

@@ -85,10 +85,11 @@ function preveriVrednost(shema: unknown, v: unknown, pot: string, globina: numbe
     if (!jeObjekt(v)) return `${pot}: pricakovan objekt`;
     const lastnosti = jeObjekt(shema.properties) ? shema.properties : {};
     for (const k of Array.isArray(shema.required) ? shema.required : []) {
-      if (typeof k === "string" && !(k in v)) return `${pot}.${k}: manjka`;
+      if (typeof k === "string" && !Object.hasOwn(v, k)) return `${pot}.${k}: manjka`;
     }
     for (const [k, x] of Object.entries(v)) {
-      if (!(k in lastnosti)) {
+      // pregled V3: samo lastne lastnosti sheme (constructor, toString ... iz prototipa niso dovoljeni argumenti)
+      if (!Object.hasOwn(lastnosti, k)) {
         // brez izrecnega additionalProperties: true so neznani argumenti napaka (zaprt seznam)
         if (shema.additionalProperties !== true) return `${pot}.${k}: neznan argument`;
         continue;

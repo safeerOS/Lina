@@ -576,3 +576,23 @@ describe("drugi pregled 0.2.10: naloge Claude Code", { concurrency: 1 }, () => {
     assert.equal((await predlagajClaudeNalogo(d.podatki, d.projekt, "x".repeat(1500), d.o))?.izvor, "lina");
   });
 });
+
+describe("naloga 8 (pregled V2): predlog iz orkestratorja ne uporabi dovoljenja »podobne«", { concurrency: 1 }, () => {
+  it("z dovoljenjem podobnih se predlog Line samodejno potrdi, predlog orkestratorja (brezDovoljenjaPodobnih) caka lastnika", async () => {
+    const { zapisiDovoljenje } = await import("./dovoljenja-podobne.server.ts");
+    const { realpathSync } = await import("node:fs");
+    const e = await okolje("n8-v2");
+    await zapisiDovoljenje(e.podatki, "naloga-agentu", { agent: "claude", mapa: realpathSync(e.projekt) }, { kdo: "lastnik" });
+    const kontrola = await predlagajClaudeNalogo(e.podatki, e.projekt, "dodaj preizkus za modul a", e.o);
+    assert.notEqual(kontrola?.stanje, "caka", "kontrola: dovoljenje podobnih velja za obicajen predlog");
+    const sosed = mkdtempSync(path.join(e.dom, "n8-v2-"));
+    await zapisiDovoljenje(e.podatki, "naloga-agentu", { agent: "claude", mapa: realpathSync(sosed) }, { kdo: "lastnik" });
+    const z = await predlagajClaudeNalogo(e.podatki, sosed, "dodaj preizkus za modul b", e.o, new Date(), { agent: "claude", brezDovoljenjaPodobnih: true });
+    assert.equal(z?.stanje, "caka", "besedilo izbere model (lahko po vbrizgu): vedno potrdi lastnik");
+  });
+
+  it("orkestrator poklice predlagajClaudeNalogo z brezDovoljenjaPodobnih: true", () => {
+    const koda = readFileSync(path.join(SRC, "lib", "lina", "orkestrator.server.ts"), "utf8");
+    assert.match(koda, /await predlagajClaudeNalogo\(dir, m, b, .*\{ agent, brezDovoljenjaPodobnih: true \}\);/);
+  });
+});
