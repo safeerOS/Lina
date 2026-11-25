@@ -219,6 +219,8 @@ export type Orkestrator = {
   nadaljujPoZagonu(): Promise<string[]>;
   preberi(id: string): Promise<StanjeNaloge | null>;
   seznam(): Promise<StanjeNaloge[]>;
+  /** Naloga 14 N2: indeks verzij je bil izgubljen ali neveljaven in je obnovljen; naloge, ki so takrat obstajale, so samo za branje. */
+  indeksObnovljen(): boolean;
 };
 
 const VELJAVEN_ID = /^o-[a-f0-9]{16}$/;
@@ -358,19 +360,46 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const INDEKS = "indeks.json";
   let verzije: Promise<Map<string, number>> | null = null;
   const znaneVerzije = () => (verzije ??= naloziVerzije().catch((e: unknown) => { verzije = null; throw e; }));
-  // zavrnitev (npr. .kljuc zavrnjen, naloga 12 #1) se ne shrani: po popravku pravic deluje brez ponovnega zagona
+  // naloga 14 N2: naloge, katerih verzije ni bilo mogoce preveriti z veljavnim indeksom (samo za branje); hrani se v podpisanem indeksu
+  const brezVnosa = new Set<string>();
+  /** Naloga 14 N2: najvisje verzije PODPISANIH stanj z veljavno shemo (surovo branje: preberi caka na indeks). */
+  const verzijeIzStanj = async () => {
+    const m = new Map<string, number>();
+    for (const ime of (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x))) {
+      const id = ime.slice(0, -5);
+      const x = await readJsonFile<unknown>(mapa, ime).catch(() => null);
+      if (!x || typeof x !== "object" || Array.isArray(x) || !("podpis" in x) || !(await podpisVelja(root, x))) continue;
+      const { podpis: _, ...stanje } = x as Record<string, unknown>;
+      odstraniPotrjeno(stanje);
+      if (razlogNeveljavnegaStanja(stanje, id, (i) => register.has(i)) !== null) continue;
+      m.set(id, (stanje.verzija as number | undefined) ?? 0);
+    }
+    return m;
+  };
+  // zavrnitev (npr. .kljuc zavrnjen, naloga 12 #1, ali napaka branja indeksa) se ne shrani: po odpravi deluje brez ponovnega zagona
   const naloziVerzije = async () => {
     const m = new Map<string, number>();
-    const x = await readJsonFile<unknown>(mapa, INDEKS).catch(() => null);
-    if (!x || typeof x !== "object" || Array.isArray(x)) return m;
-    if (!(await podpisVelja(root, x, "orkestrator-indeks"))) {
-      console.error("lina: indeks verzij nalog nima veljavnega podpisa; vrnjena stanja se zaznajo samo v tem procesu.");
+    // naloga 14 N2: samo ENOENT (null) in pokvarjen JSON pomenita "ni veljavnega indeksa"; druga napaka (EACCES, EBUSY, EISDIR) zavrne
+    const x = await readJsonFile<unknown>(mapa, INDEKS).catch((e: unknown) => { if (e instanceof SyntaxError) return undefined; throw e; });
+    const veljaven = !!x && typeof x === "object" && !Array.isArray(x) && await podpisVelja(root, x, "orkestrator-indeks");
+    if (veljaven) {
+      const v = (x as { verzije?: unknown }).verzije;
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        for (const [id, n] of Object.entries(v)) if (VELJAVEN_ID.test(id) && Number.isSafeInteger(n) && (n as number) >= 0) m.set(id, n as number);
+      }
+      const b = (x as { nepreverjene?: unknown }).nepreverjene;
+      if (Array.isArray(b)) for (const id of b) if (typeof id === "string" && VELJAVEN_ID.test(id)) brezVnosa.add(id);
       return m;
     }
-    const v = (x as { verzije?: unknown }).verzije;
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      for (const [id, n] of Object.entries(v)) if (VELJAVEN_ID.test(id) && Number.isSafeInteger(n) && (n as number) >= 0) m.set(id, n as number);
+    // naloga 14 N2: indeks manjka (ob podpisanih stanjih) ali ni veljaven - zgradi ga iz najvisjih verzij veljavnih stanj; te naloge
+    // so samo za branje (verzije ni mogoce preveriti: lahko je vrnjena kopija). Prva uporaba (ni indeksa, ni stanj): prazen indeks.
+    const izStanj = await verzijeIzStanj();
+    if (x === null && izStanj.size === 0) return m;
+    for (const [id, n] of izStanj) {
+      m.set(id, n);
+      brezVnosa.add(id);
     }
+    console.error("lina: indeks verzij nalog manjka ali ni veljaven; obnovljen iz stanj, obstojece naloge so samo za branje.");
     return m;
   };
   let zapisIndeksa: Promise<unknown> = Promise.resolve();
@@ -378,7 +407,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const shraniIndeks = async () => {
     const m = await znaneVerzije();
     const p = zapisIndeksa.catch(() => undefined).then(async () => {
-      const telo = { verzije: Object.fromEntries(m) };
+      const telo = { verzije: Object.fromEntries(m), ...(brezVnosa.size > 0 ? { nepreverjene: [...brezVnosa].sort() } : {}) };
       await writeJson(mapa, INDEKS, { ...telo, podpis: await podpisStanja(root, telo, "orkestrator-indeks") });
     });
     zapisIndeksa = p;
@@ -396,11 +425,14 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     if (podpisan) delete (x as { podpis?: unknown }).podpis;
     if (podpisan || brezPodpisa) odstraniPotrjeno(x);
     let razlog = podpisan || brezPodpisa ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
-    if (razlog === null && ((x as StanjeNaloge).verzija ?? 0) < ((await znaneVerzije()).get(id) ?? 0)) razlog = "verzija";
-    if (razlog === null) {
+    const m = razlog === null ? await znaneVerzije() : null;
+    if (m && ((x as StanjeNaloge).verzija ?? 0) < (m.get(id) ?? 0)) razlog = "verzija";
+    if (m && razlog === null) {
       const s = x as StanjeNaloge;
+      // naloga 14 N2: prebrana podpisana verzija gre v indeks v pomnilniku (naslednji zapis indeksa je ne zniza); nepodpisana nikoli
+      if (podpisan) m.set(id, Math.max(m.get(id) ?? 0, s.verzija ?? 0));
       // oznaka se izracuna ob vsakem branju (ne velja iz datoteke kot false); true z diska (stara selitev) ostane
-      if (brezPodpisa || s.nepreverjeno === true) s.nepreverjeno = true;
+      if (brezPodpisa || brezVnosa.has(id) || s.nepreverjeno === true) s.nepreverjeno = true;
       else delete s.nepreverjeno;
       return s;
     }
@@ -776,6 +808,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     // naloga 12 #2: verzija izbrisane naloge ostane v indeksu (vec od zadnje): kopija se ne vrne
     const m = await znaneVerzije();
     m.set(id, Math.max(m.get(id) ?? 0, zadnja) + 1);
+    brezVnosa.delete(id);
     await shraniIndeks();
   };
   /** Naloga 11 N5: cas v prihodnosti ali neberljiv ne steje kot novejsi (na konec vrste), sicer podtaknjene naloge izrinejo prave. */
@@ -956,6 +989,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     },
     preberi,
     seznam: seznamVeljavnih,
+    indeksObnovljen: () => brezVnosa.size > 0,
   };
 }
 
@@ -989,7 +1023,7 @@ export async function zazeniOrkestrator(dir?: string): Promise<void> {
 
 // --- seja lastnika (vmesnik) ----------------------------------------------------------------------------------------
 
-export type StanjeOrkestratorja = { vklopljen: boolean; naloge: Array<JavnaNalogaOrkestratorja & { potrditev: { vprasanjeId: string; zgostitev: string; predogled: string; odrezano: boolean } | null }> };
+export type StanjeOrkestratorja = { vklopljen: boolean; indeksObnovljen: boolean; naloge: Array<JavnaNalogaOrkestratorja & { potrditev: { vprasanjeId: string; zgostitev: string; predogled: string; odrezano: boolean } | null }> };
 
 export async function stanjeOrkestratorja(token: string | null, dir?: string): Promise<StanjeOrkestratorja> {
   const root = resolveDataDir(dir);
@@ -1003,7 +1037,7 @@ export async function stanjeOrkestratorja(token: string | null, dir?: string): P
     // potrditev veze zgostitev prikazanega vnosa (ista kot pri vprasanjih agentov): lastnik potrdi natanko to, kar vidi
     return { ...j, potrditev: v ? { vprasanjeId: v.id, zgostitev: v.zgostitev, predogled: v.predogled, odrezano: v.odrezano } : null };
   });
-  return { vklopljen: await jeOrkestratorVklopljen(dir), naloge };
+  return { vklopljen: await jeOrkestratorVklopljen(dir), indeksObnovljen: orkestrator(dir).indeksObnovljen(), naloge };
 }
 
 /**

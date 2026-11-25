@@ -54,6 +54,7 @@ export function OrkestratorKartica() {
     <div className="lina-kartica min-w-0">
       <h3><Ikona ime="racunalnik" /> {t("orkNaslov")}</h3>
       <p className="text-sm text-[var(--color-moss)]">{st.vklopljen ? t("orkNamig") : t("orkIzklopljeno")}</p>
+      {st.indeksObnovljen ? <p role="note" className="mt-2 text-sm text-[var(--color-signal)]">{t("orkIndeksObnovljen")}</p> : null}
       {st.vklopljen ? (
         <form
           className="mt-3 flex flex-col gap-2"
