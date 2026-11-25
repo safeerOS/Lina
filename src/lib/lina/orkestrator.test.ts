@@ -203,6 +203,28 @@ describe("orkestrator: tvegano orodje caka potrditev", () => {
   });
 });
 
+describe("orkestrator: telefon po obstojeci poti vprasanj", () => {
+  it("telefon vidi stanje naloge in cakajoce vprasanje ter ga potrdi (/agent-vprasanja, /agent-vprasanje/odgovor)", async () => {
+    const root = await mapa();
+    const { telefonVprasanja, telefonOdgovor } = await import("./vprasanja-agentov.server.ts");
+    let poslano = 0;
+    const poslji = orodje("poslji", "zunanje", async () => (poslano++, { ok: true, rezultat: "ok" }), { komu: { type: "string" } });
+    const m = scenarij([odg([klic("porocaj_vmesno", { besedilo: "Pripravljam." }), klic("poslji", { komu: "A" })]), odg([], "Koncano: poslano A.")]);
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: m.f, orodja: [poslji] });
+    const n = await o.nova({ cilj: "Poslji A." });
+    await o.teci(n.id);
+    const tel = telefonVprasanja(root);
+    const tek = tel.teki.find((x) => x.naloga === n.id)!;
+    assert.ok(tek.vrstice.some((v) => v.includes("Pripravljam.")), "vmesni izid je v vrsticah teka za telefon");
+    const v = tel.vprasanja.find((x) => x.naloga === n.id && x.stanje === "caka")!;
+    assert.equal(v.orodje, "poslji");
+    await telefonOdgovor(root, v.id, "dovoli", v.zgostitev, "n-0123456789abcdef");
+    await cakaj(async () => (await o.preberi(n.id))?.faza === "koncano");
+    assert.equal(poslano, 1);
+    assert.equal(telefonVprasanja(root).teki.find((x) => x.naloga === n.id)!.stanje, "koncano");
+  });
+});
+
 describe("orkestrator: vbrizg iz izida orodja", () => {
   it("navodilo v izidu ne sprozi orodja: naloga je okuzena, pisanje caka lastnika, oznake [[...]] nic ne predlagajo", async () => {
     const root = await mapa();

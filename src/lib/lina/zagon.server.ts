@@ -55,6 +55,8 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
   registrirajRele({}); // Global Link do pravega releja samo v tekocem programu, nikoli v preizkusih
   // vnaprej dodeljene naloge agentov (24. 11. 2026): casovnik razporejevalnika; zamujene ob zagonu se NE zazenejo (»zamujeno, potrdi«)
   zazeniRazporejevalnik(dir);
+  // orkestrator (25. 11. 2026): nadaljuje naloge iz shranjenega stanja in caka konec nalog pomocnikov; napaka ne podre zagona
+  await import("./orkestrator.server.ts").then((m) => m.zazeniOrkestrator(dir)).catch(() => undefined);
   // telefon za asistentko: zazene se samo, ce ga je lastnik vklopil (privzeto izklopljeno); napaka ne podre zagona glasu
   await uskladiAsistenta(dir).catch(() => undefined);
   // priklop mosta Live (L3) za ta streznik; sam nic ne vklopi, brez vklopljenega stikala pot telefona ne tece

@@ -625,11 +625,59 @@ export function orkestrator(dir?: string): Orkestrator {
 }
 
 /** Ob zagonu Line: nadaljevanje nalog in narocnina na konec nalog pomocnikov (dogodek pride enkrat; ob ponovnem zagonu preveri nadaljujPoZagonu). */
+const naroceni = new Set<string>();
 export async function zazeniOrkestrator(dir?: string): Promise<void> {
   const o = orkestrator(dir);
-  const { obNalogaKoncana } = await import("./claude-naloge.server.ts");
-  obNalogaKoncana((d) => void o.izidPomocnika(d.id).catch(() => undefined));
+  const root = resolveDataDir(dir);
+  if (!naroceni.has(root)) {
+    naroceni.add(root);
+    const { obNalogaKoncana } = await import("./claude-naloge.server.ts");
+    obNalogaKoncana((d) => void o.izidPomocnika(d.id).catch(() => undefined));
+  }
   await o.nadaljujPoZagonu().catch(() => undefined);
+}
+
+// --- seja lastnika (vmesnik) ----------------------------------------------------------------------------------------
+
+export type StanjeOrkestratorja = { vklopljen: boolean; naloge: Array<JavnaNalogaOrkestratorja & { potrditev: { vprasanjeId: string; zgostitev: string; predogled: string; odrezano: boolean } | null }> };
+
+export async function stanjeOrkestratorja(token: string | null, dir?: string): Promise<StanjeOrkestratorja> {
+  const root = resolveDataDir(dir);
+  const { requireOwner } = await import("./auth.server.ts");
+  await requireOwner(token, root);
+  const { stanjeVprasanjZaRoot } = await import("./vprasanja-agentov.server.ts");
+  const vprasanja = stanjeVprasanjZaRoot(root).vprasanja;
+  const naloge = (await orkestrator(dir).seznam()).slice(0, 20).map((s) => {
+    const j = javnaNaloga(s);
+    const v = j.cakanje?.vprasanjeId ? vprasanja.find((x) => x.id === j.cakanje!.vprasanjeId && x.stanje === "caka") : undefined;
+    // potrditev veze zgostitev prikazanega vnosa (ista kot pri vprasanjih agentov): lastnik potrdi natanko to, kar vidi
+    return { ...j, potrditev: v ? { vprasanjeId: v.id, zgostitev: v.zgostitev, predogled: v.predogled, odrezano: v.odrezano } : null };
+  });
+  return { vklopljen: await jeOrkestratorVklopljen(dir), naloge };
+}
+
+/** Ukazi iz kartice: nova naloga, ustavi, odgovor na vprasanje (besedilo), potrdi/zavrni (po poti vprasanj agentov: »dovoli« z geslom). */
+export async function ukazOrkestratorja(token: string | null, ukaz: unknown, dir?: string): Promise<StanjeOrkestratorja> {
+  const root = resolveDataDir(dir);
+  const { requireOwner } = await import("./auth.server.ts");
+  await requireOwner(token, root);
+  const u = ukaz && typeof ukaz === "object" && !Array.isArray(ukaz) ? (ukaz as Record<string, unknown>) : {};
+  const o = orkestrator(dir);
+  const id = typeof u.id === "string" ? u.id : "";
+  if (u.vrsta === "nova") {
+    const s = await o.nova({ cilj: u.cilj, tip: u.tip });
+    void o.teci(s.id).catch(() => undefined);
+  } else if (u.vrsta === "ustavi") {
+    await o.ustavi(id);
+  } else if (u.vrsta === "odgovor") {
+    await o.odgovorLastnika(id, u.besedilo);
+  } else if (u.vrsta === "potrdi" || u.vrsta === "zavrni") {
+    const { odgovorVprasanja } = await import("./vprasanja-agentov.server.ts");
+    await odgovorVprasanja(token, { id: u.vprasanjeId, odlocitev: u.vrsta === "potrdi" ? "dovoli" : "zavrni", zgostitev: u.zgostitev }, dir);
+  } else {
+    throw new OrkestratorNapaka("oblika");
+  }
+  return stanjeOrkestratorja(token, dir);
 }
 
 export type JavnaNalogaOrkestratorja = Pick<StanjeNaloge, "id" | "cilj" | "faza" | "razlog" | "odgovor" | "koraki" | "poraba" | "proracun" | "okuzeno" | "zacetek" | "posodobljeno"> & {

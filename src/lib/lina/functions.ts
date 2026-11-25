@@ -1210,6 +1210,41 @@ export const odgovorVprasanjaAgentaFn = createServerFn({ method: "POST" })
     }
   });
 
+/** Orkestrator (Lina sama vodi vecstopenjsko nalogo z orodji, 25. 11. 2026): stanje, nova naloga, ustavi, odgovor, potrdi/zavrni. */
+export const stanjeOrkestratorjaFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { stanjeOrkestratorja } = await import("./orkestrator.server.ts");
+  return stanjeOrkestratorja(await sessionToken());
+});
+
+export const ukazOrkestratorjaFn = createServerFn({ method: "POST" })
+  .validator((data: { ukaz?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const { ukazOrkestratorja, OrkestratorNapaka } = await import("./orkestrator.server.ts");
+    try {
+      return { ok: true as const, stanje: await ukazOrkestratorja(await sessionToken(), data?.ukaz) };
+    } catch (e) {
+      if (e instanceof OrkestratorNapaka) return { ok: false as const, razlog: e.koda };
+      if (e instanceof VprasanjeNapaka) return { ok: false as const, razlog: e.razlog };
+      throw e;
+    }
+  });
+
+export const nastaviOrkestratorFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const root = resolveDataDir();
+    await requireOwner(await sessionToken(), root);
+    if (typeof data?.vklop !== "boolean") throw new Error("Neveljavna nastavitev.");
+    const { nastaviOrkestrator } = await import("./orkestrator.server.ts");
+    return { vklopljen: await nastaviOrkestrator(data.vklop, root) };
+  });
+
 /** Nacrt naloge (nacrt.html) za izoliran okvir: varno prebran in ovit s CSP na strezniku; brez nacrta null. */
 export const nacrtClaudeNalogeFn = createServerFn({ method: "POST" })
   .validator((data: { id?: unknown }) => data)
@@ -1689,6 +1724,7 @@ export const stanjeAgentPomociFn = createServerFn({ method: "GET" }).handler(asy
     spominNalog: await jeSpominNalogVklopljen(root),
     pregledProjekta: await jePregledProjektaVklopljen(root),
     nacrtDiagram: await jeNacrtVklopljen(root),
+    orkestrator: await (await import("./orkestrator.server.ts")).jeOrkestratorVklopljen(root),
   };
 });
 
