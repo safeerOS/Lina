@@ -17,7 +17,7 @@ function mapaPodatkov(platforma, env, userData) {
     if (lokalno && path.win32.isAbsolute(lokalno)) return path.win32.join(lokalno, "Lina", "podatki");
     return path.win32.join(userData, "podatki");
   }
-  return path.join(userData, "podatki");
+  return path.posix.join(userData, "podatki");
 }
 
 /**
