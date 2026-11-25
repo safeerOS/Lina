@@ -11,7 +11,7 @@ const zahtevaj = createRequire(import.meta.url);
 const { APP_ID, mapaPodatkov, prosiZaKonec } = zahtevaj("../../../lupina/pomocniki.js") as {
   APP_ID: string;
   mapaPodatkov: (platforma: string, env: Record<string, string | undefined>, userData: string) => string;
-  prosiZaKonec: (otrok: { connected: boolean; send(m: unknown): unknown; kill(s: string): unknown }) => "ipc" | "signal";
+  prosiZaKonec: (otrok: { connected: boolean; send(m: unknown): unknown; kill(s: string): unknown }, platforma: string) => "ipc" | "signal";
 };
 const beri = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 
@@ -28,7 +28,7 @@ test("Linux: mapa podatkov ostane userData/podatki (namescena Lina ne izgubi pod
   assert.equal(mapaPodatkov("linux", { LOCALAPPDATA: "C:\\x" }, "/home/u/.config/Lina"), "/home/u/.config/Lina/podatki");
 });
 
-test("ustavitev: najprej prosnja prek IPC, signal samo brez kanala ali ob napaki kanala", () => {
+test("ustavitev na Windows: prosnja prek IPC (SIGTERM bi bil trd konec), signal samo brez kanala ali ob napaki kanala; Linux: SIGTERM kot doslej", () => {
   const klici: string[] = [];
   const otrok = (connected: boolean, sendVrze = false) => ({
     connected,
@@ -38,11 +38,14 @@ test("ustavitev: najprej prosnja prek IPC, signal samo brez kanala ali ob napaki
     },
     kill: (s: string) => klici.push(`kill:${s}`),
   });
-  assert.equal(prosiZaKonec(otrok(true)), "ipc");
+  assert.equal(prosiZaKonec(otrok(true), "win32"), "ipc");
   assert.deepEqual(klici.splice(0), ['send:{"lina":"koncaj"}'], "na Windows bi SIGTERM pomenil trd konec brez pospravljanja");
-  assert.equal(prosiZaKonec(otrok(false)), "signal");
+  assert.equal(prosiZaKonec(otrok(false), "win32"), "signal");
   assert.deepEqual(klici.splice(0), ["kill:SIGTERM"]);
-  assert.equal(prosiZaKonec(otrok(true, true)), "signal");
+  assert.equal(prosiZaKonec(otrok(true, true), "win32"), "signal");
+  assert.deepEqual(klici.splice(0), ["kill:SIGTERM"]);
+  // Linux: signal deluje tudi med zagonom (prosnja IPC bi se izgubila, preden je vticnik prijavljen)
+  assert.equal(prosiZaKonec(otrok(true), "linux"), "signal");
   assert.deepEqual(klici.splice(0), ["kill:SIGTERM"]);
 });
 
@@ -85,18 +88,24 @@ function izid(otrok: ReturnType<typeof spawn>, dejanje: () => void): Promise<{ i
       otrok.kill("SIGKILL");
       ne(new Error("otrok ni koncal v 10 s"));
     }, 10_000);
-    otrok.stdout!.on("data", (b: Buffer) => (izpis += b.toString("utf8")));
-    otrok.once("message", dejanje);
-    otrok.once("exit", (koda, signal) => {
+    // izid sele, ko je proces koncal IN je izpis prebran do konca (»close« po disconnect() ne pride vedno; »exit« lahko prehiti izpis)
+    let konec: { koda: number | null; signal: string | null } | null = null;
+    let izpisPrebran = false;
+    const morda = () => {
+      if (!konec || !izpisPrebran) return;
       clearTimeout(rok);
-      ok({ izpis, koda, signal });
-    });
+      ok({ izpis, ...konec });
+    };
+    otrok.stdout!.on("data", (b: Buffer) => (izpis += b.toString("utf8")));
+    otrok.stdout!.once("end", () => ((izpisPrebran = true), morda()));
+    otrok.once("message", dejanje);
+    otrok.once("exit", (koda, signal) => ((konec = { koda, signal }), morda()));
   });
 }
 
 test("pravi proces: prosnja prek IPC pozene pospravljanje in proces konca sam (ne s signalom)", async () => {
   const otrok = otrokZIpc();
-  const r = await izid(otrok, () => assert.equal(prosiZaKonec(otrok as never), "ipc"));
+  const r = await izid(otrok, () => assert.equal(prosiZaKonec(otrok as never, "win32"), "ipc"));
   assert.deepEqual(r, { izpis: "pospravljeno", koda: 0, signal: null });
 });
 
@@ -127,7 +136,7 @@ test("tok Windows: akcije pripete na SHA, samo branje, brez skrivnosti; paket NS
   assert.deepEqual([...yml.matchAll(/^\s*(contents|actions|packages|id-token|pull-requests|issues|deployments|statuses|checks|attestations|security-events):\s*(\w+)/gm)].map((m) => `${m[1]}:${m[2]}`), ["contents:read"]);
   assert.doesNotMatch(yml, /secrets\.|pull_request_target|\$\{\{\s*github\.event\./, "brez skrivnosti in brez vnosa iz dogodka v ukaze");
   assert.equal((yml.match(/runs-on: windows-latest/g) ?? []).length, 2);
-  for (const k of ["npm ci", "npx tsc --noEmit", "npm test", "npx vitest run", 'LINA_PODROBNI_POTEK: "1"', "--max-old-space-size", "electron-builder --win nsis --x64 --publish never", "sha256sum izid/*.exe", "openline/node_modules/express/package.json"]) {
+  for (const k of ["npm ci", "npx tsc --noEmit", "npm test", "npx vitest run", 'LINA_PODROBNI_POTEK: "1"', "--max-old-space-size", "electron-builder --win nsis --x64 --publish never", "sha256sum Lina-*-x64-namestitev.exe", "openline/node_modules/express/package.json"]) {
     assert.ok(yml.includes(k), k);
   }
   const pkg = JSON.parse(beri("../../../lupina/package.json")) as { build: { win: { target: { target: string; arch: string[] }[] }; nsis: Record<string, unknown>; linux: { target: string[] } } };

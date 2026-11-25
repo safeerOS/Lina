@@ -133,12 +133,12 @@ app.whenReady().then(async () => {
 });
 
 // Ustavitev streznika (22. 11. 2026): star streznik 0.2.1 je ostal ziv brez starsa in drzal vrata 8446 za telefon.
-// Prosnja prek IPC (sicer SIGTERM), po 6 s SIGKILL; isto, ce lupina sama prejme SIGTERM/SIGINT/SIGHUP (pkill, odjava), ko before-quit ne pride.
+// Windows: prosnja prek IPC (Linux in rezerva: SIGTERM), po 6 s SIGKILL; isto, ce lupina sama prejme SIGTERM/SIGINT/SIGHUP (pkill, odjava), ko before-quit ne pride.
 function ustaviStreznik() {
   koncujem = true;
   const s = strez;
   if (!s || s.exitCode !== null) return;
-  prosiZaKonec(s);
+  prosiZaKonec(s, process.platform);
   const prisilno = setTimeout(() => { try { if (s.exitCode === null) s.kill("SIGKILL"); } catch {} }, 6000);
   prisilno.unref();
   s.once("exit", () => clearTimeout(prisilno));

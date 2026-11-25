@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { imaSlovenskiModul, platformaZdaj, type Platforma } from "./platforma.server.ts";
 
 /**
  * Stalni proces RSDO (lastnik 23. 11. 2026): »se bo naložil v pomnilnik ko ga bo uporabnik vklopil ... izklopil se bo samo ko ga bo
@@ -390,12 +391,14 @@ export function izklopiRsdo(): void {
  * po vklopu tece v ozadju), poskusi znova najvec enkrat na minuto (takoj po koncani namestitvi); po ponavljajocih padcih caka na
  * uporabnikov izklop in vklop.
  */
-export async function uskladiRsdo(vklop: boolean, poNamestitvi = false): Promise<void> {
+export async function uskladiRsdo(vklop: boolean, poNamestitvi = false, platforma: Platforma = platformaZdaj()): Promise<void> {
   const s = g();
   if (!vklop) {
     if (s.zelen || s.otrok) izklopiRsdo();
     return;
   }
+  // Naloga 15: zunaj Linuxa modula ni (Dodatki povedo »ni na voljo«) - brez zagona in brez ponovnih poskusov vsako minuto.
+  if (!imaSlovenskiModul(platforma)) return;
   if (s.zelen && (s.otrok || s.zaganjam || s.stanje === "nalaga")) return;
   if (s.zelen && s.stanje === "napaka") {
     const ponovljivo = s.razlog === "ni-namescen" || s.razlog === "zagon-ni-uspel";

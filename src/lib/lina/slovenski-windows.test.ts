@@ -45,3 +45,11 @@ test("vmesnik: razlog ima besedilo v sl in en ter je v preslikavi Dodatkov", () 
   const desk = readFileSync(new URL("../../components/lina-desk.tsx", import.meta.url), "utf8");
   assert.match(desk, /"ni-na-voljo-sistem": "uiSlovenskiNiNaVoljoSistem"/);
 });
+
+test("Windows: stalni proces RSDO se ob vklopu (tudi ob zagonu Line) ne zazene in ne poskusa znova", async () => {
+  const { uskladiRsdo, stanjeRsdo, izklopiRsdo } = await import("./rsdo-streznik.server.ts");
+  await uskladiRsdo(true, false, "win32");
+  assert.equal(stanjeRsdo().stanje, "izklopljen");
+  assert.equal(stanjeRsdo().pid, null);
+  izklopiRsdo();
+});

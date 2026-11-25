@@ -108,7 +108,8 @@ jobs:
       - name: Preverba paketa
         run: |
           set -euo pipefail
-          EXE=$(ls izid/*.exe)
+          # v izid/ ostane tudi __uninstaller-nsis-*.exe: v artefakt in vsoto gre samo namestitev
+          EXE=$(ls izid/Lina-*-x64-namestitev.exe)
           echo "Namestitev: $EXE"
           R=izid/win-unpacked/resources/lina
           test -f izid/win-unpacked/Lina.exe
@@ -129,7 +130,7 @@ jobs:
           grep -rqs 'rnnoise_process_frame' "$R/.output/server"
           # lupina (Node v Electronu) se zazene na tekacu Windows
           ELECTRON_RUN_AS_NODE=1 izid/win-unpacked/Lina.exe -p 'process.versions.node'
-          sha256sum izid/*.exe | tee izid/sha256.txt
+          (cd izid && sha256sum Lina-*-x64-namestitev.exe) | tee izid/sha256.txt
           {
             echo "### Namestitev za Windows (NSIS x64, nepodpisana)"
             echo '```'
@@ -142,7 +143,7 @@ jobs:
         with:
           name: lina-windows
           path: |
-            izid/*.exe
+            izid/Lina-*-x64-namestitev.exe
             izid/sha256.txt
             tsc.log
           retention-days: 14

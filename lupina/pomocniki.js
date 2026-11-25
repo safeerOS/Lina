@@ -21,12 +21,13 @@ function mapaPodatkov(platforma, env, userData) {
 }
 
 /**
- * Ustavitev streznika: najprej prosnja prek kanala IPC (streznik pospravi kot ob SIGTERM: OpenLine, tunel, RSDO), sele nato signal.
- * Na Windows je kill("SIGTERM") trd konec (TerminateProcess) - pospravljanje ne bi steklo in otroci bi ostali brez starsa.
+ * Ustavitev streznika. Windows: prosnja prek kanala IPC (streznik pospravi kot ob SIGTERM: OpenLine, tunel, RSDO), ker je tam
+ * kill("SIGTERM") trd konec (TerminateProcess) - pospravljanje ne bi steklo in otroci bi ostali brez starsa. Linux: SIGTERM kot
+ * doslej (deluje tudi med zagonom, preden je vticnik streznika prijavljen; prosnja IPC bi se takrat izgubila - pregled naloge 15).
  * Vrne, kako je bil streznik zaprosen: "ipc" ali "signal".
  */
-function prosiZaKonec(otrok) {
-  if (otrok.connected) {
+function prosiZaKonec(otrok, platforma) {
+  if (platforma === "win32" && otrok.connected) {
     try {
       otrok.send({ lina: "koncaj" });
       return "ipc";
