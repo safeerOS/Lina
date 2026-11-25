@@ -44,6 +44,10 @@ jobs:
       # brez podpisa: electron-builder ne isce certifikata
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
+      # brez pretvorbe v CRLF: preizkusi in preverbe berejo datoteke repozitorija z vzorci za LF (kot na Linuxu)
+      - name: Konci vrstic LF
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -160,6 +164,10 @@ jobs:
       NODE_OPTIONS: "--max-old-space-size=3072"
       LINA_PODROBNI_POTEK: "1"
     steps:
+      # brez pretvorbe v CRLF: preizkusi in preverbe berejo datoteke repozitorija z vzorci za LF (kot na Linuxu)
+      - name: Konci vrstic LF
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
