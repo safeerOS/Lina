@@ -20,4 +20,5 @@ __pycache__/
 dist/
 *.tsbuildinfo
 openline-paket/
-jazz-paket/
+# jazz-paket: package.json in package-lock.json sta v repozitoriju (naloga 9, V8), node_modules ne
+jazz-paket/node_modules/

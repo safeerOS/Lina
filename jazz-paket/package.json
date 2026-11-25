@@ -1,0 +1,11 @@
+{
+  "name": "jazz-paket",
+  "private": true,
+  "description": "Moduli, ki jih streznik Line nalozi po imenu (jazz za samoucenje, unpdf za otroka razclembe PDF); razlicice = korenski package-lock.json (preizkus naloga-9-v8).",
+  "dependencies": {
+    "cojson": "0.8.23",
+    "cojson-transport-ws": "0.8.23",
+    "jazz-tools": "0.8.23",
+    "unpdf": "2.2.2"
+  }
+}
