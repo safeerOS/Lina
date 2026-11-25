@@ -209,6 +209,9 @@
     <string name="assistant_pair_failed">Seznanitev ni uspela. Preverite, da sta telefon in računalnik v istem omrežju, in poskusite znova.</string>
     <string name="assistant_session_open">Seja Claude Code na računalniku je odprta.</string>
     <string name="assistant_session_closed">Seja Claude Code na računalniku je zaprta.</string>
+    <string name="assistant_route_home">Povezano prek domačega omrežja.</string>
+    <string name="assistant_route_global">Povezano prek Global Linka (zunaj domačega omrežja).</string>
+    <string name="assistant_route_direct">Povezano neposredno od zunaj.</string>
     <string name="assistant_code_button">Poveži s kodo</string>
     <string name="assistant_code_mode_pc">Kodo kaže Lina na računalniku – vtipkam jo na telefonu</string>
     <string name="assistant_code_mode_phone">Kodo pokaže telefon – vtipkam jo v Lini na računalniku</string>
@@ -579,8 +582,8 @@
     <string name="builds_sig_unchecked">Podpis ni preverjen, zato ga ne namestim.</string>
     <string name="builds_reason">Razlog: %1$s</string>
     <string name="builds_warnings">Opozorila GitHuba (%1$d):</string>
-    <string name="builds_err_unreachable">Računalnik ni dosegljiv. Gradnje delujejo samo v domačem omrežju; preveri, ali Lina na računalniku teče, nato tapni Osveži.</string>
-    <string name="builds_err_denied">Računalnik je zahtevo zavrnil. Gradnje so dovoljene samo v domačem omrežju; po potrebi telefon znova poveži z Lino.</string>
+    <string name="builds_err_unreachable">Računalnik ni dosegljiv. Gradnje delujejo doma in prek Global Linka; preveri, ali Lina na računalniku teče in ima vklopljen Global Link, nato tapni Osveži.</string>
+    <string name="builds_err_denied">Računalnik je zahtevo zavrnil. Po potrebi telefon znova poveži z Lino.</string>
     <string name="builds_err_busy">Preveč zahtev. Počakaj minuto in tapni Osveži.</string>
     <string name="builds_err_old">Lina na računalniku gradenj še ne zna. Posodobi Lino na računalniku.</string>
     <string name="builds_err_generic">Nekaj je šlo narobe. Tapni Osveži.</string>
@@ -601,6 +604,7 @@
     <string name="install_err_paket">To ni paket Line. Ni nameščeno.</string>
     <string name="install_err_podpis">Podpis se razlikuje od nameščene Line. Ni nameščeno.</string>
     <string name="install_err_prekinjeno">Prenos je bil prekinjen. Poskusi znova.</string>
+    <string name="install_err_global">Prenos APK prek Global Linka je bil prekinjen. V domačem omrežju je prenos zanesljiv; poskusi znova doma ali tapni Namesti še enkrat.</string>
     <!-- Agenti in naloge na racunalniku (24. 11. 2026) -->
     <string name="agents_title">Agenti in naloge</string>
     <string name="agents_desc">Daj nalogo agentu na računalniku. Tvoj podpis na tem telefonu potrdi en zagon. Agent dela v terminalu na računalniku, tam so tudi njegova vprašanja. Dovoli in Zavrni spodaj veljata za naloge, ki jih Claude Code pošlješ iz pogovora z Lino.</string>
@@ -652,8 +656,8 @@
     <string name="agents_text_cleaned">Odstranjeni so bili skriti ali posebni znaki. Podpiše se samo to besedilo:\n\n%1$s</string>
     <string name="agents_text_cleaned_ok">Uporabi to besedilo</string>
     <string name="agents_assigned">Naloga je dodeljena.</string>
-    <string name="agents_err_unreachable">Računalnik ni dosegljiv. Naloge delujejo samo v domačem omrežju; preveri, ali Lina na računalniku teče, nato tapni Osveži.</string>
-    <string name="agents_err_denied">Računalnik je zahtevo zavrnil. Naloge so dovoljene samo v domačem omrežju; po potrebi telefon znova poveži z Lino.</string>
+    <string name="agents_err_unreachable">Računalnik ni dosegljiv. Naloge delujejo doma in prek Global Linka; preveri, ali Lina na računalniku teče in ima vklopljen Global Link, nato tapni Osveži.</string>
+    <string name="agents_err_denied">Računalnik je zahtevo zavrnil. Po potrebi telefon znova poveži z Lino.</string>
     <string name="agents_err_old">Lina na računalniku nalog za agente še ne zna. Posodobi Lino na računalniku.</string>
     <string name="agents_err_password">Najprej nastavi geslo v Lini na računalniku.</string>
     <string name="agents_err_agent">Ta agent na računalniku ni pripravljen. Tapni Osveži in izberi znova.</string>

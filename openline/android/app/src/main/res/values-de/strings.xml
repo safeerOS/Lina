@@ -209,6 +209,9 @@
     <string name="assistant_pair_failed">Kopplung fehlgeschlagen. Prüfen Sie, ob Telefon und Computer im selben Netzwerk sind, und versuchen Sie es erneut.</string>
     <string name="assistant_session_open">Die Claude-Code-Sitzung auf Ihrem Computer ist geöffnet.</string>
     <string name="assistant_session_closed">Die Claude-Code-Sitzung auf Ihrem Computer ist geschlossen.</string>
+    <string name="assistant_route_home">Verbunden über das Heimnetz.</string>
+    <string name="assistant_route_global">Verbunden über Global Link (außerhalb des Heimnetzes).</string>
+    <string name="assistant_route_direct">Direkt von außen verbunden.</string>
     <string name="assistant_code_button">Mit Code verbinden</string>
     <string name="assistant_code_mode_pc">Lina auf dem Computer zeigt den Code – ich tippe ihn auf dem Telefon ein</string>
     <string name="assistant_code_mode_phone">Das Telefon zeigt den Code – ich tippe ihn in Lina auf dem Computer ein</string>

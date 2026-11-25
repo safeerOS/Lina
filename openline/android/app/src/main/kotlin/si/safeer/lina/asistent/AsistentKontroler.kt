@@ -275,7 +275,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             val odg = if (podpis == null || id == null) OdgovorLine.Nedosegljiva else pov.stanjeSeje(id, cas, enkratni, podpis)
             pov.zapri()
             val s = when (odg) {
-                is OdgovorLine.Ok -> AsistentProtokol.razberiSejo(odg.telo)
+                // id Line na releju samo iz podpisanega odgovora prek pripete povezave; brez njega rele izklopljen (naloga 22)
+                is OdgovorLine.Ok -> AsistentProtokol.razberiSejo(odg.telo).also { AsistentShramba.shraniRele(context, AsistentProtokol.razberiRele(odg.telo)) }
                 is OdgovorLine.Napaka -> if (odg.koda == "claude-code-ni") false else null
                 else -> null
             }
@@ -285,8 +286,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     private val prenosPoPoti = si.safeer.lina.samostojna.PrenosPoPoti()
 
-    /** Samodejna izbira poti (LAN, nato rele) kot v Safeer OS; rele za asistentko na telefonu se doda, ko obstaja prenos. */
-    private fun povezava(): IzbirnaPovezava? = AsistentShramba.beri(context)?.let { IzbirnaPovezava(HttpPovezavaZLino(it), null, null, prenosPoPoti) }
+    /** Samodejna izbira poti (domace omrezje, nato Global Link) kot v Safeer OS; ena tovarna za vse klicatelje (PovezavaLine). */
+    private fun povezava(): IzbirnaPovezava? = PovezavaLine.ustvari(context, prenosPoPoti)
 
     private fun naGlavni(delo: () -> Unit) = glavna.post { if (!ustavljen) { delo(); obSpremembi() } }
 

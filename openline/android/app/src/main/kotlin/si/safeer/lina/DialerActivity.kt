@@ -750,7 +750,14 @@ class DialerActivity : Activity() {
             false -> getString(R.string.assistant_session_closed)
             null -> null
         }
-        assistantStatus.text = if (seja == null) glavno else "$glavno\n$seja"
+        // Pot samo iz dejanskega izida zadnje zahteve (PovezavaLine.zadnjaPot); neznana se ne pokaze (naloga 22).
+        val pot = if (!stanje.seznanjen) null else when (si.safeer.lina.asistent.PovezavaLine.zadnjaPot) {
+            si.safeer.lina.podpis.PotLine.DOMACE_OMREZJE -> getString(R.string.assistant_route_home)
+            si.safeer.lina.podpis.PotLine.GLOBAL_LINK -> getString(R.string.assistant_route_global)
+            si.safeer.lina.podpis.PotLine.NEPOSREDNO -> getString(R.string.assistant_route_direct)
+            null -> null
+        }
+        assistantStatus.text = listOfNotNull(glavno, seja, pot).joinToString("\n")
         // Kar ni narejeno, se ne pokaze: vsak gumb samo, ko ima ucinek (AsistentPrikaz, preizkusi v modulu podpis).
         assistantOpenSetupButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE
         assistantCodeButton.visibility = if (p.seznani && !iscemLino) View.VISIBLE else View.GONE

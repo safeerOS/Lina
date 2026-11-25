@@ -209,6 +209,9 @@
     <string name="assistant_pair_failed">Échec de l’association. Vérifiez que le téléphone et l’ordinateur sont sur le même réseau, puis réessayez.</string>
     <string name="assistant_session_open">La session Claude Code sur votre ordinateur est ouverte.</string>
     <string name="assistant_session_closed">La session Claude Code sur votre ordinateur est fermée.</string>
+    <string name="assistant_route_home">Connecté via le réseau domestique.</string>
+    <string name="assistant_route_global">Connecté via Global Link (hors du réseau domestique).</string>
+    <string name="assistant_route_direct">Connecté directement depuis l’extérieur.</string>
     <string name="assistant_code_button">Se connecter avec un code</string>
     <string name="assistant_code_mode_pc">Lina sur l’ordinateur affiche le code – je le saisis sur le téléphone</string>
     <string name="assistant_code_mode_phone">Le téléphone affiche le code – je le saisis dans Lina sur l’ordinateur</string>

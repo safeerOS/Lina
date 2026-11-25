@@ -22,9 +22,22 @@ object AsistentShramba {
             .putString("naslov", a.naslov).putInt("vrata", a.vrata).putString("odtis", a.odtis).commit()
 
     /**
+     * Global Link (naloga 22): id Line na releju, ki ga je racunalnik poslal v podpisanem /stanje prek pripete povezave. Shranjen
+     * samo veljaven id; ko ga racunalnik ne poslje vec (Global Link izklopljen), ga telefon pozabi in rele ne poskusa.
+     */
+    fun rele(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("rele", null)?.takeIf { si.safeer.lina.podpis.ReleProtokol.jeIdReleja(it) }
+
+    fun shraniRele(context: Context, id: String?) {
+        val e = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (id != null && si.safeer.lina.podpis.ReleProtokol.jeIdReleja(id)) e.putString("rele", id) else e.remove("rele")
+        e.apply()
+    }
+
+    /**
      * Pozabi samo seznanitev z racunalnikom. Datoteka »lina_asistent« hrani tudi tajnopise kljucev (Gemini, Brave, TinyFish,
      * Twilio, Google), zato NIKOLI clear(): 19. 11. 2026 je gumb »Pozabi racunalnik« zbrisal vse vnesene kljuce.
      */
     fun pozabi(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("naslov").remove("vrata").remove("odtis").commit()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("naslov").remove("vrata").remove("odtis").remove("rele").commit()
 }

@@ -209,6 +209,9 @@
     <string name="assistant_pair_failed">Pairing failed. Check that the phone and the computer are on the same network and try again.</string>
     <string name="assistant_session_open">The Claude Code session on your computer is open.</string>
     <string name="assistant_session_closed">The Claude Code session on your computer is closed.</string>
+    <string name="assistant_route_home">Connected via the home network.</string>
+    <string name="assistant_route_global">Connected via Global Link (outside the home network).</string>
+    <string name="assistant_route_direct">Connected directly from outside.</string>
     <string name="assistant_code_button">Connect with code</string>
     <string name="assistant_code_mode_pc">Lina on the computer shows the code – I type it on the phone</string>
     <string name="assistant_code_mode_phone">The phone shows the code – I type it in Lina on the computer</string>
@@ -580,8 +583,8 @@
     <string name="builds_sig_unchecked">The signature was not checked, so it will not be installed.</string>
     <string name="builds_reason">Reason: %1$s</string>
     <string name="builds_warnings">Warnings from GitHub (%1$d):</string>
-    <string name="builds_err_unreachable">The computer cannot be reached. Builds work only on your home network; check that Lina is running on the computer, then tap Refresh.</string>
-    <string name="builds_err_denied">The computer refused the request. Builds are allowed only on the home network; if needed, pair the phone with Lina again.</string>
+    <string name="builds_err_unreachable">The computer cannot be reached. Builds work at home and via Global Link; check that Lina is running on the computer with Global Link turned on, then tap Refresh.</string>
+    <string name="builds_err_denied">The computer refused the request. If needed, pair the phone with Lina again.</string>
     <string name="builds_err_busy">Too many requests. Wait a minute and tap Refresh.</string>
     <string name="builds_err_old">Lina on the computer cannot do builds yet. Update Lina on the computer.</string>
     <string name="builds_err_generic">Something went wrong. Tap Refresh.</string>
@@ -602,6 +605,7 @@
     <string name="install_err_paket">This is not the Lina package. Not installed.</string>
     <string name="install_err_podpis">The signature differs from the installed Lina. Not installed.</string>
     <string name="install_err_prekinjeno">The download was interrupted. Try again.</string>
+    <string name="install_err_global">The APK download via Global Link was interrupted. On your home network the download is reliable; try again at home or tap Install once more.</string>
     <!-- Agenti in naloge na racunalniku (24. 11. 2026) -->
     <string name="agents_title">Agents and tasks</string>
     <string name="agents_desc">Give a task to an agent on the computer. Your signature on this phone confirms one start. The agent works in a terminal on the computer, and its questions appear there. Allow and Deny below apply to tasks you send to Claude Code from the chat with Lina.</string>
@@ -653,8 +657,8 @@
     <string name="agents_text_cleaned">Hidden or special characters were removed. Only this text is signed:\n\n%1$s</string>
     <string name="agents_text_cleaned_ok">Use this text</string>
     <string name="agents_assigned">Task assigned.</string>
-    <string name="agents_err_unreachable">The computer cannot be reached. Tasks work only on your home network; check that Lina is running on the computer, then tap Refresh.</string>
-    <string name="agents_err_denied">The computer refused the request. Tasks are allowed only on the home network; if needed, pair the phone with Lina again.</string>
+    <string name="agents_err_unreachable">The computer cannot be reached. Tasks work at home and via Global Link; check that Lina is running on the computer with Global Link turned on, then tap Refresh.</string>
+    <string name="agents_err_denied">The computer refused the request. If needed, pair the phone with Lina again.</string>
     <string name="agents_err_old">Lina on the computer cannot take tasks for agents yet. Update Lina on the computer.</string>
     <string name="agents_err_password">Set a password in Lina on the computer first.</string>
     <string name="agents_err_agent">This agent is not ready on the computer. Tap Refresh and choose again.</string>

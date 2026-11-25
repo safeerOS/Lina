@@ -85,7 +85,7 @@ class DodatkiRacunalnikaPogled(private val a: Activity, starsi: LinearLayout) {
         NapakaDodatkov.NAPAKA -> R.string.addons_err_generic
     }
 
-    private fun povezava(): IzbirnaPovezava? = AsistentShramba.beri(a)?.let { IzbirnaPovezava(HttpPovezavaZLino(it), null, null, prenos) }
+    private fun povezava(): IzbirnaPovezava? = PovezavaLine.ustvari(a, prenos)
 
     /** Izvede klic na Lino v ozadju; [delo] dobi povezavo in id naprave. Ena zahteva naenkrat. */
     private fun vOzadju(delo: (IzbirnaPovezava, String) -> IzidDodatkov, obNeuspehu: () -> Unit = {}) {

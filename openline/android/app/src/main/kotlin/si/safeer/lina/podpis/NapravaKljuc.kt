@@ -58,6 +58,14 @@ object NapravaKljuc {
 
     private val podpisnik = Podpisnik(::podpisi, ::id, ::javniKljucB64) { smeDelati() }
 
+    /**
+     * Global Link (naloga 22): podpis glav releja SAMO za pot /v1/connect?to=<id Line>&kanal=<32 hex> (ReleProtokol.jePotPovezave);
+     * niz »GET\nPOT\nCAS\nsha256(prazno)« se ne more ujemati z nizi safeer-lina-* ali vnosom v krog. Brez opozorila ob prvem
+     * zagonu (smeDelati) se ne podpise. null = pot ni dovoljena ali kljuca ni.
+     */
+    fun podpisiRele(pot: String, casS: Long): String? =
+        if (!smeDelati() || !ReleProtokol.jePotPovezave(pot)) null else runCatching { podpisi(ReleProtokol.sporociloPodpisa(pot, casS)) }.getOrNull()
+
     /** Seznanitev s kodo iz QR v1 (pogodba @7a065fb); null, ce polja niso veljavna. */
     fun podpisiSeznanitev(koda: String, ime: String, cas: Long, enkratni: String): PodpisSeznanitve? =
         podpisnik.podpisiSeznanitev(koda, ime, cas, enkratni)

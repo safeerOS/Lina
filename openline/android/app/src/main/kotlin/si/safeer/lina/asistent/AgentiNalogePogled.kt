@@ -21,6 +21,7 @@ import si.safeer.lina.podpis.NalogaLine
 import si.safeer.lina.podpis.NapakaGradenj
 import si.safeer.lina.podpis.NapravaKljuc
 import si.safeer.lina.podpis.StanjeAgentov
+import si.safeer.lina.samostojna.PrenosPoPoti
 import java.time.Instant
 
 /**
@@ -29,7 +30,7 @@ import java.time.Instant
  * okno pokaze id in ime iz tabele telefona ter besedilo, ki se podpise. Ce ciscenje besedilo spremeni, lastnik potrdi se enkrat.
  * Podpis s kljucem naprave je lastnikova potrditev za ta zagon (brez »Razumem« se ne podpise: Podpisnik). Kartica je
  * vstavljena TIK NAD obstojeci Dovoli/Zavrni za Claude Code (isto mesto): vprasanja Claude Code so spodaj. Logika v modulu podpis
- * (AgentiLine; preizkusi), tu pogledi in niti. Samo domace omrezje (LAN). NEPREVERJENO na napravi (app se lokalno ne prevaja z Gradlom).
+ * (AgentiLine; preizkusi), tu pogledi in niti. Domace omrezje ali Global Link (PovezavaLine; lastnik 25. 11. 2026). NEPREVERJENO na napravi (app se lokalno ne prevaja z Gradlom).
  */
 class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: Int, private val pokaziOpozorilo: () -> Unit) {
     private val glavna = Handler(Looper.getMainLooper())
@@ -91,10 +92,13 @@ class AgentiNalogePogled(private val a: Activity, starsi: LinearLayout, mesto: I
         }
     }
 
-    private fun povezava(): HttpPovezavaZLino? = AsistentShramba.beri(a)?.let { HttpPovezavaZLino(it) }
+    private val prenos = PrenosPoPoti()
 
-    /** Klic na Lino v ozadju (samo LAN povezava). Ena zahteva naenkrat. */
-    private fun vOzadju(delo: (HttpPovezavaZLino, String) -> IzidAgentov, obUspehu: (IzidAgentov) -> Unit) {
+    /** Domace omrezje, nato Global Link (ista tovarna kot Dodatki); povezava se zapre po vsakem klicu. */
+    private fun povezava(): IzbirnaPovezava? = PovezavaLine.ustvari(a, prenos)
+
+    /** Klic na Lino v ozadju (domace omrezje ali Global Link). Ena zahteva naenkrat. */
+    private fun vOzadju(delo: (IzbirnaPovezava, String) -> IzidAgentov, obUspehu: (IzidAgentov) -> Unit) {
         if (dela) return
         dela = true
         dodeli.isEnabled = false

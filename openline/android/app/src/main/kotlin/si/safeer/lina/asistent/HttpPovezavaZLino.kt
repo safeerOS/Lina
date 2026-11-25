@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 class HttpPovezavaZLino(
     private val naslov: AsistentNaslov,
     osnovni: OkHttpClient = PinnedHttp.client(naslov.odtis, pingSeconds = 0),
-) : PovezavaZLino {
+) : PovezavaZLino, java.io.Closeable {
     private val osnova = naslov.osnova()
     private val client: OkHttpClient = osnovni.newBuilder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -87,13 +87,13 @@ class HttpPovezavaZLino(
         addQueryParameter("enkratni", enkratni); addQueryParameter("podpis", podpis)
     }
 
-    // Gradnje na GitHubu (24. 11. 2026): samo domace omrezje (racunalnik od zunaj odgovori 403).
+    // Gradnje na GitHubu (24. 11. 2026): doma ali prek Global Linka (POTI_ODDALJENO, lastnik 25. 11. 2026).
     override fun stanjeGradenj(posiljatelj: String, cas: Long, enkratni: String, podpis: String) =
         get("gradnje", GradnjeLine.NAJVEC_ODGOVORA, podpisanaPoizvedba(posiljatelj, cas, enkratni, podpis))
     override fun predlogGradnje(telo: String) = post("gradnja/predlog", telo)
     override fun potrditevGradnje(telo: String) = post("gradnja/potrdi", telo)
 
-    // Agenti in naloge (24. 11. 2026): samo domace omrezje (poti niso v POTI_ODDALJENO); vrsta do 30 nalog po 8000 znakov.
+    // Agenti in naloge (24. 11. 2026): doma ali prek Global Linka (POTI_ODDALJENO, 25. 11. 2026); vrsta do 30 nalog po 8000 znakov.
     override fun stanjeAgentNalog(posiljatelj: String, cas: Long, enkratni: String, podpis: String) =
         get("agent-naloge", AgentiLine.NAJVEC_ODGOVORA, podpisanaPoizvedba(posiljatelj, cas, enkratni, podpis))
     override fun dodeliAgentNalogo(telo: String) = post("agent-naloga/dodeli", telo)
@@ -144,4 +144,6 @@ class HttpPovezavaZLino(
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
     }
+
+    override fun close() = zapri()
 }

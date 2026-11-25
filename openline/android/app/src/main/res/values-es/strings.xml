@@ -209,6 +209,9 @@
     <string name="assistant_pair_failed">La vinculación ha fallado. Compruebe que el teléfono y el ordenador están en la misma red e inténtelo de nuevo.</string>
     <string name="assistant_session_open">La sesión de Claude Code en su ordenador está abierta.</string>
     <string name="assistant_session_closed">La sesión de Claude Code en su ordenador está cerrada.</string>
+    <string name="assistant_route_home">Conectado a través de la red doméstica.</string>
+    <string name="assistant_route_global">Conectado a través de Global Link (fuera de la red doméstica).</string>
+    <string name="assistant_route_direct">Conectado directamente desde fuera.</string>
     <string name="assistant_code_button">Conectar con código</string>
     <string name="assistant_code_mode_pc">Lina en el ordenador muestra el código – lo escribo en el teléfono</string>
     <string name="assistant_code_mode_phone">El teléfono muestra el código – lo escribo en Lina en el ordenador</string>

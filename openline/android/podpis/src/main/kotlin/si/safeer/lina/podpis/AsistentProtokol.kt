@@ -88,6 +88,16 @@ object AsistentProtokol {
         return when (niz(o, "claudeCode", 16)) { "odprta" -> true; "zaprta" -> false; else -> null }
     }
 
+    /**
+     * Global Link (naloga 22): id Line na releju iz podpisanega odgovora /stanje (dobljen prek pripete povezave). Samo veljaven
+     * id releja (n- + 16 hex), sicer null - telefon iz odgovora nikoli ne vzame naslova ali gostitelja.
+     */
+    fun razberiRele(besedilo: String): String? {
+        val k = koren(besedilo) ?: return null
+        val o = (k["stanje"] as? JsonObject) ?: k
+        return niz(o, "rele", 18)?.takeIf { ReleProtokol.jeIdReleja(it) }
+    }
+
     private fun niz(o: JsonObject, k: String, najvec: Int = NAJVEC_BESEDILA): String? =
         (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { it.length <= najvec && NiziLine.praviUnicode(it) }
 

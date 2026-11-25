@@ -20,14 +20,17 @@ import si.safeer.lina.podpis.NamestitevApk
 import si.safeer.lina.podpis.NapakaGradenj
 import si.safeer.lina.podpis.NapravaKljuc
 import si.safeer.lina.podpis.OdgovorLine
+import si.safeer.lina.podpis.PotLine
 import si.safeer.lina.podpis.StanjeGradenj
 import si.safeer.lina.podpis.ZavrnitevApk
+import si.safeer.lina.samostojna.PrenosPoPoti
 import java.io.File
 
 /**
  * »Gradnje na GitHubu« v zavihku Racunalnik (lastnik 24. 11. 2026): stanje, predlog in potrditev (tok, veja in commit vidni pred podpisom),
  * ura konca po ljubljanskem casu, POLNA pot mape na racunalniku in sha256, opozorila GitHuba kot golo besedilo; »Namesti na ta
- * telefon«. Logika v modulu podpis (GradnjeLine, NamestitevApk; preizkusi), tu pogledi in niti. Samo domace omrezje (LAN povezava).
+ * telefon«. Logika v modulu podpis (GradnjeLine, NamestitevApk; preizkusi), tu pogledi in niti. Domace omrezje ali Global Link
+ * (PovezavaLine; lastnik 25. 11. 2026); tudi prenos APK gre prek releja z istim pripetim odtisom.
  * NEPREVERJENO na napravi (app se lokalno ne prevaja).
  */
 class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val pokaziOpozorilo: () -> Unit) {
@@ -101,10 +104,13 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
         }
     }
 
-    private fun povezava(): HttpPovezavaZLino? = AsistentShramba.beri(a)?.let { HttpPovezavaZLino(it) }
+    private val prenos = PrenosPoPoti()
 
-    /** Klic na Lino v ozadju (samo LAN povezava; gradnje od zunaj niso dovoljene). Ena zahteva naenkrat. */
-    private fun vOzadju(delo: (HttpPovezavaZLino, String) -> IzidGradenj, obUspehu: (IzidGradenj) -> Unit) {
+    /** Domace omrezje, nato Global Link (ista tovarna kot Dodatki); povezava se zapre po vsakem klicu. */
+    private fun povezava(): IzbirnaPovezava? = PovezavaLine.ustvari(a, prenos)
+
+    /** Klic na Lino v ozadju (domace omrezje ali Global Link). Ena zahteva naenkrat. */
+    private fun vOzadju(delo: (IzbirnaPovezava, String) -> IzidGradenj, obUspehu: (IzidGradenj) -> Unit) {
         if (dela) return
         dela = true
         predlagaj.isEnabled = false
@@ -267,7 +273,7 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
         }
         stanje.setText(R.string.install_downloading)
         Thread({
-            var pov: HttpPovezavaZLino? = null
+            var pov: IzbirnaPovezava? = null
             var kopija: File? = null
             val besedilo: String = try {
                 val zveza = povezava().also { pov = it }
@@ -280,10 +286,19 @@ class GradnjePogled(private val a: Activity, starsi: LinearLayout, private val p
                     podpis == null -> a.getString(R.string.builds_need_warning)
                     else -> {
                         mapaApk.mkdirs()
-                        val (izid, napaka) = zveza.prenesiApk(id, cas, e, podpis, mapaApk)
+                        // Pot ni dosegljiva samo, ce ni prisel noben odgovor; sicer se naslednja pot ne poskusi (isti enkratni niz).
+                        val prenesen = zveza.poPoteh { p ->
+                            (p as? HttpPovezavaZLino)?.prenesiApk(id, cas, e, podpis, mapaApk)
+                                ?.takeUnless { it.first == null && it.second == OdgovorLine.Nedosegljiva }
+                        }
+                        val (izid, napaka) = prenesen?.first ?: (null to OdgovorLine.Nedosegljiva)
+                        val prekRele = prenesen?.second == PotLine.GLOBAL_LINK
                         when {
                             napaka is OdgovorLine.Napaka && napaka.status == 404 -> a.getString(R.string.install_none)
                             napaka is OdgovorLine.Napaka && napaka.status == 409 && napaka.koda == "vsota" -> a.getString(R.string.install_changed)
+                            // prek releja: prekinjen prenos pove, da doma deluje (ne splosna napaka)
+                            prekRele && (izid as? IzidPrenosa.Zavrnjeno)?.razlog == ZavrnitevApk.PREKINJENO ->
+                                a.getString(R.string.install_err_global)
                             napaka != null -> sporocilo(GradnjeLine.napaka(napaka))
                             izid is IzidPrenosa.Zavrnjeno -> a.getString(zavrnitev(izid.razlog))
                             // Namesti se samo gradnja, ki jo je lastnik tapnil (id in sha256 iz prikaza).
