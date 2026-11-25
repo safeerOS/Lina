@@ -89,7 +89,12 @@ function izGlavnegaOkvirja(podrobnosti, okno, naslov) {
  * tuj); izid taskkill gre v dnevnik. Node drzi rocaj procesa do dogodka exit, zato Windows PID-a pred tem ne dodeli znova.
  */
 function prisilniKonec(otrok, platforma, zazeni = execFile, dnevnik = (v) => console.error(v)) {
-  if (!otrok || otrok.exitCode !== null || (otrok.signalCode !== undefined && otrok.signalCode !== null)) return;
+  if (!otrok || otrok.exitCode !== null) return;
+  if (otrok.signalCode !== undefined && otrok.signalCode !== null) {
+    // naloga 12 #8: na Windows je bil to TerminateProcess samo za streznik - drevesa po mrtvem PID-u ni mogoce koncati, zapis ostane
+    if (platforma === "win32") dnevnik(`lina-lupina: streznik ${otrok.pid ?? "?"} koncan s ${otrok.signalCode}; OpenLine, tunel ali RSDO so morda ostali brez starsa (zasedena vrata ob naslednjem zagonu)`);
+    return;
+  }
   try {
     if (platforma === "win32" && otrok.pid) {
       const pid = otrok.pid;
