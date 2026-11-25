@@ -11,7 +11,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { createHmac } from "node:crypto";
 import { setupOwner } from "./auth.server.ts";
-import { en, sl, t } from "./besedila.ts";
+import { en, sl } from "./besedila.ts";
 import { kljucBrezPravic, kljucCelovitosti, praviceKljuca } from "./keys.server.ts";
 import { readStorage } from "./storage.server.ts";
 
@@ -87,9 +87,11 @@ describe("N1 (naloga 14): datotecni sistem pravic ne podpira", { skip: !posix },
       assert.deepEqual(await readFile(pot), Buffer.alloc(32, 7));
       assert.equal(kljucBrezPravic(dir), true);
       const token = await setupOwner("geslo-test-1234", dir);
-      const v = await readStorage(token, dir);
-      assert.ok(v.opozorila.includes(t("kljucBrezPravic")), JSON.stringify(v.opozorila));
+      // streznik govori samo slovensko (jezik pozna brskalnik): zastavica, besedilo v jeziku vmesnika izbere lina-desk.tsx
+      assert.equal((await readStorage(token, dir)).kljucBrezPravic, true);
       assert.ok(en.kljucBrezPravic.length > 20 && en.kljucBrezPravic !== sl.kljucBrezPravic);
+      const namizje = await readFile(path.join(import.meta.dirname, "../../components/lina-desk.tsx"), "utf8");
+      assert.match(namizje, /place\.kljucBrezPravic \?[^\n]*t\("kljucBrezPravic"\)/);
     });
   }
 
@@ -98,6 +100,6 @@ describe("N1 (naloga 14): datotecni sistem pravic ne podpira", { skip: !posix },
     await writeFile(path.join(dir, ".kljuc"), Buffer.alloc(32, 1), { mode: 0o600 });
     await kljucCelovitosti("x", dir);
     const token = await setupOwner("geslo-test-1234", dir);
-    assert.ok(!(await readStorage(token, dir)).opozorila.includes(t("kljucBrezPravic")));
+    assert.equal((await readStorage(token, dir)).kljucBrezPravic, undefined);
   });
 });

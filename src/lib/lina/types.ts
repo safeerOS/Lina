@@ -584,6 +584,8 @@ export type StorageView = {
   mapa: string;
   razlog: string;
   opozorila: string[];
+  /** Naloga 14 N1: .kljuc ostane berljiv drugim (FS brez pravic); besedilo izbere vmesnik v svojem jeziku. */
+  kljucBrezPravic?: boolean;
 };
 
 /** Predlog kataloga. Locen od veljavnega kataloga, dokler lastnik ne potrdi. */

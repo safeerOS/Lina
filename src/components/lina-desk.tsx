@@ -1234,6 +1234,7 @@ function StoragePanel({
           {item}
         </p>
       ))}
+      {place.kljucBrezPravic ? <p className="mt-3 text-sm text-[var(--color-signal)]" role="note">{t("kljucBrezPravic")}</p> : null}
       {note ? (
         <p className="mt-3 text-sm" role="status">
           {note}
