@@ -128,4 +128,18 @@ class NajdbeSlepi17tTest {
         }
     }
 
+    // N8: meja seje steje bajte (UTF-8 + pobeg JSON), zato je seja ne okrni drugace kot projekcija za racunalnik.
+    @Test
+    fun `N8 - prepis s sumniki, ki ga seja ne okrni dodatno, gre na racunalnik cel`() {
+        val s = SejaKlica(0L, "+99955501001") { 1_700_000_000_000L }
+        repeat(SejaKlica.MEJA_IZMENJAV) { i ->
+            if (i % 2 == 0) s.dodajVhod("č".repeat(50)) else s.dodajIzhod("\"ž\"".repeat(10))
+            s.konecObrata()
+        }
+        val z = s.zakljuci(1_700_000_000_001L)
+        val p = z.zaSinhronizacijo()
+        assertEquals(z.prepisPogovora.size, p.prepisPogovora.size, "projekcija je odrezala konec, ki ga telefon hrani")
+        assertEquals(z.prepisOkrnjen, p.prepisOkrnjen)
+    }
+
 }

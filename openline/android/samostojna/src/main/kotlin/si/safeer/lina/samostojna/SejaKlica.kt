@@ -15,7 +15,8 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
     private val izhod = StringBuilder()
     /** Prepis po vrsti (govorec, cas prvega odlomka, besedilo); omejen ze med klicem, da dolg klic ne raste v pomnilniku. */
     private val izmenjave = ArrayList<Triple<String, Long, StringBuilder>>()
-    private var znakovPrepisa = 0
+    /** Bajti prepisa v JSON UTF-8 (z [] in ovojem izmenjav), kot jih steje projekcija za racunalnik (N8). */
+    private var bajtiPrepisa = 2
     private var novaIzmenjava = true
     private var prepisOkrnjen = false
     private var ime = ""
@@ -52,29 +53,27 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
     private fun dodajVPrepis(govorec: String, besedilo: String) {
         if (prepisOkrnjen) return
         var ostanek = besedilo
+        var vsiliNovo = false
         while (ostanek.isNotEmpty()) {
             val zadnja = izmenjave.lastOrNull()
-            val nadaljuj = zadnja != null && !novaIzmenjava && zadnja.first == govorec && zadnja.third.length < MEJA_IZMENJAVE_ZNAKOV
-            if (!nadaljuj && izmenjave.size >= MEJA_IZMENJAV) { prepisOkrnjen = true; return }
-            if (!nadaljuj && znakovPrepisa + OVOJ_IZMENJAVE >= MEJA_PREPISA_ZNAKOV) { prepisOkrnjen = true; return }
-            val cilj = if (nadaljuj) zadnja!!.third else StringBuilder().also { izmenjave.add(Triple(govorec, ura(), it)); znakovPrepisa += OVOJ_IZMENJAVE }
+            val nadaljuj = !vsiliNovo && zadnja != null && !novaIzmenjava && zadnja.first == govorec && zadnja.third.length < MEJA_IZMENJAVE_ZNAKOV
+            if (!nadaljuj && (izmenjave.size >= MEJA_IZMENJAV || bajtiPrepisa + OVOJ_IZMENJAVE >= MEJA_PREPISA_B)) { prepisOkrnjen = true; return }
+            val cilj = if (nadaljuj) zadnja!!.third else StringBuilder().also { izmenjave.add(Triple(govorec, ura(), it)); bajtiPrepisa += OVOJ_IZMENJAVE }
             novaIzmenjava = false
-            val prostor = minOf(MEJA_IZMENJAVE_ZNAKOV - cilj.length, MEJA_PREPISA_ZNAKOV - znakovPrepisa)
-            if (prostor <= 0) { prepisOkrnjen = true; return }
+            vsiliNovo = false
             // Odlomka brez presledka med stavkoma (»slovensko.Pa ni«) locimo s presledkom, kot dodajLocenoZaNovStavek z vrstico.
-            if (nadaljuj && cilj.isNotEmpty() && ostanek.first().isUpperCase() && (cilj.last().isLetter() || cilj.last() in ".!?")) {
-                cilj.append(' '); znakovPrepisa++
+            if (cilj.isNotEmpty() && ostanek.first().isUpperCase() && (cilj.last().isLetter() || cilj.last() in ".!?")) {
+                if (bajtiPrepisa + 1 > MEJA_PREPISA_B) { prepisOkrnjen = true; return }
+                cilj.append(' '); bajtiPrepisa++
                 continue
             }
-            // Razrez ne sme prerezati nadomestnega para (slepi pregled N4): visoki del gre v naslednji kos.
-            var kos = ostanek.take(prostor)
-            val prerezPara = kos.length < ostanek.length && kos.last().isHighSurrogate()
-            if (prerezPara) kos = kos.dropLast(1)
+            // Kos v mejah znakov izmenjave in bajtov prepisa; reze samo med celimi znaki (nadomestni par ostane cel, slepi pregled N4).
+            val kos = kosVMejah(ostanek, MEJA_IZMENJAVE_ZNAKOV - cilj.length, MEJA_PREPISA_B - bajtiPrepisa)
             if (kos.isEmpty()) {
-                if (nadaljuj) { novaIzmenjava = true; continue } // par v celoti v novo izmenjavo
+                if (cilj.isNotEmpty()) { vsiliNovo = true; continue } // znak ne gre vec v to izmenjavo: v novo
                 prepisOkrnjen = true; return // ni prostora niti za en cel znak
             }
-            cilj.append(kos); znakovPrepisa += kos.length
+            cilj.append(kos); bajtiPrepisa += jsonBajti(kos)
             ostanek = ostanek.substring(kos.length)
         }
     }
@@ -147,15 +146,43 @@ class SejaKlica(val casZacetka: Long, val stevilka: String, private val ura: () 
         const val MEJA_DOBESEDNO = 6000
         const val MEJA_OBRATA = 600
         /**
-         * Meje prepisa pogovora: izmenjava do 2000 znakov (kot sporocilo), najvec 400 izmenjav in 20 000 enot, kjer vsaka izmenjava steje
-         * se OVOJ_IZMENJAVE za kljuce JSON ({"govorec":"klicatelj","cas":1700000000000,"besedilo":""} = 59 B). Tako slovenski prepis, ki
-         * ga seja ne okrni, ostane pod MEJA_PREPISA_SINHRON_B (24 KiB) in ga projekcija za racunalnik ne skrajsa (preizkus).
+         * Meje prepisa pogovora: izmenjava do 2000 znakov (kot sporocilo), najvec 400 izmenjav in MEJA_PREPISA_B bajtov JSON UTF-8 (N8: bajti,
+         * ne znaki - c/s/z in narekovaji so 2 B), kjer vsaka izmenjava steje se OVOJ_IZMENJAVE za kljuce in vejico
+         * ({"govorec":"klicatelj","cas":1700000000000,"besedilo":""}, = 60 B). Tako prepis, ki ga seja ne okrni, projekcija za racunalnik
+         * ne skrajsa (preizkus), dokler ostala polja zapisa pustijo prostor (MEJA_ZAPISA_SINHRON_B).
          */
         const val MEJA_IZMENJAVE_ZNAKOV = 2000
         const val MEJA_IZMENJAV = 400
-        const val MEJA_PREPISA_ZNAKOV = 20_000
+        const val MEJA_PREPISA_B = MEJA_PREPISA_SINHRON_B
         const val OVOJ_IZMENJAVE = 60
     }
+}
+
+/** Bajti znaka v JSON UTF-8, kot ga zapise kotlinx.serialization (pobeg ", \\ in kontrolnih znakov). */
+internal fun jsonBajti(cp: Int): Int = when {
+    cp == '"'.code || cp == '\\'.code -> 2
+    cp == '\n'.code || cp == '\r'.code || cp == '\t'.code || cp == '\b'.code || cp == 0x0C -> 2
+    cp < 0x20 -> 6
+    cp < 0x80 -> 1
+    cp < 0x800 -> 2
+    cp < 0x10000 -> 3
+    else -> 4
+}
+
+internal fun jsonBajti(s: String): Int { var b = 0; var i = 0; while (i < s.length) { val cp = s.codePointAt(i); b += jsonBajti(cp); i += Character.charCount(cp) }; return b }
+
+/** Najdaljsi zacetek [s] z najvec [znakov] enotami UTF-16 in [bajtov] bajti JSON; reze samo med celimi znaki (nikoli sredi para). */
+internal fun kosVMejah(s: String, znakov: Int, bajtov: Int): String {
+    var i = 0
+    var b = 0
+    while (i < s.length) {
+        val cp = s.codePointAt(i)
+        val n = Character.charCount(cp)
+        val bb = jsonBajti(cp)
+        if (i + n > znakov || b + bb > bajtov) break
+        i += n; b += bb
+    }
+    return s.substring(0, i)
 }
 
 private val ZNAKI_PREPOVEDANI = Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]")

@@ -158,8 +158,8 @@ data class IzmenjavaKlica(val govorec: String, val cas: Long, val besedilo: Stri
 /**
  * Najvec bajtov (UTF-8, JSON) prepisa v enem zapisu za racunalnik. Utemeljitev: racunalnik vraca klice v odgovorih do 48 KiB
  * (MEJA_ODGOVORA_B v sinhron-telefon.server.ts), telefon sprejme najvec 64 KiB (AsistentProtokol.NAJVEC_ODGOVORA), zahteva telefona
- * pa ima 400 000 B za klice. Ostala polja zapisa imajo obicajno manj kot 14 KB, zato 24 KiB prepisa pusti en zapis v enem odgovoru.
- * Seja klica (SejaKlica.MEJA_PREPISA_ZNAKOV z OVOJ_IZMENJAVE) zbere do ~17 000 znakov besedila v 50 izmenjavah (~15 min pogovora), kar je v JSON pod to mejo.
+ * pa ima 400 000 B za klice. Prepis dobi samo, kar ostane do MEJA_ZAPISA_SINHRON_B po ostalih poljih (najvec ~38 KB, glej skrajsajZaSinhronizacijo).
+ * Seja klica steje iste bajte (SejaKlica.MEJA_PREPISA_B, N8): ~23 000 B slovenskega besedila, npr. ~100 izmenjav po 170 znakov (~15-20 min pogovora).
  */
 const val MEJA_PREPISA_SINHRON_B = 24 * 1024
 

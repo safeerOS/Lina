@@ -68,7 +68,7 @@ class PrepisPogovoraTest {
         val z = s.zakljuci(2L)
         assertTrue(z.prepisOkrnjen)
         assertTrue(z.prepisPogovora.size <= SejaKlica.MEJA_IZMENJAV)
-        assertTrue(z.prepisPogovora.sumOf { it.besedilo.length } <= SejaKlica.MEJA_PREPISA_ZNAKOV)
+        assertTrue(json.encodeToString(z.prepisPogovora).toByteArray(Charsets.UTF_8).size <= SejaKlica.MEJA_PREPISA_B)
         assertTrue(z.prepisPogovora.all { it.besedilo.length <= SejaKlica.MEJA_IZMENJAVE_ZNAKOV })
     }
 
