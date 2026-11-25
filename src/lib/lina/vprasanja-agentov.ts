@@ -4,7 +4,8 @@
  * Lina zazene Claude Code brez okna (-p, --output-format stream-json) z orodjem za dovoljenja (--permission-prompt-tool), ki ga ponuja
  * majhen MCP streznik Line prek stdio (PROGRAM_POMOCNIKA). Pomocnik vprasanje poslje Lini prek Unix vticnice v mapi podatkov (0700) z
  * zetonom zagona; po vticnici gre SAMO vprasanje, odgovor da lastnik (racunalnik z geslom ali podpisan telefon), nikoli agent.
- * Samodejnega »da« ni: vsako vprasanje caka lastnika, rok = zavrnitev. Razvrstitev (razvrstiDejanje) samo oznaci nevarno za prikaz.
+ * Samodejnega »da« ni: vsako vprasanje caka lastnika, rok = zavrnitev. Pravila allow iz nastavitev uporabnika in projekta se ne uporabijo
+ * (--restricted, pregled 0213 A3); privzeto dovoljeno branje v delovni mapi ni vprasanje. Razvrstitev (razvrstiDejanje) samo oznaci nevarno za prikaz.
  * Brez stanja in brez omrezja (preizkusi: vprasanja-agentov.test.ts).
  */
 import { createHash } from "node:crypto";
@@ -39,17 +40,24 @@ export class VprasanjeNapaka extends Error {
   }
 }
 
+/** Orodja seje v Lini (--restricted brez --tools odstrani Bash in WebFetch); ostala vgrajena orodja niso na voljo. */
+export const ORODJA_CLAUDE_V_LINI = "Bash,Read,Edit,Write,MultiEdit,NotebookEdit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task";
+
 /**
- * Argumenti za Claude Code. --permission-mode default: kar nastavitve lastnika ne dovolijo, gre na orodje Line; nikoli --allowedTools ali
+ * Argumenti za Claude Code. --permission-mode default: o vsem, kar ni privzeto dovoljeno, odloci orodje Line; nikoli --allowedTools ali
  * preskok dovoljenj. --strict-mcp-config: samo MCP Line (drugi strezniki iz nastavitev se ne zazenejo v seji brez okna).
+ * Pregled 0213 A3: --restricted (Claude Code 2.1.331 --help) prezre nastavitve user, project in local - pravila allow iz
+ * ~/.claude/settings.json in iz .claude/ projekta (ki ga agent lahko sam zapise) ne obidejo vprasanj Line; datotecna orodja so omejena
+ * na delovno mapo, pisanje nastavitev, gita in orodij sme odobriti samo upravljalec dovoljenj (orodje Line). Upravljane nastavitve
+ * organizacije veljajo se naprej. Kar Claude Code privzeto dovoli brez vprasanja (branje v delovni mapi), ne pride v Lino.
  */
 export function argvClaudeVLini(poziv: string, mcpKonfig: string): string[] {
   return [
     "-p", poziv,
     "--output-format", "stream-json", "--verbose",
     "--permission-mode", "default",
-    // samo nastavitve lastnika: pravila allow in kljuke iz .claude/ projekta (ki ga agent lahko sam zapise) ne obidejo vprasanj Line
-    "--setting-sources", "user",
+    "--restricted",
+    "--tools", ORODJA_CLAUDE_V_LINI,
     "--permission-prompt-tool", ORODJE_DOVOLJENJA,
     "--mcp-config", mcpKonfig, "--strict-mcp-config",
   ];
@@ -111,7 +119,9 @@ export function razvrstiDejanje(orodje: string, vnos: Record<string, unknown>, d
 }
 
 // eslint-disable-next-line no-control-regex
-const NADZORNI = /\u001b\[[0-9;?]*[A-Za-z]|[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g;
+// Pregled 0213 A5: vsi oblikovni znaki (\p{Cf}: U+00AD, U+200B-U+200F, U+202A-U+202E, U+2060-U+206F, U+FEFF, oznake U+E0000-U+E007F ...),
+// nadzorni C0/C1 in nevidna polnila (U+034F, U+115F, U+1160, U+17B4, U+17B5, U+180E, U+3164, U+FFA0); tab in nova vrstica ostaneta
+const NADZORNI = /\u001b\[[0-9;?]*[A-Za-z]|[\u0000-\u0008\u000b-\u001f\u007f-\u009f\p{Cf}\u034f\u115f\u1160\u17b4\u17b5\u180e\u3164\uffa0]/gu;
 export function cisto(s: string, meja = NAJVEC_ZNAKOV_VRSTICE): string {
   return s.replace(NADZORNI, "").slice(0, meja);
 }

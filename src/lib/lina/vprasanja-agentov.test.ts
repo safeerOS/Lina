@@ -116,9 +116,17 @@ describe("vprasanja agenta (Claude Code -> Lina)", () => {
     assert.equal(a[a.indexOf("--permission-prompt-tool") + 1], ORODJE_DOVOLJENJA);
     assert.equal(a[a.indexOf("--mcp-config") + 1], "/x/mcp.json");
     assert.ok(a.includes("--strict-mcp-config"));
-    assert.equal(a[a.indexOf("--setting-sources") + 1], "user", "pravila in kljuke projekta ne obidejo vprasanj");
     assert.equal(a[a.indexOf("--permission-mode") + 1], "default");
     assert.ok(!a.some((x) => /dangerously|bypass|allowedTools|allowed-tools/i.test(x)));
+  });
+
+  it("pregled 0213 A3: pravila allow iz nastavitev uporabnika in projekta ne obidejo vprasanj Line (--restricted, brez --setting-sources)", () => {
+    const a = argvClaudeVLini("Preberi nalogo.", "/x/mcp.json");
+    assert.ok(a.includes("--restricted"), "--restricted prezre user, project in local nastavitve (Claude Code --help)");
+    assert.ok(!a.includes("--setting-sources"), "--setting-sources user bi nalozil ~/.claude/settings.json z allow");
+    // --restricted brez --tools odstrani Bash in WebFetch: seznam mora biti izrecen in mora imeti Bash
+    const orodja = a[a.indexOf("--tools") + 1]!.split(",");
+    for (const o of ["Bash", "Read", "Edit", "Write", "WebFetch"]) assert.ok(orodja.includes(o), o);
   });
 
   it("lazni Claude: vprasanje pride v Lino, Dovoli se vrne agentu z nespremenjenim vnosom, dnevnik dela in odlocitev sta zapisana", async () => {
@@ -287,6 +295,7 @@ describe("vprasanja agenta (Claude Code -> Lina)", () => {
     assert.equal(vLini[0]!.program, "/usr/bin/claude");
     assert.match(vLini[0]!.poziv, /NALOGA\.md/);
   });
+
 });
 
 describe("vprasanja agenta: popravki pregleda 25. 11.", () => {
@@ -509,6 +518,8 @@ describe("vprasanja agenta s telefona", () => {
     } finally {
       await s.ustavi();
     }
-    for (const p of ["/agent-vprasanja", "/agent-vprasanje/odgovor"]) assert.equal(POTI_ODDALJENO.get(`${POT}${p}`), undefined);
+    // pregled 0213 A10: tudi prek Global Linka (naloga, dodeljena od zunaj, sicer caka do roka); isti podpis naprave
+    assert.equal(POTI_ODDALJENO.get(`${POT}/agent-vprasanja`), "GET");
+    assert.equal(POTI_ODDALJENO.get(`${POT}/agent-vprasanje/odgovor`), "POST");
   });
 });

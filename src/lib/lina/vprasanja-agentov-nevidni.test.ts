@@ -21,10 +21,13 @@ describe("vprasanja-agentov: brez skritih znakov v izvoru", () => {
     odstrani.push(0x7f);
     for (let c = 0x200b; c <= 0x200f; c++) odstrani.push(c);
     for (let c = 0x202a; c <= 0x202e; c++) odstrani.push(c);
-    for (let c = 0x2066; c <= 0x2069; c++) odstrani.push(c);
+    // pregled 0213 A5: razred je razsirjen na vse oblikovne znake (\p{Cf}, tudi U+2060-U+2064 in U+206A-U+206F) in C1 nadzorne
+    for (let c = 0x2060; c <= 0x2064; c++) odstrani.push(c);
+    for (let c = 0x2066; c <= 0x206f; c++) odstrani.push(c);
+    for (let c = 0x80; c <= 0x9f; c++) odstrani.push(c);
     for (const c of odstrani) assert.equal(cisto(`a${String.fromCodePoint(c)}b`), "ab", `U+${c.toString(16)}`);
-    // meje razreda in obicajni znaki ostanejo (tab in nova vrstica nista v razredu)
-    for (const c of [0x09, 0x0a, 0x200a, 0x2010, 0x2029, 0x202f, 0x2065, 0x206a, 0x20ac, 0x10d]) {
+    // meje razreda in obicajni znaki ostanejo (tab in nova vrstica nista v razredu; U+2065 ni dodeljen, ni Cf)
+    for (const c of [0x09, 0x0a, 0x200a, 0x2010, 0x2029, 0x202f, 0x2065, 0x20ac, 0x10d, 0xa0, 0xe9]) {
       assert.equal(cisto(`a${String.fromCodePoint(c)}b`), `a${String.fromCodePoint(c)}b`, `U+${c.toString(16)}`);
     }
     assert.equal(cisto("x\u001b[31mrdece\u001b[0my"), "xrdecey");
