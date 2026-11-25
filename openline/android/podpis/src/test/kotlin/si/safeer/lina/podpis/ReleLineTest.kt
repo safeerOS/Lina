@@ -327,4 +327,54 @@ class ReleLineTest {
             }
         }
     }
+
+    @Test
+    fun `T5 - tuja aplikacija s 40 praznimi vticnicami (vedno znova odprtimi) ne zapre poti, prava vticnica dobi kanal`() {
+        LazenRele().use { rele ->
+            ReleVrata("n-0123456789abcdef", rele.kanal()).use { v ->
+                val konec = java.util.concurrent.atomic.AtomicBoolean(false)
+                val tuje = java.util.concurrent.ConcurrentLinkedQueue<Socket>()
+                // napadalec: drzi 40 praznih povezav; zaprto takoj odpre znova
+                val napadalec = thread(isDaemon = true) {
+                    while (!konec.get()) {
+                        tuje.removeIf { it.isClosed || try { it.soTimeout = 1; it.getInputStream().read() < 0 } catch (_: java.net.SocketTimeoutException) { false } catch (_: Exception) { true } }
+                        while (tuje.size < 40 && !konec.get()) try { tuje += Socket(InetAddress.getLoopbackAddress(), v.vrata) } catch (_: Exception) { break }
+                        Thread.sleep(20)
+                    }
+                }
+                try {
+                    Thread.sleep(500)
+                    val s = v.tovarna().createSocket(InetAddress.getLoopbackAddress(), v.vrata)
+                    s.soTimeout = 5_000
+                    // brez popravka vrata pravo vticnico zaprejo takoj (pisanje ali branje vrze izjemo)
+                    val odgovor = try { s.getOutputStream().write("y".toByteArray()); s.getOutputStream().flush(); preberi(s.getInputStream(), 3) } catch (_: Exception) { "" }
+                    assertEquals("L:y", odgovor, "prava vticnica ni dobila kanala")
+                    s.close()
+                } finally {
+                    konec.set(true); napadalec.join(2_000); tuje.forEach { try { it.close() } catch (_: Exception) {} }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `T13 - zaprtje lokalnih vrat (izklop Global Linka, Pozabi) takoj zapre tudi kanale, ki ze tecejo`() {
+        LazenRele().use { rele ->
+            val v = ReleVrata("n-0123456789abcdef", rele.kanal())
+            val s = v.tovarna().createSocket(InetAddress.getLoopbackAddress(), v.vrata)
+            s.getOutputStream().write("z".toByteArray()); s.getOutputStream().flush()
+            assertEquals("L:z", preberi(s.getInputStream(), 3))
+            v.close()
+            s.soTimeout = 3_000
+            val zacetek = System.currentTimeMillis()
+            val n = try { s.getInputStream().read() } catch (_: java.net.SocketTimeoutException) { -2 } catch (_: java.net.SocketException) { -1 }
+            assertEquals(-1, n, "lokalna vticnica ostala odprta po close()")
+            assertTrue(System.currentTimeMillis() - zacetek < 1_000)
+            val rok = System.currentTimeMillis() + 2_000
+            while (rele.zaprti.get() < 1 && System.currentTimeMillis() < rok) Thread.sleep(20)
+            assertEquals(1, rele.zaprti.get(), "kanal na releju ostal odprt")
+            s.close()
+        }
+    }
+
 }

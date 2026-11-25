@@ -28,41 +28,73 @@ class ReleVrata(private val cilj: String, private val kanal: ReleKanal) : Closea
     // izrecno 127.0.0.1: PovezavaLine se poveze na ta naslov (pregled 7: getLoopbackAddress je lahko ::1)
     private val streznik = ServerSocket(0, 16, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
     private val mesta = Semaphore(NAJVEC)
+    // T5 (pregled 0213): vticnice brez skrivnosti ne zasedajo mest za kanale; ob polni vrsti se zapre NAJSTAREJSA nepreverjena,
+    // zato tuja aplikacija s praznimi povezavami ne more zapreti poti (prava vticnica skrivnost poslje takoj po connect).
+    private val nepreverjene = java.util.ArrayDeque<Socket>()
+    // T13 (pregled 0213): odprte lokalne vticnice in kanali releja; close() (izklop Global Linka, Pozabi) jih zapre takoj.
+    private val odprte = java.util.concurrent.ConcurrentHashMap.newKeySet<Closeable>()
+    @Volatile private var zaprto = false
     val vrata: Int = streznik.localPort
 
     init {
         thread(isDaemon = true, name = "lina-rele-vrata") {
             while (!streznik.isClosed) {
                 val s = try { streznik.accept() } catch (_: Exception) { break }
-                if (!mesta.tryAcquire()) { zapri(s); continue }
-                thread(isDaemon = true, name = "lina-rele-kanal") { try { povezi(s) } finally { mesta.release() } }
+                synchronized(nepreverjene) {
+                    nepreverjene.addLast(s)
+                    while (nepreverjene.size > NAJVEC_NEPREVERJENIH) zapri(nepreverjene.removeFirst())
+                }
+                thread(isDaemon = true, name = "lina-rele-kanal") { povezi(s) }
             }
         }
     }
 
+    /** Doda [c] med odprte; ce so vrata medtem zaprta, ga zapre takoj (vrne false). */
+    private fun registriraj(c: Closeable): Boolean {
+        odprte.add(c)
+        if (!zaprto) return true
+        odprte.remove(c)
+        try { c.close() } catch (_: Exception) {}
+        return false
+    }
+
     private fun povezi(s: Socket) {
+        val ok = try { preveriSkrivnost(s) } catch (_: Exception) { false } finally { synchronized(nepreverjene) { nepreverjene.remove(s) } }
+        if (!ok || !mesta.tryAcquire()) { zapri(s); return }
+        try { prenasaj(s) } finally { mesta.release() }
+    }
+
+    private fun preveriSkrivnost(s: Socket): Boolean {
+        // skupni rok za celo skrivnost (pregled 4: rok na posamezno branje bi tuji aplikaciji dovolil drzati mesta)
+        val rok = System.currentTimeMillis() + ROK_SKRIVNOSTI_MS
+        val prejeto = ByteArray(32)
+        var k = 0
+        while (k < 32) {
+            val ostane = rok - System.currentTimeMillis()
+            if (ostane <= 0) break
+            s.soTimeout = ostane.toInt()
+            val n = s.getInputStream().read(prejeto, k, 32 - k); if (n < 0) break; k += n
+        }
+        return k == 32 && MessageDigest.isEqual(prejeto, skrivnost)
+    }
+
+    private fun prenasaj(s: Socket) {
+        if (!registriraj(s)) return
         try {
-            // skupni rok 5 s za celo skrivnost (pregled 4: rok na posamezno branje bi tuji aplikaciji dovolil drzati mesta)
-            val rok = System.currentTimeMillis() + 5_000
-            val prejeto = ByteArray(32)
-            var k = 0
-            while (k < 32) {
-                val ostane = rok - System.currentTimeMillis()
-                if (ostane <= 0) break
-                s.soTimeout = ostane.toInt()
-                val n = s.getInputStream().read(prejeto, k, 32 - k); if (n < 0) break; k += n
-            }
-            if (k != 32 || !MessageDigest.isEqual(prejeto, skrivnost)) { zapri(s); return }
             s.soTimeout = 0
             val (vhod, izhod) = kanal.odpri(cilj) ?: run { zapri(s); return }
+            if (!registriraj(izhod)) { zapri(s); return }
             // lokalna stran konca prva: zapri tudi kanal releja, sicer bi bralna nit cakala, dokler ga ne zapre rele (pregled 4)
             val t = thread(isDaemon = true) { prenesi(s.getInputStream(), izhod); zapri(s); try { izhod.close() } catch (_: Exception) {} }
             prenesi(vhod, s.getOutputStream())
             zapri(s)
             try { izhod.close() } catch (_: Exception) {}
             t.join(1_000)
+            odprte.remove(izhod)
         } catch (_: Exception) {
             zapri(s)
+        } finally {
+            odprte.remove(s)
         }
     }
 
@@ -91,7 +123,18 @@ class ReleVrata(private val cilj: String, private val kanal: ReleKanal) : Closea
         override fun createSocket(a: InetAddress?, port: Int, la: InetAddress?, lp: Int): Socket = createSocket(a, port)
     }
 
-    override fun close() = try { streznik.close() } catch (_: Exception) {}
+    override fun close() {
+        zaprto = true
+        try { streznik.close() } catch (_: Exception) {}
+        synchronized(nepreverjene) { nepreverjene.forEach(::zapri); nepreverjene.clear() }
+        for (c in odprte.toList()) try { c.close() } catch (_: Exception) {}
+        odprte.clear()
+    }
 
-    companion object { const val NAJVEC = 8 }
+    companion object {
+        const val NAJVEC = 8
+        /** Najvec hkratnih vticnic pred skrivnostjo; nova zapre najstarejso (T5). */
+        const val NAJVEC_NEPREVERJENIH = 32
+        const val ROK_SKRIVNOSTI_MS = 2_000L
+    }
 }
