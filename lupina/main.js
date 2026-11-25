@@ -7,7 +7,7 @@ const http = require("http");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
-const { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik, prisilniKonec, koncajDovoljen } = require("./pomocniki");
+const { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik, izGlavnegaOkvirja, prisilniKonec, koncajDovoljen } = require("./pomocniki");
 
 const NAMESTITEV = app.isPackaged ? path.join(process.resourcesPath, "lina") : path.join(__dirname, "..");
 const IKONA = path.join(__dirname, "ikona.png");
@@ -103,7 +103,7 @@ function dovoliDovoljenja() {
   });
   // Brez gesla streznik novo nalogo orkestratorja sprejme samo z zetonom lupine (proces drugega uporabnika ga nima; meja je geslo).
   session.defaultSession.webRequest.onBeforeSendHeaders((podrobnosti, odgovori) =>
-    odgovori({ requestHeaders: glaveZaStreznik(podrobnosti.url, naslov, zetonLupine, podrobnosti.requestHeaders) }));
+    odgovori({ requestHeaders: glaveZaStreznik(podrobnosti.url, naslov, izGlavnegaOkvirja(podrobnosti, okno, naslov) ? zetonLupine : "", podrobnosti.requestHeaders) }));
   session.defaultSession.setPermissionCheckHandler((wc, dovoljenje, izvor) => lokalno(izvor) && (dovoljenje === "media" || dovoljenje === "notifications"));
 }
 

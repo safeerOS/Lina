@@ -67,6 +67,21 @@ function glaveZaStreznik(url, naslov, zeton, glave) {
 }
 
 /**
+ * Naloga 11 N6: ali je zahtevo sprozil glavni okvir okna Line z izvorom streznika (ne iframe, delavec, drugo okno ali webview v isti
+ * seji). Samo takrat lupina doda zeton; ciljni naslov sam ni dovolj (vdelana tuja vsebina ali XSS bi zeton dobila).
+ */
+function izGlavnegaOkvirja(podrobnosti, okno, naslov) {
+  const wc = okno && !okno.isDestroyed() ? okno.webContents : null;
+  const okvir = podrobnosti && podrobnosti.frame;
+  if (!wc || !naslov || podrobnosti.webContentsId !== wc.id || !okvir || okvir.parent !== null) return false;
+  try {
+    return new URL(okvir.url).origin === naslov;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Prisilni konec streznika (naloga 9, V10). Windows: kill() je TerminateProcess samo za streznik - OpenLine, tunel in RSDO bi ostali
  * brez starsa; zato taskkill /T /F po PID (celo drevo, vzorec tunel.server.ts). Linux: SIGKILL kot doslej.
  */
@@ -95,4 +110,4 @@ function koncajDovoljen(argv, dodatno, zeton) {
   return crypto.timingSafeEqual(Buffer.from(dan), Buffer.from(zeton));
 }
 
-module.exports = { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik, prisilniKonec, koncajDovoljen };
+module.exports = { APP_ID, mapaPodatkov, prosiZaKonec, glaveZaStreznik, izGlavnegaOkvirja, prisilniKonec, koncajDovoljen };

@@ -83,6 +83,7 @@ describe("V6: lupina doda zeton samo zahtevam na lokalni streznik Line", () => {
     const m = await readFile(path.join(import.meta.dirname, "../../../lupina/main.js"), "utf8");
     assert.match(m, /LINA_LUPINA_ZETON: zetonLupine/);
     assert.match(m, /webRequest\.onBeforeSendHeaders\(/);
-    assert.match(m, /glaveZaStreznik\(podrobnosti\.url, naslov, zetonLupine, podrobnosti\.requestHeaders\)/);
+    // naloga 11 N6: zeton samo za glavni okvir lastnega okna
+    assert.match(m, /glaveZaStreznik\(podrobnosti\.url, naslov, izGlavnegaOkvirja\(podrobnosti, okno, naslov\) \? zetonLupine : "", podrobnosti\.requestHeaders\)/);
   });
 });
