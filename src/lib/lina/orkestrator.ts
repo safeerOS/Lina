@@ -150,7 +150,7 @@ export function ocenaZetonov(znakov: number): number {
   return Math.ceil(znakov / 4);
 }
 
-export type RazlogUstavitve = "koraki" | "zetoni" | "cas" | "ponovitev" | "preklic" | "napaka" | "varnost" | "izklopljeno" | "rok-pomocnika";
+export type RazlogUstavitve = "koraki" | "zetoni" | "cas" | "ponovitev" | "preklic" | "napaka" | "varnost" | "izklopljeno" | "rok-pomocnika" | "nadgradnja";
 
 export function presezenaMeja(p: Proracun, poraba: Poraba, casMs: number, koraki: number): RazlogUstavitve | null {
   if (koraki >= p.najvecKorakov) return "koraki";

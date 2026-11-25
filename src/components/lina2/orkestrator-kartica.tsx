@@ -93,6 +93,7 @@ function NalogaOrk({ n, zaposlen, onUkaz }: { n: Naloga; zaposlen: boolean; onUk
         {n.poraba.ocenjeno ? ` (${t("orkOcena")})` : ""}
       </p>
       {n.okuzeno ? <p className="mt-1 text-xs text-[var(--color-signal)]">{t("orkOkuzeno")}</p> : null}
+      {n.nepreverjeno ? <p className="mt-1 text-xs text-[var(--color-signal)]">{t("orkNepreverjeno")}</p> : null}
       <ol className="mt-2 max-h-64 overflow-auto text-xs" aria-live="polite">
         {n.dogodki.filter((d) => d.vrsta !== "korak-zacet" || d.orodje).slice(-30).map((d) => (
           <li key={d.st} className={d.vrsta === "vmesno" || d.vrsta === "nacrt" ? "font-medium" : "text-[var(--color-moss)]"}>
