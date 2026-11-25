@@ -9,9 +9,12 @@ import { loadPravila, nastaviDodatekIzTelefona, type UskladitevDodatkov } from "
 import { stanjeRsdo } from "./rsdo-streznik.server.ts";
 import { stanjeNamestitveSlovenskega } from "./slovenski-modul.server.ts";
 import { resolveDataDir } from "./store.server.ts";
+import { imaSlovenskiModul, platformaZdaj, type Platforma } from "./platforma.server.ts";
 
 /** Stanje slovenskega modela v obliki ostalih dodatkov; neuspela namestitev je vidna (pregled 029, najdba 12). */
-export function stanjeSlovenskega(): { stanje: StanjeDodatka; razlog: string } {
+export function stanjeSlovenskega(platforma: Platforma = platformaZdaj()): { stanje: StanjeDodatka; razlog: string } {
+  // Naloga 15: na Windows modula ni (namestilnik je samo za Linux) - jasno »ni na voljo«, ne »namestitev ni uspela, poskusite znova«.
+  if (!imaSlovenskiModul(platforma)) return { stanje: "napaka", razlog: "ni-na-voljo-sistem" };
   const rsdo = stanjeRsdo();
   const stanje = ({ izklopljen: "izklopljen", nalaga: "se_zaganja", pripravljen: "deluje", napaka: "napaka" } as const)[rsdo.stanje];
   const razlog = rsdo.razlog === "ni-namescen" && stanjeNamestitveSlovenskega() === "napaka" ? "namestitev-ni-uspela" : (rsdo.razlog ?? "");
