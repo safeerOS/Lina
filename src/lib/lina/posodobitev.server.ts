@@ -448,13 +448,12 @@ async function zacni(token: string | null, dir: string | undefined, odvisnosti: 
       ({ pot: deb, vsota } = pripravljeno);
     } else {
       deb = k.pot!;
-      if (gradnja !== null) {
-        // gradnja: najnovejsi paket v mapi mora biti prav datoteka gradnje; preveri in namesti se njena zasebna kopija (A-15)
-        if (deb !== path.resolve(gradnja.pot)) return { ok: false, razlog: "vsota" };
-        const kopija = await kopirajGradnjo(root, deb);
-        if (!kopija) return { ok: false, razlog: "prenos" };
-        deb = kopija;
-      }
+      // gradnja: najnovejsi paket v mapi mora biti prav datoteka gradnje
+      if (gradnja !== null && deb !== path.resolve(gradnja.pot)) return { ok: false, razlog: "vsota" };
+      // A-15 in pregled 0213 A6 (vir »mapa«, tudi safeer-os): preveri in namesti se zasebna kopija, nikoli datoteka v vidni mapi
+      const kopija = await kopirajGradnjo(root, deb);
+      if (!kopija) return { ok: false, razlog: "prenos" };
+      deb = kopija;
       vsota = await o.vsotaDatoteke(deb).catch(() => "");
       if (!/^[0-9a-f]{64}$/.test(vsota)) return { ok: false, razlog: "prenos" };
       if (gradnja !== null && !vsotaEnaka(vsota, gradnja.sha256)) return { ok: false, razlog: "vsota" };

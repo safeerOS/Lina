@@ -113,7 +113,9 @@ test("vir B: novejsi paket iz mape -> zagon locenega procesa z absolutnimi potmi
   for (const v of ["0.2.8", "0.2.9", "0.2.10"]) writeFileSync(path.join(mapa, `lina-lupina_${v}_amd64.deb`), `paket ${v}`);
   writeFileSync(path.join(dir, "posodobitev.json"), JSON.stringify({ mapa }));
   const deb = path.join(mapa, "lina-lupina_0.2.10_amd64.deb");
-  const { odv, zagoni } = lazno({ namescena: "0.2.8", paketi: { [deb]: { paket: "lina-lupina", razlicica: "0.2.10" } } });
+  // pregled 0213 A6: tudi vir »mapa« namesti zasebno kopijo v <podatki>/posodobitev (kot A-15 za gradnjo)
+  const kopija = path.join(path.resolve(dir), "posodobitev", "lina-lupina_0.2.10_amd64.deb");
+  const { odv, zagoni } = lazno({ namescena: "0.2.8", paketi: { [deb]: { paket: "lina-lupina", razlicica: "0.2.10" }, [kopija]: { paket: "lina-lupina", razlicica: "0.2.10" } } });
 
   const stanje = await stanjePosodobitve(token, dir, odv);
   assert.deepEqual(stanje, { naVoljo: true, namescena: "0.2.8", razpolozljiva: "0.2.10", vir: "mapa", novejsa: true, tece: false, napakaVira: false, zadnjiIzid: null });
@@ -122,7 +124,7 @@ test("vir B: novejsi paket iz mape -> zagon locenega procesa z absolutnimi potmi
   assert.deepEqual(izid, { ok: true, razlicica: "0.2.10" });
   assert.equal(zagoni.length, 1);
   assert.equal(zagoni[0]!.program, "/bin/bash");
-  assert.deepEqual(zagoni[0]!.argumenti, ["/opt/Lina/resources/lina/posodobi.sh", deb, path.resolve(dir), sha("paket 0.2.10")]);
+  assert.deepEqual(zagoni[0]!.argumenti, ["/opt/Lina/resources/lina/posodobi.sh", kopija, path.resolve(dir), sha("paket 0.2.10")]);
   assert.deepEqual(zagoni[0]!.env, { DISPLAY: ":0", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1/bus", HOME: "/tmp/h", PATH: "/usr/bin:/bin" }, "brez ELECTRON_RUN_AS_NODE, zetona lupine in kljucev");
   assert.equal(posodobitevTece(), true, "dokler skripta tece, je zaklep zaprt");
   assert.deepEqual(await zacniPosodobitev(token, dir, odv), { ok: false, razlog: "ze_tece" });
@@ -445,9 +447,30 @@ test("safeer-os: paket Line v mapi ne velja za safeer-os in obratno (ime iz dpkg
   writeFileSync(deb, "x");
   writeFileSync(path.join(mapa, "lina-lupina_9.9.9_amd64.deb"), "lina");
   writeFileSync(path.join(dir, "posodobitev.json"), JSON.stringify({ mapa }));
-  const { odv, zagoni } = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [deb]: { paket: "lina-lupina", razlicica: "0.4.97" } } });
+  const kopija = path.join(path.resolve(dir), "posodobitev", "safeer-os_0.4.97_amd64.deb");
+  const napacen = { paket: "lina-lupina", razlicica: "0.4.97" };
+  const { odv, zagoni } = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [deb]: napacen, [kopija]: napacen } });
   assert.deepEqual(await zacniPosodobitev(token, dir, odv, "safeer-os"), { ok: false, razlog: "napacen_paket" });
   assert.equal(zagoni.length, 0);
+});
+
+test("pregled 0213 A6: vir »mapa« za safeer-os - skripta dobi zasebno kopijo (0700); zamenjava datoteke v vidni mapi po preverbi ne vpliva", async () => {
+  const { dir, token } = await novaMapa();
+  const mapa = mkdtempSync(path.join(KOREN, "izhod-"));
+  const deb = path.join(mapa, "safeer-os_0.4.97_amd64.deb");
+  writeFileSync(deb, "pravi safeer");
+  writeFileSync(path.join(dir, "posodobitev.json"), JSON.stringify({ mapa }));
+  const kopija = path.join(path.resolve(dir), "posodobitev", "safeer-os_0.4.97_amd64.deb");
+  const p = { paket: "safeer-os", razlicica: "0.4.97" };
+  const { odv, zagoni } = laznoVec({ namescene: { "lina-lupina": "0.2.11", "safeer-os": "0.4.96" }, paketi: { [deb]: p, [kopija]: p } });
+  assert.deepEqual(await zacniPosodobitev(token, dir, odv, "safeer-os"), { ok: true, razlicica: "0.4.97" });
+  assert.equal(zagoni[0]!.argumenti[1], kopija, "skripta (pkexec dpkg -i) dobi kopijo, ne datoteke v vidni mapi");
+  assert.equal(zagoni[0]!.argumenti[3], sha("pravi safeer"));
+  // napadalec zamenja datoteko v vidni mapi med preverbo in vnosom gesla v pkexec: namesti se vseeno preverjena kopija
+  writeFileSync(deb, "tuj paket");
+  assert.equal(readFileSync(kopija, "utf8"), "pravi safeer");
+  assert.equal(statSync(path.dirname(kopija)).mode & 0o777, 0o700);
+  zagoni[0]!.otrok.emit("exit", 0);
 });
 
 function githubSafeer(o: { deb: Buffer; vsote: string }) {
