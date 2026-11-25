@@ -32,7 +32,8 @@ export type Odvisnosti = {
   zazeni: (ukaz: string, args: string[], opcije: SpawnOptions) => ChildProcess;
   izvrsljivo: () => string;
   korenOpenLine: () => string | null;
-  zaganjalnik: () => string;
+  /** Pot zaganjalnika za koren paketa OpenLine (brez korena: razvojna pot). */
+  zaganjalnik: (koren?: string) => string;
   pripraviLino: (root: string) => Promise<PripravaLine>;
   dataDir: (root: string) => string;
   prostaVrata: (naslov: string) => Promise<number>;
@@ -81,6 +82,21 @@ function jeZasebenIpv4(v: unknown): v is string {
     if (Number(del) > 255) return false;
   }
   return zasebenNaslov(v);
+}
+
+/** Ime zaganjalnika: v paketu je v korenu OpenLine (extraResources lupine -> lina/openline/), v razvoju ob tej datoteki. */
+export const IME_ZAGANJALNIKA = "openline-start.mjs";
+
+/**
+ * Naloga 16: zaganjalnik iz korena OpenLine (LINA_OPENLINE_DIR), ne iz import.meta.url. Po gradnji je ta koda v svezenju
+ * (.output/server/_ssr/router-*.mjs), kjer zaganjalnika ni; otrok se je takoj koncal (»OpenLine se ni pripravil pravocasno«).
+ */
+export function zaganjalnikZaKoren(koren?: string): string {
+  if (koren) {
+    const vPaketu = path.join(koren, IME_ZAGANJALNIKA);
+    if (fs.existsSync(vPaketu)) return vPaketu;
+  }
+  return privzetiZaganjalnik();
 }
 
 function privzetiZaganjalnik(): string {
@@ -249,7 +265,7 @@ export function privzeteOdvisnosti(delne?: Partial<Odvisnosti>): Odvisnosti {
     zazeni: delne?.zazeni ?? ((ukaz, args, opcije) => spawn(ukaz, args, opcije)),
     izvrsljivo: delne?.izvrsljivo ?? (() => process.execPath),
     korenOpenLine: delne?.korenOpenLine ?? (() => null),
-    zaganjalnik: delne?.zaganjalnik ?? privzetiZaganjalnik,
+    zaganjalnik: delne?.zaganjalnik ?? zaganjalnikZaKoren,
     pripraviLino:
       delne?.pripraviLino ??
       (async () => {
@@ -289,6 +305,11 @@ export async function zagotoviOpenLine(
   const koren = path.resolve(surovKoren);
   const vstopna = path.join(koren, "dist", "index.js");
   if (!fs.existsSync(vstopna)) {
+    throw new Error("OpenLine ni v paketu");
+  }
+  // naloga 16: brez zaganjalnika se otrok takoj konca; jasna napaka namesto cakanja na rok pripravljenosti
+  const zaganjalnik = o.zaganjalnik(koren);
+  if (!fs.existsSync(zaganjalnik)) {
     throw new Error("OpenLine ni v paketu");
   }
 
@@ -373,7 +394,7 @@ export async function zagotoviOpenLine(
         // 6. Zagon otroka prek zaganjalnika (shell: false, samo sestavljeno okolje).
         varnoZabelezi(o.dnevnik, "openline:zagon");
         try {
-          otrok = o.zazeni(o.izvrsljivo(), [o.zaganjalnik(), vstopna], {
+          otrok = o.zazeni(o.izvrsljivo(), [zaganjalnik, vstopna], {
             env: okolje,
             cwd: koren,
             stdio: ["pipe", "pipe", "pipe"],

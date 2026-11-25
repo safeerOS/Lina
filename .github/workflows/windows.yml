@@ -124,15 +124,23 @@ jobs:
           test -f "$R/openline/node_modules/express/package.json"
           test -f "$R/openline/node_modules/ws/package.json"
           test -f "$R/openline/node_modules/selfsigned/package.json"
+          # naloga 16: zaganjalnik OpenLine mora biti v paketu (razresi se iz korena OpenLine, ne iz svezenja)
+          test -f "$R/openline/openline-start.mjs"
           test -f "$R/node_modules/jazz-tools/package.json"
           test -f "$R/node_modules/unpdf/package.json"
           test -f "$R/rsdo-streznik.py"
+          # naloga 16: datoteke, ki jih koda bere ob paketu (koren iz vstopne datoteke streznika, viri-paketa.server.ts)
+          test -f "$R/kontrola_tiska.py"
+          test -f "$R/podatki/learn-anything-teme.json"
+          test -f "$R/podatki/LEARN-ANYTHING-MIT.txt"
           test -f "$R/vendor/rnnoise-wasm/LICENSE"
           test -f "$R/vendor/rnnoise-wasm/COPYING-RNNOISE"
           test -f "$R/vendor/rnnoise-wasm/NOTICE"
           grep -rqs 'rnnoise_process_frame' "$R/.output/server"
           # lupina (Node v Electronu) se zazene na tekacu Windows
           ELECTRON_RUN_AS_NODE=1 izid/win-unpacked/Lina.exe -p 'process.versions.node'
+          # naloga 16: OpenLine iz paketa se zazene prek zaganjalnika (kot v Lini) in javi pripravljenost na 127.0.0.1
+          ELECTRON_RUN_AS_NODE=1 timeout 90 izid/win-unpacked/Lina.exe scripts/preverba-openline-paketa.mjs "$(cygpath -w "$PWD/$R")"
           (cd izid && sha256sum Lina-*-x64-namestitev.exe) | tee izid/sha256.txt
           {
             echo "### Namestitev za Windows (NSIS x64, nepodpisana)"

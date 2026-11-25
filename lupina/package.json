@@ -1,7 +1,7 @@
 {
   "name": "lina-lupina",
   "productName": "Lina",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "Lina - AI telefonska tajnica",
   "author": "Safeer <info@safeer.si>",
   "homepage": "https://safeer.si",
@@ -37,6 +37,10 @@
         "to": "lina/openline/node_modules"
       },
       {
+        "from": "../src/lib/lina/openline-start.mjs",
+        "to": "lina/openline/openline-start.mjs"
+      },
+      {
         "from": "../jazz-paket/node_modules",
         "to": "lina/node_modules"
       },
@@ -47,6 +51,14 @@
       {
         "from": "../scripts/rsdo-streznik.py",
         "to": "lina/rsdo-streznik.py"
+      },
+      {
+        "from": "../scripts/kontrola_tiska.py",
+        "to": "lina/kontrola_tiska.py"
+      },
+      {
+        "from": "../src/lib/lina/podatki",
+        "to": "lina/podatki"
       },
       {
         "from": "../vendor/rnnoise-wasm",

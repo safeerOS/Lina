@@ -45,6 +45,7 @@ import {
 } from "./kontrola-tiska.ts";
 import { narociloZaNalog, uvoziNarocilaLina } from "./narocila.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
+import { datotekaPaketa } from "./viri-paketa.server.ts";
 import { preveriMapoZapiskov } from "./zapiski-mapa.server.ts";
 
 export const DATOTEKA_NASTAVITEV = "kontrola-tiska.json";
@@ -54,8 +55,7 @@ export const ROK_NAMESTITVE_MS = 20 * 60_000;
 const NAJVEC_IZHODA = 2 * 1024 * 1024;
 const ID_KONTROLE = /^[0-9]{8}-[0-9]{6}-[a-f0-9]{6}$/;
 
-// V paketu deb je skripta v resources/lina (kot rsdo-streznik.py); v razvoju v scripts/ projekta.
-const SKRIPTA_PAKET = "/opt/Lina/resources/lina/kontrola_tiska.py";
+// V paketu (deb in NSIS) je skripta v resources/lina (kot rsdo-streznik.py; naloga 16: prej je v paketu ni bilo); v razvoju v scripts/ projekta.
 const SKRIPTA_RAZVOJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "kontrola_tiska.py");
 
 export type IzidZagona = { koda: number | null; stdout: string; stderr: string; casovnaMeja: boolean };
@@ -103,7 +103,7 @@ function pythonPrivzeto(root: string): string {
   return pythonOkolja(path.join(root, MAPA_OKOLJA), windows());
 }
 
-const skripta = () => odv.skripta ?? (existsSync(SKRIPTA_PAKET) ? SKRIPTA_PAKET : SKRIPTA_RAZVOJ);
+const skripta = () => odv.skripta ?? datotekaPaketa("kontrola_tiska.py", SKRIPTA_RAZVOJ);
 const zagon: Zagon = (p, a, o) => (odv.zagon ?? zagonPrivzeto)(p, a, o);
 const python = (root: string) => (odv.python ?? pythonPrivzeto)(root);
 

@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { datotekaPaketa } from "./viri-paketa.server.ts";
 
 export interface Tema {
   name: string;
@@ -14,7 +15,8 @@ let predpomnjeno: Map<string, Tema> | null = null;
 
 export function naloziIndeksTem(besedilo?: string): Map<string, Tema> {
   if (!besedilo && predpomnjeno) return predpomnjeno;
-  const surovo = besedilo ?? readFileSync(join(dirname(fileURLToPath(import.meta.url)), "podatki", "learn-anything-teme.json"), "utf8");
+  // naloga 16: v paketu je indeks v resources/lina/podatki (ob svezenju ga ni; napako klicatelji tiho pozrejo)
+  const surovo = besedilo ?? readFileSync(datotekaPaketa(join("podatki", "learn-anything-teme.json"), join(dirname(fileURLToPath(import.meta.url)), "podatki", "learn-anything-teme.json")), "utf8");
   const sez: unknown = JSON.parse(surovo);
   if (!Array.isArray(sez)) throw new Error("indeks tem ni seznam");
   const m = new Map<string, Tema>();

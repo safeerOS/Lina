@@ -127,9 +127,15 @@ jobs:
           grep -q 'resources/lina/openline/node_modules/express/package.json' vsebina-deb.txt
           grep -q 'resources/lina/openline/node_modules/ws/package.json' vsebina-deb.txt
           grep -q 'resources/lina/openline/node_modules/selfsigned/package.json' vsebina-deb.txt
+          # naloga 16: zaganjalnik OpenLine (0.2.9-0.2.13 ga ni imel: »OpenLine se ni pripravil pravocasno«)
+          grep -q 'resources/lina/openline/openline-start.mjs$' vsebina-deb.txt
           grep -q 'resources/lina/node_modules/jazz-tools/package.json' vsebina-deb.txt
           grep -q 'resources/lina/node_modules/unpdf/package.json' vsebina-deb.txt
           grep -q 'resources/lina/rsdo-streznik.py' vsebina-deb.txt
+          # naloga 16: datoteke, ki jih koda bere ob paketu (koren iz vstopne datoteke streznika, viri-paketa.server.ts)
+          grep -q 'resources/lina/kontrola_tiska.py$' vsebina-deb.txt
+          grep -q 'resources/lina/podatki/learn-anything-teme.json$' vsebina-deb.txt
+          grep -q 'resources/lina/podatki/LEARN-ANYTHING-MIT.txt$' vsebina-deb.txt
           # pregled 0213 C1: licence RNNoise (BSD-3 tocka 2) in ovoja (Apache-2.0 4(a)) morajo biti v paketu
           grep -q 'resources/lina/vendor/rnnoise-wasm/LICENSE$' vsebina-deb.txt
           grep -q 'resources/lina/vendor/rnnoise-wasm/COPYING-RNNOISE$' vsebina-deb.txt
@@ -156,6 +162,8 @@ jobs:
           grep -rqs 'rnnoise_process_frame' "$X/opt/Lina/resources/lina/.output/server"
           # Najprej sama lupina: manjkajoca knjiznica na streznikih GitHub ni napaka pakiranja.
           ELECTRON_RUN_AS_NODE=1 "$L" -p 'process.versions.node'
+          # naloga 16: OpenLine iz paketa se res zazene prek zaganjalnika (kot v Lini) in javi pripravljenost na 127.0.0.1
+          ELECTRON_RUN_AS_NODE=1 timeout 90 "$L" "$GITHUB_WORKSPACE/scripts/preverba-openline-paketa.mjs" "$X/opt/Lina/resources/lina"
           python3 scripts/preverba-paketa-pdf.py "$RUNNER_TEMP/vzorec.pdf" "Pozdrav Lina PDF"
           # Iz mape brez node_modules: otrok razresuje golo ime iz delovne mape, v $GITHUB_WORKSPACE bi nasel unpdf iz npm ci.
           cd "$X"

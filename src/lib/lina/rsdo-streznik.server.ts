@@ -1,9 +1,9 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { imaSlovenskiModul, platformaZdaj, type Platforma } from "./platforma.server.ts";
+import { datotekaPaketa } from "./viri-paketa.server.ts";
 
 /**
  * Stalni proces RSDO (lastnik 23. 11. 2026): »se bo naložil v pomnilnik ko ga bo uporabnik vklopil ... izklopil se bo samo ko ga bo
@@ -38,11 +38,11 @@ export const ROK_UGASANJA_MS = 5000;
 const PREMOR_PONOVITVE_MS = 1000;
 const PREMOR_PONOVNE_PREVERBE_MS = 60_000;
 const NAJVEC_VRSTICE = 1024 * 1024;
-// V paketu deb je skripta v resources/lina (extraResources v gradnji); v razvoju v scripts/ projekta.
-// Pot iz import.meta.url v zgrajenem strezniku (.output/server/chunks) ne kaze na scripts/, zato najprej namescena pot (pregled 23. 11. 2026).
-const SKRIPTA_PAKET = "/opt/Lina/resources/lina/rsdo-streznik.py";
+// V paketu (deb in NSIS) je skripta v resources/lina (extraResources v gradnji); v razvoju v scripts/ projekta.
+// Pot iz import.meta.url v zgrajenem strezniku (.output/server/_ssr) ne kaze na scripts/, zato najprej pot v paketu (pregled 23. 11. 2026;
+// naloga 16: koren paketa iz vstopne datoteke streznika, ne trda pot /opt/Lina, ki je na Windows ni).
 const SKRIPTA_RAZVOJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "rsdo-streznik.py");
-const SKRIPTA = existsSync(SKRIPTA_PAKET) ? SKRIPTA_PAKET : SKRIPTA_RAZVOJ;
+const SKRIPTA = datotekaPaketa("rsdo-streznik.py", SKRIPTA_RAZVOJ);
 
 type Notranje = {
   zelen: boolean;
