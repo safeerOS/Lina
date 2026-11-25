@@ -11,7 +11,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { setupOwner } from "./auth.server.ts";
 import {
-  DATOTEKA_NASTAVITVE, IME_VNOSA, OZNAKA_VNOSA, mapaSamodejnegaZagona, nastaviSamodejniZagon, stanjeSamodejnegaZagona,
+  DATOTEKA_NASTAVITVE, IME_VNOSA, OZNAKA_VNOSA, izvedljivaLupine, mapaSamodejnegaZagona, nastaviSamodejniZagon, stanjeSamodejnegaZagona,
   uskladiSamodejniZagon, vsebinaVnosa,
 } from "./samodejni-zagon.server.ts";
 
@@ -112,7 +112,12 @@ describe("zagon ob prijavi", () => {
   });
 
   it("Exec: narekovaji, poševnice, $ in ` so ubezani (specifikacija Desktop Entry)", () => {
-    assert.match(vsebinaVnosa('/x/a"b$c`d\\e'), /\nExec="\/x\/a\\"b\\\$c\\`d\\\\e" --ozadje\n/);
+    // pregled 0213 A13: pravilo narekovajev (\" \$ \` \\), nato splosno pravilo niza (\ -> \\) in % -> %%; prejsnjo obliko
+    // (\" \$ ...) GLib.KeyFile zavrne kot vrednost, ki je ni mogoce razloziti (preverjeno 25. 11. 2026), ta se vrne v izvirno pot
+    const p = "\\".repeat(2);
+    const vrstica = vsebinaVnosa('/x/a"b$c`d\\e%f').split("\n").find((v) => v.startsWith("Exec="));
+    assert.equal(vrstica, `Exec="/x/a${p}"b${p}$c${p}\`d${p}${p}e%%f" --ozadje`);
+    assert.equal(izvedljivaLupine({ ELECTRON_RUN_AS_NODE: "1" }, "/opt/Lina\nX-Zlonamerno=1/lina-lupina"), null, "nova vrstica v poti");
   });
 
   it("XDG_CONFIG_HOME (absolutna) ima prednost pred HOME/.config", () => {

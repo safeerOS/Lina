@@ -43,14 +43,19 @@ export function mapaSamodejnegaZagona(env: NodeJS.ProcessEnv = process.env): str
  * Nezapakirana lupina (razvoj) tece kot gol »electron«: tak vnos bi ob prijavi odprl prazen Electron, zato ga ni.
  */
 export function izvedljivaLupine(env: NodeJS.ProcessEnv = process.env, izvedljiva: string = process.execPath): string | null {
-  if (env.ELECTRON_RUN_AS_NODE !== "1" || !path.isAbsolute(izvedljiva)) return null;
+  // A13: nova vrstica v poti bi v datoteko autostart vnesla nov kljuc
+  if (env.ELECTRON_RUN_AS_NODE !== "1" || !path.isAbsolute(izvedljiva) || /[\r\n]/.test(izvedljiva)) return null;
   if (/^electron(\.exe)?$/i.test(path.basename(izvedljiva))) return null;
   return izvedljiva;
 }
 
-/** Vrednost za Exec po specifikaciji Desktop Entry: pot v narekovajih, posebni znaki ubezani. */
+/**
+ * Vrednost za Exec po specifikaciji Desktop Entry: pot v narekovajih, " ` $ \ ubezani (pravilo narekovajev), nato splosno pravilo za niz
+ * (\ -> \\, zato je dobesedna posevnica \\\\) in % -> %% (koda polja). Pregled 0213 A13: prej GLib vrednosti s temi znaki ni razclenil
+ * (»value that cannot be interpreted«, preverjeno z GLib.KeyFile 25. 11. 2026).
+ */
 function argumentExec(pot: string): string {
-  return `"${pot.replace(/[\\"`$]/g, (z) => `\\${z}`)}"`;
+  return `"${pot.replace(/[\\"`$]/g, (z) => `\\${z}`)}"`.replace(/\\/g, "\\\\").replace(/%/g, "%%");
 }
 
 export function vsebinaVnosa(izvedljiva: string): string {
