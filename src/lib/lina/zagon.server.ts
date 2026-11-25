@@ -7,6 +7,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { registrirajVezoKlicev, uskladiAsistenta } from "./asistent-telefon.server.ts";
 // locen uvoz: preizkus naloga-veza-openline zaklepa zgornjo vrstico dobesedno
 import { registrirajRele } from "./asistent-telefon.server.ts";
+import { zacniNadzorNaslova } from "./asistent-telefon.server.ts";
 import { zazeniAvtonomijo } from "./avtonomija-izvedba.server.ts";
 import { zazeniRazporejevalnik } from "./claude-naloge.server.ts";
 import { uskladiGlasTelefona } from "./glas-telefon.server.ts";
@@ -59,6 +60,8 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
   await import("./orkestrator.server.ts").then((m) => m.zazeniOrkestrator(dir)).catch(() => undefined);
   // telefon za asistentko: zazene se samo, ce ga je lastnik vklopil (privzeto izklopljeno); napaka ne podre zagona glasu
   await uskladiAsistenta(dir).catch(() => undefined);
+  // naloga 15: ob menjavi omrezja (Wi-Fi -> kabel) Lina sama preide na nov naslov in vrne Global Link (vsakih 30 s)
+  zacniNadzorNaslova(dir);
   // priklop mosta Live (L3) za ta streznik; sam nic ne vklopi, brez vklopljenega stikala pot telefona ne tece
   registrirajPrikljucekTelefona(dir);
   // glas telefona (/api/voice/telefon, L2): zazene se samo, ce ga je lastnik vklopil (privzeto izklopljeno)

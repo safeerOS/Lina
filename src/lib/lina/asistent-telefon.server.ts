@@ -19,7 +19,8 @@ import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { IzvajalecClaudeCode } from "./asistent.server.ts";
 import { AsistentStreznik, zasebenNaslov, type Seznanitve, type StanjeSeznanitve } from "./asistent-streznik.server.ts";
-import { zasebniNaslovi } from "./zasebno-omrezje.server.ts";
+import { izberiLanNaslov, izvorPrivzetePoti, naslovNaVmesniku, zasebniNaslovi } from "./zasebno-omrezje.server.ts";
+import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import { requireOwner } from "./auth.server.ts";
 import { ID_NAPRAVE, potVticnice } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
@@ -110,7 +111,15 @@ type Tekoci = {
   /** Global Link (naloga 22): agent releja, ce je nastavitev vklopljena; sicer null. */
   rele: AgentReleja | null;
   globalLink: boolean;
+  /** Naslov in vrata iz nastavitev; naslov/vrata zgoraj sta dejansko vezana (v rezervi 127.0.0.1 in prosta vrata). */
+  zeleniNaslov: string;
+  zelenaVrata: number;
+  /** Naloga 15: lokalni naslov ni na voljo (»naslov«) ali vrata zasedena (»vrata«): tece samo Global Link; null = doma dosegljiv. */
+  rezerva: "naslov" | "vrata" | null;
 };
+
+/** Koda napake asistenta za vmesnik (besedilo v jeziku vmesnika: telNapaka_<koda>); prazno = brez napake. */
+export type KodaNapakeAsistenta = "" | "naslov" | "vrata" | "drugo";
 
 type Stanje = {
   tekoci: Tekoci | null; napaka: string; prijave: Map<string, Prijava>; veriga: Promise<unknown>; opozoriloKlicev: string;
@@ -124,7 +133,13 @@ type Stanje = {
   opozoriloPripraveKlicev?: string;
   /** Za preizkuse: lazno omrezje za oglas DNS-SD. */
   omrezje?: Pick<MoznostiOglasa, "vticnica" | "maska" | "platforma">;
+  napakaKoda?: KodaNapakeAsistenta;
+  /** Naloga 15: za preizkuse lazni vmesniki in izvor privzete poti (sicer networkInterfaces in izvorPrivzetePoti). */
+  omrezjeNaslovov?: OmrezjeNaslovov | null;
+  /** Naloga 15: obcasno preverjanje naslova (zagon programa). */
+  nadzor?: ReturnType<typeof setInterval> | null;
 };
+type OmrezjeNaslovov = { vmesniki: () => NodeJS.Dict<NetworkInterfaceInfo[]>; izvor: () => Promise<string | null> };
 const KLJUC = Symbol.for("lina.asistent.telefon");
 function stanje(): Stanje {
   const g = globalThis as { [KLJUC]?: Stanje };
@@ -264,18 +279,80 @@ async function ustavi(): Promise<void> {
   await ustaviPotKlicev();
 }
 
+/** Za preizkuse: lazni vmesniki in izvor privzete poti (null = pravo omrezje). */
+export function nastaviOmrezjeNaslovov(o: OmrezjeNaslovov | null): void {
+  stanje().omrezjeNaslovov = o;
+}
+const vmesniki = () => stanje().omrezjeNaslovov?.vmesniki() ?? networkInterfaces();
+const izvorPoti = () => stanje().omrezjeNaslovov?.izvor() ?? izvorPrivzetePoti();
+
+function vrstaNapake(e: unknown): Exclude<KodaNapakeAsistenta, ""> {
+  const c = (e as NodeJS.ErrnoException)?.code;
+  return c === "EADDRNOTAVAIL" ? "naslov" : c === "EADDRINUSE" ? "vrata" : "drugo";
+}
+function nastaviNapako(e: unknown): void {
+  const v = vrstaNapake(e);
+  stanje().napakaKoda = v;
+  stanje().napaka = v === "vrata" ? "Vrata so zasedena." : v === "naslov" ? "Naslova ta racunalnik nima vec." : (e as Error).message.slice(0, 200);
+}
+
+/**
+ * Naloga 15: shranjenega naslova ni vec na nobenem vmesniku (npr. Wi-Fi -> kabel) -> trenutni naslov lokalnega omrezja (izberiLanNaslov)
+ * se uporabi in shrani, brez uporabnikovega klika. Ce novega ni, ostane shranjeni (ko se omrezje vrne, velja spet).
+ */
+async function slediNaslovu(root: string, n: Nastavitve): Promise<Nastavitve> {
+  if (!n.vklop || naslovNaVmesniku(n.naslov, vmesniki())) return n;
+  const nov = izberiLanNaslov(vmesniki(), await izvorPoti());
+  if (!nov || nov === n.naslov) return n;
+  // isti zaklep kot seznam naprav (A-12), z novim branjem: ne prepise imen ali lastnikove sprotne izbire
+  return naSeznamu(async () => {
+    const m = await preberiNastavitve(root);
+    if (m.naslov !== n.naslov || !m.vklop) return m;
+    const z = { ...m, naslov: nov };
+    await writeJson(root, NASTAVITVE_ASISTENTA, z satisfies Nastavitve);
+    return z;
+  });
+}
+
+/**
+ * Naloga 15: ali je treba uskladiti zaradi omrezja (obcasno iz zagona programa). Zdrav streznik na naslovu, ki se obstaja, pusti
+ * pri miru (ponovni zagon bi zaprl okno kode in naloge). true = uskladitev je tekla.
+ */
+export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
+  const root = resolveDataDir(dir);
+  if (!(await preberiNastavitve(root)).vklop) return false;
+  const t = stanje().tekoci;
+  const v = vmesniki();
+  const treba = !t
+    || (t.rezerva === "naslov" && (naslovNaVmesniku(t.zeleniNaslov, v) || izberiLanNaslov(v, await izvorPoti()) !== null))
+    || (t.rezerva === null && !naslovNaVmesniku(t.naslov, v));
+  if (treba) await uskladiAsistenta(root);
+  return treba;
+}
+
+/** Naloga 15: preverjanje naslova vsakih [ms] (zagon programa); ponovni klic zamenja prejsnji casovnik. */
+export function zacniNadzorNaslova(dir?: string, ms = 30_000): void {
+  const root = resolveDataDir(dir);
+  if (stanje().nadzor) clearInterval(stanje().nadzor!);
+  const i = setInterval(() => { void preveriNaslovAsistenta(root).catch(() => undefined); }, ms);
+  i.unref?.();
+  stanje().nadzor = i;
+}
+
 /** Uskladi tekoci streznik z nastavitvami (zagon Line, sprememba nastavitev). Napaka zagona se zapomni za prikaz. */
 export function uskladiAsistenta(dir?: string): Promise<void> {
   return zaporedno(async () => {
     const root = resolveDataDir(dir);
-    const n = await preberiNastavitve(root);
+    const n = await slediNaslovu(root, await preberiNastavitve(root));
     const t = stanje().tekoci;
-    if (t && (!n.vklop || t.naslov !== n.naslov || t.vrata !== n.vrata || t.globalLink !== n.globalLink)) await ustavi();
+    if (t && (!n.vklop || t.zeleniNaslov !== n.naslov || t.zelenaVrata !== n.vrata || t.globalLink !== n.globalLink
+      // rezerva zaradi naslova: naslov je spet tu; doma dosegljiv: vezani naslov je izginil (rezerva »vrata« se ne ponavlja, da rele ne utripa)
+      || (t.rezerva === "naslov" ? naslovNaVmesniku(n.naslov, vmesniki()) : t.rezerva === null && !naslovNaVmesniku(t.naslov, vmesniki())))) await ustavi();
     if (!n.vklop || stanje().tekoci) {
-      if (!n.vklop) stanje().napaka = "";
-      // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi()
+      if (!n.vklop) { stanje().napaka = ""; stanje().napakaKoda = ""; }
+      // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi(); v rezervi ne (127.0.0.1)
       const tek = stanje().tekoci;
-      if (tek) void pripraviPotKlicev(root, tek.naslov);
+      if (tek && !tek.rezerva) void pripraviPotKlicev(root, tek.naslov);
       return;
     }
     try {
@@ -311,7 +388,8 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       });
       let streznik: AsistentStreznik | null = null;
       const koda = new SeznanitevSKodo({ varovalka, odtis: () => streznik?.odtis ?? "" });
-      koda.obOdprtju = () => zacniOglas(n.naslov, n.vrata);
+      // oglas na dejansko vezanem naslovu (ne na naslovu iz nastavitev ob zagonu); v rezervi ni oglasa
+      koda.obOdprtju = () => { const tt = stanje().tekoci; if (tt && tt.koda === koda && !tt.rezerva) zacniOglas(tt.naslov, tt.vrata); };
       koda.obZaprtju = ustaviOglas;
       // ocena cilja ob izidu agenta: samo predlog na telefon, nadaljevanje podpise naprava (cilj-naloge.server.ts)
       const sCiljem = ovijCilj(izvajalec, oceniZModelom(() => pogovorBrain(root), undefined, () => dovoliOcenoIzida(root)));
@@ -343,10 +421,26 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         stanje: async () => telefonVprasanja(root),
         odgovori: (id: string, odlocitev: string, zgostitev: string, naprava: string) => telefonOdgovor(root, id, odlocitev, zgostitev, naprava),
       };
-      streznik = new AsistentStreznik({ root, naslov: n.naslov, vrata: n.vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje, agentiNaloge, vprasanjaAgentov,
-        omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null });
+      const novStreznik = (naslov: string, vrata: number) => new AsistentStreznik({ root, naslov, vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje,
+        agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null });
       try {
-        const { naslov, vrata, odtis } = await streznik.zazeni();
+        let rezerva: Tekoci["rezerva"] = null;
+        let napakaLan: unknown = null;
+        let zagnan: { naslov: string; vrata: number; odtis: string };
+        try {
+          streznik = novStreznik(n.naslov, n.vrata);
+          zagnan = await streznik.zazeni();
+        } catch (e) {
+          // Naloga 15: Global Link ni odvisen od lokalnega naslova - streznik brez LAN vticnice (127.0.0.1, prosta vrata) za kanale releja
+          const v = vrstaNapake(e);
+          if (v === "drugo" || !kljucR || !stanje().rele) throw e;
+          await streznik?.ustavi();
+          streznik = novStreznik("127.0.0.1", 0);
+          zagnan = await streznik.zazeni();
+          rezerva = v;
+          napakaLan = e;
+        }
+        const { naslov, vrata, odtis } = zagnan;
         const s = streznik;
         // Global Link: na releju so dovoljene samo naprave, ki jih je lastnik dodal (id iz kljuca, kot v Safeer Linku)
         const povezavaReleja = stanje().rele;
@@ -357,17 +451,21 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
           sprejmi: (d) => s.sprejmiOddaljeno(d, "rele"),
         }) : null;
         rele?.zazeni();
-        stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka, rele, globalLink: n.globalLink };
-        stanje().napaka = "";
-        void pripraviPotKlicev(root, naslov); // v ozadju: uporabnik ne caka; napaka postane opozorilo
+        stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka, rele, globalLink: n.globalLink,
+          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva };
+        if (rezerva) nastaviNapako(napakaLan); // vidno v Poveži telefon: doma telefon Line ne doseze, Global Link tece
+        else {
+          stanje().napaka = "";
+          stanje().napakaKoda = "";
+          void pripraviPotKlicev(root, naslov); // v ozadju: uporabnik ne caka; napaka postane opozorilo
+        }
       } catch (e) {
         clearInterval(osvezi);
         izvajalec.zapri();
         throw e;
       }
     } catch (e) {
-      const c = (e as NodeJS.ErrnoException).code;
-      stanje().napaka = c === "EADDRINUSE" ? "Vrata so zasedena." : c === "EADDRNOTAVAIL" ? "Naslova ta racunalnik nima vec." : (e as Error).message.slice(0, 200);
+      nastaviNapako(e);
     }
   });
 }
@@ -382,8 +480,13 @@ export type StanjeAsistenta = {
   naslov: string;
   vrata: number;
   naslovi: string[];
+  /** Streznik sprejema telefon doma (v rezervi samo Global Link: false). */
   tece: boolean;
   napaka: string;
+  /** Naloga 15: koda napake za besedilo v jeziku vmesnika (telNapaka_<koda>). */
+  napakaKoda: KodaNapakeAsistenta;
+  /** Naloga 15: lokalnega naslova ni (ali vrata zasedena), tece samo Global Link. */
+  samoGlobalLink: boolean;
   odtis: string;
   claudeCode: boolean;
   cakajo: Array<{ koda: string; id: string; ime: string }>;
@@ -410,7 +513,8 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
   const ozjiKrog: string[] = [];
   for (const [koda, p] of stanje().prijave) if (p.stanje === "caka" && p.naprava && await jeClanKroga(p.naprava.kljuc, p.naprava.id)) ozjiKrog.push(koda);
   return {
-    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t, napaka: stanje().napaka, odtis: t?.odtis ?? "",
+    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t && !t.rezerva, napaka: stanje().napaka,
+    napakaKoda: stanje().napakaKoda ?? "", samoGlobalLink: !!t?.rezerva, odtis: t?.odtis ?? "",
     claudeCode: t ? await t.izvajalec.razpolozljiv().catch(() => false) : false,
     cakajo,
     ozjiKrog,
@@ -487,6 +591,9 @@ async function potKlicev(root: string, t: Tekoci, openline: typeof povabiloOpenL
   }
 }
 
+/** Naloga 15: v rezervi (samo Global Link) QR in koda ne izdata naslova 127.0.0.1, ki ga telefon ne doseze. */
+const NI_LAN_SEZNANITEV = "Racunalnik nima naslova v domacem omrezju; seznanjanje doma ni mogoce (Global Link tece).";
+
 export type Povabilo = { vsebina: string; svg: string; velja: number; klici: boolean; opozorilo: string };
 
 /**
@@ -498,6 +605,7 @@ export async function zacniSeznanitev(token: string | null, dir?: string): Promi
   await requireOwner(token, root);
   const t = stanje().tekoci;
   if (!t) throw new Error("Najprej vklopite telefon za asistentko.");
+  if (t.rezerva) throw new Error(NI_LAN_SEZNANITEV);
   await pocakajPotKlicev(root, t.naslov); // pot klicev tece ze od vklopa; to jo zagotovi, ce je med tem padla
   pocistiPrijave();
   const koda = randomBytes(16).toString("base64url");
@@ -516,6 +624,7 @@ export async function zacniSeznanitevSKodo(token: string | null, dir?: string): 
   await requireOwner(token, root);
   const t = stanje().tekoci;
   if (!t) throw new Error("Najprej vklopite telefon za asistentko.");
+  if (t.rezerva) throw new Error(NI_LAN_SEZNANITEV);
   await pocakajPotKlicev(root, t.naslov);
   const { koda, do: doMs } = t.koda.odpri();
   return { koda, do: doMs, klici: (await stanjeOpenLine(root)).povezan, opozorilo: "" };
@@ -609,7 +718,7 @@ export async function odlociSeznanitev(token: string | null, koda: unknown, spre
     const t = stanje().tekoci;
     stanje().opozoriloKlicev = "";
     p.klici = null;
-    if (t) {
+    if (t && !t.rezerva) {
       const { klici, opozorilo } = await potKlicev(root, t, openline, rokKlicevMs);
       p.klici = klici ? { url: klici.url, code: klici.koda, fp: klici.odtis } : null;
       stanje().opozoriloKlicev = opozorilo;
@@ -642,6 +751,9 @@ export async function ponastaviAsistenta(): Promise<void> {
   await ustavi();
   stanje().prijave.clear();
   stanje().napaka = "";
+  stanje().napakaKoda = "";
   stanje().opozoriloKlicev = "";
   stanje().opozoriloPripraveKlicev = "";
+  if (stanje().nadzor) clearInterval(stanje().nadzor!);
+  stanje().nadzor = null;
 }

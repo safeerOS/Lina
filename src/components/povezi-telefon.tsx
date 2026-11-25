@@ -48,10 +48,10 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
 
   // med cakanjem na telefon osvezi stanje (prijava telefona, seja Claude Code)
   useEffect(() => {
-    if (!s?.tece) return;
+    if (!s?.vklop) return;
     const i = setInterval(() => { void stanjeAsistentaFn().then(setS).catch(() => undefined); }, 3000);
     return () => clearInterval(i);
-  }, [s?.tece]);
+  }, [s?.vklop]);
 
   async function izvedi(delo: () => Promise<void>) {
     setZaposlen(true);
@@ -128,6 +128,9 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
         </label>
         <button type="submit" disabled={zaposlen} className={gumb}>{t("telShrani")}</button>
       </form>
+      {/* naloga 15: napaka je vidna vedno (tudi ko tece samo Global Link), v jeziku vmesnika; podrobnost streznika samo pri »drugo« */}
+      {s.napakaKoda ? <p role="alert" className="text-sm text-[var(--color-signal)]">{t(`telNapaka_${s.napakaKoda}`)}{s.napakaKoda === "drugo" && s.napaka ? ` (${s.napaka})` : ""}</p> : null}
+      {s.samoGlobalLink ? <p role="status" className="text-sm">{t("telSamoGlobalLink")}</p> : null}
       {s.tece ? (
         <>
           <p className="text-sm">{t("telTece")} {s.naslov}:{s.vrata}</p>
@@ -197,7 +200,7 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
           ) : null}
         </>
       ) : (
-        <p className="text-sm">{s.napaka || t("telNeTece")}</p>
+        s.samoGlobalLink ? null : <p className="text-sm">{t("telNeTece")}</p>
       )}
       {s.cakajo.map((c) => {
         // N5d: tudi clan ozjega kroga Safeer Linka vidi id in ga potrdi (telefon za Lino vedno zahteva dotik »ID se ujema«, zato bi

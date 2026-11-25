@@ -5,6 +5,7 @@
  * Brez uvozov iz asistent-*, kanal-claude* in poti klica (preizkus v glas-telefon.test.ts).
  */
 import { generateKeyPairSync, randomBytes, sign, X509Certificate, createPrivateKey } from "node:crypto";
+import { createSocket } from "node:dgram";
 import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import path from "node:path";
@@ -179,6 +180,44 @@ export async function potrdiloVMapi(
     }
   }
   return { ...nov, odtis: odtisPotrdila(nov.cert) };
+}
+
+/** Vmesniki, na katerih telefon v domacem omrezju Line ne doseze (vsebniki, mostovi, navidezni, VPN, loopback). */
+const NI_LAN = /^(lo|docker|br-|veth|virbr|vboxnet|vmnet|cni|flannel|podman|lxc|lxd|tun|tap|wg|zt|tailscale|vethernet)/i;
+
+/**
+ * Naloga 15: naslov v lokalnem omrezju, ko shranjenega ni vec (menjava Wi-Fi -> kabel). Prednost ima vmesnik privzete poti
+ * ([izvor] = izvorni naslov privzete poti), nato drugi pravi vmesniki; zasebni IPv4 pred ULA; nikoli javni, notranji ali NI_LAN.
+ */
+export function izberiLanNaslov(vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, izvor: string | null): string | null {
+  const kandidati: Array<{ naslov: string; ocena: number }> = [];
+  for (const [ime, v] of Object.entries(vmesniki)) {
+    if (NI_LAN.test(ime)) continue;
+    const privzeti = !!izvor && (v ?? []).some((e) => e.address === izvor);
+    for (const e of v ?? []) {
+      const je4 = e.family === "IPv4" || (e.family as unknown) === 4; // Node 18.0-18.3: stevilka
+      if (e.internal || !zasebenNaslov(e.address) || (!je4 && !/^f[cd]/i.test(e.address))) continue;
+      kandidati.push({ naslov: e.address, ocena: (je4 ? 0 : 2) + (privzeti ? 0 : 1) });
+    }
+  }
+  kandidati.sort((a, b) => a.ocena - b.ocena);
+  return kandidati[0]?.naslov ?? null;
+}
+
+/** Izvorni naslov privzete poti IPv4 (UDP connect na TEST-NET, nic se ne poslje); deluje na Linuxu in Windows. null = ni poti. */
+export function izvorPrivzetePoti(): Promise<string | null> {
+  return new Promise((ok) => {
+    const s = createSocket("udp4");
+    const konec = (x: string | null) => { try { s.close(); } catch { /* ze zaprta */ } ok(x); };
+    s.once("error", () => konec(null));
+    s.connect(9, "192.0.2.1", () => { try { konec(s.address().address); } catch { konec(null); } });
+  });
+}
+
+/** Ali je naslov se na kateremkoli vmesniku (127.0.0.1, ::1 in localhost vedno). */
+export function naslovNaVmesniku(naslov: string, vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces()): boolean {
+  if (naslov === "127.0.0.1" || naslov === "::1" || naslov === "localhost") return true;
+  return Object.values(vmesniki).some((v) => (v ?? []).some((e) => e.address === naslov));
 }
 
 /** Zasebni naslovi IPv4 tega racunalnika (izbira v nastavitvah) in 127.0.0.1; nikoli 0.0.0.0 ali javni naslov. */
