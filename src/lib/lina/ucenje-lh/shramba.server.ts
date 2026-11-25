@@ -56,12 +56,12 @@ function veljavneIzkusnje(x: unknown): IzkusnjaLH[] {
   for (const i of x.slice(-NAJVEC_IZKUSENJ)) {
     const v = i as Partial<IzkusnjaLH> | null;
     if (!v || typeof v.tip !== "string" || !/^[a-z0-9-]{1,40}$/.test(v.tip)) continue;
-    const besedilo = cisto(v.besedilo, 600);
+    const besedilo = enaVrstica(v.besedilo, 600);
     if (!besedilo) continue;
     const n = po.get(v.tip) ?? 0;
     if (n >= NAJVEC_IZKUSENJ_NA_TIP) continue;
     po.set(v.tip, n + 1);
-    out.push({ tip: v.tip, naslov: cisto(v.naslov, 80) || "Izkusnja", besedilo });
+    out.push({ tip: v.tip, naslov: enaVrstica(v.naslov, 80) || "Izkusnja", besedilo });
   }
   return out;
 }

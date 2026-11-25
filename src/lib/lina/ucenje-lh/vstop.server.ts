@@ -15,7 +15,7 @@ import {
   NAJVEC_IZKUSENJ_NA_TIP,
   ROK_SEJE_MS,
   besediloEnote,
-  cisto,
+  enaVrstica,
   jeKonec,
   jeNameraSestave,
   jeNameraUre,
@@ -213,11 +213,11 @@ async function zaNalogo(root: string, tip: string, cilj: string): Promise<Array<
 function zapisiIzkusnjo(root: string, i: IzkusnjaLH): Promise<boolean> {
   return vVrsti(root, async () => {
     const s = await preberiStanjeLH(root);
-    const besedilo = cisto(i.besedilo, 600);
+    const besedilo = enaVrstica(i.besedilo, 600);
     if (!s.vklopljen || !/^[a-z0-9-]{1,40}$/.test(i.tip) || !besedilo) return false;
     const istega = s.izkusnje.filter((x) => x.tip === i.tip).slice(-(NAJVEC_IZKUSENJ_NA_TIP - 1));
     const drugi = s.izkusnje.filter((x) => x.tip !== i.tip);
-    s.izkusnje = [...drugi, ...istega, { tip: i.tip, naslov: cisto(i.naslov, 80) || "Izkusnja", besedilo }].slice(-NAJVEC_IZKUSENJ);
+    s.izkusnje = [...drugi, ...istega, { tip: i.tip, naslov: enaVrstica(i.naslov, 80) || "Izkusnja", besedilo }].slice(-NAJVEC_IZKUSENJ);
     await zapisiStanjeLH(root, s);
     return true;
   });
