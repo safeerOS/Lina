@@ -122,6 +122,7 @@ describe("prepisiRsdo: ciscenje pred RSDO za stikalom", { timeout: 30000 }, () =
     const m = await nalozRnnoise();
     assert.ok(m);
     const dobljeno = vzorci(await prepis(true));
+    assert.equal(MESANICA_RNNOISE_POSNETEK, 0.5, "naloga 17d: RNNoise 50/50 (izmerjena razlicica w8_rnn50)");
     const ref = referencaOzko(m, govor16, MESANICA_RNNOISE_POSNETEK);
     assert.equal(dobljeno.length, govor16.length, "enako stevilo vzorcev kot izhod ffmpeg");
     assert.equal(razlik(dobljeno, ref), 0, "pot (a) ne gre skozi 8 kHz Wiener in RNNoise 50/50");
