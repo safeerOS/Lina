@@ -71,10 +71,11 @@ function glaveZaStreznik(url, naslov, zeton, glave) {
  * seji). Samo takrat lupina doda zeton; ciljni naslov sam ni dovolj (vdelana tuja vsebina ali XSS bi zeton dobila).
  */
 function izGlavnegaOkvirja(podrobnosti, okno, naslov) {
-  const wc = okno && !okno.isDestroyed() ? okno.webContents : null;
-  const okvir = podrobnosti && podrobnosti.frame;
-  if (!wc || !naslov || podrobnosti.webContentsId !== wc.id || !okvir || okvir.parent !== null) return false;
+  // getterji unicenega okvirja (WebFrameMain) vrzejo; izjema v onBeforeSendHeaders bi zahtevo pustila viseti
   try {
+    const wc = okno && !okno.isDestroyed() ? okno.webContents : null;
+    const okvir = podrobnosti && podrobnosti.frame;
+    if (!wc || !naslov || podrobnosti.webContentsId !== wc.id || !okvir || okvir.parent !== null) return false;
     return new URL(okvir.url).origin === naslov;
   } catch {
     return false;

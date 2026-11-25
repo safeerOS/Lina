@@ -37,6 +37,11 @@ describe("N6: zeton samo za glavni okvir lastnega okna", () => {
     assert.equal(izGlavnegaOkvirja({ webContentsId: 7, frame: glavni }, okno(), ""), false);
   });
 
+  it("unicen okvir (getter Electrona vrze) ne vrze iz obdelovalca zahteve: ne", () => {
+    const unicen = { get parent(): never { throw new Error("Render frame was disposed before WebFrameMain could be accessed"); }, get url(): never { throw new Error("disposed"); } };
+    assert.equal(izGlavnegaOkvirja({ webContentsId: 7, frame: unicen }, okno(), NASLOV), false);
+  });
+
   it("main.js: zeton gre v glave samo po izGlavnegaOkvirja (sicer se glava samo odstrani)", async () => {
     const m = await readFile(path.join(import.meta.dirname, "../../../lupina/main.js"), "utf8");
     assert.match(m, /glaveZaStreznik\(podrobnosti\.url, naslov, izGlavnegaOkvirja\(podrobnosti, okno, naslov\) \? zetonLupine : "", podrobnosti\.requestHeaders\)/);
