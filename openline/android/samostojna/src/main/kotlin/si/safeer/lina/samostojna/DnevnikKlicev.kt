@@ -198,7 +198,11 @@ const val ROK_PREPISA_PODJETJE_MS = 90L * 24 * 60 * 60 * 1000
 const val GOVOREC_KLICATELJ = "klicatelj"
 const val GOVOREC_LINA = "lina"
 
-/** Besedilo v mejah, ki jih racunalnik sprejme (dolzina, brez osamljenih nadomestnih znakov): en zapis ne sme zatakniti sinhronizacije. */
+/**
+ * Besedilo v mejah, ki jih racunalnik sprejme (dolzina, brez osamljenih nadomestnih znakov): en zapis ne sme zatakniti sinhronizacije.
+ * Kontrolni znaki razen \n, \r, \t se izpustijo (N2): v JSON so 6 B (\u0001), zato bi polna polja zapis dvignila nad MEJA_ZAPISA_SINHRON_B.
+ * Tako je znak v JSON najvec 3 B na enoto UTF-16; vsa polja razen prepisa (12 540 enot) so pod 38 KB.
+ */
 fun skrajsajZaSinhronizacijo(s: String, meja: Int): String {
     var r = if (s.length > meja) s.substring(0, meja) else s
     val b = StringBuilder(r.length)
@@ -209,7 +213,7 @@ fun skrajsajZaSinhronizacijo(s: String, meja: Int): String {
             if (i + 1 < r.length && Character.isLowSurrogate(r[i + 1])) { b.append(c).append(r[i + 1]); i += 2; continue }
             i++; continue
         }
-        if (!Character.isLowSurrogate(c)) b.append(c)
+        if (!Character.isLowSurrogate(c) && (c >= ' ' || c == '\n' || c == '\r' || c == '\t')) b.append(c)
         i++
     }
     r = b.toString()

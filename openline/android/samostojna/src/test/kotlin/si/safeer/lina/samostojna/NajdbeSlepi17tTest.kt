@@ -114,4 +114,18 @@ class NajdbeSlepi17tTest {
         assertEquals(listOf("nov"), DnevnikKlicev(shramba).cakajociZaSinhronizacijo().map { it.id })
     }
 
+    // N2: meja celega zapisa v BAJTIH tudi za kontrolne znake (JSON \u0001 = 6 B).
+    @Test
+    fun `N2 - zapis s polji polnimi kontrolnih znakov in narekovajev ostane pod 46 KiB`() {
+        for (k in listOf("\u0001", "\"", "\u001f")) {
+            val z = ZapisKlica(
+                id = "k-n2", casZacetka = 1L, stevilka = "+99955501001", trajanjeS = 1, povzetek = k.repeat(2000),
+                klicatelj = k.repeat(240), podjetje = k.repeat(240), sporocilo = k.repeat(2000), sporociloDobesedno = k.repeat(6000),
+                brezSporocilaRazlog = k.repeat(2000), prepisPogovora = listOf(IzmenjavaKlica("klicatelj", 1L, k.repeat(2000))),
+            )
+            val b = json.encodeToString(z.zaSinhronizacijo()).toByteArray(Charsets.UTF_8).size
+            assertTrue(b <= MEJA_ZAPISA_SINHRON_B, "zapis z '${k.codePointAt(0)}' ima $b B")
+        }
+    }
+
 }
