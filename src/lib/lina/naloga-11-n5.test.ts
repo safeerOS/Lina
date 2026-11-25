@@ -37,6 +37,14 @@ describe("N5: ciscenje koncanih nalog", () => {
     assert.ok(await o.preberi(prava), "prava koncana naloga ostane");
   });
 
+  it("naloga s casom malo v prihodnosti (ura premaknjena nazaj) ni stara: ob manj kot 50 koncanih ostane", async () => {
+    const root = await mapa();
+    const id = await koncana(root, new Date(Date.now() + 5000).toISOString());
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: koncni });
+    await o.nova({ cilj: "nova naloga sprozi ciscenje" });
+    assert.ok(await o.preberi(id), "ni pociscena samo zaradi casa v prihodnosti");
+  });
+
   it("dnevnik dejanj stare naloge se ob ciscenju premakne v arhiv (vsebina ohranjena), stanje se izbrise", async () => {
     const root = await mapa();
     const t0 = Date.parse("2026-10-01T10:00:00.000Z");

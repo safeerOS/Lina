@@ -679,17 +679,19 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     await mkdir(path.join(mapa, "arhiv"), { recursive: true, mode: 0o700 });
     await rename(path.join(mapa, dnevnik), path.join(mapa, "arhiv", dnevnik)).catch(brezNapake);
   };
-  /** Naloga 11 N5: cas v prihodnosti ali neberljiv ne steje kot novejsi (najstarejsi), sicer podtaknjene naloge izrinejo prave. */
-  const casPosodobitve = (s: StanjeNaloge) => {
+  /** Naloga 11 N5: cas v prihodnosti ali neberljiv ne steje kot novejsi (na konec vrste), sicer podtaknjene naloge izrinejo prave. */
+  const veljavenCas = (s: StanjeNaloge) => {
     const t = Date.parse(s.posodobljeno);
-    return Number.isFinite(t) && t <= zdaj() ? t : 0;
+    return Number.isFinite(t) && t <= zdaj() ? t : null;
   };
   /** Pregled V5: koncane starejse od HRANI_KONCANE_MS in najstarejse cez NAJVEC_KONCANIH; neveljavne in tuje datoteke ostanejo. */
   const pocisti = async () => {
     const koncane = (await seznamVeljavnih()).filter((s) => KONCNE_FAZE.includes(s.faza))
-      .sort((a, b) => casPosodobitve(b) - casPosodobitve(a));
+      .sort((a, b) => (veljavenCas(b) ?? 0) - (veljavenCas(a) ?? 0));
     for (const [i, s] of koncane.entries()) {
-      const star = zdaj() - casPosodobitve(s) > HRANI_KONCANE_MS;
+      // star samo po berljivem preteklem casu: ura, premaknjena nazaj, ne pocisti pravih nalog takoj (te gredo le cez mejo stevila)
+      const t = veljavenCas(s);
+      const star = t !== null && zdaj() - t > HRANI_KONCANE_MS;
       if (!star && i < NAJVEC_KONCANIH) continue;
       await vVrsti(s.id, async () => {
         const sveze = await preberi(s.id);
