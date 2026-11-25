@@ -7,6 +7,7 @@ const http = require("http");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
+const { APP_ID, mapaPodatkov, prosiZaKonec } = require("./pomocniki");
 
 const NAMESTITEV = app.isPackaged ? path.join(process.resourcesPath, "lina") : path.join(__dirname, "..");
 const IKONA = path.join(__dirname, "ikona.png");
@@ -17,6 +18,7 @@ let koncujem = false;
 let naslov = "";
 
 app.commandLine.appendSwitch("lang", "sl"); // datum in ura v slovenski obliki
+if (process.platform === "win32") app.setAppUserModelId(APP_ID); // obvestila Windows (bliznjica NSIS ima isti appId)
 // »lina-lupina --koncaj«: tekoco Lino zapre cisto (glavni proces ustavi streznik in sam konca).
 // Ne s pkill: ta poslje SIGTERM tudi notranjim procesom Chromiuma (GPU, omrezje, zygote) in glavni proces se
 // sesuje (FATAL »GPU process isn't usable«, jedro: trap int3; izmerjeno 23. 11. 2026).
@@ -55,7 +57,7 @@ function pocakajStreznik(vrata, rok = 30000) {
 
 async function zazeniStreznik() {
   const vrata = await prostaVrata();
-  const podatki = path.join(app.getPath("userData"), "podatki");
+  const podatki = mapaPodatkov(process.platform, process.env, app.getPath("userData"));
   fs.mkdirSync(podatki, { recursive: true, mode: 0o700 });
   strez = spawn(process.execPath, [path.join(NAMESTITEV, ".output/server/index.mjs")], {
     cwd: NAMESTITEV,
@@ -69,7 +71,8 @@ async function zazeniStreznik() {
       ...(fs.existsSync(path.join(NAMESTITEV, "openline", "dist", "index.js")) ? { LINA_OPENLINE_DIR: path.join(NAMESTITEV, "openline") } : {}),
       LINA_LUPINA_ZETON: crypto.randomBytes(24).toString("hex"),
     },
-    stdio: "ignore",
+    // kanal IPC: ustavitev s pospravljanjem tudi na Windows (tam je SIGTERM trd konec); streznik konca tudi, ce lupina umre
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   strez.on("exit", () => { strez = null; if (!koncujem) app.quit(); });
   await pocakajStreznik(vrata);
@@ -130,12 +133,12 @@ app.whenReady().then(async () => {
 });
 
 // Ustavitev streznika (22. 11. 2026): star streznik 0.2.1 je ostal ziv brez starsa in drzal vrata 8446 za telefon.
-// SIGTERM, po 6 s SIGKILL; isto, ce lupina sama prejme SIGTERM/SIGINT/SIGHUP (pkill, odjava), ko before-quit ne pride.
+// Windows: prosnja prek IPC (Linux in rezerva: SIGTERM), po 6 s SIGKILL; isto, ce lupina sama prejme SIGTERM/SIGINT/SIGHUP (pkill, odjava), ko before-quit ne pride.
 function ustaviStreznik() {
   koncujem = true;
   const s = strez;
   if (!s || s.exitCode !== null) return;
-  try { s.kill("SIGTERM"); } catch {}
+  prosiZaKonec(s, process.platform);
   const prisilno = setTimeout(() => { try { if (s.exitCode === null) s.kill("SIGKILL"); } catch {} }, 6000);
   prisilno.unref();
   s.once("exit", () => clearTimeout(prisilno));

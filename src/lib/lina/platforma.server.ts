@@ -23,6 +23,11 @@ export function imaXdgSamodejniZagon(platforma: Platforma = platformaZdaj()): bo
   return platforma === "linux";
 }
 
+/** Slovenski govorni modul (RSDO) se namesti z orodjem za Linux Mint (cli-anything-linuxmint): samo Linux; drugje se ne ponudi. */
+export function imaSlovenskiModul(platforma: Platforma = platformaZdaj()): boolean {
+  return platforma === "linux";
+}
+
 /** POSIX dovoljenja (chmod, uid, mode) imajo pomen samo zunaj Windows; tam jih ne uporabljaj kot varnostno mejo. */
 export function imaPosixDovoljenja(platforma: Platforma = platformaZdaj()): boolean {
   return !jeWindows(platforma);

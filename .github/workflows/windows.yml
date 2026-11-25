@@ -1,0 +1,219 @@
+name: Lina Windows (namestitev NSIS)
+
+# Prvi paket Line za Windows (naloga 15, 25. 11. 2026). Pripravljeno, NE zagnano: prvi tek sprozi lastnik ali vodja.
+# Sprozilec: potisk na vejo lina-windows-* (rocni zagon deluje sele, ko je tok na privzeti veji) ali rocno.
+# Loceni tok (ne posel v racunalnik.yml): rdec prvi tek na Windows ne sme obarvati gradnje deb.
+# Paket in preizkusi sta locena posla: padec preizkusa ne ustavi namestitvenega programa (oba sta vidna v povzetku).
+# Podpisa kode ni: Windows SmartScreen ob prvem zagonu pokaze opozorilo (zapisano v navodilu za namestitev).
+# Akcije so pripete na SHA (komentar = oznaka), po vzorcu drugih Safeer tokov.
+on:
+  push:
+    branches: ["lina-windows-*"]
+    paths:
+      - "src/**"
+      - "server/**"
+      - "scripts/**"
+      - "public/**"
+      - "skili/**"
+      - "lupina/**"
+      - "openline/server/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vite.config.ts"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lina-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paket:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: bash
+    env:
+      NITRO_PRESET: node-server
+      CI: "true"
+      # brez podpisa: electron-builder ne isce certifikata
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      # brez pretvorbe v CRLF: preizkusi in preverbe berejo datoteke repozitorija z vzorci za LF (kot na Linuxu)
+      - name: Konci vrstic LF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24  # enako kot deb: paket tece na Node 24 (Electron 45)
+          cache: npm
+
+      - name: Namestitev odvisnosti programa
+        run: npm ci --no-audit --no-fund
+
+      - name: Gradnja programa (vite build, nato preverba skila v gradnji)
+        run: npm run build
+
+      - name: Preverba tipov (0 napak, sicer gradnja pade)
+        run: |
+          set +e
+          npx tsc --noEmit -p . > tsc.log 2>&1
+          KODA=$?
+          N=$(grep -c 'error TS' tsc.log)
+          echo "### Preverba tipov (Windows): ${N} napak (koda ${KODA})" >> "$GITHUB_STEP_SUMMARY"
+          grep 'error TS' tsc.log | head -40 >> "$GITHUB_STEP_SUMMARY" || true
+          exit $KODA
+
+      - name: Paket OpenLine (prevod + samo produkcijski node_modules)
+        run: |
+          set -euo pipefail
+          # cygpath: GNU tar bi »D:\...« razumel kot oddaljeni gostitelj
+          OL="$(cygpath -u "$RUNNER_TEMP")/ol"
+          mkdir -p "$OL"
+          tar -C openline/server --exclude=node_modules --exclude=dist --exclude=tests -cf - . | tar -C "$OL" -xf -
+          cd "$OL"
+          npm ci --no-audit --no-fund
+          npm run build
+          npm ci --omit=dev --no-audit --no-fund
+          test -f dist/index.js
+          CILJ="$(cygpath -u "$GITHUB_WORKSPACE")/openline-paket"
+          mkdir -p "$CILJ"
+          cp -r dist package.json node_modules "$CILJ/"
+          if [ -d public ]; then cp -r public "$CILJ/"; fi
+
+      - name: Paket modulov, ki jih streznik nalozi po imenu (jazz za samoucenje, unpdf za otroka razclembe PDF)
+        run: |
+          set -euo pipefail
+          UNPDF=$(node -p "require('./package-lock.json').packages['node_modules/unpdf'].version")
+          mkdir -p jazz-paket
+          echo '{"name":"jp","private":true}' > jazz-paket/package.json
+          cd jazz-paket
+          npm install --omit=dev --no-audit --no-fund jazz-tools@0.8.23 cojson@0.8.23 cojson-transport-ws@0.8.23 "unpdf@${UNPDF}"
+          test -d node_modules/jazz-tools
+          test -f node_modules/unpdf/package.json
+
+      - name: Namestitev lupine (Electron in electron-builder)
+        working-directory: lupina
+        run: npm install --no-audit --no-fund
+
+      - name: Namestitveni program NSIS (x64, brez podpisa)
+        working-directory: lupina
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Preverba paketa
+        run: |
+          set -euo pipefail
+          # v izid/ ostane tudi __uninstaller-nsis-*.exe: v artefakt in vsoto gre samo namestitev
+          EXE=$(ls izid/Lina-*-x64-namestitev.exe)
+          echo "Namestitev: $EXE"
+          R=izid/win-unpacked/resources/lina
+          test -f izid/win-unpacked/Lina.exe
+          test -f izid/win-unpacked/resources/app.asar
+          test -f "$R/.output/server/index.mjs"
+          test -f "$R/.output/public/favicon.svg"
+          test -f "$R/openline/dist/index.js"
+          # deb 0.2.8/0.2.9: electron-builder je izpustil gnezdene node_modules (OpenLine se ni zagnal)
+          test -f "$R/openline/node_modules/express/package.json"
+          test -f "$R/openline/node_modules/ws/package.json"
+          test -f "$R/openline/node_modules/selfsigned/package.json"
+          test -f "$R/node_modules/jazz-tools/package.json"
+          test -f "$R/node_modules/unpdf/package.json"
+          test -f "$R/rsdo-streznik.py"
+          test -f "$R/vendor/rnnoise-wasm/LICENSE"
+          test -f "$R/vendor/rnnoise-wasm/COPYING-RNNOISE"
+          test -f "$R/vendor/rnnoise-wasm/NOTICE"
+          grep -rqs 'rnnoise_process_frame' "$R/.output/server"
+          # lupina (Node v Electronu) se zazene na tekacu Windows
+          ELECTRON_RUN_AS_NODE=1 izid/win-unpacked/Lina.exe -p 'process.versions.node'
+          (cd izid && sha256sum Lina-*-x64-namestitev.exe) | tee izid/sha256.txt
+          {
+            echo "### Namestitev za Windows (NSIS x64, nepodpisana)"
+            echo '```'
+            cat izid/sha256.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: lina-windows
+          path: |
+            izid/Lina-*-x64-namestitev.exe
+            izid/sha256.txt
+            tsc.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  preizkusi:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      # meja pomnilnika za Node (podprocesi jo podedujejo); peskovnik bwrap na Windows ni (agenti z omejenimi mapami tam niso na voljo)
+      NODE_OPTIONS: "--max-old-space-size=3072"
+      LINA_PODROBNI_POTEK: "1"
+    steps:
+      # brez pretvorbe v CRLF: preizkusi in preverbe berejo datoteke repozitorija z vzorci za LF (kot na Linuxu)
+      - name: Konci vrstic LF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Namestitev odvisnosti
+        run: npm ci --no-audit --no-fund
+
+      - name: Preizkusi (node --test prek scripts/test.mjs, LINA_PODROBNI_POTEK=1)
+        timeout-minutes: 30
+        run: |
+          set +e
+          npm test > preizkusi.log 2>&1
+          KODA=$?
+          echo "KODA=${KODA}"; tail -n 3 preizkusi.log
+          {
+            echo "### Preizkusi na Windows (koda ${KODA})"
+            grep -E '^# (tests|pass|fail|cancelled|skipped)' preizkusi.log || true
+            echo '```'
+            grep -E '^ *not ok' preizkusi.log | head -60 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $KODA
+
+      - name: Preizkusi vitest (specifikacije .spec.ts)
+        if: always()
+        run: |
+          set +e
+          npx vitest run > vitest.log 2>&1
+          KODA=$?
+          {
+            echo "### Vitest na Windows (koda ${KODA})"
+            tail -15 vitest.log
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $KODA
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: lina-windows-preizkusi
+          path: |
+            preizkusi.log
+            vitest.log
+          retention-days: 14
+          if-no-files-found: warn

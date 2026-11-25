@@ -3962,6 +3962,7 @@ function DrugiPaketi({ onError, napisNapake, napisIzida }: { onError: (s: string
 const RAZLOG_SLOVENSKI: Record<string, Beseda> = {
   "ni-namescen": "uiSlovenskiNiNamescen",
   "namestitev-ni-uspela": "uiSlovenskiNamestitevNiUspela",
+  "ni-na-voljo-sistem": "uiSlovenskiNiNaVoljoSistem",
   "zagon-ni-uspel": "uiSlovenskiZagonNiUspel",
   "nalaganje-predolgo": "uiSlovenskiNalaganjePredolgo",
   "proces-pada": "uiSlovenskiProcesPada",

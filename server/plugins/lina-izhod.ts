@@ -1,4 +1,5 @@
 import { definePlugin } from "nitro";
+import { prijaviKonecLupine } from "../../src/lib/izhod-lupine";
 
 const KLJUC = Symbol.for("lina.izhod.prijavljen");
 const ROK_MS = 3000;
@@ -18,4 +19,6 @@ export default definePlugin(() => {
       setTimeout(() => process.exit(0), ROK_MS).unref();
     });
   }
+  // Lupina prosi za konec prek IPC (na Windows je SIGTERM trd konec): sprozi iste poslusalce kot SIGTERM, tudi tega zgoraj.
+  prijaviKonecLupine();
 });

@@ -157,7 +157,8 @@ describe("17: besedila stanja slovenskega pomocnika so v besedila.ts (sl in en)"
     }
     const blok = /const RAZLOG_SLOVENSKI[^{]*\{([^}]*)\}/.exec(vir)?.[1] ?? "";
     const pari = [...blok.matchAll(/"([a-z-]+)":\s*"(\w+)"/g)].map((m) => [m[1], m[2]] as const);
-    const razlogi: Array<RazlogRsdo | "namestitev-ni-uspela"> = ["ni-namescen", "zagon-ni-uspel", "nalaganje-predolgo", "proces-pada", "proces-visi", "prevelik-izhod", "namestitev-ni-uspela"];
+    // naloga 15 (Windows): »ni-na-voljo-sistem« - modul je samo za Linux, drugje jasno »ni na voljo« (dodatki-telefon.server.ts)
+    const razlogi: Array<RazlogRsdo | "namestitev-ni-uspela" | "ni-na-voljo-sistem"> = ["ni-namescen", "zagon-ni-uspel", "nalaganje-predolgo", "proces-pada", "proces-visi", "prevelik-izhod", "namestitev-ni-uspela", "ni-na-voljo-sistem"];
     assert.deepEqual(pari.map(([r]) => r).sort(), [...razlogi].sort());
     for (const [, kljuc] of pari) {
       assert.ok(sl[kljuc as Beseda] && en[kljuc as Beseda], kljuc);
