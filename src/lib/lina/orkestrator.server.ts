@@ -294,7 +294,8 @@ function kanonicno(v: unknown): string {
 
 /**
  * Naloga 11 N1: podpis stanja naloge (HMAC-SHA256 s podkljucem iz glavnega kljuca Line, keys.server). Stanje brez veljavnega podpisa
- * je neveljavno (tudi stanje, zapisano pred to izdajo). Meja: kdor bere .kljuc v mapi podatkov, lahko podpise sam.
+ * je neveljavno (stanje pred to izdajo preseli preseli). Meja: podpis NE varuje pred bralcem mape podatkov - kdor prebere .kljuc (mapa v
+ * oblaku ali dostopna drugim), podpise sam; varuje samo pred tistim, ki sme pisati, a ne brati (naloga 12 #1).
  */
 export async function podpisStanja(root: string, stanje: unknown): Promise<string> {
   const { kljucCelovitosti } = await import("./keys.server.ts");

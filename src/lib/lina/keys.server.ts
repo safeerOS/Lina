@@ -1,11 +1,13 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
-import { chmod, link, mkdir, open, readFile, unlink } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, link, lstat, mkdir, open, unlink } from "node:fs/promises";
 import path from "node:path";
 import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
 import { callProvider, gcpLocation, gcpProject, hideSecret, razlogVzroka } from "./providers.ts";
 import { normirajNaslov } from "./lastni-streznik.ts";
 import { OMNIROUTE_PRIVZETI_NASLOV, veljavenNaslovOmniroute } from "./omniroute.ts";
+import { imaPosixDovoljenja } from "./platforma.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import {
   BREZPLACNI_SAMO_ASISTENTKA,
@@ -70,6 +72,34 @@ async function zapisiKljuc(file: string, key: Buffer, flags: "w" | "wx"): Promis
   }
 }
 
+/**
+ * Naloga 12 #1: .kljuc se prebere samo, ce je prava datoteka (O_NOFOLLOW: simbolna povezava se ne odpre), na POSIX last procesa in
+ * brez pravic skupine/drugih; sicer napaka z opozorilom. Napaka ni ENOENT, zato masterKey kljuca NE ustvari znova (izguba vseh
+ * sifriranih kljucev API). Windows: samo simbolna povezava (uid in mode tam nista meja). Meja: TOCTOU med preverbo mape in odprtjem ni
+ * pokrit; kdor sme pisati v mapo podatkov kot isti uporabnik, je zunaj tega modela.
+ */
+async function preberiKljuc(file: string): Promise<Buffer> {
+  const nevaren = (zakaj: string) => {
+    const e = new Error(`Datoteka .kljuc v mapi podatkov ni varna (${zakaj}), zato je Lina ne uporabi. .kljuc mora biti navadna datoteka uporabnika, ki poganja Lino, s pravicami 600 (samo lastnik).`);
+    console.error(`lina: ${e.message}`);
+    return e;
+  };
+  const posix = imaPosixDovoljenja();
+  if (!posix && (await lstat(file)).isSymbolicLink()) throw nevaren("simbolna povezava");
+  const h = await open(file, constants.O_RDONLY | (posix ? constants.O_NOFOLLOW : 0)).catch((e: NodeJS.ErrnoException) => {
+    throw e.code === "ELOOP" ? nevaren("simbolna povezava") : e;
+  });
+  try {
+    const st = await h.stat();
+    if (!st.isFile()) throw nevaren("ni navadna datoteka");
+    if (posix && typeof process.getuid === "function" && st.uid !== process.getuid()) throw nevaren("drug lastnik");
+    if (posix && (st.mode & 0o077) !== 0) throw nevaren("pravice za skupino ali druge");
+    return await h.readFile();
+  } finally {
+    await h.close();
+  }
+}
+
 /** Ustvarjanje kljuca v teku po poti: hkratni klici v istem procesu dobijo isti kljuc. */
 const kljuciVTeku = new Map<string, Promise<Buffer>>();
 
@@ -89,7 +119,7 @@ async function ustvariKljuc(file: string): Promise<Buffer> {
   } finally {
     await unlink(zacasna).catch(() => undefined);
   }
-  const koncni = await readFile(file);
+  const koncni = await preberiKljuc(file);
   if (koncni.length === 32) {
     await lock(file);
     return koncni;
@@ -104,7 +134,7 @@ async function masterKey(dir: string): Promise<Buffer> {
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, ".kljuc");
   try {
-    const existing = await readFile(file);
+    const existing = await preberiKljuc(file);
     if (existing.length === 32) {
       await lock(file);
       return existing;
