@@ -9,7 +9,7 @@
  * dodajo v register; brez njih Lina dela samo z vgrajenimi orodji. Tajnica (klici) te datoteke ne uvaza.
  * Komentarji brez sumnikov.
  */
-import { appendFile, chmod, mkdir, readdir } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readdir, unlink } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
@@ -48,6 +48,9 @@ const NAJVEC_DOGODKOV = 200;
 const NAJVEC_ZNAKOV_CILJA = 4000;
 /** Najvec NEKONCANIH nalog hkrati (koncane ne stejejo, sicer bi po 50 nalogah orkestrator za vedno zavracal nove). */
 const NAJVEC_NALOG = 50;
+/** Naloga 9 V5: koncane naloge se hranijo najvec 30 dni in najvec 50 (starejse se samodejno pocistijo ob novi nalogi in zagonu). */
+const HRANI_KONCANE_MS = 30 * 24 * 60 * 60_000;
+const NAJVEC_KONCANIH = 50;
 /** Najdlje cakanje na pomocnika (predlog 15 min + naloga do 2 h v claude-naloge); nato izid »rok« in zanka tece naprej. */
 export const ROK_POMOCNIKA_MS = 3 * 60 * 60_000;
 const KONCNE_FAZE = ["koncano", "ustavljeno", "napaka"];
@@ -204,6 +207,8 @@ export type Orkestrator = {
   /** Preveri cakajoce pomocnike (samo enega ali vse): koncan, zavrnjen, izginil ali cez rok -> izid v zanko. */
   preveriPomocnike(samo?: string): Promise<void>;
   odgovorLastnika(id: string, besedilo: unknown): Promise<StanjeNaloge>;
+  /** Izbris koncane naloge (stanje in dnevnik); nekoncana -> napaka »faza«. */
+  izbrisi(id: string): Promise<void>;
   izidPomocnika(nalogaId: string): Promise<void>;
   /** Ob zagonu Line: nadaljuje tekoce naloge, znova zastavi cakajoca vprasanja, preveri pomocnike. */
   nadaljujPoZagonu(): Promise<string[]>;
@@ -635,6 +640,31 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     }
   };
 
+  /** Samo lastni datoteki veljavne naloge (id preverjen z VELJAVEN_ID); manjkajoca datoteka ni napaka. */
+  const izbrisiDatoteke = async (id: string) => {
+    for (const ime of [pot(id), `${id}.dnevnik.jsonl`]) {
+      await unlink(path.join(mapa, ime)).catch((e: NodeJS.ErrnoException) => { if (e.code !== "ENOENT") throw e; });
+    }
+  };
+  /** Pregled V5: koncane starejse od HRANI_KONCANE_MS in najstarejse cez NAJVEC_KONCANIH; neveljavne in tuje datoteke ostanejo. */
+  const pocisti = async () => {
+    const koncane = (await seznamVeljavnih()).filter((s) => KONCNE_FAZE.includes(s.faza))
+      .sort((a, b) => b.posodobljeno.localeCompare(a.posodobljeno));
+    for (const [i, s] of koncane.entries()) {
+      const star = zdaj() - Date.parse(s.posodobljeno) > HRANI_KONCANE_MS;
+      if (!star && i < NAJVEC_KONCANIH) continue;
+      await vVrsti(s.id, async () => {
+        const sveze = await preberi(s.id);
+        if (sveze && KONCNE_FAZE.includes(sveze.faza)) await izbrisiDatoteke(s.id);
+      });
+    }
+  };
+  const seznamVeljavnih = async () => {
+    const imena = (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x));
+    const vse = await Promise.all(imena.map((x) => preberi(x.slice(0, -5))));
+    return vse.filter((x): x is StanjeNaloge => !!x).sort((a, b) => b.zacetek.localeCompare(a.zacetek));
+  };
+
   const teci = (id: string): Promise<StanjeNaloge> => {
     const tece = tecejo.get(id);
     if (tece) return tece;
@@ -649,6 +679,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       const cilj = typeof v.cilj === "string" ? v.cilj.normalize("NFC").trim() : "";
       if (!cilj || cilj.length > NAJVEC_ZNAKOV_CILJA || !(cilj as string & { isWellFormed(): boolean }).isWellFormed()) throw new OrkestratorNapaka("oblika");
       await mkdir(mapa, { recursive: true, mode: 0o700 });
+      await pocisti().catch(() => undefined);
       if ((await this.seznam()).filter((x) => !KONCNE_FAZE.includes(x.faza)).length >= NAJVEC_NALOG) throw new OrkestratorNapaka("polno");
       const imaGeslo = o.imaGeslo ?? (async () => (await import("./auth.server.ts")).ownerExists(root));
       const s: StanjeNaloge = {
@@ -725,7 +756,17 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         void teci(s0.id).catch(() => undefined);
       }
     },
+    async izbrisi(id) {
+      pot(id);
+      await vVrsti(id, async () => {
+        const s = await preberi(id);
+        if (!s) throw new OrkestratorNapaka("ni-naloge");
+        if (!KONCNE_FAZE.includes(s.faza)) throw new OrkestratorNapaka("faza");
+        await izbrisiDatoteke(id);
+      });
+    },
     async nadaljujPoZagonu() {
+      await pocisti().catch(() => undefined);
       const nadaljevane: string[] = [];
       const vklopljen = await jeOrkestratorVklopljen(dir).catch(() => false);
       for (const s0 of await this.seznam()) {
@@ -759,11 +800,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       return nadaljevane;
     },
     preberi,
-    async seznam() {
-      const imena = (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x));
-      const vse = await Promise.all(imena.map((x) => preberi(x.slice(0, -5))));
-      return vse.filter((x): x is StanjeNaloge => !!x).sort((a, b) => b.zacetek.localeCompare(a.zacetek));
-    },
+    seznam: seznamVeljavnih,
   };
 }
 
@@ -827,6 +864,8 @@ export async function ukazOrkestratorja(token: string | null, ukaz: unknown, dir
     void o.teci(s.id).catch(() => undefined);
   } else if (u.vrsta === "ustavi") {
     await o.ustavi(id);
+  } else if (u.vrsta === "izbrisi") {
+    await o.izbrisi(id);
   } else if (u.vrsta === "odgovor") {
     await o.odgovorLastnika(id, u.besedilo);
   } else if (u.vrsta === "potrdi" || u.vrsta === "zavrni") {

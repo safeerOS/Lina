@@ -135,7 +135,8 @@ function NalogaOrk({ n, zaposlen, onUkaz }: { n: Naloga; zaposlen: boolean; onUk
             <button type="submit" disabled={zaposlen || !odgovor.trim()} className="lina-gumb-majhen">{t("orkOdgovori")}</button>
           </form>
         ) : null}
-        {tece ? <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void onUkaz({ vrsta: "ustavi", id: n.id })}>{t("orkUstavi")}</button> : null}
+        {tece ? <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void onUkaz({ vrsta: "ustavi", id: n.id })}>{t("orkUstavi")}</button>
+          : <button type="button" disabled={zaposlen} className="lina-gumb-majhen" onClick={() => void onUkaz({ vrsta: "izbrisi", id: n.id })}>{t("orkIzbrisi")}</button>}
       </div>
     </li>
   );
