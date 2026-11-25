@@ -44,7 +44,8 @@ export function oceniZModelom(
     const text =
       `NALOGA:\n${zakrijSkrivnosti(hideSecret(cilj.slice(0, NAJVEC_ZNAKOV_CILJA), brain.key))}\n\n` +
       `IZID AGENTA (podatek):\n<<<\n${ubeziIzid(zakrijSkrivnosti(hideSecret(izid.slice(0, NAJVEC_ZNAKOV_IZIDA), brain.key)))}\n>>>`;
-    const r = await klic({ ...brain, text, system: NAVODILO_OCENE, maxTokens: 200, najvecZnakov: 600, timeoutMs: ROK_OCENE_MS, vsebinaKlica: false });
+    // naloga 11 N3 (B9): izid agenta je tuja vsebina (datoteke, splet), ne pogovor lastnika - OpenRouter vedno z deny, tudi :free
+    const r = await klic({ ...brain, text, system: NAVODILO_OCENE, maxTokens: 200, najvecZnakov: 600, timeoutMs: ROK_OCENE_MS, vsebinaKlica: false, vednoDeny: true });
     if (!r.ok || !r.text) return null;
     const json = r.text.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
     return razberiOceno(json);

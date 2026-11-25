@@ -512,6 +512,8 @@ export async function noviceOceni(token: string | null, dir?: string, odv?: Part
       najvecZnakov: 4000,
       timeoutMs: 24_000,
       vsebinaKlica: false,
+      // naloga 11 N3 (B9): postavke novic so vsebina s spleta, ne pogovor lastnika - OpenRouter vedno z deny
+      vednoDeny: true,
     });
     if (!odgovor.ok) {
       napaka = napaka || hideSecret(odgovor.sporocilo, brain.key);
