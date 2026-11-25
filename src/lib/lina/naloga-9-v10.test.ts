@@ -38,7 +38,7 @@ describe("V10: prisilni konec streznika", () => {
     const klici: string[] = [];
     prisilniKonec(o, "linux", (u) => klici.push(u));
     assert.deepEqual(signali, ["SIGKILL"]);
-    assert.deepEqual(klici, []);
+    assert.equal(klici.length, 0); // deepEqual(klici, []) bi tip zozil na never[]
     const koncan = otrok(0);
     prisilniKonec(koncan.o, "win32", (u) => klici.push(u));
     assert.deepEqual(klici, []);
