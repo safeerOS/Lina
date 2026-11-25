@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
@@ -229,7 +230,9 @@ data class ZapisKlicaSinhronizacija(
 private data class DnevnikKlicevShramba(
     val verzija: Int = 1,
     val zapisi: List<ZapisKlica>,
-    val cakajoci: List<ZapisKlicaSinhronizacija> = emptyList()
+    val cakajoci: List<ZapisKlicaSinhronizacija> = emptyList(),
+    /** Id zapisov s prepisom, ki jih je racunalnik brez zmoznosti prepisa (0.2.13) prejel brez njega (N1). */
+    val zadrzaniPrepisi: List<String> = emptyList()
 )
 
 @Serializable
@@ -404,6 +407,8 @@ class DnevnikKlicev(
 ) {
     private val zapisi = linkedMapOf<String, ZapisKlica>()
     private val vrstaSinhronizacije = linkedMapOf<String, ZapisKlicaSinhronizacija>()
+    /** Zapisi s prepisom, ki jih je racunalnik prejel brez prepisa: gredo znova v vrsto, ko racunalnik javi ZMOZNOST_PREPIS (N1). */
+    private val zadrzaniPrepisi = linkedSetOf<String>()
     private var branjeSpodletelo = false
 
     init {
@@ -472,9 +477,10 @@ class DnevnikKlicev(
         val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
         predlaganiZapisi.remove(id)
         predlaganiCakajoci.remove(id)
-        shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values)
+        shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values, zadrzaniPrepisi - id)
         zapisi.remove(id)
         vrstaSinhronizacije.remove(id)
+        zadrzaniPrepisi.remove(id)
         return true
     }
 
@@ -523,25 +529,42 @@ class DnevnikKlicev(
     }
 
     // Po uspesni izmenjavi z racunalnikom odstrani iz vrste SAMO tiste zapise, ki so bili poslani in se medtem niso spremenili.
-    fun potrdiPoslane(zaPosiljanje: List<ZapisKlicaSinhronizacija>) {
+    // prepisSprejet = racunalnik je javil ZMOZNOST_PREPIS; sicer se zapis s prepisom zadrzi za ponovno posiljanje (N1).
+    fun potrdiPoslane(zaPosiljanje: List<ZapisKlicaSinhronizacija>, prepisSprejet: Boolean = false) {
         synchronized(this) {
             // Po neuspeli ponovni nalozitvi shramba morda hrani novejsi posnetek, ki ga nismo mogli prebrati:
             // potrditve ne zapisemo (revizija ostane cakajoca; ponovno posiljanje je varnejse od prepisa).
             if (branjeSpodletelo) return
             var sprememba = false
             val predlagani = vrstaSinhronizacije.toMutableMap()
+            val zadrzani = LinkedHashSet(zadrzaniPrepisi)
             for (element in zaPosiljanje) {
                 if (predlagani[element.id] == element) {
                     predlagani.remove(element.id)
+                    if (!prepisSprejet && element.prepisPogovora.isNotEmpty()) zadrzani.add(element.id)
                     sprememba = true
                 }
             }
             if (sprememba) {
-                shraniVShrambo(zapisi.values, predlagani.values)
+                shraniVShrambo(zapisi.values, predlagani.values, zadrzani)
                 vrstaSinhronizacije.clear()
                 vrstaSinhronizacije.putAll(predlagani)
+                zadrzaniPrepisi.clear()
+                zadrzaniPrepisi.addAll(zadrzani)
             }
         }
+    }
+
+    // Racunalnik je javil ZMOZNOST_PREPIS: zadrzani zapisi s prepisom gredo znova v vrsto (isti id, racunalnik dopolni prepis).
+    @Synchronized
+    fun vrniZadrzanePrepise() {
+        if (branjeSpodletelo || zadrzaniPrepisi.isEmpty()) return
+        val predlagani = vrstaSinhronizacije.toMutableMap()
+        for (id in zadrzaniPrepisi) zapisi[id]?.let { predlagani[id] = it.zaSinhronizacijo() }
+        shraniVShrambo(zapisi.values, predlagani.values, emptyList())
+        vrstaSinhronizacije.clear()
+        vrstaSinhronizacije.putAll(predlagani)
+        zadrzaniPrepisi.clear()
     }
 
     // Zapisi klicev, ki jih racunalnik pozna, telefon pa ne (npr. ob ponovni namestitvi): se dodajo s prepisom v mejah (ce ga racunalnik poslje) in NE gredo v vrsto za posiljanje.
@@ -602,6 +625,7 @@ class DnevnikKlicev(
             val koren = jsonDnevnik.parseToJsonElement(surovo)
             val seznamElementov: JsonArray
             var cakajociElementi: JsonArray? = null
+            var zadrzaniElementi: JsonArray? = null
             when (koren) {
                 is JsonObject -> {
                     val verzija = koren["verzija"]?.jsonPrimitive?.intOrNull ?: return false
@@ -612,6 +636,7 @@ class DnevnikKlicev(
                     val poljeCakajoci = koren["cakajoci"]
                     if (poljeCakajoci != null && poljeCakajoci !is JsonArray) return false
                     cakajociElementi = poljeCakajoci as? JsonArray
+                    zadrzaniElementi = koren["zadrzaniPrepisi"] as? JsonArray
                 }
                 is JsonArray -> {
                     seznamElementov = koren
@@ -669,6 +694,10 @@ class DnevnikKlicev(
             }
             // vrsta ne sme kazati na klic, ki ga dnevnik nima
             vrstaSinhronizacije.keys.retainAll(zapisi.keys)
+            zadrzaniElementi?.let { el ->
+                zadrzaniPrepisi.clear()
+                el.mapNotNullTo(zadrzaniPrepisi) { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull()?.takeIf { it in zapisi } }
+            }
 
             if (vsajEnPoskodovan && zapisi.isNotEmpty()) {
                 // Ce smo iz delno poskodovane datoteke resili veljavne zapise, jih takoj varno zapisemo nazaj.
@@ -683,7 +712,8 @@ class DnevnikKlicev(
 
     private fun shraniVShrambo(
         predlaganiZapisi: Collection<ZapisKlica> = zapisi.values,
-        predlaganiCakajoci: Collection<ZapisKlicaSinhronizacija> = vrstaSinhronizacije.values
+        predlaganiCakajoci: Collection<ZapisKlicaSinhronizacija> = vrstaSinhronizacije.values,
+        predlaganiZadrzani: Collection<String> = zadrzaniPrepisi
     ) {
         val urejeni = urediZapise(predlaganiZapisi, nujniNaVrhu = true)
         val cakajoci = predlaganiCakajoci.sortedWith(
@@ -691,7 +721,7 @@ class DnevnikKlicev(
                 .thenByDescending { it.casZacetka }
                 .thenBy { it.id }
         )
-        val ovoj = DnevnikKlicevShramba(verzija = 1, zapisi = urejeni, cakajoci = cakajoci)
+        val ovoj = DnevnikKlicevShramba(verzija = 1, zapisi = urejeni, cakajoci = cakajoci, zadrzaniPrepisi = predlaganiZadrzani.toList())
         val json = jsonDnevnik.encodeToString(ovoj)
         shramba.shrani(json)
     }

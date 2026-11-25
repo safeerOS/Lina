@@ -32,7 +32,14 @@ data class OdgovorSinhron(
     val pogovor: List<PogovorSinhron> = emptyList(),
     val navodila: NavodilaSinhron? = null,
     val ostane: Boolean = false,
+    /**
+     * Kaj racunalnik zna (slepi pregled 17t, N1). "prepis-v1" = prepisPogovora sprejme in shrani (tudi za id, ki ga ze pozna brez prepisa).
+     * Brez tega polja (racunalnik 0.2.13) telefon zapisa s prepisom ne steje za sprejetega: zadrzi ga in ga poslje znova po posodobitvi.
+     */
+    val zmoznosti: List<String> = emptyList(),
 )
+
+const val ZMOZNOST_PREPIS = "prepis-v1"
 
 object SinhronLine {
     const val NAJVEC_VNOSOV = 300
@@ -86,7 +93,10 @@ object SinhronLine {
             val cakajoci = omejiPoBajtih(dnevnik.cakajociZaSinhronizacijo().take(NAJVEC_VNOSOV))
             val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null, epoha.ifEmpty { null }))
             val odg = odgovor(poslji(telo) ?: return false) ?: return false
-            dnevnik.potrdiPoslane(cakajoci)
+            val prepisSprejet = ZMOZNOST_PREPIS in odg.zmoznosti
+            dnevnik.potrdiPoslane(cakajoci, prepisSprejet)
+            // Racunalnik zdaj zna prepis: zapisi, ki jih je star racunalnik dobil brez prepisa, gredo v vrsto (naslednji krog).
+            if (prepisSprejet) dnevnik.vrniZadrzanePrepise()
             // Ce zapis prejetih klicev ne uspe, revizija ostane (racunalnik jih ob naslednjem krogu poslje znova).
             try { dnevnik.sprejmiIzRacunalnika(odg.klici) } catch (_: Exception) { return false }
             if (odg.pogovor.isNotEmpty()) prejetPogovor(odg.pogovor)
