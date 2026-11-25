@@ -5,7 +5,7 @@ import { izberiModelFn, logoutFn } from "@/lib/lina/functions.ts";
 import { IME_PONUDNIKA } from "@/lib/lina/types.ts";
 import { kliciZaPrikaz, steviloNovih } from "@/lib/lina/imenik.ts";
 import { datumGlave, uraGlave, type RazdelekLine } from "@/lib/lina/ui-videz.ts";
-import { Cvet, DomovPanel, Ikona, ImenikPanel } from "./domov.tsx";
+import { DomovPanel, Ikona, ImenikPanel } from "./domov.tsx";
 import { KoledarPanel } from "./koledar.tsx";
 import { ImeKartica } from "./ime-kartica.tsx";
 import { MedijiPanel } from "./mediji.tsx";
@@ -136,7 +136,7 @@ export function Lina2Okvir(props: Props) {
         <aside className="lina2-stranska">
           <div className="lina2-logo">
             <span className="lina2-logo-znak" aria-hidden="true">
-              <Cvet />
+              <img src="/lina/lina-ikona.webp" alt="" width={72} height={72} decoding="async" />
             </span>
             <span className="lina2-logo-besedilo">
               <span className="lina2-logo-ime">Lina</span>
