@@ -1087,7 +1087,8 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   sinhron-telefon.server.ts: revizije, brez dvojnikov); 400 neveljavna vsebina, 403 podpis/naprava/ponovitev, 413 telo nad 768 KiB. Samo domace omrezje
   (ni v POTI_ODDALJENO). Preizkusi: asistent-streznik.test.ts (sinhronizacija, velik paket); Kotlin: SinhronLine.kt.
   Naloga 17 (lastnik 25. 11. 2026): zapis klica nosi prepisPogovora [{govorec klicatelj|lina, cas, besedilo}] in prepisOkrnjen (nezaupano: 400 izmenjav,
-  prepis <= 24 KiB, zapis <= 46 KiB, neveljavna izmenjava se preskoci). Klici s telefona so v listCalls (izvor "telefon", id s-telefona-<id>, samo branje:
+  prepis <= 24 KiB, zapis <= 46 KiB, neveljavna izmenjava se preskoci). Klici s telefona so na seznamu prek klici-seznam.server.ts (samo functions.ts; pot klica service.server.ts ne sme uvoziti sinhron-telefon,
+  kanal-claude.test 4.4), izvor "telefon", id s-telefona-<id>, samo branje:
   recordCaller ga zavrne); vsak dobi mapo klica (zapisiZapisekKlica, do 10 na krog, oznake v sinhron-telefon-mape.json; izbrisana mapa se ne vrne);
   podjetniski zapis po zapiskiHrambaDni tudi iz sinhronizacije. Preizkusi: naloga-17-klici-telefon.test.ts, naloga-17-klici-telefon-ui.spec.ts.
 - Vsebina QR (ena vrstica, shema kot QR konzole OpenLine; razdelek url/code/fp od T1-S1 NI vec v QR):
