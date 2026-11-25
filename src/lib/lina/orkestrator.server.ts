@@ -807,7 +807,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     await unlink(path.join(mapa, pot(id))).catch(brezNapake);
     // naloga 12 #2: verzija izbrisane naloge ostane v indeksu (vec od zadnje): kopija se ne vrne
     const m = await znaneVerzije();
-    m.set(id, Math.max(m.get(id) ?? 0, zadnja) + 1);
+    // naloga 14 N8: ostane varno celo stevilo (sicer ga branje indeksa zavrze in izbris izgine)
+    m.set(id, Math.min(Number.MAX_SAFE_INTEGER, Math.max(m.get(id) ?? 0, zadnja) + 1));
     brezVnosa.delete(id);
     await shraniIndeks();
   };
@@ -940,7 +941,10 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           const obstaja = await access(path.join(mapa, pot(id))).then(() => true, () => false);
           if (!obstaja) throw new OrkestratorNapaka("ni-naloge");
           if (tecejo.has(id)) throw new OrkestratorNapaka("faza");
-          return void (await izbrisiDatoteke(id));
+          // naloga 14 N8: verzija iz surove datoteke (ce je celo stevilo), da izbris ne zniza znane verzije, ko indeks nima vnosa
+          const surovo = await readJsonFile<unknown>(mapa, pot(id)).catch(() => null);
+          const v = surovo && typeof surovo === "object" && !Array.isArray(surovo) ? (surovo as { verzija?: unknown }).verzija : undefined;
+          return void (await izbrisiDatoteke(id, Number.isSafeInteger(v) && (v as number) >= 0 ? (v as number) : 0));
         }
         // naloga 14 N3: nepreverjena (samo branje) se nikoli ne konca sama - izbris mozen v vsaki fazi, razen ce tece
         if (!KONCNE_FAZE.includes(s.faza) && !(s.nepreverjeno && !tecejo.has(id))) throw new OrkestratorNapaka("faza");
