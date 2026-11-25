@@ -61,7 +61,7 @@ const NEVELJAVNA: Array<[string, (s: Record<string, unknown>) => void]> = [
     s.faza = "caka-lastnika";
     s.cakanje = { klicId: "k9-9", vprasanjeId: null, vprasanje: "?" };
   }],
-  ["odprt klic z argumenti, ki niso objekt", (s) => { s.odprti = [{ id: "k1-1", ime: "porocaj_vmesno", argumenti: "x" }]; }],
+  ["odprt klic brez id", (s) => { s.odprti = [{ ime: "porocaj_vmesno", argumenti: {} }]; }],
   ["ponovitve z nestevilsko vrednostjo", (s) => { s.ponovitve = { a: "1" }; }],
 ];
 
@@ -104,6 +104,29 @@ describe("V7: kontrola - veljavno stanje se nadaljuje", () => {
     const o = ustvariOrkestrator(root, { ...brez, klicModela: m.f });
     assert.deepEqual(await o.nadaljujPoZagonu(), [id]);
     await cakaj(async () => (await o.preberi(id))?.faza === "koncano");
+  });
+
+  it("lastno stanje iz cudnega odgovora modela (argumenti [] / null / brez, poraba NaN) ostane veljavno: naloga konca vidno", async () => {
+    const root = await mapa();
+    let i = 0;
+    const cudni = [[], null, undefined, "niz"];
+    const f: KlicModela = async () => {
+      const a = cudni[i];
+      i++;
+      if (i > cudni.length) return { ...koncni, usage: { vhod: Number.NaN, izhod: Number.POSITIVE_INFINITY, predpomnjeni: 0 } };
+      return { ok: true, besedilo: "", klici: [{ id: "x", ime: "porocaj_vmesno", argumenti: a as unknown as Record<string, unknown> }], usage: { vhod: Number.NaN, izhod: 5, predpomnjeni: 0 }, razlogKonca: "orodje" };
+    };
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: f });
+    const n = await o.nova({ cilj: "Cudni odgovori modela." });
+    const s = await o.teci(n.id);
+    assert.equal(s.faza, "koncano", JSON.stringify(s.dogodki.slice(-4)));
+    const naDisku = await o.preberi(n.id);
+    assert.ok(naDisku, "stanje na disku je veljavno in vidno");
+    assert.ok((await o.seznam()).some((x) => x.id === n.id));
+    assert.ok(Number.isFinite(naDisku!.poraba.vhod) && Number.isFinite(naDisku!.poraba.izhod), JSON.stringify(naDisku!.poraba));
+    assert.equal(naDisku!.poraba.ocenjeno, true, "neveljavna poraba ponudnika -> ocena iz znakov (meja zetonov ni obidena)");
+    const napacni = naDisku!.sporocila.filter((x) => x.vloga === "orodje" && /Napacni argumenti/.test(String(x.rezultat)));
+    assert.equal(napacni.length, cudni.length);
   });
 
   it("odprt klic orodja, ki ga je model izmislil, ostane veljaven: dobi izid »ne obstaja« (pot V1)", async () => {

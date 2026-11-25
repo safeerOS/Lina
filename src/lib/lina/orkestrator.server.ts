@@ -241,9 +241,10 @@ export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime
   if (x.ocena !== null && !(obj(x.ocena) && niz(x.ocena.ovira) && niz(x.ocena.dokaz))) return "ocena";
   if (!Array.isArray(x.sporocila) || !x.sporocila.every((m) =>
     obj(m) && (m.vloga === "uporabnik" ? niz(m.besedilo)
-      : m.vloga === "asistent" ? (m.besedilo === undefined || niz(m.besedilo)) && (m.klici === undefined || (Array.isArray(m.klici) && m.klici.every((k) => obj(k) && niz(k.id) && niz(k.ime) && obj(k.argumenti))))
+      : m.vloga === "asistent" ? (m.besedilo === undefined || niz(m.besedilo)) && (m.klici === undefined || (Array.isArray(m.klici) && m.klici.every((k) => obj(k) && niz(k.id) && niz(k.ime))))
         : m.vloga === "orodje" && niz(m.id) && niz(m.ime) && (niz(m.rezultat) || obj(m.rezultat)) && (m.napaka === undefined || typeof m.napaka === "boolean")))) return "sporocila";
-  if (!Array.isArray(x.odprti) || !x.odprti.every((k) => obj(k) && niz(k.id) && niz(k.ime) && obj(k.argumenti)
+  // argumenti odprtega klica so model izbral (lahko ne-objekt): zavrne jih preveriArgumente ob izvedbi (izid »Napacni argumenti«)
+  if (!Array.isArray(x.odprti) || !x.odprti.every((k) => obj(k) && niz(k.id) && niz(k.ime)
     && (k.zacet === undefined || typeof k.zacet === "boolean") && (k.potrjeno === undefined || (k.potrjeno === true && imaOrodje(k.ime as string))))) return "odprti";
   const odprti = x.odprti as Array<{ id: string; ime: string }>;
   const cakajoca = x.faza === "caka-potrditev" || x.faza === "caka-lastnika" || x.faza === "caka-pomocnika";
@@ -566,7 +567,9 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           return s;
         }
         s.poraba.klici += 1;
-        if (r.usage) {
+        // poraba samo kot koncna nenegativna stevila (NaN bi obsel mejo zetonov in pokvaril stanje na disku - pregled naloge 9)
+        const veljavna = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+        if (r.usage && veljavna(r.usage.vhod) && veljavna(r.usage.izhod)) {
           s.poraba.vhod += r.usage.vhod;
           s.poraba.izhod += r.usage.izhod;
         } else {
