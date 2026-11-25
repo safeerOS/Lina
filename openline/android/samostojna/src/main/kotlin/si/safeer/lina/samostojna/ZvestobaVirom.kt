@@ -76,6 +76,9 @@ object PredajaNaloge {
     private val TRDI_POVEZAVO = Regex("\\b(sem povezana|povezana sem)\\b", RegexOption.IGNORE_CASE)
     private val O_RACUNALNIKU = Regex("nalog|računalnik|racunalnik|claude|global link|povezan", RegexOption.IGNORE_CASE)
 
+    /** Ali besedilo govori o racunalniku, nalogi ali povezavi (takrat program pred oceno trditev izmeri dosegljivost, T4). */
+    fun omenjaRacunalnik(besedilo: String): Boolean = O_RACUNALNIKU.containsMatchIn(besedilo)
+
     /** Oznaka v trajni zgodovini seje: racunalnik je nalogo sprejel (iz nje se ob ponovnem zagonu obnovi »zadnja naloga«). */
     const val OZNAKA_SPREJETA = "[program: računalnik je sprejel nalogo: "
 

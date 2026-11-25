@@ -69,13 +69,21 @@ object SistemskoNavodilo {
      * Naloga 11 (25. 11. 2026, 06:49 na 5G): seznanjen telefon ni isto kot dosegljiv racunalnik. Lina je rekla »Da, povezana sem«, ker je
      * navodilo za seznanjen telefon trdilo dostop. Tri stanja: ni seznanjen, seznanjen a nedosegljiv, dosegljiv (izmerjeno ob vprasanju).
      */
-    fun racunalnik(stanje: StanjeRacunalnika): String = when (stanje) {
+    /**
+     * [izmerjeno] = dosegljivost je bila izmerjena ob tem vprasanju (T4, pregled 0213: meri se samo, ko vprasanje zadeva racunalnik);
+     * neizmerjen seznanjen racunalnik ni ne »dosegljiv« ne »preverjeno nedosegljiv«.
+     */
+    fun racunalnik(stanje: StanjeRacunalnika, izmerjeno: Boolean = true): String = if (!izmerjeno && stanje == StanjeRacunalnika.NEDOSEGLJIV) RACUNALNIK_NEIZMERJEN else when (stanje) {
         StanjeRacunalnika.NI_SEZNANJEN -> " Racunalnik ni povezan: nalog ne moreš predati racunalniku. Povej, da je treba telefon najprej povezati z Lino na racunalniku (nastavitve, Racunalnik)."
         StanjeRacunalnika.NEDOSEGLJIV -> " Telefon je seznanjen z Lino na racunalniku, a racunalnik zdaj NI dosegljiv (preverjeno ob tem vprasanju; naloge delujejo samo v domacem omrezju ali prek poti, ki je telefon zdaj nima). " +
             "Na vprasanje o povezavi povej natanko to; ne trdi, da si povezana. Ce uporabnik zeli nalogo za racunalnik, dodaj samostojno vrstico [[racunalnik: natancen opis naloge s polno potjo projekta]]; " +
             "program jo poskusi poslati in sam pove izid (ce racunalnik ni dosegljiv, ponudi, da jo shrani in poslje pozneje). Ti nikoli ne pisi, da nalogo posiljas ali da si jo poslala."
         StanjeRacunalnika.DOSEGLJIV -> RACUNALNIK_DOSEGLJIV
     }
+
+    private const val RACUNALNIK_NEIZMERJEN = " Telefon je seznanjen z Lino na racunalniku; dosegljivosti racunalnika ob tem vprasanju nisi preverila. " +
+        "Ne trdi, da si povezana, in ne, da racunalnik ni dosegljiv. Ce uporabnik zeli nalogo za racunalnik, dodaj samostojno vrstico " +
+        "[[racunalnik: natancen opis naloge s polno potjo projekta]]; program jo poskusi poslati in sam pove izid. Ti nikoli ne pisi, da nalogo posiljas ali da si jo poslala."
 
     private const val RACUNALNIK_DOSEGLJIV = " Uporabnik ima povezan racunalnik z Lino in programom Claude Code. Nalogo, ki jo je treba opraviti na racunalniku " +
             "(programiranje, vodenje projekta, delo z drugimi agenti), predaj tako, da v odgovor dodas samostojno vrstico natanko v obliki " +
