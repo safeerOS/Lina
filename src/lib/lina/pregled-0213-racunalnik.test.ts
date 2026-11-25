@@ -35,6 +35,15 @@ test("pregled 0213 B1: obicajen odgovor brez trditve ostane nespremenjen do bajt
   const o = "Naloga za jutri:  kupi kruh.\n\n\nRačunalnik je prižgan.";
   assert.equal(await obdelajClaudeCode(root, o, true), o);
   assert.equal(await obdelajClaudeCode(root, o, false), o);
+  // tretja oseba in prihodnjik nista trditev Line, da je ze poslala
+  for (const s of ["Stranka je poslala naročilo za računalnik.", "Gradnjo bom zagnala na računalniku, ko potrdite.", "Kolegica je predala nalogo včeraj."]) {
+    assert.equal(await obdelajClaudeCode(root, s, true), s, s);
+  }
+  // druga oznaka (gradnja, n8n): trditev odpade, opombe programa ni (izid pove naslednji korak)
+  const g = await obdelajClaudeCode(root, "Poslala sem nalogo računalniku.\n[[gradnja: lina | apk]]", true);
+  assert.doesNotMatch(g, TRDITEV);
+  assert.doesNotMatch(g, /nikamor oddana/);
+  assert.match(g, /\[\[gradnja: lina \| apk\]\]/);
 });
 
 test("pregled 0213 B2: neobstojeca mapa iz modela s skritimi znaki (U+202E) se lastniku ne izpise", async () => {
@@ -57,7 +66,8 @@ test("pregled 0213 C1: licence RNNoise in ovoja so v extraResources paketa deb; 
   }
   const ci = beri("../../../.github/workflows/racunalnik.yml");
   for (const f of ["LICENSE", "COPYING-RNNOISE", "NOTICE"]) assert.ok(ci.includes(`resources/lina/vendor/rnnoise-wasm/${f}$`), `CI preveri ${f}`);
-  assert.match(ci, /_rnnoise_process_frame/, "CI preveri, da je koda RNNoise v svezenju streznika");
+  assert.match(ci, /grep -rqs 'rnnoise_process_frame' "\$X\/opt\/Lina\/resources\/lina\/\.output\/server"/, "CI preveri, da je koda RNNoise v svezenju streznika");
+  assert.ok(readFileSync(new URL("../../../vendor/rnnoise-wasm/rnnoise.js", import.meta.url), "utf8").includes('"rnnoise_process_frame"'), "iskani niz je dobesedni niz v rnnoise.js");
 });
 
 test("pregled 0213 B7: vprasanja agenta so vidna izven zavihka Racunalnik - znacka v meniju in obvestilo namizja (sl in en)", async () => {

@@ -278,24 +278,31 @@ export async function obdelajClaudeCode(root: string, odgovor: string, dovoliPre
   return `${brezTrditev}\n\n${izid}`.trim();
 }
 
-/** Odgovor brez oznake naloge: ce je model trdil, da je nalogo poslal, stavek odpade in program pove, da ni bila poslana. */
+/**
+ * Odgovor brez oznake naloge: ce je model trdil, da je SAM nalogo ze poslal (prva oseba, preteklik ali »posiljam«), stavek odpade in
+ * program pove, da ni bila oddana. Tretja oseba (»stranka je poslala«) in prihodnjik (»bom zagnala«) ostaneta. Ob drugi oznaki
+ * ([[gradnja: …]], [[n8n: …]]) opombe ni - izid pove naslednji korak.
+ */
 function brezLazneTrditve(odgovor: string): string {
   // obicajen odgovor ostane nespremenjen do bajta (filter sicer normalizira presledke)
-  if (!odgovor.split("\n").some((v) => !v.trim().startsWith("[[") && v.split(/(?<=[.!?])\s+/).some(trdiPosiljanje))) return odgovor;
-  return `${brezTrditevOPosiljanju(odgovor)}\n\n(Ta naloga ni bila nikamor oddana. Če jo želite, jo pripravim kot predlog, ki ga potrdite v zavihku Računalnik.)`.trim();
+  if (!odgovor.split("\n").some((v) => !v.trim().startsWith("[[") && v.split(/(?<=[.!?])\s+/).some(trdiPrvaOseba))) return odgovor;
+  const b = brezTrditevOPosiljanju(odgovor, trdiPrvaOseba);
+  return /\[\[\s*(gradnja|n8n)\s*:/i.test(odgovor) ? b : `${b}\n\n(Ta naloga ni bila nikamor oddana. Če jo želite, jo pripravim kot predlog, ki ga potrdite v zavihku Računalnik.)`.trim();
 }
-const trdiPosiljanje = (stavek: string) => TRDI_POSILJANJE.test(stavek) && O_NALOGI.test(stavek);
 
 const TRDI_POSILJANJE = /po[sš]iljam|poslala|predala|predajam|zagnala|sem oddala/i;
+const PRVA_OSEBA = /(^|[^\p{L}])(po[sš]iljam|predajam)([^\p{L}]|$)|(^|[^\p{L}])sem([^\p{L}][^.!?]{0,40})?[^\p{L}](poslala|predala|zagnala|oddala)([^\p{L}]|$)|(^|[^\p{L}])(poslala|predala|zagnala|oddala)[^\p{L}]([^.!?]{0,40}[^\p{L}])?sem([^\p{L}]|$)/iu;
 const O_NALOGI = /nalog|računalnik|racunalnik|claude|agent/i;
+const trdiPosiljanje = (st: string) => TRDI_POSILJANJE.test(st) && O_NALOGI.test(st);
+const trdiPrvaOseba = (st: string) => PRVA_OSEBA.test(st) && O_NALOGI.test(st);
 /**
  * Odstrani stavke, v katerih model trdi, da je nalogo poslal ali predal (izid vedno sporoci program). Po vrsticah: vrstice z
  * oznakami ([[gradnja: …]], [[n8n: …]]) in prelomi ostanejo, ker jih obdelajo naslednji koraki.
  */
-export function brezTrditevOPosiljanju(besedilo: string): string {
+export function brezTrditevOPosiljanju(besedilo: string, trdi: (stavek: string) => boolean = trdiPosiljanje): string {
   return besedilo
     .split("\n")
-    .map((v) => (v.trim().startsWith("[[") ? v : v.split(/(?<=[.!?])\s+/).filter((st) => !(TRDI_POSILJANJE.test(st) && O_NALOGI.test(st))).join(" ")))
+    .map((v) => (v.trim().startsWith("[[") ? v : v.split(/(?<=[.!?])\s+/).filter((st) => !trdi(st)).join(" ")))
     .filter((v, i, vse) => v.trim() !== "" || (i > 0 && vse[i - 1]!.trim() !== ""))
     .join("\n")
     .trim();

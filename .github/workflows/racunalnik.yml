@@ -153,7 +153,8 @@ jobs:
           L="$X/opt/Lina/lina-lupina"
           # pregled 0213 C1: koda RNNoise (dinamicni uvoz ../../../vendor/rnnoise-wasm/rnnoise.js) mora biti v svezenju streznika,
           # sicer stikalo »Zmanjsanje hrupa« v namescenem paketu tiho ne deluje (dnevnik samo »rnnoise-ni-na-voljo«)
-          grep -rqs '_rnnoise_process_frame' "$X/opt/Lina/resources/lina/.output/server"
+          # niz "rnnoise_process_frame" je v rnnoise.js kot dobesedni niz (T("rnnoise_process_frame", ...)), ki ga krajsanje ne spremeni
+          grep -rqs 'rnnoise_process_frame' "$X/opt/Lina/resources/lina/.output/server"
           # Najprej sama lupina: manjkajoca knjiznica na streznikih GitHub ni napaka pakiranja.
           ELECTRON_RUN_AS_NODE=1 "$L" -p 'process.versions.node'
           python3 scripts/preverba-paketa-pdf.py "$RUNNER_TEMP/vzorec.pdf" "Pozdrav Lina PDF"
