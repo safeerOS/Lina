@@ -1,0 +1,28 @@
+RNNoise (WebAssembly) v Lini - izvor in licence
+================================================
+
+Paket: @shiguredo/rnnoise-wasm 2025.1.5 (npm, https://github.com/shiguredo/rnnoise-wasm)
+Prenesen: /home/<uporabnik>/Prejemi/nezaupano/rnnoise/shiguredo-rnnoise-wasm-2025.1.5.tgz
+          sha256 8e0690aee3f83fd80f45fbe69a5a243808f7a5bd42e0e28501f34dbe14700bb1
+Pregledan pred vgradnjo (25. 11. 2026): WASM je vgrajen v rnnoise.js (base64), nalaganje brez omrezja
+(fetch/XMLHttpRequest/importScripts v kodi ni), brez dostopa do diska.
+
+Datoteke v tej mapi (nespremenjene, iz dist/ in korena paketa):
+  rnnoise.js          sha256 e6958293a0118bf9860cb2753332f7562531cc987c914552c426cd7d7180a63e
+  rnnoise.d.ts        sha256 b37b0161b04d6c4893dc3c21c0f0c937b1ca829062f2c57067d1e3a0a26da19f
+  rnnoise_wasm.d.ts   sha256 8ae99b86f381695b17ed053adccb27f000d04612b9fbbb00059baee9519e0924
+  package.json        sha256 d5ff7738e11c0a05f6357e5c2f3f01ef7f0c9eb933b29a2ba204bf2b1784e51d
+  LICENSE             sha256 a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9
+
+Licence:
+  - Ovoj JavaScript (@shiguredo/rnnoise-wasm): Apache License 2.0, besedilo v LICENSE.
+    Copyright 2021-2025, Takeru Ohta (Original Author); Copyright 2021-2025, Shiguredo Inc.
+  - RNNoise (prevedeno v WASM): BSD-3-Clause, besedilo v COPYING-RNNOISE.
+    Besedilo je dobesedna kopija datoteke third_party/rnnoise/COPYING iz libwebrtc (Mozilla), ker paket npm
+    besedila BSD ne vsebuje; sha256 e2f59ff41d9d03adc3dcf3deff170f8c8cf4a6eb4a9b174762a7656d23200ffa.
+    NEPREVERJENO: trenutna datoteka COPYING v xiph/rnnoise (in v vilici shiguredo/rnnoise, iz katere je zgrajen WASM)
+    lahko navaja dodatne imetnike pravic (24. 11. 2026 prebrano: tudi Amazon). Pred javno izdajo primerjaj z izvirnikom.
+
+Sprememba ob vgradnji: nobena v datotekah paketa. Zgradba je samo za brskalnik (preverja window/WorkerGlobalScope);
+src/lib/lina/zvok-rnnoise.server.ts zato med sinhronim zacetkom nalaganja zacasno nastavi globalThis.WorkerGlobalScope
+in ga takoj odstrani.

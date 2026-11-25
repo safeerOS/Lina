@@ -54,6 +54,12 @@ export const MULAW_TISINA = 0xff;
 export const OKVIR_BAJTOV = 160;
 
 /**
+ * Vbrizgan cistilnik PCM (npr. RNNoise iz zvok-rnnoise.server.ts): vrne natanko toliko vzorcev, kot jih je dobil; unici() sprosti
+ * vire. Ta datoteka ga NE uvaza (WASM ~5 MB ostane samo na strezniku).
+ */
+export type CistilnikPcm = { obdelaj(pcm: Int16Array): Int16Array; unici(): void };
+
+/**
  * Tokovni prevzorcevalnik z oknastim sincom (Hann). Meja sita je 0,95 manjse od frekvenc Nyquista (pri zmanjsanju
  * izhodne, pri povecanju vhodne); vsak izhodni vzorec je normaliziran z vsoto tez (enosmerna komponenta ostane 1).
  * Zgodovina vzorcev se ohrani med klici process(), zato kosi poljubne dolzine dajo isti izhod kot celota.
@@ -140,15 +146,25 @@ export function pcmVBajte(pcm: Int16Array): Uint8Array {
 export class VhodTwilioVLive {
   private readonly gor = new Prevzorcevalnik(8000, 16000);
   private readonly cistilnik: CiscenjeZvoka8k | null;
+  private readonly dodatno: CistilnikPcm | null;
 
-  constructor(ciscenje = false) {
+  /** dodatno: vbrizgan cistilnik 8 kHz (RNNoise, naloga 17a) za Wienerjem; null = kot prej. */
+  constructor(ciscenje = false, dodatno: CistilnikPcm | null = null) {
     this.cistilnik = ciscenje ? new CiscenjeZvoka8k() : null;
+    this.dodatno = dodatno;
   }
 
   /** Vrne PCM 16-bit little-endian 16 kHz. */
   process(mulaw: Uint8Array): Uint8Array {
-    const pcm8 = mulawVPcm(mulaw);
-    return pcmVBajte(this.gor.process(this.cistilnik ? this.cistilnik.obdelaj(pcm8) : pcm8));
+    let pcm8 = mulawVPcm(mulaw);
+    if (this.cistilnik) pcm8 = this.cistilnik.obdelaj(pcm8);
+    if (this.dodatno) pcm8 = this.dodatno.obdelaj(pcm8);
+    return pcmVBajte(this.gor.process(pcm8));
+  }
+
+  /** Konec klica: sprosti vbrizgani cistilnik (pomnilnik WASM). */
+  unici(): void {
+    this.dodatno?.unici();
   }
 }
 

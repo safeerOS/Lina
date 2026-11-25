@@ -14,7 +14,7 @@
 import { razlogVarovalkeGovora } from "../odgovor-znanje.ts";
 import { fazaTrajanja } from "../trajanje.ts";
 import type { Catalog } from "../types.ts";
-import { IzhodLiveVTwilio, OKVIR_BAJTOV, VhodTwilioVLive, razrezi } from "./zvok.ts";
+import { IzhodLiveVTwilio, OKVIR_BAJTOV, VhodTwilioVLive, bajtiVPcm, pcmVBajte, razrezi, type CistilnikPcm } from "./zvok.ts";
 import { MEJA_SPOROCILA_TWILIO, razberiTwilio, twilioClear, twilioMark, twilioMedia } from "./twilio-sporocila.ts";
 
 export type TwilioVrata = {
@@ -107,7 +107,18 @@ export type OdvisnostiMosta = {
   };
   /** Najdaljsi rok cakanja zakljucka Soniox v ms (privzeto 3000 ms; preizkusi ga lahko skrajsajo). */
   sonioxRokZakljuckaMs?: number;
+  /**
+   * RNNoise pred Live (naloga 17a, za stikalom »Zmanjsanje hrupa«): nov cistilnik za en klic pri 8 kHz (Twilio/SIP) ali 16 kHz
+   * (telefon kot prehod). null ali napaka = kot prej (Twilio/SIP samo Wiener, telefon brez filtra). Brez te odvisnosti nic novega.
+   */
+  ciscenjeRnnoise?: (frekvenca: 8000 | 16000) => CistilnikPcm | null;
 };
+
+/**
+ * Pot Twilio/SIP z RNNoise: tudi Wiener pred njim (true) ali samo RNNoise (false). Prava odvisnost (vstop.server.ts) za 8 kHz zdaj
+ * vrne null: po meritvi WER (naloga 17a, POROCILO.md) ostane samo Wiener; vezava ostane za meritev na pravem hrupu tiskarne.
+ */
+export const WIENER_Z_RNNOISE = true;
 
 export const OPOZORILO_PRED_IZTEKOM_MS = 30_000;
 export const ROK_ZAKLJUCKA_SONIOX_MS = 3_000;
@@ -173,6 +184,9 @@ export class LiveMost {
   private liveNared = false;
   private cas0 = 0;
   private vhodPretvornik = new VhodTwilioVLive(true);
+  /** RNNoise za telefon kot prehod (16 kHz): ustvari se ob prvem kosu, ce je stikalo vklopljeno; null = brez filtra. */
+  private ciscenje16k: CistilnikPcm | null = null;
+  private ciscenje16kDovoljeno = false;
   private readonly izhodPretvornik = new IzhodLiveVTwilio();
   private predpomnilnikVhoda: Uint8Array[] = [];
   /** Do kdaj predvajamo pozdrav (vhod ne gre v Live, dokler traja). */
@@ -363,6 +377,13 @@ export class LiveMost {
     try {
       this.nastavitve = await this.odv.nalozi();
       if (this.nastavitve.ciscenjeZvoka === false) this.vhodPretvornik = new VhodTwilioVLive(false);
+      else if (!this.konec) {
+        // Po koncu klica (zakljuci med nalozi) se nic ne ustvari: zakljuci je cistilnike ze pospravil.
+        this.ciscenje16kDovoljeno = true;
+        // Pot telefona (zacetekKlica) ima zvok 16 kHz (naPcm16k); 8 kHz cistilnik ustvari samo pot Twilio/SIP.
+        const c8 = this.odv.zacetekKlica ? null : this.novCistilnik(8000);
+        if (c8) this.vhodPretvornik = new VhodTwilioVLive(WIENER_Z_RNNOISE, c8);
+      }
     } catch {
       this.dnevnik("nastavitve-napaka");
       this.twilio.zapri(1011, "nastavitve");
@@ -445,6 +466,16 @@ export class LiveMost {
     }
   }
 
+  /** Nov RNNoise cistilnik iz odvisnosti; napaka ali null = brez (klic gre naprej po stari poti). */
+  private novCistilnik(frekvenca: 8000 | 16000): CistilnikPcm | null {
+    try {
+      return this.odv.ciscenjeRnnoise?.(frekvenca) ?? null;
+    } catch {
+      this.dnevnik("rnnoise-napaka");
+      return null;
+    }
+  }
+
   private naMedia(zvok: Uint8Array): void {
     this.naVhodPcm(this.vhodPretvornik.process(zvok));
   }
@@ -452,7 +483,13 @@ export class LiveMost {
   /** Pot telefona: surov PCM 16 kHz od telefona (brez mu-law) gre po isti poti kot Twilio vhod. Po koncu klica ali pred startom se zavrze. */
   naPcm16k(pcm: Uint8Array): void {
     if (this.faza !== "zacenjam" && this.faza !== "dela") return;
-    this.naVhodPcm(pcm);
+    if (this.ciscenje16kDovoljeno) {
+      this.ciscenje16kDovoljeno = false;
+      this.ciscenje16k = this.novCistilnik(16000);
+      // Stikalo vklopljeno, RNNoise ni (npr. vendor manjka v svezenju): klic gre brez filtra, a to mora biti vidno v dnevniku.
+      if (!this.ciscenje16k) this.dnevnik("rnnoise-ni-na-voljo");
+    }
+    this.naVhodPcm(this.ciscenje16k ? pcmVBajte(this.ciscenje16k.obdelaj(bajtiVPcm(pcm))) : pcm);
   }
 
   private naVhodPcm(pcm: Uint8Array): void {
@@ -996,6 +1033,11 @@ export class LiveMost {
     this.dnevnik(`konec-${razlog}`);
     this.sonioxVrsta = [];
     this.sonioxVrstaBajtov = 0;
+    // Vbrizgana cistilnika (WASM) se sprostita na tem enem mestu; po unici() zvok ne gre vec nikamor (faza konec).
+    this.ciscenje16kDovoljeno = false;
+    this.ciscenje16k?.unici();
+    this.ciscenje16k = null;
+    this.vhodPretvornik.unici();
     const sidSoniox = this.callSid;
     const sejaSoniox = this.soniox;
     const odpiranjeSoniox = this.sonioxOdpiranje;

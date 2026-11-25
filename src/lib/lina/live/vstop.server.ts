@@ -19,10 +19,12 @@ import { preberiSonioxKljuc } from "../soniox-kljuc.server.ts";
 import { odpriSonioxSejo, type MoznostiSonioxSeje } from "../soniox-seja.server.ts";
 import { resolveDataDir } from "../store.server.ts";
 import { ciscenjeKlicevVklopljeno } from "../zvok-ciscenje.server.ts";
+import { CiscenjeRnnoise, nalozRnnoise, rnnoisePripravljen } from "../zvok-rnnoise.server.ts";
 import { LiveMost, type NacinBesedila, type OdvisnostiMosta, type TwilioVrata, type ZapisnikLive } from "./most.ts";
 import { setupLive, sistemskoNavodilo } from "./navodilo.ts";
 import { odsekStrokKlic } from "../stroke.server.ts";
 import { odpriLiveWs } from "./odjemalec.server.ts";
+import { zRezervoSetupa } from "./odpri-rezerva.ts";
 import { posnetekMulaw } from "./posnetek.server.ts";
 import { POT_LIVE } from "./twiml.ts";
 import { porabiZetonLive, steviloCakajocihZetonov } from "./zeton.ts";
@@ -108,6 +110,12 @@ export function sonioxZaKoren(
 
 export type ZasedenostLive = { osvezi(callSid: string): void; sprosti(callSid: string): void };
 
+/**
+ * Delez ociscenega zvoka RNNoise (ostalo surovo) za telefon kot prehod 16 kHz; izbrano po meritvi WER (POROCILO.md naloge 17a).
+ * Klic 8 kHz (Twilio/SIP) RNNoise NE dobi: meritev ni pokazala koristi pred obstojecim Wienerjem (pri 5 dB 30 proti 27 napak).
+ */
+export const MESANICA_RNNOISE_16K = 0.5;
+
 /** Pravi odvisnosti mosta: zeton procesa, Live prek Vertex (ADC), stalni posnetki Line, zapis klica v knjigi. */
 export function pravaOdvisnost(root: string, zasedenost: ZasedenostLive, dnevnik: (koda: string) => void): OdvisnostiMosta {
   return {
@@ -118,6 +126,8 @@ export function pravaOdvisnost(root: string, zasedenost: ZasedenostLive, dnevnik
       const pozdrav = uvodKlica(pravila, line.catalog.company.name);
       const sistemsko = sistemskoNavodilo({ podjetje: line.catalog.company.name, katalog: line.catalog, pozdrav, stroke: await odsekStrokKlic(root) });
       const ciscenjeZvoka = await ciscenjeKlicevVklopljeno(root);
+      // RNNoise se nalozi enkrat na proces (prvic 72-96 ms, POROCILO.md naloge 17a); napaka = null in klic gre po stari poti.
+      if (ciscenjeZvoka) await nalozRnnoise();
       return {
         setup: setupLive({ projekt: brain.project, sistemsko, zmanjsanjeHrupa: ciscenjeZvoka }),
         katalog: line.catalog,
@@ -128,12 +138,17 @@ export function pravaOdvisnost(root: string, zasedenost: ZasedenostLive, dnevnik
         ciscenjeZvoka,
       };
     },
-    odpriLive: odpriLiveWs(),
+    // v1 in START_SENSITIVITY_LOW nista preverjena skupaj: ob zavrnitvi setupa ena ponovitev brez polja (odpri-rezerva.ts).
+    odpriLive: zRezervoSetupa(odpriLiveWs(), dnevnik),
     zapisnik: zapisnikIzKnjige(root),
     zasedenost,
     posnetek: posnetekMulaw(root),
     dnevnik,
     soniox: sonioxZaKoren(root, dnevnik),
+    ciscenjeRnnoise: (frekvenca) => {
+      const modul = frekvenca === 16000 ? rnnoisePripravljen() : null;
+      return modul ? new CiscenjeRnnoise(modul, { frekvenca, mesanica: MESANICA_RNNOISE_16K }) : null;
+    },
   };
 }
 

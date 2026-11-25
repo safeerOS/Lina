@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { access, unlink, writeFile } from "node:fs/promises";
+import { access, readFile, unlink, writeFile } from "node:fs/promises";
 import { freemem, homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { odlociPotPrepisa, type PotPrepisa } from "./live/rsdo-namig.ts";
 import { ocistiBesedilo, prepisiPrekStreznika, rsdoNalaga, rsdoPripravljen, rsdoVklopljen } from "./rsdo-streznik.server.ts";
+import { nalozRnnoise, ocistiWav16k, type RnnoiseModul } from "./zvok-rnnoise.server.ts";
 
 /**
  * Lokalni slovenski prepoznavalnik RSDO (dodatek »slovenski«). Lastnik 19. 11. 2026: »Gemini + namig RSDO«; 23. 11. 2026: »moral bi
@@ -36,7 +37,30 @@ const streznikPrivzeti: StreznikRsdo = { pripravljen: rsdoPripravljen, prepisi: 
 /** Najdaljsi posnetek za prepis (s): dolg izrek ali sum ne zadrzi procesa do roka (pregled 029, najdba 6). */
 export const NAJDALJSI_POSNETEK_S = 60;
 
-export type OdvisnostiRsdo = { izvajalec?: Izvajalec; dom?: string; prostiRamMB?: () => number | null; ffmpeg?: string; streznik?: StreznikRsdo };
+export type OdvisnostiRsdo = {
+  izvajalec?: Izvajalec;
+  dom?: string;
+  prostiRamMB?: () => number | null;
+  ffmpeg?: string;
+  streznik?: StreznikRsdo;
+  /** Stikalo »Zmanjsanje hrupa« (zvok.json): RNNoise na 16 kHz WAV pred RSDO (naloga 17a). Ni podano = brez ciscenja. */
+  ciscenje?: boolean;
+  /** RNNoise (preizkusi); privzeto modul procesa. */
+  rnnoise?: () => Promise<RnnoiseModul | null>;
+};
+
+/** RNNoise na WAV za RSDO; ob kakrsni koli napaki ostane izhod ffmpeg (prepis gre naprej). */
+async function ocistiZaRsdo(wav: string, odv: OdvisnostiRsdo): Promise<void> {
+  if (odv.ciscenje !== true) return;
+  try {
+    const modul = await (odv.rnnoise ?? nalozRnnoise)();
+    if (!modul) return;
+    const ociscen = await ocistiWav16k(modul, await readFile(wav));
+    if (ociscen) await writeFile(wav, ociscen, { mode: 0o600 });
+  } catch {
+    /* izvirnik ffmpeg ostane */
+  }
+}
 
 export function potCli(dom: string = homedir()): string {
   return path.join(dom, ".local", "bin", "cli-anything-linuxmint");
@@ -96,6 +120,7 @@ export async function prepisiRsdo(zvok: Buffer, mime: string, odv: OdvisnostiRsd
     await writeFile(vhod, zvok, { mode: 0o600 });
     const p = await izv(odv.ffmpeg ?? "ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", vhod, "-t", String(NAJDALJSI_POSNETEK_S), "-ac", "1", "-ar", "16000", wav], ROK_PRETVORBE_MS);
     if (p.koda !== 0) return null;
+    await ocistiZaRsdo(wav, odv);
     if (streznik.pripravljen()) {
       // napaka stalnega procesa ne sprozi se CLI (dvojni cas in dvojni RAM): prepis gre naprej brez namiga
       const b = ocistiBesedilo((await streznik.prepisi(wav)) ?? "").trim();

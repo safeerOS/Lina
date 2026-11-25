@@ -8,6 +8,7 @@ import { navodiloZNamigom } from "./live/rsdo-namig.ts";
 import { loadPravila } from "./pravila.server.ts";
 import { potPrepisaZa, prepisiRsdo, type OdvisnostiRsdo } from "./rsdo-motor.server.ts";
 import { preberiStanjeStrok } from "./stroke.server.ts";
+import { ciscenjeKlicevVklopljeno } from "./zvok-ciscenje.server.ts";
 import { namigiPrepoznave, popraviPrepoznavoIzrazov } from "./stroke.ts";
 
 /**
@@ -67,7 +68,9 @@ export async function prepisiZvok(zvokB64: string, mime: string, token: string |
     // Dodatek »slovenski« (RSDO): lokalni prepis gre Geminiju kot nezaupan namig; ob napaki prepis brez namiga.
     const pravila = await loadPravila(root).catch(() => null);
     const pot = await potPrepisaZa({ dodatekVklopljen: pravila?.dodatki?.slovenski === true, rsdoNamig: pravila?.rsdoNamig }, rsdo);
-    const namig = pot.pot === "gemini-rsdo" ? await prepisiRsdo(Buffer.from(zvokB64, "base64"), mime, rsdo) : null;
+    // Stikalo »Zmanjsanje hrupa«: RNNoise na posnetek za RSDO (naloga 17a); Gemini dobi izvirni posnetek (ni izmerjeno z Gemini).
+    const ciscenje = rsdo.ciscenje ?? (pot.pot === "gemini-rsdo" ? await ciscenjeKlicevVklopljeno(root) : false);
+    const namig = pot.pot === "gemini-rsdo" ? await prepisiRsdo(Buffer.from(zvokB64, "base64"), mime, { ...rsdo, ciscenje }) : null;
     const stroke = await preberiStanjeStrok(root).catch(() => null);
     const izid = await callProvider({ ...brain, text: navodiloZNamigom(navodiloPrepisa(stroke ? namigiPrepoznave(stroke, 40) : []), namig), audio: { mime, data: zvokB64 }, maxTokens: 600, timeoutMs: 20_000 });
     if (!izid.ok) return { ok: false, sporocilo: izid.sporocilo };
