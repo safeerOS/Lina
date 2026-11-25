@@ -71,7 +71,8 @@ describe("V10: --koncaj samo z zetonom lastne lupine", () => {
   });
 
   it("streznik da zeton skripti posodobitve (seznam dovoljenega okolja), ostalo kot doslej", () => {
-    assert.deepEqual(okoljeSkripte({ LINA_KONCAJ_ZETON: ZETON, LINA_LUPINA_ZETON: "x", HOME: "/h" }), { LINA_KONCAJ_ZETON: ZETON, HOME: "/h", PATH: "/usr/bin:/bin" });
+    // naloga 11 N2: zeton konca izrecno iz pomnilnika streznika, ne iz podedovanega okolja
+    assert.deepEqual(okoljeSkripte({ LINA_LUPINA_ZETON: "x", HOME: "/h" }, ZETON), { LINA_KONCAJ_ZETON: ZETON, HOME: "/h", PATH: "/usr/bin:/bin" });
   });
 
   it("skripta: po --koncaj zeton odstrani, da ga nova Lina ne podeduje", () => {

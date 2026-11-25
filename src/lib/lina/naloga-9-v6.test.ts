@@ -57,7 +57,7 @@ describe("V6: nova naloga orkestratorja", () => {
     const f = await readFile(path.join(import.meta.dirname, "functions.ts"), "utf8");
     const i = f.indexOf("export const ukazOrkestratorjaFn");
     const telo = f.slice(i, f.indexOf("export const", i + 10));
-    assert.match(telo, /ukazOrkestratorja\(await sessionToken\(\), data\?\.ukaz, undefined, veljavenZetonLupine\(getRequest\(\)\.headers\.get\(GLAVA_LUPINE\), process\.env\.LINA_LUPINA_ZETON\)\)/);
+    assert.match(telo, /ukazOrkestratorja\(await sessionToken\(\), data\?\.ukaz, undefined, veljavenZetonLupine\(getRequest\(\)\.headers\.get\(GLAVA_LUPINE\), zetonLupine\(\)\)\)/);
   });
 });
 

@@ -50,7 +50,8 @@ const GLAVA_LUPINE = "x-lina-lupina";
 
 /**
  * Glave zahteve iz okna Line (naloga 9, V6): zeton lupine dobi SAMO lokalni streznik Line (isti izvor kot naslov); vsakemu drugemu
- * izvoru se glava odstrani, tudi ce bi jo nastavila stran. Brez gesla streznik po tem zetonu loci okno Line od drugih lokalnih procesov.
+ * izvoru se glava odstrani, tudi ce bi jo nastavila stran. Brez gesla streznik po tem zetonu loci okno Line od drugih lokalnih procesov
+ * (ne od zlonamernega procesa istega uporabnika: meja je geslo lastnika, naloga 11 N2).
  */
 function glaveZaStreznik(url, naslov, zeton, glave) {
   const izid = {};
@@ -84,7 +85,8 @@ const NAJKRAJSI_ZETON_KONCAJ = 32;
 
 /**
  * »lina-lupina --koncaj« iz drugega primerka (naloga 9, V10): Lino zapre samo, ce drugi primerek poslje zeton, ki ga je ta lupina
- * dala strezniku (LINA_KONCAJ_ZETON), streznik pa samo skripti posodobitve. Drug proces istega uporabnika zetona nima.
+ * dala strezniku (LINA_KONCAJ_ZETON), streznik pa samo skripti posodobitve. To ni meja proti procesu istega uporabnika (ta lahko
+ * bere pomnilnik streznika ali Lino ustavi s SIGTERM); varuje pred procesi drugega uporabnika in pred nakljucnim zapiranjem.
  */
 function koncajDovoljen(argv, dodatno, zeton) {
   if (!Array.isArray(argv) || !argv.includes("--koncaj")) return false;

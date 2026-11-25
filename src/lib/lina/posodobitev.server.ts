@@ -19,6 +19,7 @@ import { requireOwner } from "./auth.server.ts";
 import { jeLinuxAmd64 } from "./platforma.server.ts";
 import { readJsonFile, resolveDataDir } from "./store.server.ts";
 import { prenesiPreverjeno, vsotaEnaka } from "./tunel.server.ts";
+import { zetonKoncaja } from "./zetoni-lupine.server.ts";
 
 export const IME_PAKETA = "lina-lupina";
 /** Seznam dovoljenih paketov in vir izdaj (javni repozitorij, sredstvo <paket>_<razlicica>_amd64.deb + SHA256SUMS). */
@@ -205,14 +206,16 @@ function privzetaVsota(pot: string): Promise<string> {
 /**
  * Okolje skripte s seznama DOVOLJENEGA: namizje za pkexec in notify-send. Streznik tece z ELECTRON_RUN_AS_NODE (izmerjeno 23. 11. 2026):
  * podedovan bi `lina-lupina --koncaj` in ponoven zagon zagnal Node namesto programa; zeton lupine in kljuci ne gredo naprej.
+ * Zeton konca (naloga 9 V10) samo izrecno iz pomnilnika streznika (naloga 11 N2), nikoli iz podedovanega okolja.
  */
-export function okoljeSkripte(env: NodeJS.ProcessEnv): Record<string, string> {
+export function okoljeSkripte(env: NodeJS.ProcessEnv, koncaj?: string): Record<string, string> {
   const izid: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (typeof v !== "string") continue;
-    // LINA_KONCAJ_ZETON (naloga 9, V10): samo s tem zetonom skripta zapre Lino z »lina-lupina --koncaj«
-    if (/^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|LINA_KONCAJ_ZETON)$/.test(k) || /^(XDG|LC)_[A-Z_]+$/.test(k)) izid[k] = v;
+    if (/^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE)$/.test(k) || /^(XDG|LC)_[A-Z_]+$/.test(k)) izid[k] = v;
   }
+  // LINA_KONCAJ_ZETON (naloga 9, V10): samo s tem zetonom skripta zapre Lino z »lina-lupina --koncaj«
+  if (koncaj) izid.LINA_KONCAJ_ZETON = koncaj;
   izid.PATH = "/usr/bin:/bin";
   return izid;
 }
@@ -506,7 +509,7 @@ async function zacni(token: string | null, dir: string | undefined, odvisnosti: 
     if (primerjajRazlicici(podatki.razlicica, p.namescena) <= 0) return { ok: false, razlog: "ni_novejsa" };
     // 4. argument samo za druge pakete: skripta brez njega pomeni lina-lupina (enak klic kot pred 25. 11.)
     const argumenti = [o.skripta, deb, root, vsota, ...(paket === IME_PAKETA ? [] : [paket])];
-    const otrok = o.zazeni("/bin/bash", argumenti, okoljeSkripte(o.env));
+    const otrok = o.zazeni("/bin/bash", argumenti, okoljeSkripte(o.env, zetonKoncaja()));
     predano = true;
     const sprosti = () => {
       tece = false;

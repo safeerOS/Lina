@@ -18,7 +18,7 @@ let koncujem = false;
 let naslov = "";
 // Zeton lupine (nakljucen ob zagonu): streznik ga dobi v okolju, okno ga posilja samo strezniku (naloga 9, V6).
 const zetonLupine = crypto.randomBytes(24).toString("hex");
-// Zeton za »--koncaj« (naloga 9, V10): streznik ga da samo skripti posodobitve; drug proces Line ne zapre.
+// Zeton za »--koncaj« (naloga 9, V10): streznik ga da samo skripti posodobitve. Ni meja proti procesu istega uporabnika (meja je geslo).
 const zetonKoncaja = crypto.randomBytes(24).toString("hex");
 
 app.commandLine.appendSwitch("lang", "sl"); // datum in ura v slovenski obliki
@@ -101,7 +101,7 @@ function dovoliDovoljenja() {
     const zvok = dovoljenje === "media" && Array.isArray(podrobnosti.mediaTypes) && podrobnosti.mediaTypes.every((m) => m === "audio");
     odgovori(lokalno(podrobnosti.requestingUrl) && (zvok || dovoljenje === "notifications"));
   });
-  // Brez gesla streznik novo nalogo orkestratorja sprejme samo z zetonom lupine (drug lokalni proces ga nima).
+  // Brez gesla streznik novo nalogo orkestratorja sprejme samo z zetonom lupine (proces drugega uporabnika ga nima; meja je geslo).
   session.defaultSession.webRequest.onBeforeSendHeaders((podrobnosti, odgovori) =>
     odgovori({ requestHeaders: glaveZaStreznik(podrobnosti.url, naslov, zetonLupine, podrobnosti.requestHeaders) }));
   session.defaultSession.setPermissionCheckHandler((wc, dovoljenje, izvor) => lokalno(izvor) && (dovoljenje === "media" || dovoljenje === "notifications"));
