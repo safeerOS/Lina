@@ -46,6 +46,11 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     void stanjeAsistentaFn().then(prevzemi).catch(() => setS(null));
   }, []);
 
+  // naloga 15: Lina je sama presla na nov naslov -> izbira v obrazcu sledi (sicer bi naslednje stikalo poslalo stari naslov)
+  useEffect(() => {
+    if (s?.naslov) setNaslov(s.naslov);
+  }, [s?.naslov]);
+
   // med cakanjem na telefon osvezi stanje (prijava telefona, seja Claude Code)
   useEffect(() => {
     if (!s?.vklop) return;

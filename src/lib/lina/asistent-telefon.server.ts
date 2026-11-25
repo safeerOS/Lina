@@ -116,6 +116,8 @@ type Tekoci = {
   zelenaVrata: number;
   /** Naloga 15: lokalni naslov ni na voljo (»naslov«) ali vrata zasedena (»vrata«): tece samo Global Link; null = doma dosegljiv. */
   rezerva: "naslov" | "vrata" | null;
+  /** Naslovi vseh vmesnikov ob zagonu: rezerva »naslov« se ponovi samo, ko se omrezje spremeni (sicer bi rele utripal vsakih 30 s). */
+  omrezje: string;
 };
 
 /** Koda napake asistenta za vmesnik (besedilo v jeziku vmesnika: telNapaka_<koda>); prazno = brez napake. */
@@ -284,6 +286,7 @@ export function nastaviOmrezjeNaslovov(o: OmrezjeNaslovov | null): void {
   stanje().omrezjeNaslovov = o;
 }
 const vmesniki = () => stanje().omrezjeNaslovov?.vmesniki() ?? networkInterfaces();
+const odtisOmrezja = (v: NodeJS.Dict<NetworkInterfaceInfo[]>) => Object.values(v).flatMap((x) => (x ?? []).map((e) => e.address)).sort().join(",");
 const izvorPoti = () => stanje().omrezjeNaslovov?.izvor() ?? izvorPrivzetePoti();
 
 function vrstaNapake(e: unknown): Exclude<KodaNapakeAsistenta, ""> {
@@ -324,7 +327,7 @@ export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
   const t = stanje().tekoci;
   const v = vmesniki();
   const treba = !t
-    || (t.rezerva === "naslov" && (naslovNaVmesniku(t.zeleniNaslov, v) || izberiLanNaslov(v, await izvorPoti()) !== null))
+    || (t.rezerva === "naslov" && odtisOmrezja(v) !== t.omrezje)
     || (t.rezerva === null && !naslovNaVmesniku(t.naslov, v));
   if (treba) await uskladiAsistenta(root);
   return treba;
@@ -421,6 +424,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         stanje: async () => telefonVprasanja(root),
         odgovori: (id: string, odlocitev: string, zgostitev: string, naprava: string) => telefonOdgovor(root, id, odlocitev, zgostitev, naprava),
       };
+      const omrezje = odtisOmrezja(vmesniki());
       const novStreznik = (naslov: string, vrata: number) => new AsistentStreznik({ root, naslov, vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje,
         agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null });
       try {
@@ -452,7 +456,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         }) : null;
         rele?.zazeni();
         stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka, rele, globalLink: n.globalLink,
-          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva };
+          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva, omrezje };
         if (rezerva) nastaviNapako(napakaLan); // vidno v Poveži telefon: doma telefon Line ne doseze, Global Link tece
         else {
           stanje().napaka = "";

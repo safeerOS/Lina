@@ -49,6 +49,7 @@ test("izberiLanNaslov: vmesnik privzete poti, nikoli docker/br-/veth/lo/notranji
     docker0: [v4("172.17.0.1")],
     "br-aa1c5a814643": [v4("10.83.0.1")],
     veth12ab: [v4("10.0.5.1")],
+    lo0: [v4("10.9.9.9")],
     wlp2s0: [v4("192.168.1.20")],
     enp1s0: [v4("192.168.0.135"), v6("fd12:3456::1")],
   };
@@ -58,6 +59,9 @@ test("izberiLanNaslov: vmesnik privzete poti, nikoli docker/br-/veth/lo/notranji
   assert.equal(izberiLanNaslov({ docker0: [v4("172.17.0.1")], lo: [v4("127.0.0.1", true)] }, null), null);
   assert.equal(izberiLanNaslov({ eth0: [v4("8.8.4.4")] }, "8.8.4.4"), null, "javni naslov nikoli");
   assert.equal(izberiLanNaslov({ eth0: [v4("8.8.4.4"), v6("fd00::5")] }, null), "fd00::5", "ULA, ce zasebnega IPv4 ni");
+  // Windows: imena pravih vmesnikov, ki se zacnejo z »Lo«, niso loopback
+  assert.equal(izberiLanNaslov({ "Local Area Connection": [v4("192.168.5.5")] }, null), "192.168.5.5");
+  assert.equal(izberiLanNaslov({ "Lokalna povezava 2": [v4("10.1.1.4")] }, "10.1.1.4"), "10.1.1.4");
   assert.equal(izberiLanNaslov({ eth0: [v6("fe80::1"), v6("2001:db8::1")] }, null), null, "link-local in javni IPv6 ne");
 });
 
@@ -107,6 +111,7 @@ test("brez lokalnega naslova: Global Link (agent releja) vseeno tece, napaka je 
     assert.notEqual(s.napaka, "");
     assert.equal((await shranjen(o)).naslov, "192.168.77.7", "brez novega naslova ostane shranjen stari (ko se vrne, velja spet)");
     await assert.rejects(zacniSeznanitev(o.token, o.dir), /omrezj/i);
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "omrezje se ni spremenilo: brez ponovnega zagona (rele ne utripa)");
     // omrezje se vrne: preveriNaslovAsistenta preklopi s samo Global Linka na lokalni naslov
     nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4("127.0.0.7")] }), izvor: async () => "127.0.0.7" });
     assert.equal(await preveriNaslovAsistenta(o.dir), true);
@@ -118,12 +123,52 @@ test("brez lokalnega naslova: Global Link (agent releja) vseeno tece, napaka je 
   } finally { await pospravi(o); }
 });
 
+test("naslov je na vmesniku, a vezava pade (npr. IPv6 DAD): ena rezerva, brez ponovnega zagona vsakih 30 s, dokler se omrezje ne spremeni", async () => {
+  const o = await pripravi("192.168.77.7", true);
+  try {
+    let vm: NodeJS.Dict<NetworkInterfaceInfo[]> = { enp1s0: [v4("192.168.77.7")] }; // lazno: vmesnik ga ima, jedro ga ne veze
+    nastaviOmrezjeNaslovov({ vmesniki: () => vm, izvor: async () => "192.168.77.7" });
+    registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
+    await uskladiAsistenta(o.dir);
+    assert.equal((await stanjeAsistenta(o.token, o.dir)).samoGlobalLink, true);
+    assert.equal(await preveriNaslovAsistenta(o.dir), false);
+    assert.equal(await preveriNaslovAsistenta(o.dir), false);
+    vm = { enp1s0: [v4("127.0.0.8")] };
+    assert.equal(await preveriNaslovAsistenta(o.dir), true);
+    const po = await stanjeAsistenta(o.token, o.dir);
+    assert.equal(po.samoGlobalLink, false);
+    assert.equal(po.naslov, "127.0.0.8");
+  } finally { await pospravi(o); }
+});
+
+test("vrata zasedena (EADDRINUSE): Global Link tece, koda »vrata«, preverba vsakih 30 s NE zaganja znova (rele ne utripa)", async () => {
+  const o = await pripravi("127.0.0.5", true);
+  const zaseden = net.createServer();
+  await new Promise<void>((ok, ne) => { zaseden.once("error", ne); zaseden.listen(o.vrata, "127.0.0.5", () => ok()); });
+  try {
+    nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5" });
+    registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
+    await uskladiAsistenta(o.dir);
+    const s = await stanjeAsistenta(o.token, o.dir);
+    assert.equal(s.samoGlobalLink, true);
+    assert.equal(s.napakaKoda, "vrata");
+    assert.equal(s.tece, false);
+    assert.notEqual(s.globalLinkStanje, "izklopljen");
+    assert.equal(await preveriNaslovAsistenta(o.dir), false);
+    assert.equal((await shranjen(o)).naslov, "127.0.0.5", "naslov je veljaven, ne menja se");
+  } finally {
+    await new Promise<void>((ok) => zaseden.close(() => ok()));
+    await pospravi(o);
+  }
+});
+
 test("vmesnik Poveži telefon: napaka asistenta je vidna (role=alert) tudi med tekom in v sl in en; stanje se osvezuje, ko je vklopljeno", async () => {
   const ui = await readFile(new URL("../../components/povezi-telefon.tsx", import.meta.url), "utf8");
   const besedila = await readFile(new URL("./besedila.ts", import.meta.url), "utf8");
   assert.match(ui, /s\.napakaKoda \? <p role="alert"[^>]*>\{t\(`telNapaka_\$\{s\.napakaKoda\}`\)\}/);
   assert.doesNotMatch(ui, /\{s\.napaka \|\| t\("telNeTece"\)\}/, "surovo slovensko besedilo streznika ni vec edini prikaz");
   assert.match(ui, /if \(!s\?\.vklop\) return;/, "osvezevanje tece, dokler je telefon vklopljen (tudi ko ne tece)");
+  assert.match(ui, /if \(s\?\.naslov\) setNaslov\(s\.naslov\);/, "izbira naslova sledi samodejni menjavi");
   for (const k of ["telNapaka_naslov", "telNapaka_vrata", "telNapaka_drugo", "telSamoGlobalLink"]) {
     assert.equal(besedila.split(`${k}:`).length - 1, 2, `${k} v sl in en`);
   }

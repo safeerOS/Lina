@@ -183,7 +183,8 @@ export async function potrdiloVMapi(
 }
 
 /** Vmesniki, na katerih telefon v domacem omrezju Line ne doseze (vsebniki, mostovi, navidezni, VPN, loopback). */
-const NI_LAN = /^(lo|docker|br-|veth|virbr|vboxnet|vmnet|cni|flannel|podman|lxc|lxd|tun|tap|wg|zt|tailscale|vethernet)/i;
+// »lo« samo kot celo ime (lo, lo0): »Local Area Connection« / »Lokalna povezava« na Windows sta prava vmesnika
+const NI_LAN = /^(lo\d*$|docker|br-|veth|virbr|vboxnet|vmnet|cni|flannel|podman|lxc|lxd|tun|tap|wg|zt|tailscale|vethernet)/i;
 
 /**
  * Naloga 15: naslov v lokalnem omrezju, ko shranjenega ni vec (menjava Wi-Fi -> kabel). Prednost ima vmesnik privzete poti

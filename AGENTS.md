@@ -610,6 +610,11 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
   skupna meja lahko se vedno zapre pot vsem kanalom. Podpis naprave velja za vsako zahtevo. AgentReleja.ustavi zapre tudi sprejete kanale (A12). Telefon: id Line na releju dobi v podpisanem GET /stanje (polje rele), kanal odpre ReleKanal (modul podpis),
   OkHttp gre prek ReleVrata (127.0.0.1 + 32-bajtna skrivnost procesa) z ISTIM pripetim odtisom; ena tovarna PovezavaLine.ustvari.
   Neposredne poti za asistentko Lina nima (Caddy/tunel prepustita samo /api/voice/*). Preizkusi: rele-lina.test.ts, ReleLineTest.kt.
+- Naloga 15 (25. 11. 2026, lastnik po menjavi Wi-Fi -> kabel): ce shranjenega naslova asistentke ni vec na nobenem vmesniku, Lina SAMA izbere
+  zasebni naslov vmesnika privzete poti (nikoli lo/docker/br-/veth/VPN, nikoli javni; IPv4 pred ULA), ga shrani in preveri vsakih 30 s
+  (zacniNadzorNaslova v zagonu; zdrav streznik se ne zaganja znova). Ce lokalni streznik ne more poslusati (EADDRNOTAVAIL/EADDRINUSE) in je
+  Global Link vklopljen, tece streznik na 127.0.0.1 (prosta vrata) samo za kanale releja; QR in koda se takrat ne izdata. Napaka je v »Povezi
+  telefon« kot opozorilo (napakaKoda -> telNapaka_*, sl in en). mDNS oglas ostane samo med odprtim oknom kode. Preizkus: naloga-15-naslov.test.ts.
   Naloge agentov in gradnje so od 25. 11. 2026 (lastnik »da«) tudi v POTI_ODDALJENO, od pregleda 0213 (A10) tudi vprasanja agentov
   (GET /agent-vprasanja, POST /agent-vprasanje/odgovor - sicer naloga, dodeljena od zunaj, caka do roka); seznanjanje, /koda/*,
   sinhronizacija in klici ostanejo samo doma.
