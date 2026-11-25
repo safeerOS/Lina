@@ -127,7 +127,8 @@ export function vrsticaZnanja(z: PoglavjeZapis): string {
 export async function prikliciZnanje(root: string, vprasanje: string): Promise<string> {
   try {
     const zadetki = await isciZnanje(vprasanje, { dir: root, najvec: NAJVEC_PRIKLICANIH_POGLAVIJ });
-    return zadetki.map(vrsticaZnanja).join("\n");
+    // izkusnje orkestratorja (orkestrator-ucenje.ts) so za naloge, ne znanje za pogovor
+    return zadetki.filter((z) => !z.tema.startsWith("izkusnje-")).map(vrsticaZnanja).join("\n");
   } catch {
     console.warn("lina samoucenje: priklic ni uspel");
     return "";

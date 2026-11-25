@@ -12,7 +12,8 @@
 import { appendFile, chmod, mkdir, readdir } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { odlociNadaljevanje, zacetnoStanje, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
+import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
+import { NAJVEC_ZNAKOV_NALOGE_LINE } from "./claude-naloge.ts";
 import { oceniZModelom, type Oceni } from "./cilj-naloge.server.ts";
 import {
   NAVODILO_ORKESTRATORJA,
@@ -24,6 +25,7 @@ import {
   preimenujKlice,
   presezenaMeja,
   preveriArgumente,
+  ROK_ORODJA_MS,
   skrciZgodovino,
   ustvariRegister,
   zahtevaPotrditev,
@@ -43,7 +45,11 @@ export const MAPA_ORKESTRATORJA = "orkestrator";
 export const NASTAVITVE_ORKESTRATORJA = "orkestrator-nastavitve.json";
 const NAJVEC_DOGODKOV = 200;
 const NAJVEC_ZNAKOV_CILJA = 4000;
+/** Najvec NEKONCANIH nalog hkrati (koncane ne stejejo, sicer bi po 50 nalogah orkestrator za vedno zavracal nove). */
 const NAJVEC_NALOG = 50;
+/** Najdlje cakanje na pomocnika (predlog 15 min + naloga do 2 h v claude-naloge); nato izid »rok« in zanka tece naprej. */
+export const ROK_POMOCNIKA_MS = 3 * 60 * 60_000;
+const KONCNE_FAZE = ["koncano", "ustavljeno", "napaka"];
 /** Najvec samopregledov, ki vrnejo »se ni dosezeno«, preden naloga konca z oceno (cilj-naloge.ts ima svoj strop). */
 const NAJVEC_SAMOPREGLEDOV = 2;
 
@@ -66,7 +72,7 @@ export type StanjeNaloge = {
   sporocila: SporociloOrodja[];
   odprti: OdprtKlic[];
   /** Cakajoca potrditev/vprasanje: klic in id vprasanja v skupni vrsti (po ponovnem zagonu se zastavi znova). */
-  cakanje: { klicId: string; vprasanjeId: string | null; pomocnik?: string; vprasanje?: string } | null;
+  cakanje: { klicId: string; vprasanjeId: string | null; pomocnik?: string; vprasanje?: string; od?: string } | null;
   dogodki: DogodekOrkestratorja[];
   stDogodka: number;
   koraki: number;
@@ -167,12 +173,14 @@ function vgrajenaOrodja(d: { predlagajPomocniku: NonNullable<OdvisnostiOrkestrat
       // netvegano besedilo). Zato tu ni druge potrditve, razen ce je naloga okuzena (zahtevaPotrditev).
       razred: "zunanje",
       potrditev: false,
+      // ko je model ze bral podatke (izid orodja), lahko vrinjeno navodilo obide zaznavo vzorcev - takrat potrdi tudi orkestrator
+      potrditevPoPodatkih: true,
       definicija: {
         ime: "dodeli_pomocniku",
         opis: "Za obsezno nalogo (vec delov, > 8 datotek ali > 45 min) dodeli del zunanjemu agentu na racunalniku. Lastnik predlog potrdi; izid pride nazaj.",
         parametri: {
           type: "object",
-          properties: { mapa: { type: "string", maxLength: 500 }, naloga: { type: "string", maxLength: 4000 }, agent: { type: "string", enum: ["claude", "opencode", "agy", "pi", "grok"] } },
+          properties: { mapa: { type: "string", maxLength: 500 }, naloga: { type: "string", maxLength: NAJVEC_ZNAKOV_NALOGE_LINE }, agent: { type: "string", enum: ["claude", "opencode", "agy", "pi", "grok"] } },
           required: ["mapa", "naloga"],
         },
       },
@@ -190,7 +198,9 @@ export type Orkestrator = {
   nova(v: { cilj: unknown; tip?: unknown; proracun?: unknown }): Promise<StanjeNaloge>;
   /** Pozene zanko naloge do konca ali do cakanja; vrne stanje. */
   teci(id: string): Promise<StanjeNaloge>;
-  ustavi(id: string): Promise<StanjeNaloge>;
+  ustavi(id: string, razlog?: "preklic" | "izklopljeno"): Promise<StanjeNaloge>;
+  /** Preveri cakajoce pomocnike (samo enega ali vse): koncan, zavrnjen, izginil ali cez rok -> izid v zanko. */
+  preveriPomocnike(samo?: string): Promise<void>;
   odgovorLastnika(id: string, besedilo: unknown): Promise<StanjeNaloge>;
   izidPomocnika(nalogaId: string): Promise<void>;
   /** Ob zagonu Line: nadaljuje tekoce naloge, znova zastavi cakajoca vprasanja, preveri pomocnike. */
@@ -237,7 +247,9 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     await appendFile(p, JSON.stringify({ cas: iso(), ...zapis }) + "\n", { mode: 0o600 }).catch(() => undefined);
     await chmod(p, 0o600).catch(() => undefined);
   };
-  const dogodek = (s: StanjeNaloge, vrsta: VrstaDogodka, besedilo: string, dod: { orodje?: string; klicId?: string } = {}) => {
+  const dogodek = (s: StanjeNaloge, vrsta: VrstaDogodka, besedilo0: string, dod: { orodje?: string; klicId?: string } = {}) => {
+    // dogodki gredo na zaslon in telefon (vrstice teka): skrivnosti in domace poti zakrite
+    const besedilo = zakrijSkrivnosti(besedilo0.slice(0, 2000));
     s.stDogodka += 1;
     s.dogodki.push({ st: s.stDogodka, cas: iso(), vrsta, besedilo: besedilo.slice(0, 600), ...dod });
     if (s.dogodki.length > NAJVEC_DOGODKOV) s.dogodki.splice(0, s.dogodki.length - NAJVEC_DOGODKOV);
@@ -269,13 +281,14 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     const u = await ucenjeZa(s);
     if (u) {
       const izid = faza === "koncano" && razlog === "dosezeno" ? "uspeh" : faza === "koncano" ? "nepopolno" : "neuspeh";
-      await u.poNalogi({ tip: s.tip, izid, delovalo: [...new Set(s.delovalo)], ni: [...new Set(s.ni)], razlog: String(razlog ?? faza), koraki: s.koraki, cas: iso() }).catch(() => undefined);
+      await u.poNalogi({ tip: s.tip, izid, delovalo: [...new Set(s.delovalo)], ni: [...new Set(s.ni)], razlog: String(razlog ?? faza), koraki: s.koraki, naloga: s.id, cas: iso() }).catch(() => undefined);
     }
   };
 
   /** Izid klica gre v zgodovino kot podatek; vbrizg okuzi nalogo. */
-  const dodajIzid = async (s: StanjeNaloge, k: KlicOrodja, izid: { ok: boolean; besedilo: string }) => {
-    const ovito = ovijPodatek(k.ime, izid.besedilo);
+  const dodajIzid = async (s: StanjeNaloge, k: KlicOrodja, izid: { ok: boolean; besedilo: string; odLastnika?: boolean }) => {
+    // besedilo lastnika (odgovor na vprasanje) ni nezaupan podatek: brez ovojnice in brez zaznave (lastnik ne okuzi svoje naloge)
+    const ovito = izid.odLastnika ? { besedilo: izid.besedilo, vbrizg: [] as string[] } : ovijPodatek(k.ime, izid.besedilo);
     if (ovito.vbrizg.length && !s.okuzeno) {
       s.okuzeno = true;
       dogodek(s, "napaka", `V izidu orodja je zaznano vrinjeno navodilo (${ovito.vbrizg.join(", ")}); od zdaj vsa tvegana orodja cakajo potrditev.`, { orodje: k.ime, klicId: k.id });
@@ -295,7 +308,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   /** Zastavi vprasanje v skupni vrsti in ob odgovoru nadaljuje (odgovor se obdela v vrsti naloge). */
   const zastavi = (s: StanjeNaloge, orodje: string, vnos: Record<string, unknown>) => {
     const { id, odgovor } = zastaviVprasanjeVLini(root, s.id, orodje, vnos, rokVprasanja);
-    void odgovor.then((odg) => vVrsti(s.id, () => poOdgovoru(s.id, id, odg))).then((st) => st && st.faza === "tece" && void teci(s.id)).catch(() => undefined);
+    void odgovor.then((odg) => vVrsti(s.id, () => poOdgovoru(s.id, id, odg))).then((st) => { if (st && st.faza === "tece") void teci(s.id).catch(() => undefined); }).catch(() => undefined);
     return id;
   };
 
@@ -321,7 +334,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     if (s.faza === "caka-lastnika") {
       s.cakanje = null;
       s.faza = "tece";
-      await dodajIzid(s, k, { ok: true, besedilo: odg.dovoli ? "Lastnik je odgovoril: da." : `Lastnik je odgovoril: ne (${odg.kdo || "rok"}).` });
+      const besedilo = odg.dovoli ? "Lastnik je odgovoril: da." : odg.kdo === "lastnik" || odg.kdo.startsWith("naprava:") ? "Lastnik je odgovoril: ne." : "Lastnik ni odgovoril v roku.";
+      await dodajIzid(s, k, { ok: true, besedilo, odLastnika: true });
       await zapisi(s);
       return s;
     }
@@ -352,7 +366,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         return false;
       }
       const potrjeno = (k as OdprtKlic & { potrjeno?: boolean }).potrjeno === true;
-      if (!potrjeno && zahtevaPotrditev(orodje, s.okuzeno)) {
+      const imaPodatke = s.sporocila.some((x) => x.vloga === "orodje" && x.ime !== "porocaj_vmesno" && x.ime !== "vprasaj_lastnika");
+      if (!potrjeno && zahtevaPotrditev(orodje, s.okuzeno, imaPodatke)) {
         s.faza = "caka-potrditev";
         s.cakanje = { klicId: k.id, vprasanjeId: null };
         k.zacet = true;
@@ -368,7 +383,23 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       const t0 = zdaj();
       let izid: IzidOrodja;
       try {
-        izid = await orodje.izvedi(k.argumenti, { nalogaId: s.id, signal });
+        // rok orodja: signal se prekine (orodje naj ga uposteva), izid je napaka; zanka ne visi na obeseni izvedbi
+        const ac = new AbortController();
+        const naPrekinitev = () => ac.abort();
+        signal.addEventListener("abort", naPrekinitev, { once: true });
+        let rok: ReturnType<typeof setTimeout> | undefined;
+        try {
+          izid = await Promise.race([
+            orodje.izvedi(k.argumenti, { nalogaId: s.id, signal: ac.signal }),
+            new Promise<IzidOrodja>((r) => {
+              rok = setTimeout(() => { ac.abort(); r({ ok: false, napaka: "Orodje ni koncalo v roku." }); }, orodje.rokMs ?? ROK_ORODJA_MS);
+              rok.unref?.(); // rok ne drzi procesa Line pri zaustavitvi
+            }),
+          ]);
+        } finally {
+          clearTimeout(rok);
+          signal.removeEventListener("abort", naPrekinitev);
+        }
       } catch (e) {
         izid = { ok: false, napaka: `Orodje ni uspelo: ${e instanceof Error ? e.message.slice(0, 200) : "napaka"}` };
       }
@@ -378,7 +409,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         await dodajIzid(s, k, { ok: true, besedilo: "Sporoceno lastniku." });
       } else if ("caka" in izid) {
         s.faza = izid.caka === "pomocnik" ? "caka-pomocnika" : "caka-lastnika";
-        s.cakanje = izid.caka === "pomocnik" ? { klicId: k.id, vprasanjeId: null, pomocnik: izid.nalogaId } : { klicId: k.id, vprasanjeId: null, vprasanje: izid.vprasanje };
+        s.cakanje = izid.caka === "pomocnik" ? { klicId: k.id, vprasanjeId: null, pomocnik: izid.nalogaId, od: iso() } : { klicId: k.id, vprasanjeId: null, vprasanje: izid.vprasanje };
         if (izid.caka === "lastnik") s.cakanje.vprasanjeId = zastavi(s, "vprasaj_lastnika", { vprasanje: izid.vprasanje });
         dogodek(s, izid.caka === "pomocnik" ? "korak-koncan" : "vprasanje", izid.caka === "pomocnik" ? `Naloga pomocniku predlagana (${izid.nalogaId}); caka potrditev in izid.` : izid.vprasanje, { orodje: k.ime, klicId: k.id });
         await zapisi(s);
@@ -405,7 +436,17 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         const sveze = await preberi(id);
         if (!sveze || sveze.faza !== "tece" || ac.signal.aborted) return sveze ?? s;
         s = sveze;
+        // stikalo velja za vse: tudi naloga, ki ze tece, se ustavi
+        if (!(await jeOrkestratorVklopljen(dir).catch(() => false))) {
+          for (const x of [...s.odprti]) await dodajIzid(s, x, { ok: false, besedilo: "Ni izvedeno: izvajanje nalog je izklopljeno." });
+          await koncaj(s, "ustavljeno", "izklopljeno", "Ustavljeno: izvajanje nalog je izklopljeno v Nastavitvah.");
+          return s;
+        }
         if (!(await izvediOdprte(s, ac.signal))) return (await preberi(id)) ?? s;
+        if (!(await jeOrkestratorVklopljen(dir).catch(() => false))) {
+          await koncaj(s, "ustavljeno", "izklopljeno", "Ustavljeno: izvajanje nalog je izklopljeno v Nastavitvah.");
+          return s;
+        }
         const meja = presezenaMeja(s.proracun, s.poraba, s.casMs, s.koraki);
         if (meja) {
           await koncaj(s, "ustavljeno", meja, `Ustavljeno: dosezena meja (${meja}).`);
@@ -492,6 +533,13 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         await koncaj(s, "koncano", dosezeno ? "dosezeno" : ocena ? "neuspeh" : null, r.besedilo);
         return s;
       }
+    } catch (e) {
+      // izjema (zapis na disk, ponudnik, ucenje) ne pusti naloge v »tece« brez razloga: konec z napako, ce se da zapisati
+      const zadnje = (await preberi(id).catch(() => null)) ?? s;
+      if (!KONCNE_FAZE.includes(zadnje.faza)) {
+        await koncaj(zadnje, "napaka", "napaka", `Notranja napaka: ${e instanceof Error ? e.message.slice(0, 200) : "neznano"}`).catch(() => undefined);
+      }
+      return zadnje;
     } finally {
       prekinitve.delete(id);
     }
@@ -511,8 +559,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       const cilj = typeof v.cilj === "string" ? v.cilj.normalize("NFC").trim() : "";
       if (!cilj || cilj.length > NAJVEC_ZNAKOV_CILJA || !(cilj as string & { isWellFormed(): boolean }).isWellFormed()) throw new OrkestratorNapaka("oblika");
       await mkdir(mapa, { recursive: true, mode: 0o700 });
-      const obstojece = (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x));
-      if (obstojece.length >= NAJVEC_NALOG) throw new OrkestratorNapaka("polno");
+      if ((await this.seznam()).filter((x) => !KONCNE_FAZE.includes(x.faza)).length >= NAJVEC_NALOG) throw new OrkestratorNapaka("polno");
       const imaGeslo = o.imaGeslo ?? (async () => (await import("./auth.server.ts")).ownerExists(root));
       const s: StanjeNaloge = {
         id: `o-${randomBytes(8).toString("hex")}`, cilj, tip: normirajTip(v.tip), faza: "tece", razlog: null, odgovor: null, ocena: null,
@@ -527,15 +574,16 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       return s;
     },
     teci,
-    async ustavi(id) {
+    async ustavi(id, razlog = "preklic") {
       prekinitve.get(id)?.abort();
       return vVrsti(id, async () => {
         const s = await preberi(id);
         if (!s) throw new OrkestratorNapaka("ni-naloge");
-        if (["koncano", "ustavljeno", "napaka"].includes(s.faza)) return s;
+        if (KONCNE_FAZE.includes(s.faza)) return s;
         if (s.cakanje?.vprasanjeId) prekliciVprasanjeVLini(root, s.cakanje.vprasanjeId);
-        for (const x of [...s.odprti]) await dodajIzid(s, x, { ok: false, besedilo: "Ni izvedeno: lastnik je ustavil nalogo." });
-        await koncaj(s, "ustavljeno", "preklic", "Lastnik je ustavil nalogo.");
+        const zakaj = razlog === "izklopljeno" ? "izvajanje nalog je izklopljeno" : "lastnik je ustavil nalogo";
+        for (const x of [...s.odprti]) await dodajIzid(s, x, { ok: false, besedilo: `Ni izvedeno: ${zakaj}.` });
+        await koncaj(s, "ustavljeno", razlog, `Ustavljeno: ${zakaj}.`);
         return s;
       });
     },
@@ -550,35 +598,53 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         const vprasanje = s.cakanje.vprasanjeId;
         s.cakanje = null;
         s.faza = "tece";
-        if (k) await dodajIzid(s, k, { ok: true, besedilo: `Lastnik je odgovoril: ${b}` });
+        if (k) await dodajIzid(s, k, { ok: true, besedilo: `Lastnik je odgovoril: ${b}`, odLastnika: true });
         await zapisi(s);
         if (vprasanje) prekliciVprasanjeVLini(root, vprasanje);
         return s;
       });
-      void teci(id);
+      void teci(id).catch(() => undefined);
       return st;
     },
     async izidPomocnika(nalogaId) {
+      await this.preveriPomocnike(nalogaId);
+    },
+    async preveriPomocnike(samo) {
       for (const s0 of await this.seznam()) {
-        if (s0.faza !== "caka-pomocnika" || s0.cakanje?.pomocnik !== nalogaId) continue;
-        const i = await izidPomocnikaBeri(nalogaId).catch(() => null);
-        if (!i?.koncano) continue;
+        const pomocnik = s0.cakanje?.pomocnik;
+        if (s0.faza !== "caka-pomocnika" || !pomocnik || (samo !== undefined && pomocnik !== samo)) continue;
+        // ni dogodka, ko lastnik predlog zavrne, ta potece ali izgine: preverba po id (ob dogodku, ob zagonu in periodicno) in rok
+        const i = await izidPomocnikaBeri(pomocnik).catch(() => undefined);
+        const od = Date.parse(s0.cakanje?.od ?? s0.posodobljeno);
+        const potekel = Number.isFinite(od) && zdaj() - od > ROK_POMOCNIKA_MS;
+        if (i === undefined && !potekel) continue;
+        if (i && !i.koncano && !potekel) continue;
+        const besedilo = i === null ? "Pomocnik: naloge ni (zavrnjena ali odstranjena)."
+          : i && i.koncano ? `Pomocnik: stanje ${i.stanje}.\nPorocilo:\n${i.porocilo ?? "(brez porocila)"}`
+            : "Pomocnik ni koncal v roku; nadaljuj brez njega ali vprasaj lastnika.";
+        const ok = !!i && i.koncano && i.stanje === "koncano";
         await vVrsti(s0.id, async () => {
           const s = await preberi(s0.id);
-          if (!s || s.faza !== "caka-pomocnika" || !s.cakanje) return;
+          if (!s || s.faza !== "caka-pomocnika" || !s.cakanje || s.cakanje.pomocnik !== pomocnik) return;
           const k = s.odprti.find((x) => x.id === s.cakanje!.klicId);
           s.cakanje = null;
           s.faza = "tece";
-          if (k) await dodajIzid(s, k, { ok: i.stanje === "koncano", besedilo: `Pomocnik: stanje ${i.stanje}.\nPorocilo:\n${i.porocilo ?? "(brez porocila)"}` });
+          if (k) await dodajIzid(s, k, { ok, besedilo });
           await zapisi(s);
         });
-        void teci(s0.id);
+        void teci(s0.id).catch(() => undefined);
       }
     },
     async nadaljujPoZagonu() {
       const nadaljevane: string[] = [];
+      const vklopljen = await jeOrkestratorVklopljen(dir).catch(() => false);
       for (const s0 of await this.seznam()) {
-        if (!["tece", "caka-potrditev", "caka-lastnika", "caka-pomocnika"].includes(s0.faza)) continue;
+        if (KONCNE_FAZE.includes(s0.faza)) continue;
+        if (!vklopljen) {
+          // izklopljeno stikalo: nedokoncane naloge se ob zagonu ustavijo, ne nadaljujejo
+          await this.ustavi(s0.id, "izklopljeno").catch(() => undefined);
+          continue;
+        }
         odpriTekVLini(root, s0.id, "", s0.gesloObZacetku);
         await vVrsti(s0.id, async () => {
           const s = await preberi(s0.id);
@@ -597,8 +663,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           await zapisi(s);
         });
         nadaljevane.push(s0.id);
-        if (s0.faza === "tece") void teci(s0.id);
-        if (s0.faza === "caka-pomocnika" && s0.cakanje?.pomocnik) await this.izidPomocnika(s0.cakanje.pomocnik);
+        if (s0.faza === "tece") void teci(s0.id).catch(() => undefined);
+        if (s0.faza === "caka-pomocnika" && s0.cakanje?.pomocnik) await this.preveriPomocnike(s0.cakanje.pomocnik);
       }
       return nadaljevane;
     },
@@ -633,6 +699,8 @@ export async function zazeniOrkestrator(dir?: string): Promise<void> {
     naroceni.add(root);
     const { obNalogaKoncana } = await import("./claude-naloge.server.ts");
     obNalogaKoncana((d) => void o.izidPomocnika(d.id).catch(() => undefined));
+    // zavrnjen, potekel ali izginil predlog pomocniku nima dogodka: preverba vsako minuto (casovnik ne drzi procesa)
+    setInterval(() => void o.preveriPomocnike().catch(() => undefined), 60_000).unref();
   }
   await o.nadaljujPoZagonu().catch(() => undefined);
 }
