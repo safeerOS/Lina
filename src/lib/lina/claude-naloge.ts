@@ -405,7 +405,8 @@ export const NAVODILO_OZNAKE =
   "[[claude-code: <absolutna pot do projektne mape> | <ozka naloga: cilj, datoteke, merilo konca>]]. Oznaka nicesar ne zazene: " +
   "lastnik predlog vidi in potrdi v zavihku Racunalnik. Ne trdi, da naloga tece, dokler je lastnik ne potrdi." +
   " Za drugega agenta (agy, opencode, pi, grok) ali kasnejsi zagon uporabi [[agent-naloga: <agent> | <absolutna pot> | <zdaj ali HH:MM ali po <id naloge>> | <ozka naloga>]];" +
-  " tudi to je samo predlog, ki ga lastnik potrdi.";
+  " tudi to je samo predlog, ki ga lastnik potrdi." +
+  " Pot projekta vzemi samo iz lastnikovih besed ali pogovora; ce je ne ves, ga vprasaj in oznake ne dodaj (imena mape si nikoli ne izmisli).";
 
 // ------------------------------------------------------------------ Lina vodi vse agente (lastnik 24. 11. 2026)
 
