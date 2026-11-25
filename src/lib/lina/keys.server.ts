@@ -109,6 +109,8 @@ const kljuciVTeku = new Map<string, Promise<Buffer>>();
  * drugi proces, ki izgubi tekmo, prebere zmagovalni kljuc. Pokvarjen obstojec kljuc (ne 32 bajtov) se prepise kot prej.
  */
 async function ustvariKljuc(file: string): Promise<Buffer> {
+  // naloga 12 #4: nov kljuc v tej mapi - izpeljani podkljuci celovitosti ne veljajo vec
+  for (const k of celovitost.keys()) if (k.startsWith(`${path.dirname(file)}\0`)) celovitost.delete(k);
   const key = randomBytes(32);
   const zacasna = `${file}.${process.pid}.${randomBytes(6).toString("hex")}.nov`;
   await zapisiKljuc(zacasna, key, "wx");
@@ -150,9 +152,23 @@ async function masterKey(dir: string): Promise<Buffer> {
   return vTeku;
 }
 
-/** Naloga 11 N1: podkljuc za celovitost podatkov na disku (HMAC), izpeljan iz glavnega kljuca po namenu (glavni se ne uporabi neposredno). */
-export async function kljucCelovitosti(namen: string, dir?: string): Promise<Buffer> {
-  return createHmac("sha256", await masterKey(resolveDataDir(dir))).update(`lina-celovitost:${namen}`).digest();
+/** Naloga 12 #4: podkljuci celovitosti po mapi in namenu (en izracun; zavrnitev se ne shrani). Pozabi jih ustvariKljuc za svojo mapo. */
+const celovitost = new Map<string, Promise<Buffer>>();
+
+/**
+ * Naloga 11 N1: podkljuc za celovitost podatkov na disku (HMAC), izpeljan iz glavnega kljuca po namenu (glavni se ne uporabi neposredno).
+ * Naloga 12 #4: v pomnilniku po prvem branju - seznam nalog ga sicer bere za vsako stanje (branje .kljuc, chmod).
+ */
+export function kljucCelovitosti(namen: string, dir?: string): Promise<Buffer> {
+  const root = resolveDataDir(dir);
+  const k = `${root}\0${namen}`;
+  let p = celovitost.get(k);
+  if (!p) {
+    p = masterKey(root).then((glavni) => createHmac("sha256", glavni).update(`lina-celovitost:${namen}`).digest());
+    celovitost.set(k, p);
+    p.catch(() => { if (celovitost.get(k) === p) celovitost.delete(k); });
+  }
+  return p;
 }
 
 function encrypt(secret: string, key: Buffer, aad?: string): Pick<KeyFile, "iv" | "tag" | "ciphertext"> {
