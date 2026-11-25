@@ -9,7 +9,7 @@
  * dodajo v register; brez njih Lina dela samo z vgrajenimi orodji. Tajnica (klici) te datoteke ne uvaza.
  * Komentarji brez sumnikov.
  */
-import { access, appendFile, chmod, lstat, mkdir, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { access, appendFile, chmod, lstat, mkdir, readdir, rename, unlink } from "node:fs/promises";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
@@ -298,7 +298,7 @@ function kanonicno(v: unknown): string {
 
 /**
  * Naloga 11 N1: podpis stanja naloge (HMAC-SHA256 s podkljucem iz glavnega kljuca Line, keys.server). Stanje brez veljavnega podpisa
- * je neveljavno (stanje pred to izdajo preseli preseli). Meja: podpis NE varuje pred bralcem mape podatkov - kdor prebere .kljuc (mapa v
+ * je neveljavno; stanje BREZ polja podpis je samo za branje z oznako nepreverjeno (naloga 14 N3, nikoli podpisano). Meja: podpis NE varuje pred bralcem mape podatkov - kdor prebere .kljuc (mapa v
  * oblaku ali dostopna drugim), podpise sam; varuje samo pred tistim, ki sme pisati, a ne brati (naloga 12 #1).
  */
 export async function podpisStanja(root: string, stanje: unknown, namen = "orkestrator"): Promise<string> {
@@ -389,14 +389,21 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     if (!VELJAVEN_ID.test(id)) return null;
     const x = await readJsonFile<unknown>(mapa, pot(id)).catch(() => null);
     if (x === null) return null;
-    const podpisan = !!x && typeof x === "object" && await podpisVelja(root, x);
-    if (podpisan) {
-      delete (x as { podpis?: unknown }).podpis;
-      odstraniPotrjeno(x);
-    }
-    let razlog = podpisan ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
+    // naloga 14 N3: brez polja podpis = samo za branje (nikoli podpisano, nikoli nadaljevano); napacen podpis = neveljavno
+    const obj = typeof x === "object" && !Array.isArray(x);
+    const brezPodpisa = obj && !("podpis" in x);
+    const podpisan = obj && !brezPodpisa && await podpisVelja(root, x);
+    if (podpisan) delete (x as { podpis?: unknown }).podpis;
+    if (podpisan || brezPodpisa) odstraniPotrjeno(x);
+    let razlog = podpisan || brezPodpisa ? razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime)) : "podpis";
     if (razlog === null && ((x as StanjeNaloge).verzija ?? 0) < ((await znaneVerzije()).get(id) ?? 0)) razlog = "verzija";
-    if (razlog === null) return x as StanjeNaloge;
+    if (razlog === null) {
+      const s = x as StanjeNaloge;
+      // oznaka se izracuna ob vsakem branju (ne velja iz datoteke kot false); true z diska (stara selitev) ostane
+      if (brezPodpisa || s.nepreverjeno === true) s.nepreverjeno = true;
+      else delete s.nepreverjeno;
+      return s;
+    }
     // pregled V7: neveljavno stanje se ne nadaljuje in ne pokaze; v dnevnik enkrat na nalogo (seznam bere ob vsakem osvezenju)
     if (!zeJavljeno.has(id)) {
       zeJavljeno.add(id);
@@ -404,7 +411,14 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     }
     return null;
   };
+  /** Naloga 14 N3: stanje za spremembo (nadaljevanje, odgovor, ustavitev); nepreverjeno je samo za branje. */
+  const beriZaPisanje = async (id: string): Promise<StanjeNaloge | null> => {
+    const s = await preberi(id);
+    return s && !s.nepreverjeno ? s : null;
+  };
   const zapisi = async (s: StanjeNaloge) => {
+    // naloga 14 N3: nepreverjeno stanje se nikoli ne podpise (podpis bi podtaknjeno vsebino opral v veljavno)
+    if (s.nepreverjeno) throw new OrkestratorNapaka("faza");
     const m = await znaneVerzije();
     s.verzija = Math.max(s.verzija ?? 0, m.get(s.id) ?? 0) + 1;
     s.posodobljeno = iso();
@@ -489,7 +503,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   };
 
   const poOdgovoru = async (nalogaId: string, vprasanjeId: string, odg: OdgovorVLini): Promise<StanjeNaloge | null> => {
-    const s = await preberi(nalogaId);
+    const s = await beriZaPisanje(nalogaId);
     if (!s || !s.cakanje || s.cakanje.vprasanjeId !== vprasanjeId) return null;
     const k = s.odprti.find((x) => x.id === s.cakanje!.klicId);
     if (!k) return null;
@@ -602,7 +616,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const zanka = async (id: string): Promise<StanjeNaloge> => {
     let s = await preberi(id);
     if (!s) throw new OrkestratorNapaka("ni-naloge");
-    if (s.faza !== "tece") return s;
+    if (s.faza !== "tece" || s.nepreverjeno) return s;
     const ac = new AbortController();
     prekinitve.set(id, ac);
     odpriTekVLini(root, s.id, "", s.gesloObZacetku);
@@ -610,7 +624,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       for (;;) {
         // drug klic (ustavi, odgovor) je lahko stanje spremenil na disku
         const sveze = await preberi(id);
-        if (!sveze || sveze.faza !== "tece" || ac.signal.aborted) return sveze ?? s;
+        if (!sveze || sveze.faza !== "tece" || sveze.nepreverjeno || ac.signal.aborted) return sveze ?? s;
         s = sveze;
         // stikalo velja za vse: tudi naloga, ki ze tece, se ustavi
         if (!(await jeOrkestratorVklopljen(dir).catch(() => false))) {
@@ -785,38 +799,6 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       }).catch(() => undefined);
     }
   };
-  /**
-   * Naloga 12 #3: enkratna selitev ob prvem zagonu po nadgradnji. Stanje BREZ polja podpis (izdaja pred N1) z veljavno shemo dobi
-   * oznako nepreverjeno; koncano ostane za branje, nedokoncano se ustavi (razlog nadgradnja) brez izvedbe orodja. Napacen podpis
-   * ostane neveljaven. Oznaka v mapi: brez nje bi odstranjen podpis za vedno obsel N1 (tudi brez nje se nic ne izvede, samo ustavi).
-   */
-  const preseli = async () => {
-    const oznaka = path.join(mapa, ".selitev-podpis");
-    if (await access(oznaka).then(() => true, () => false)) return;
-    await mkdir(mapa, { recursive: true, mode: 0o700 });
-    let vse = true;
-    for (const ime of (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x))) {
-      const id = ime.slice(0, -5);
-      await vVrsti(id, async () => {
-        const x = await readJsonFile<unknown>(mapa, ime).catch(() => null);
-        if (!x || typeof x !== "object" || Array.isArray(x) || "podpis" in x) return;
-        odstraniPotrjeno(x);
-        if (razlogNeveljavnegaStanja(x, id, (i) => register.has(i)) !== null) return;
-        const s = x as StanjeNaloge;
-        s.nepreverjeno = true;
-        if (!KONCNE_FAZE.includes(s.faza)) {
-          s.faza = "ustavljeno";
-          s.razlog = "nadgradnja";
-          s.odprti = [];
-          s.cakanje = null;
-          dogodek(s, "napaka", "Ustavljeno ob nadgradnji Line: stanje iz prejsnje izdaje ni preverjeno, nobeno dejanje ni izvedeno.");
-        }
-        await zapisi(s);
-      }).catch(() => { vse = false; });
-    }
-    // oznaka samo, ce je bila obdelana vsaka datoteka (napaka, npr. zavrnjen .kljuc, selitve ne porabi)
-    if (vse) await writeFile(oznaka, "", { flag: "wx", mode: 0o600 }).catch(() => undefined);
-  };
   const seznamVeljavnih = async () => {
     const imena = (await readdir(mapa).catch(() => [])).filter((x) => /^o-[a-f0-9]{16}\.json$/.test(x));
     const vse = await Promise.all(imena.map((x) => preberi(x.slice(0, -5))));
@@ -838,7 +820,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       if (!cilj || cilj.length > NAJVEC_ZNAKOV_CILJA || !(cilj as string & { isWellFormed(): boolean }).isWellFormed()) throw new OrkestratorNapaka("oblika");
       await mkdir(mapa, { recursive: true, mode: 0o700 });
       await pocisti().catch(() => undefined);
-      if ((await this.seznam()).filter((x) => !KONCNE_FAZE.includes(x.faza)).length >= NAJVEC_NALOG) throw new OrkestratorNapaka("polno");
+      // naloga 14 N3: nepreverjene (samo branje) ne stejejo - nikoli ne tecejo
+      if ((await this.seznam()).filter((x) => !KONCNE_FAZE.includes(x.faza) && !x.nepreverjeno).length >= NAJVEC_NALOG) throw new OrkestratorNapaka("polno");
       const imaGeslo = o.imaGeslo ?? (async () => (await import("./auth.server.ts")).ownerExists(root));
       const s: StanjeNaloge = {
         id: `o-${randomBytes(8).toString("hex")}`, cilj, tip: normirajTip(v.tip), faza: "tece", razlog: null, odgovor: null, ocena: null,
@@ -859,6 +842,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         const s = await preberi(id);
         if (!s) throw new OrkestratorNapaka("ni-naloge");
         if (KONCNE_FAZE.includes(s.faza)) return s;
+        if (s.nepreverjeno) throw new OrkestratorNapaka("faza");
         if (s.cakanje?.vprasanjeId) prekliciVprasanjeVLini(root, s.cakanje.vprasanjeId);
         const zakaj = razlog === "izklopljeno" ? "izvajanje nalog je izklopljeno" : "lastnik je ustavil nalogo";
         for (const x of [...s.odprti]) await dodajIzid(s, x, { ok: false, besedilo: `Ni izvedeno: ${zakaj}.` });
@@ -870,7 +854,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       const st = await vVrsti(id, async () => {
         const s = await preberi(id);
         if (!s) throw new OrkestratorNapaka("ni-naloge");
-        if (s.faza !== "caka-lastnika" || !s.cakanje) throw new OrkestratorNapaka("faza");
+        if (s.faza !== "caka-lastnika" || !s.cakanje || s.nepreverjeno) throw new OrkestratorNapaka("faza");
         const b = typeof besedilo === "string" ? besedilo.trim().slice(0, 2000) : "";
         if (!b) throw new OrkestratorNapaka("oblika");
         const k = s.odprti.find((x) => x.id === s.cakanje!.klicId);
@@ -891,7 +875,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     async preveriPomocnike(samo) {
       for (const s0 of await this.seznam()) {
         const pomocnik = s0.cakanje?.pomocnik;
-        if (s0.faza !== "caka-pomocnika" || !pomocnik || (samo !== undefined && pomocnik !== samo)) continue;
+        if (s0.faza !== "caka-pomocnika" || !pomocnik || s0.nepreverjeno || (samo !== undefined && pomocnik !== samo)) continue;
         // ni dogodka, ko lastnik predlog zavrne, ta potece ali izgine: preverba po id (ob dogodku, ob zagonu in periodicno) in rok
         const i = await izidPomocnikaBeri(pomocnik).catch(() => undefined);
         const od = Date.parse(s0.cakanje?.od ?? s0.posodobljeno);
@@ -903,7 +887,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
             : "Pomocnik ni koncal v roku; nadaljuj brez njega ali vprasaj lastnika.";
         const ok = !!i && i.koncano && i.stanje === "koncano";
         await vVrsti(s0.id, async () => {
-          const s = await preberi(s0.id);
+          const s = await beriZaPisanje(s0.id);
           if (!s || s.faza !== "caka-pomocnika" || !s.cakanje || s.cakanje.pomocnik !== pomocnik) return;
           const k = s.odprti.find((x) => x.id === s.cakanje!.klicId);
           s.cakanje = null;
@@ -925,17 +909,18 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           if (tecejo.has(id)) throw new OrkestratorNapaka("faza");
           return void (await izbrisiDatoteke(id));
         }
-        if (!KONCNE_FAZE.includes(s.faza)) throw new OrkestratorNapaka("faza");
+        // naloga 14 N3: nepreverjena (samo branje) se nikoli ne konca sama - izbris mozen v vsaki fazi, razen ce tece
+        if (!KONCNE_FAZE.includes(s.faza) && !(s.nepreverjeno && !tecejo.has(id))) throw new OrkestratorNapaka("faza");
         await izbrisiDatoteke(id, s.verzija);
       });
     },
     async nadaljujPoZagonu() {
-      await preseli().catch(() => undefined);
       await pocisti().catch(() => undefined);
       const nadaljevane: string[] = [];
       const vklopljen = await jeOrkestratorVklopljen(dir).catch(() => false);
       for (const s0 of await this.seznam()) {
-        if (KONCNE_FAZE.includes(s0.faza)) continue;
+        // naloga 14 N3: nepreverjena (brez podpisa) se nikoli ne nadaljuje, ne ustavi in ne zapise
+        if (KONCNE_FAZE.includes(s0.faza) || s0.nepreverjeno) continue;
         if (!vklopljen) {
           // izklopljeno stikalo: nedokoncane naloge se ob zagonu ustavijo, ne nadaljujejo
           await this.ustavi(s0.id, "izklopljeno").catch(() => undefined);
@@ -943,7 +928,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         }
         odpriTekVLini(root, s0.id, "", s0.gesloObZacetku);
         await vVrsti(s0.id, async () => {
-          const s = await preberi(s0.id);
+          const s = await beriZaPisanje(s0.id);
           if (!s) return;
           // naloga 11 N1: izidov orodij z diska ni mogoce preveriti za vbrizg za nazaj - konzervativno okuzeno
           if (imaPodatke(s) && !s.okuzeno) {
@@ -1014,7 +999,7 @@ export async function stanjeOrkestratorja(token: string | null, dir?: string): P
   const vprasanja = stanjeVprasanjZaRoot(root).vprasanja;
   const naloge = (await orkestrator(dir).seznam()).slice(0, 20).map((s) => {
     const j = javnaNaloga(s);
-    const v = j.cakanje?.vprasanjeId ? vprasanja.find((x) => x.id === j.cakanje!.vprasanjeId && x.stanje === "caka") : undefined;
+    const v = j.cakanje?.vprasanjeId && !j.nepreverjeno ? vprasanja.find((x) => x.id === j.cakanje!.vprasanjeId && x.stanje === "caka") : undefined;
     // potrditev veze zgostitev prikazanega vnosa (ista kot pri vprasanjih agentov): lastnik potrdi natanko to, kar vidi
     return { ...j, potrditev: v ? { vprasanjeId: v.id, zgostitev: v.zgostitev, predogled: v.predogled, odrezano: v.odrezano } : null };
   });

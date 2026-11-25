@@ -23,7 +23,7 @@ export function OrkestratorKartica() {
     void stanjeOrkestratorjaFn().then(setSt).catch(() => undefined);
   }, []);
   useEffect(osvezi, [osvezi]);
-  const dejavno = !!st?.naloge.some((n) => !KONCNE.includes(n.faza));
+  const dejavno = !!st?.naloge.some((n) => !KONCNE.includes(n.faza) && !n.nepreverjeno);
   useEffect(() => {
     const c = setInterval(osvezi, dejavno ? 2000 : 30_000);
     return () => clearInterval(c);
@@ -81,7 +81,9 @@ export function OrkestratorKartica() {
 
 function NalogaOrk({ n, zaposlen, onUkaz }: { n: Naloga; zaposlen: boolean; onUkaz: (u: Record<string, unknown>) => Promise<boolean> }) {
   const [odgovor, setOdgovor] = useState("");
-  const tece = !KONCNE.includes(n.faza);
+  // naloga 14 N3: nepreverjena naloga je samo za branje (brez ustavi/odgovor/potrdi), izbris mozen
+  const tece = !KONCNE.includes(n.faza) && !n.nepreverjeno;
+  const ukazi = !n.nepreverjeno;
   return (
     <li className="rounded-xl border border-[var(--color-rule)] p-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -107,7 +109,7 @@ function NalogaOrk({ n, zaposlen, onUkaz }: { n: Naloga; zaposlen: boolean; onUk
           <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all text-xs">{n.potrditev.predogled}</pre>
         </div>
       ) : null}
-      {n.faza === "caka-pomocnika" ? <p className="mt-2 text-sm">{t("orkCakaPomocnika")}</p> : null}
+      {ukazi && n.faza === "caka-pomocnika" ? <p className="mt-2 text-sm">{t("orkCakaPomocnika")}</p> : null}
       {n.odgovor ? (
         <div className="mt-2">
           <p className="text-sm font-medium">{t("orkOdgovor")}</p>
@@ -115,7 +117,7 @@ function NalogaOrk({ n, zaposlen, onUkaz }: { n: Naloga; zaposlen: boolean; onUk
         </div>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-2">
-        {n.faza === "caka-potrditev" && n.potrditev ? (
+        {ukazi && n.faza === "caka-potrditev" && n.potrditev ? (
           <>
             {n.potrditev.odrezano ? null : (
               <button type="button" disabled={zaposlen} className="rounded-full bg-[var(--color-signal)] px-4 py-1.5 text-sm text-[var(--color-on-ink)] disabled:opacity-50"
@@ -129,7 +131,7 @@ function NalogaOrk({ n, zaposlen, onUkaz }: { n: Naloga; zaposlen: boolean; onUk
             </button>
           </>
         ) : null}
-        {n.faza === "caka-lastnika" ? (
+        {ukazi && n.faza === "caka-lastnika" ? (
           <form className="flex flex-1 gap-2" onSubmit={(e) => { e.preventDefault(); if (odgovor.trim()) void onUkaz({ vrsta: "odgovor", id: n.id, besedilo: odgovor }).then((ok) => ok && setOdgovor("")); }}>
             <label className="sr-only" htmlFor={`ork-odg-${n.id}`}>{t("orkOdgovorNamig")}</label>
             <input id={`ork-odg-${n.id}`} value={odgovor} onChange={(e) => setOdgovor(e.target.value)} maxLength={2000} placeholder={t("orkOdgovorNamig")} className={`${POLJE} min-w-0 flex-1`} />
