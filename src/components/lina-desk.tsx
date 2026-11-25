@@ -44,7 +44,7 @@ import { RAZLOGI_KATALOG, razlogOdsotnosti, type NastavitveOdsotnosti } from "@/
 import { obveznoBesedilo, prazenSeznamBesedilo, razdelekViden, vajaNamigBesedilo, veljavenZavihek, zavihki, type ZavihekId } from "@/lib/lina/osebni-nacin.ts";
 import { nizZaVklop, PREVERJENI_OPERATERJI, type Operater, type VrstaPreusmeritve } from "@/lib/lina/iphone.ts";
 import { Podokna } from "@/components/podokna.tsx";
-import { CiscenjeZvokaStikalo, SamoucenjeStikalo, SpominPogovorovStikalo } from "@/components/lina2/mediji.tsx";
+import { CiscenjeZvokaStikalo, MotivacijaStikalo, SamodejniZagonStikalo, SamoucenjeStikalo, SpominPogovorovStikalo } from "@/components/lina2/mediji.tsx";
 import { StrokeKartica } from "@/components/lina2/stroke-kartica.tsx";
 import { GradnjeStikalo } from "@/components/lina2/racunalnik.tsx";
 import { ObvestilaNastavitve } from "@/components/lina2/obvestila-nastavitve.tsx";
@@ -2684,9 +2684,11 @@ export function NastavitveVsebina({
                   </label>
                 ))}
               </fieldset>
+              <SamodejniZagonStikalo razred={IZBIRA} />
               <CiscenjeZvokaStikalo razred={IZBIRA} />
               <SpominPogovorovStikalo razred={IZBIRA} />
               <SamoucenjeStikalo razred={IZBIRA} />
+              <MotivacijaStikalo razred={IZBIRA} />
               <StrokeKartica razred={IZBIRA} />
               <GradnjeStikalo razred={IZBIRA} />
               <ObvestilaNastavitve razred={IZBIRA} />

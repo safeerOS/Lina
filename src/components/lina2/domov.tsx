@@ -4,6 +4,7 @@ import { imenikIzbrisiFn, imenikSeznamFn, imenikShraniFn } from "@/lib/lina/func
 import { kliciZaPrikaz, normalizirajTelefon, steviloNovih, type StikImenik } from "@/lib/lina/imenik.ts";
 import { lokalniCas, uraBesedilo } from "@/lib/lina/koledar.ts";
 import { datumDanes, vLjubljani } from "@/lib/lina/ui-videz.ts";
+import { delPozdrava, type DelPozdrava } from "@/lib/lina/motivacija.ts";
 import type { BrainPublic, CallSession } from "@/lib/lina/types.ts";
 import { AsistentPanel, DanesKartica } from "@/components/lina2/pogovor.tsx";
 import { MotivacijaBesedilo } from "./mediji.tsx";
@@ -152,11 +153,12 @@ function BarvnaIkona({ ime }: { ime: BarvnaIme }) {
   );
 }
 
-function pozdrav(h: number): string {
-  if (h < 5) return t("d2DoberVecer");
-  if (h < 11) return t("d2DoberJutro");
-  if (h < 18) return t("d2DoberDan");
-  return t("d2DoberVecer");
+/** Pozdrav po ljubljanski uri; isti vir ure kot misel dneva (motivacija.ts delPozdrava, URA_VECERA). */
+const POZDRAV: Record<DelPozdrava, "d2LahkoNoc" | "d2DoberJutro" | "d2DoberDan" | "d2DoberVecer"> = {
+  noc: "d2LahkoNoc", jutro: "d2DoberJutro", dan: "d2DoberDan", vecer: "d2DoberVecer",
+};
+function pozdrav(zdaj: Date): string {
+  return t(POZDRAV[delPozdrava(zdaj)]);
 }
 
 function kdajBesedilo(iso: string, zdaj: Date): string {
@@ -292,7 +294,7 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
           <div className="lina-scena-glava">
           <div className="lina-hero-oblacek">
             {podjetje ? <p className="lina-hero-podjetje">{podjetje}</p> : null}
-            <h2>{zdaj ? pozdrav(zdaj.getHours()) : t("d2Pozdravljeni")}!</h2>
+            <h2>{zdaj ? pozdrav(zdaj) : t("d2Pozdravljeni")}!</h2>
             <p>{t("d2HeroVprasanje")}</p>
           </div>
           <button type="button" className="lina-priljubljeno" aria-expanded={urejanje} onClick={() => setUrejanje((v) => !v)}>
@@ -399,14 +401,8 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
             </div>
           </section>
           ) : null}
-          {jeOknoVidno(izbira, "majhni") ? (
-          <aside className="lina-karta lina-majhni">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z" fill="#ffc531" />
-            </svg>
-            <MotivacijaBesedilo rezerva={t("d2MajhniKoraki")} />
-          </aside>
-          ) : null}
+          {/* Izklopljena misel dneva: kartice ni (MotivacijaBesedilo vrne null). */}
+          {jeOknoVidno(izbira, "majhni") ? <MotivacijaBesedilo rezerva={t("d2MajhniKoraki")} /> : null}
         </div>
       </div>
 
@@ -425,14 +421,14 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
                 <li key={k.sid} className="py-3">
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <span className="font-semibold">{k.ime || oblikujTelefon(k.telefon) || t("d2NeznanKlicatelj")}</span>
-                    {k.ime && k.telefon ? <span className="text-xs tabular-nums text-[var(--color-moss)]">{oblikujTelefon(k.telefon)}</span> : null}
-                    <span className="ml-auto text-xs text-[var(--color-brass)]">{zdaj ? kdajBesedilo(k.kdaj, zdaj) : ""}{k.zakljucen ? "" : ` · ${t("d2VTeku")}`}</span>
+                    {k.ime && k.telefon ? <span className="text-[0.8125rem] tabular-nums text-[var(--color-moss)]">{oblikujTelefon(k.telefon)}</span> : null}
+                    <span className="ml-auto text-[0.8125rem] text-[var(--color-brass)]">{zdaj ? kdajBesedilo(k.kdaj, zdaj) : ""}{k.zakljucen ? "" : ` · ${t("d2VTeku")}`}</span>
                   </div>
                   <button type="button" className="mt-1 block w-full text-left text-sm text-[var(--color-moss)] hover:text-[var(--color-ink)]" onClick={() => onOdpri("klic")}>{k.kaj || t("d2BrezPovzetka")}</button>
                   {k.telefon ? (
                     <div className="mt-2">
                       {k.shranjen ? (
-                        <span className="text-xs text-[var(--color-moss)]">{t("d2VImeniku")}</span>
+                        <span className="text-[0.8125rem] text-[var(--color-moss)]">{t("d2VImeniku")}</span>
                       ) : shranjujem === k.sid ? (
                         <form
                           className="flex flex-wrap items-center gap-2"
@@ -445,7 +441,7 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
                           <input id={`ime-${k.sid}`} autoFocus value={ime} onChange={(e) => setIme(e.target.value)} placeholder={t("d2ImeStika")} maxLength={80} className="rounded-xl border border-[var(--color-rule)] bg-[var(--color-surface)] px-3 py-1.5 text-sm outline-none focus:border-[var(--aurora-1)]" />
                           <button type="submit" className="lina-gumb-majhen">{t("d2Shrani")}</button>
                           <button type="button" className="lina-gumb-majhen" onClick={() => { setShranjujem(null); setNapaka(""); }}>{t("d2Preklici")}</button>
-                          {napaka ? <span role="alert" className="text-xs text-[var(--color-signal)]">{napaka}</span> : null}
+                          {napaka ? <span role="alert" className="text-[0.8125rem] text-[var(--color-signal)]">{napaka}</span> : null}
                         </form>
                       ) : (
                         <button type="button" className="lina-gumb-majhen" onClick={() => { setShranjujem(k.sid); setIme(k.ime); setNapaka(""); }}>
@@ -473,7 +469,7 @@ export function DomovPanel({ calls, podjetje, linijaOdprta, onOdpri, brain, ukaz
                 {imenik.slice(0, 5).map((s) => (
                   <li key={s.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
                     <span className="min-w-0 truncate">{s.ime}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-[var(--color-moss)]">{oblikujTelefon(s.telefon)}</span>
+                    <span className="shrink-0 text-[0.8125rem] tabular-nums text-[var(--color-moss)]">{oblikujTelefon(s.telefon)}</span>
                   </li>
                 ))}
               </ul>
@@ -542,7 +538,7 @@ export function ImenikPanel({ calls }: { calls: CallSession[] }) {
                 <li key={s.id} className="flex items-start gap-3 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{s.ime}</p>
-                    <p className="text-xs tabular-nums text-[var(--color-moss)]">{oblikujTelefon(s.telefon)}{n > 0 ? ` · ${stKlicevBesedilo(n)}` : ""}</p>
+                    <p className="text-[0.8125rem] tabular-nums text-[var(--color-moss)]">{oblikujTelefon(s.telefon)}{n > 0 ? ` · ${stKlicevBesedilo(n)}` : ""}</p>
                     {s.opomba ? <p className="mt-1 text-sm text-[var(--color-moss)]">{s.opomba}</p> : null}
                   </div>
                   <button

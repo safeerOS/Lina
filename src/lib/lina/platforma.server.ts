@@ -18,6 +18,11 @@ export function jeLinuxAmd64(platforma: Platforma = platformaZdaj(), arh: string
   return platforma === "linux" && arh === "x64";
 }
 
+/** Zagon ob prijavi prek uporabniskega vnosa XDG (~/.config/autostart): samo Linux (samodejni-zagon.server.ts). */
+export function imaXdgSamodejniZagon(platforma: Platforma = platformaZdaj()): boolean {
+  return platforma === "linux";
+}
+
 /** POSIX dovoljenja (chmod, uid, mode) imajo pomen samo zunaj Windows; tam jih ne uporabljaj kot varnostno mejo. */
 export function imaPosixDovoljenja(platforma: Platforma = platformaZdaj()): boolean {
   return !jeWindows(platforma);

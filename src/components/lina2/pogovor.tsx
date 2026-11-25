@@ -146,6 +146,11 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
   useEffect(() => {
     konec.current?.scrollIntoView({ block: "end" });
   }, [sporocila, caka]);
+  // Domov (ozko okno, stran se pomika): okno odgovora v celoti nad spodnjo vrstico (CSS scroll-margin-bottom), 25. 11. 2026.
+  const oknoOdgovora = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (kompakt && aktivno) oknoOdgovora.current?.scrollIntoView({ block: "nearest" });
+  }, [kompakt, aktivno, sporocila, caka]);
   const obdelanUkaz = useRef(0);
   useEffect(() => {
     if (ukaz && ukaz.id !== obdelanUkaz.current) {
@@ -436,7 +441,7 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
     const zadnje = sporocila[sporocila.length - 1];
     const vprasanje = [...sporocila].reverse().find((s) => s.vloga === "lastnik");
     return (
-      <div className="lina-odgovor" role="region" aria-label={t("pogovorNaslov")} aria-live="polite">
+      <div ref={oknoOdgovora} className="lina-odgovor" role="region" aria-label={t("pogovorNaslov")} aria-live="polite">
         <div className="lina-odgovor-telo">
           {vprasanje ? <p className="lina-odgovor-vprasanje">{vprasanje.besedilo}</p> : null}
           {zadnje?.vloga === "lina" ? <p className="lina-odgovor-besedilo">{zadnje.besedilo}</p> : null}

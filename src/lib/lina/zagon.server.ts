@@ -13,6 +13,7 @@ import { ustvariVezoKlicev } from "./openline-veza.server.ts";
 import { loadPravila } from "./pravila.server.ts";
 import { uskladiRsdo } from "./rsdo-streznik.server.ts";
 import { pripraviGlasObZagonu, type StanjeZagona } from "./service.server.ts";
+import { uskladiSamodejniZagon } from "./samodejni-zagon.server.ts";
 import { resolveDataDir } from "./store.server.ts";
 
 const KLJUC = Symbol.for("lina.zagon.zeton");
@@ -63,5 +64,7 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
     .catch(() => undefined);
   // urnik samostojnih opravil (pravila avtonomije): sam nic ne vklopi; brez vklopljenih pravil obhod ne naredi nicesar
   zazeniAvtonomijo(resolveDataDir(dir));
+  // zagon ob prijavi (naloga 21): privzeto vklopljen; vnos XDG zapise samo streznik, ki ga je zagnala lupina; napaka ne podre zagona
+  await uskladiSamodejniZagon(dir).catch(() => undefined);
   return new Response(stanje, { status: 200, headers: glave });
 }

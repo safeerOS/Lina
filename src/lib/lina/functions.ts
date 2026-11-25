@@ -1373,6 +1373,31 @@ export const nastaviMotivacijoFn = createServerFn({ method: "POST" })
     return nastaviMotivacijo(data?.popravek, await sessionToken());
   });
 
+/** Zagon ob prijavi (naloga 21): stanje in stikalo v Nastavitvah. */
+export const samodejniZagonFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { stanjeSamodejnegaZagona } = await import("./samodejni-zagon.server.ts");
+  return stanjeSamodejnegaZagona(await sessionToken());
+});
+
+export const nastaviSamodejniZagonFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data ?? {})
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const { nastaviSamodejniZagon } = await import("./samodejni-zagon.server.ts");
+    return nastaviSamodejniZagon(data?.vklop, await sessionToken());
+  });
+
+/** Samo branje (brez ustvarjanja misli): stikalo v Nastavitvah in kartica v jeziku brez misli (25. 11. 2026). */
+export const motivacijaStanjeFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { preberiMotivacijo } = await import("./motivacija.server.ts");
+  return preberiMotivacijo(await sessionToken());
+});
+
 // --- 22. 11. 2026: branje ustvarjene slike ali videa za okno Slike in video (samo lastnik, data URL).
 export const medijPodatkiFn = createServerFn({ method: "GET" })
   .validator((data: { id?: unknown }) => data)

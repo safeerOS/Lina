@@ -14,6 +14,9 @@ import {
   medijPodatkiFn,
   nastaviCiscenjeKlicevFn,
   nastaviMotivacijoFn,
+  motivacijaStanjeFn,
+  nastaviSamodejniZagonFn,
+  samodejniZagonFn,
   nastavitveZvokaFn,
 } from "@/lib/lina/functions.ts";
 import { jezikVmesnika } from "@/lib/lina/besedila.ts";
@@ -232,54 +235,144 @@ export function MedijiPanel() {
 
 type PogledMotivacije = Awaited<ReturnType<typeof dnevnaMotivacijaFn>>;
 
-/** Kartica na Domovu: misel dneva (jutro, po 17. uri vecer). Ob napaki ali izklopu ostane stalno besedilo (podano kot `rezerva`). */
+/**
+ * Kartica na Domovu: misel dneva (jutro, po 17. uri vecer). Izklopljena misel = kartice ni (lastnik 25. 11. 2026); vklop je v
+ * Nastavitvah (MotivacijaStikalo). Dokler stanje ni znano, kartice ni (brez utripa); ob napaki ostane stalno besedilo (`rezerva`).
+ */
 export function MotivacijaBesedilo({ rezerva }: { rezerva: string }) {
   const [pogled, setPogled] = useState<PogledMotivacije | null>(null);
-  // Misel dneva tvori model v slovenscini: v drugem jeziku vmesnika ostane stalno besedilo v tem jeziku.
+  const [napaka, setNapaka] = useState(false);
+  // Misel dneva tvori model v slovenscini: v drugem jeziku vmesnika ostane stalno besedilo v tem jeziku (stanje se samo prebere).
   const slovensko = jezikVmesnika() === "sl";
   useEffect(() => {
-    if (!slovensko) return;
     let zivo = true;
-    dnevnaMotivacijaFn()
+    (slovensko ? dnevnaMotivacijaFn() : motivacijaStanjeFn())
       .then((p) => {
         if (zivo) setPogled(p);
+      })
+      .catch(() => {
+        if (zivo) setNapaka(true);
+      });
+    return () => {
+      zivo = false;
+    };
+  }, [slovensko]);
+  async function izklopi() {
+    try {
+      setPogled(await nastaviMotivacijoFn({ data: { popravek: { vklopljena: false } } }));
+    } catch {
+      /* ostane staro stanje */
+    }
+  }
+  if (!pogled && !napaka) return null;
+  if (pogled && !pogled.nastavitve.vklopljena) return null;
+  const m = jezikVmesnika() !== "sl" || !pogled ? null : (pogled.vecer ?? pogled.jutro);
+  return (
+    <aside className="lina-karta lina-majhni">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z" fill="#ffc531" />
+      </svg>
+      {m ? (
+        <span className="lina-mot">
+          <small>
+            {t2("motNaslov")} · {m.del === "vecer" ? t2("motVecer") : t2("motJutro")}
+          </small>
+          <em>{m.besedilo}</em>
+          <button type="button" className="lina-mot-gumb" onClick={() => void izklopi()}>
+            {t2("motStikalo")}: ✓
+          </button>
+        </span>
+      ) : (
+        <em>{rezerva}</em>
+      )}
+    </aside>
+  );
+}
+
+/** Stikalo v Nastavitvah: misel dneva na Domovu (privzeto vklopljena; izklop skrije kartico). */
+export function MotivacijaStikalo({ razred }: { razred: string }) {
+  const [vklop, setVklop] = useState<boolean | null>(null);
+  const [napaka, setNapaka] = useState(false);
+  useEffect(() => {
+    let zivo = true;
+    motivacijaStanjeFn()
+      .then((p) => {
+        if (zivo) setVklop(p.nastavitve.vklopljena);
       })
       .catch(() => undefined);
     return () => {
       zivo = false;
     };
-  }, [slovensko]);
-  async function nastavi(vklopljena: boolean) {
+  }, []);
+  async function spremeni(nov: boolean) {
+    setNapaka(false);
+    const prej = vklop;
+    setVklop(nov);
     try {
-      await nastaviMotivacijoFn({ data: { popravek: { vklopljena } } });
-      setPogled(await dnevnaMotivacijaFn());
+      setVklop((await nastaviMotivacijoFn({ data: { popravek: { vklopljena: nov } } })).nastavitve.vklopljena);
     } catch {
-      /* ostane staro stanje */
+      setVklop(prej);
+      setNapaka(true);
     }
   }
-  if (jezikVmesnika() !== "sl" || !pogled) return <em>{rezerva}</em>;
-  if (!pogled.nastavitve.vklopljena) {
-    return (
-      <span className="lina-mot">
-        <em>{rezerva}</em>
-        <button type="button" className="lina-mot-gumb" onClick={() => void nastavi(true)}>
-          {t2("motStikalo")}
-        </button>
-      </span>
-    );
-  }
-  const m = pogled.vecer ?? pogled.jutro;
-  if (!m) return <em>{rezerva}</em>;
+  if (vklop === null) return null;
   return (
-    <span className="lina-mot">
-      <small>
-        {t2("motNaslov")} · {m.del === "vecer" ? t2("motVecer") : t2("motJutro")}
-      </small>
-      <em>{m.besedilo}</em>
-      <button type="button" className="lina-mot-gumb" onClick={() => void nastavi(false)}>
-        {t2("motStikalo")}: ✓
-      </button>
-    </span>
+    <div className="mt-4">
+      <label className={razred}>
+        <input type="checkbox" checked={vklop} onChange={(e) => void spremeni(e.target.checked)} />
+        {t2("motStikalo")}
+      </label>
+      {napaka ? (
+        <p role="alert" className="text-xs text-[var(--color-signal)]">
+          {t2("motNapaka")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Stikalo v Nastavitvah: zagon ob prijavi (naloga 21, privzeto vklopljeno; Lina tece v ozadju). */
+export function SamodejniZagonStikalo({ razred }: { razred: string }) {
+  const [stanje, setStanje] = useState<Awaited<ReturnType<typeof samodejniZagonFn>> | null>(null);
+  const [napaka, setNapaka] = useState(false);
+  useEffect(() => {
+    let zivo = true;
+    samodejniZagonFn()
+      .then((s) => {
+        if (zivo) setStanje(s);
+      })
+      .catch(() => undefined);
+    return () => {
+      zivo = false;
+    };
+  }, []);
+  async function spremeni(vklop: boolean) {
+    setNapaka(false);
+    const prej = stanje;
+    if (prej) setStanje({ ...prej, vklop });
+    try {
+      setStanje(await nastaviSamodejniZagonFn({ data: { vklop } }));
+    } catch {
+      setStanje(prej);
+      setNapaka(true);
+    }
+  }
+  if (!stanje) return null;
+  return (
+    <div className="mt-4">
+      <label className={razred}>
+        <input type="checkbox" checked={stanje.vklop} onChange={(e) => void spremeni(e.target.checked)} />
+        {t2("zagonStikalo")}
+      </label>
+      <p className="mt-1 text-xs text-[var(--color-moss)]">{t2("zagonOpis")}</p>
+      {!stanje.naVoljo ? <p className="mt-1 text-xs text-[var(--color-moss)]">{t2("zagonNiNaVoljo")}</p> : null}
+      {stanje.tuj ? <p className="mt-1 text-xs text-[var(--color-brass)]">{t2("zagonTuj")}</p> : null}
+      {napaka ? (
+        <p role="alert" className="text-xs text-[var(--color-signal)]">
+          {t2("zagonNapaka")}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

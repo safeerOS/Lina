@@ -3,7 +3,7 @@
  * predlog iz priloge: jutro in vecer, teme, osebno povezano z delom, nastavitve, "raje ena iskrena kot deset nepomembnih").
  * Cista pravila brez diska in omrezja: kljuc dneva, del dneva, tema dneva, vnaprej pripravljene misli, navodilo modelu in
  * ciscenje odgovora.
- * - Najvec DVE sporocili na dan (jutro, vecer), nikoli obvestil; vecer samo po 17. uri po uri naprave.
+ * - Najvec DVE sporocili na dan (jutro, vecer), nikoli obvestil; vecer samo po 17. uri po ljubljanski uri (PAS_LINE).
  * - Zahteva modelu privzeto NE nosi osebnih podatkov (dan v tednu, tema, ton, nekaj prejsnjih misli). Zapiske o lastniku
  *   dobi samo, ce je lastnik izbral slog "osebno" ali "oboje".
  * - Razpolozenja lastnika Lina NE ugiba (domneva o cloveku, ne dejstvo).
@@ -87,14 +87,24 @@ function deliCasa(zdaj: Date, pas?: string): { dan: string; ura: number } {
   return { dan: zdaj.toISOString().slice(0, 10), ura: zdaj.getUTCHours() };
 }
 
-/** Koledarski dan v danem casovnem pasu (privzeto pas naprave). Neveljaven pas: dan po UTC. */
-export function kljucDneva(zdaj: Date, pas?: string): string {
+/** En vir ure za pozdrav na Domovu in misel dneva (lastnik 25. 11. 2026): ljubljanski cas, ne pas sistema. */
+export const PAS_LINE = "Europe/Ljubljana";
+
+/** Koledarski dan v danem casovnem pasu (privzeto ljubljanski). Neveljaven pas: dan po UTC. */
+export function kljucDneva(zdaj: Date, pas: string = PAS_LINE): string {
   return deliCasa(zdaj, pas).dan;
 }
 
-/** Vecer se zacne ob 17. uri po uri v danem pasu. */
-export function delDneva(zdaj: Date, pas?: string): Del {
+/** Vecer se zacne ob 17. uri po uri v danem pasu (privzeto ljubljanski). */
+export function delDneva(zdaj: Date, pas: string = PAS_LINE): Del {
   return deliCasa(zdaj, pas).ura >= URA_VECERA ? "vecer" : "jutro";
+}
+
+export type DelPozdrava = "noc" | "jutro" | "dan" | "vecer";
+/** Pozdrav na Domovu po uri (lastnik 25. 11. 2026): 0-5 noc, 5-10 jutro, 10-17 dan, 17-24 vecer; vecer = vecerna misel (URA_VECERA). */
+export function delPozdrava(zdaj: Date, pas: string = PAS_LINE): DelPozdrava {
+  const ura = deliCasa(zdaj, pas).ura;
+  return ura < 5 ? "noc" : ura < 10 ? "jutro" : ura < URA_VECERA ? "dan" : "vecer";
 }
 
 /** Stevilo dni od 1. 1. 1970 za veljaven kljuc dneva. */
