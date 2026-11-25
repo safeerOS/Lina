@@ -362,6 +362,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const znaneVerzije = () => (verzije ??= naloziVerzije().catch((e: unknown) => { verzije = null; throw e; }));
   // naloga 14 N2: naloge, katerih verzije ni bilo mogoce preveriti z veljavnim indeksom (samo za branje); hrani se v podpisanem indeksu
   const brezVnosa = new Set<string>();
+  // naloga 14 N2: indeks je bil kdaj obnovljen (izbrisi pred tem so izgubljeni) - podpisana naloga brez vnosa je od tedaj samo za branje
+  let obnovljen = false;
   /** Naloga 14 N2: najvisje verzije PODPISANIH stanj z veljavno shemo (surovo branje: preberi caka na indeks). */
   const verzijeIzStanj = async () => {
     const m = new Map<string, number>();
@@ -389,6 +391,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       }
       const b = (x as { nepreverjene?: unknown }).nepreverjene;
       if (Array.isArray(b)) for (const id of b) if (typeof id === "string" && VELJAVEN_ID.test(id)) brezVnosa.add(id);
+      obnovljen = (x as { obnovljen?: unknown }).obnovljen === true;
       return m;
     }
     // naloga 14 N2: indeks manjka (ob podpisanih stanjih) ali ni veljaven - zgradi ga iz najvisjih verzij veljavnih stanj; te naloge
@@ -399,6 +402,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       m.set(id, n);
       brezVnosa.add(id);
     }
+    obnovljen = true;
     console.error("lina: indeks verzij nalog manjka ali ni veljaven; obnovljen iz stanj, obstojece naloge so samo za branje.");
     return m;
   };
@@ -407,7 +411,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   const shraniIndeks = async () => {
     const m = await znaneVerzije();
     const p = zapisIndeksa.catch(() => undefined).then(async () => {
-      const telo = { verzije: Object.fromEntries(m), ...(brezVnosa.size > 0 ? { nepreverjene: [...brezVnosa].sort() } : {}) };
+      const telo = { verzije: Object.fromEntries(m), ...(brezVnosa.size > 0 ? { nepreverjene: [...brezVnosa].sort() } : {}), ...(obnovljen ? { obnovljen: true } : {}) };
       await writeJson(mapa, INDEKS, { ...telo, podpis: await podpisStanja(root, telo, "orkestrator-indeks") });
     });
     zapisIndeksa = p;
@@ -430,6 +434,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     if (m && razlog === null) {
       const s = x as StanjeNaloge;
       // naloga 14 N2: prebrana podpisana verzija gre v indeks v pomnilniku (naslednji zapis indeksa je ne zniza); nepodpisana nikoli
+      if (podpisan && obnovljen && !m.has(id)) brezVnosa.add(id);
       if (podpisan) m.set(id, Math.max(m.get(id) ?? 0, s.verzija ?? 0));
       // oznaka se izracuna ob vsakem branju (ne velja iz datoteke kot false); true z diska (stara selitev) ostane
       if (brezPodpisa || brezVnosa.has(id) || s.nepreverjeno === true) s.nepreverjeno = true;

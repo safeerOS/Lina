@@ -82,6 +82,25 @@ describe("N2: indeks verzij ob napaki in neveljavnem podpisu", () => {
     await preveriSamoBranje(root, id);
   });
 
+  it("po obnovi indeksa podtaknjena kopija naloge, izbrisane pred izgubo indeksa (izbris izgubljen): samo za branje, tudi po zagonu", async () => {
+    const root = await mapa();
+    const m = model();
+    const o = ustvariOrkestrator(root, { ...brez, klicModela: m.klicModela });
+    const d = await o.nova({ cilj: "Izbrisana naloga." });
+    await o.teci(d.id);
+    const kopijaD = await readFile(datoteka(root, d.id), "utf8");
+    await o.izbrisi(d.id);
+    await vrnjenaKopija(root);
+    await unlink(indeks(root));
+    const o2 = ustvariOrkestrator(root, { ...brez, klicModela: m.klicModela });
+    await o2.seznam(); // obnova indeksa iz stanj (D ni vec na disku)
+    await writeFile(datoteka(root, d.id), kopijaD);
+    assert.equal((await o2.preberi(d.id))?.nepreverjeno, true);
+    await o2.nova({ cilj: "Zapis indeksa." });
+    const o3 = ustvariOrkestrator(root, { ...brez, klicModela: m.klicModela });
+    assert.equal((await o3.preberi(d.id))?.nepreverjeno, true, "po zagonu");
+  });
+
   it("prehodna napaka branja indeksa (EISDIR) ne izprazni indeksa: zavrnitev, nic zapisano, po odpravi zascita velja", async () => {
     const root = await mapa();
     const id = await vrnjenaKopija(root);
