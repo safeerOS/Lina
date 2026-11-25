@@ -10,6 +10,7 @@ import { jeSamoucenjeVklopljeno } from "./samoucenje-baza.server.ts";
 import { izluciUci, naucSeVOzadju, odsekSamoucenja, prikliciZnanje } from "./samoucenje-pogovor.server.ts";
 import { odsekPravilIzPopravkov, zabeleziPopravek } from "./ucenje-popravkov.server.ts";
 import { naucIzDokumenta, odsekStrokPogovor, zabeleziPogovorLastnika } from "./stroke.server.ts";
+import { ucenjeLHOdsek, ucenjeLHSporocilo } from "./ucenje-lh-vrata.server.ts";
 import { besediloDatotek, oznakaPriponk, pripraviPriponke } from "./priponke.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { predlagajClaudeNalogo, type Odvisnosti } from "./claude-naloge.server.ts";
@@ -350,6 +351,10 @@ export async function asistentPogovor(
   // Izbrani model za pogovor (izbirnik v ukazni vrstici) ali, ce ga ni, isti ponudnik kot za klice.
   const brain = await pogovorBrain(root);
   if (!brain) return { ok: false, sporocilo: await razlogBrezAsistentke(root), zgodovina };
+  // Ucenje postopkov (modul ucenje-lh, AGPL, 25. 11. 2026): odloca koda iz lastnikovega besedila (sestava enote, ura, odgovor v uri);
+  // po paketu in n8n (njihov »da« ima prednost), samo v tem pogovoru (ne priponke, ne klici). Brez modula vrne null.
+  const ucenje = await ucenjeLHSporocilo(root, novo, brain, zdaj);
+  if (ucenje !== null) return zakljuci(ucenje);
   if (jeKoledarskaNamera(novo)) {
     // Model samo razbere naslov in cas; zapis in potrditev naredi koda, zato Lina ne more trditi, kar ni zapisano.
     const izl = await callProvider({ ...brain, text: novo, system: navodiloIzluscenja(zdaj), maxTokens: 200, najvecZnakov: 1000, timeoutMs: 12_000, vsebinaKlica: false });
@@ -373,7 +378,9 @@ export async function asistentPogovor(
   // Prilagodljivi kontekst (24. 11. 2026): uci se samo iz lastnikovega sporocila (raba izrazov, stroka), nato kratek odsek relevantnih izrazov.
   await zabeleziPogovorLastnika(root, novo, zdaj);
   const stroke = await odsekStrokPogovor(root, novo);
-  const vhod = sestaviAsistenta(zgodovina, novo, pravila.slog, pravila.navodila, SKILI_ASISTENTKE, spomin, `${uc.odsek}${popravkiPravila}${stroke}`, { povzetek: await preberiPovzetek(root), razlicica: await razlicicaLine() });
+  // naucene ucne enote (podatek), ki se nanasajo na sporocilo; oznake [[ ]] so ze nevtralizirane v modulu
+  const enote = brezOznak(await ucenjeLHOdsek(root, novo));
+  const vhod = sestaviAsistenta(zgodovina, novo, pravila.slog, pravila.navodila, SKILI_ASISTENTKE, spomin, `${uc.odsek}${popravkiPravila}${stroke}${enote}`, { povzetek: await preberiPovzetek(root), razlicica: await razlicicaLine() });
   const rezultat = await callProvider({ ...brain, text: vhod.text, system: vhod.system + NAVODILO_OZNAKE + ((await jeGradnjaVklopljena(root).catch(() => false)) ? NAVODILO_OZNAKE_GRADNJE : "") + (pravila.dodatki?.n8n === true ? NAVODILO_OZNAKE_N8N : ""), maxTokens: 400, najvecZnakov: 2000, vsebinaKlica: false });
   const cas = new Date().toISOString();
   if (!rezultat.ok) return { ok: false, sporocilo: rezultat.sporocilo, zgodovina };

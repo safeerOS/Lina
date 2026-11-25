@@ -46,6 +46,7 @@ import { nizZaVklop, PREVERJENI_OPERATERJI, type Operater, type VrstaPreusmeritv
 import { Podokna } from "@/components/podokna.tsx";
 import { CiscenjeZvokaStikalo, MotivacijaStikalo, SamodejniZagonStikalo, SamoucenjeStikalo, SpominPogovorovStikalo } from "@/components/lina2/mediji.tsx";
 import { StrokeKartica } from "@/components/lina2/stroke-kartica.tsx";
+import { UcenjeLHStikalo } from "@/components/lina2/ucenje-lh-kartica.tsx";
 import { GradnjeStikalo } from "@/components/lina2/racunalnik.tsx";
 import { ObvestilaNastavitve } from "@/components/lina2/obvestila-nastavitve.tsx";
 import {
@@ -2688,6 +2689,7 @@ export function NastavitveVsebina({
               <CiscenjeZvokaStikalo razred={IZBIRA} />
               <SpominPogovorovStikalo razred={IZBIRA} />
               <SamoucenjeStikalo razred={IZBIRA} />
+              <UcenjeLHStikalo razred={IZBIRA} />
               <MotivacijaStikalo razred={IZBIRA} />
               <StrokeKartica razred={IZBIRA} />
               <GradnjeStikalo razred={IZBIRA} />

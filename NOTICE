@@ -1,0 +1,9 @@
+Lina (Safeer)
+
+Ta program vsebuje (med drugim) to kodo tretjih pod drugo licenco:
+
+src/lib/lina/ucenje-lh/
+  Učenje postopkov, prirejeno po LearnHarness (https://github.com/amosblomqvist/learnharness, commit 069a6a1).
+  Copyright (C) Amos Blomqvist. Licenca: GNU Affero General Public License v3.0 (src/lib/lina/ucenje-lh/LICENSE).
+  Spremenil Safeer (team@safeer.si), 25. 11. 2026; podrobnosti v src/lib/lina/ucenje-lh/README.md.
+  Modul se pri gradnji izpusti z LINA_BREZ_UCENJA_LH=1 (Lina brez njega deluje).

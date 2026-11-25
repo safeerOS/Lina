@@ -1489,7 +1489,8 @@ Izmerjeno (pomocnik, pravi model prek procesa): nalaganje 6,3 s, kratek posnetek
 - Ocena cilja naloge agenta (cilj-naloge.ts, cilj-naloge.server.ts; zamisel DeerFlow MIT in LearnHarness AGPL, koda NI prevzeta):
   ob uspelem izidu Claude Code model za pogovor oceni izid; na telefon gre stalno besedilo ocene pred izidom (rok 8 s, ob napaki izid
   brez ocene). Nadaljevanje Lina NE sprozi: nova naloga potrebuje podpis naprave. Izid agenta gre k ponudniku modela za pogovor.
-- LearnHarness (github.com/amosblomqvist/learnharness) je AGPL-3.0: kode ne kopiramo in ga ne dodamo kot odvisnost (Lina je placljiva).
+- LearnHarness (github.com/amosblomqvist/learnharness) je AGPL-3.0. Odlocitev lastnika 25. 11. 2026: jedro metode je vgrajeno kot LOCEN AGPL modul
+  src/lib/lina/ucenje-lh/ (glej razdelek »Ucenje postopkov (ucenje-lh)«); drugje kode LearnHarness ne kopiramo in ga ne dodamo kot odvisnost.
 
 ## Lina gradi APK in deb na GitHubu (lastnik 24. 11. 2026)
 Lastnik: »Naj lina zna tudi graditi apk na githube«. Privzeto VKLOPLJENO (njegova ideja), s stikalom za izklop v Nastavitvah.
