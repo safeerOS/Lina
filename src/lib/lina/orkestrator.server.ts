@@ -212,6 +212,63 @@ export type Orkestrator = {
 };
 
 const VELJAVEN_ID = /^o-[a-f0-9]{16}$/;
+const FAZE: ReadonlyArray<Faza> = ["tece", "caka-potrditev", "caka-lastnika", "caka-pomocnika", "koncano", "ustavljeno", "napaka"];
+/** Orodje, na katerega caka faza (caka-potrditev: katero koli orodje iz registra s potrditvijo). */
+const ORODJE_CAKANJA: Partial<Record<Faza, string>> = { "caka-lastnika": "vprasaj_lastnika", "caka-pomocnika": "dodeli_pomocniku" };
+
+/**
+ * Naloga 9 V7: oblika stanja z diska (datoteko lahko podtakne ali pokvari kdor koli z dostopom do mape podatkov). Vrne razlog ali
+ * null. Orodja: delovalo/ni, potrjen klic in klic, na katerega naloga caka, samo iz registra; odprt klic z izmisljenim imenom je
+ * veljaven (dobi izid »ne obstaja«, pregled V1). Vsebine (npr. podtaknjene zastavice potrjeno pri orodju iz registra) shema ne loci.
+ */
+export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime: string) => boolean): string | null {
+  const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+  const niz = (v: unknown) => typeof v === "string";
+  const st = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+  const nizi = (v: unknown) => Array.isArray(v) && v.every(niz);
+  if (!obj(x)) return "ni objekt";
+  if (x.id !== id) return "id";
+  if (!niz(x.cilj) || !(x.cilj as string).trim() || (x.cilj as string).length > NAJVEC_ZNAKOV_CILJA) return "cilj";
+  if (!niz(x.tip)) return "tip";
+  if (!FAZE.includes(x.faza as Faza)) return "faza";
+  if (x.razlog !== null && !niz(x.razlog)) return "razlog";
+  if (x.odgovor !== null && !niz(x.odgovor)) return "odgovor";
+  if (x.ocena !== null && !(obj(x.ocena) && niz(x.ocena.ovira) && niz(x.ocena.dokaz))) return "ocena";
+  if (!Array.isArray(x.sporocila) || !x.sporocila.every((m) =>
+    obj(m) && (m.vloga === "uporabnik" ? niz(m.besedilo)
+      : m.vloga === "asistent" ? (m.besedilo === undefined || niz(m.besedilo)) && (m.klici === undefined || (Array.isArray(m.klici) && m.klici.every((k) => obj(k) && niz(k.id) && niz(k.ime) && obj(k.argumenti))))
+        : m.vloga === "orodje" && niz(m.id) && niz(m.ime) && (niz(m.rezultat) || obj(m.rezultat)) && (m.napaka === undefined || typeof m.napaka === "boolean")))) return "sporocila";
+  if (!Array.isArray(x.odprti) || !x.odprti.every((k) => obj(k) && niz(k.id) && niz(k.ime) && obj(k.argumenti)
+    && (k.zacet === undefined || typeof k.zacet === "boolean") && (k.potrjeno === undefined || (k.potrjeno === true && imaOrodje(k.ime as string))))) return "odprti";
+  const odprti = x.odprti as Array<{ id: string; ime: string }>;
+  const cakajoca = x.faza === "caka-potrditev" || x.faza === "caka-lastnika" || x.faza === "caka-pomocnika";
+  if (x.cakanje === null) {
+    if (cakajoca) return "cakanje";
+  } else {
+    const c = x.cakanje;
+    if (!obj(c) || !niz(c.klicId) || (c.vprasanjeId !== null && !niz(c.vprasanjeId))) return "cakanje";
+    for (const p of ["pomocnik", "vprasanje", "od"]) if (c[p] !== undefined && !niz(c[p])) return "cakanje";
+    if (!cakajoca) return "cakanje brez cakajoce faze";
+    const k = odprti.find((o) => o.id === c.klicId);
+    const pricakovano = ORODJE_CAKANJA[x.faza as Faza];
+    if (!k || !imaOrodje(k.ime) || (pricakovano !== undefined && k.ime !== pricakovano)) return "cakanje: orodje";
+    if (x.faza === "caka-pomocnika" && !niz(c.pomocnik)) return "cakanje: pomocnik";
+  }
+  if (!Array.isArray(x.dogodki) || !x.dogodki.every((d) => obj(d) && st(d.st) && niz(d.cas) && niz(d.vrsta) && niz(d.besedilo))) return "dogodki";
+  for (const p of ["stDogodka", "koraki", "casMs", "samopregledov"]) if (!st(x[p])) return p;
+  const por = x.poraba;
+  if (!obj(por) || !st(por.vhod) || !st(por.izhod) || !st(por.klici) || typeof por.ocenjeno !== "boolean") return "poraba";
+  const pr = x.proracun;
+  if (!obj(pr) || !["najvecKorakov", "najvecZetonov", "rokMs", "najvecPonovitev"].every((p) => st(pr[p]))) return "proracun";
+  if (!obj(x.ponovitve) || !Object.values(x.ponovitve).every(st)) return "ponovitve";
+  for (const p of ["okuzeno", "ucenje", "gesloObZacetku"]) if (typeof x[p] !== "boolean") return p;
+  if (!nizi(x.enoteUcenja)) return "enoteUcenja";
+  const ci = x.cilja;
+  if (!obj(ci) || !st(ci.nadaljevanj) || !st(ci.brezNapredka) || !niz(ci.zadnjiIzid)) return "cilja";
+  if (!nizi(x.delovalo) || !nizi(x.ni) || ![...(x.delovalo as string[]), ...(x.ni as string[])].every(imaOrodje)) return "delovalo/ni";
+  if (!niz(x.zacetek) || !niz(x.posodobljeno)) return "cas";
+  return null;
+}
 
 export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}): Orkestrator {
   const root = resolveDataDir(dir);
@@ -245,7 +302,20 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     if (!VELJAVEN_ID.test(id)) throw new OrkestratorNapaka("ni-naloge");
     return `${id}.json`;
   };
-  const preberi = async (id: string) => (VELJAVEN_ID.test(id) ? await readJsonFile<StanjeNaloge>(mapa, pot(id)).catch(() => null) : null);
+  const zeJavljeno = new Set<string>();
+  const preberi = async (id: string): Promise<StanjeNaloge | null> => {
+    if (!VELJAVEN_ID.test(id)) return null;
+    const x = await readJsonFile<unknown>(mapa, pot(id)).catch(() => null);
+    if (x === null) return null;
+    const razlog = razlogNeveljavnegaStanja(x, id, (ime) => register.has(ime));
+    if (razlog === null) return x as StanjeNaloge;
+    // pregled V7: neveljavno stanje se ne nadaljuje in ne pokaze; v dnevnik enkrat na nalogo (seznam bere ob vsakem osvezenju)
+    if (!zeJavljeno.has(id)) {
+      zeJavljeno.add(id);
+      await vDnevnik({ id } as StanjeNaloge, { vrsta: "neveljavno-stanje", razlog });
+    }
+    return null;
+  };
   const zapisi = async (s: StanjeNaloge) => {
     s.posodobljeno = iso();
     await writeJson(mapa, pot(s.id), s);
