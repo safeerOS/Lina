@@ -255,14 +255,17 @@ async function obdelajUci(root: string, odgovor: string, vklopljeno: boolean): P
  */
 export async function obdelajClaudeCode(root: string, odgovor: string, dovoliPredlog: boolean, o: Odvisnosti = {}): Promise<string> {
   const { besedilo, predlogi } = izluciPredloge(odgovor);
-  if (!predlogi.length) return odgovor;
-  if (!dovoliPredlog) return besedilo;
+  // Pregled 0213 B1: tudi brez (veljavne) oznake ali pri priponkah ne gre lastniku trditev, da je naloga poslana - poslana ni bila nikamor
+  if (!predlogi.length) return brezLazneTrditve(odgovor);
+  if (!dovoliPredlog) return brezLazneTrditve(besedilo);
   const p = predlogi[0]!;
   // Naloga 11: stavki modela o posiljanju ne gredo lastniku; izid pove spodnje sporocilo programa.
   const brezTrditev = brezTrditevOPosiljanju(besedilo);
   // Naloga 11 (06:49: izmisljena mapa »Lina-Project«): mapa mora obstajati, sicer Lina vprasa za pravo pot (predloga ni).
   if (!path.isAbsolute(p.mapa) || !existsSync(p.mapa)) {
-    return `${brezTrditev}\n\n(Naloge nisem pripravila: mape »${p.mapa.slice(0, 200)}« na tem računalniku ni. Katera je prava pot projekta? Povejte jo, pa nalogo pripravim.)`.trim();
+    // Pregled 0213 B2: pot je od modela - s skritimi znaki (npr. U+202E) je lastnik ne vidi, kot je zapisana
+    const mapa = imaNevidne(p.mapa) ? "(pot s skritimi znaki)" : `»${p.mapa.slice(0, 200)}«`;
+    return `${brezTrditev}\n\n(Naloge nisem pripravila: mape ${mapa} na tem računalniku ni. Katera je prava pot projekta? Povejte jo, pa nalogo pripravim.)`.trim();
   }
   // [[agent-naloga: ...]] (24. 11. 2026): drug agent ali kasnejsi zagon; se vedno samo predlog, ki ga lastnik potrdi
   const z = await predlagajClaudeNalogo(root, p.mapa, p.naloga, o, new Date(), p.agent ? { agent: p.agent, pogoj: p.pogoj } : {});
@@ -274,6 +277,14 @@ export async function obdelajClaudeCode(root: string, odgovor: string, dovoliPre
     : `(Naloga za ${komu} je potrjena po vašem dovoljenju za podobne naloge; preklic v Nastavitvah > Dovoljenja.)`;
   return `${brezTrditev}\n\n${izid}`.trim();
 }
+
+/** Odgovor brez oznake naloge: ce je model trdil, da je nalogo poslal, stavek odpade in program pove, da ni bila poslana. */
+function brezLazneTrditve(odgovor: string): string {
+  // obicajen odgovor ostane nespremenjen do bajta (filter sicer normalizira presledke)
+  if (!odgovor.split("\n").some((v) => !v.trim().startsWith("[[") && v.split(/(?<=[.!?])\s+/).some(trdiPosiljanje))) return odgovor;
+  return `${brezTrditevOPosiljanju(odgovor)}\n\n(Ta naloga ni bila nikamor oddana. Če jo želite, jo pripravim kot predlog, ki ga potrdite v zavihku Računalnik.)`.trim();
+}
+const trdiPosiljanje = (stavek: string) => TRDI_POSILJANJE.test(stavek) && O_NALOGI.test(stavek);
 
 const TRDI_POSILJANJE = /po[sš]iljam|poslala|predala|predajam|zagnala|sem oddala/i;
 const O_NALOGI = /nalog|računalnik|racunalnik|claude|agent/i;
