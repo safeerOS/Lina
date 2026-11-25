@@ -258,7 +258,7 @@
     <string name="local_note_saved">Zapisano: %1$s</string>
     <string name="local_task_proposed">Lina predlaga nalogo za računalnik: %1$s\nPogovor vsebuje besedilo nekoga drugega (klicatelj, deljena aplikacija ali dokument), zato gre naloga šele, ko jo potrdiš.</string>
     <string name="local_task_sprejeta">Računalnik je sprejel nalogo št. %2$s: %1$s\nPotek in izid sta v zavihku Računalnik.</string>
-    <string name="local_task_nedosegljiv">Naloge nisem mogla poslati, ker računalnik ni dosegljiv (naloge zdaj delujejo samo v domačem omrežju). Lahko jo shranim in pošljem, ko bo dosegljiv.</string>
+    <string name="local_task_nedosegljiv">Naloge nisem mogla poslati, ker računalnik ni dosegljiv (ne v domačem omrežju ne prek Global Linka). Lahko jo shranim in pošljem, ko bo dosegljiv.</string>
     <string name="local_task_claude_code_ni">Naloge nisem mogla oddati: na računalniku Claude Code ni zagnan ali ni nameščen.</string>
     <string name="local_task_zavrnjena">Računalnik je nalogo zavrnil (ta telefon nima dovoljenja). Preveri povezavo v Nastavitvah > Računalnik.</string>
     <string name="local_task_prevec">Računalnik je nalogo zavrnil, ker je bilo v kratkem času preveč zahtev. Poskusi čez nekaj minut.</string>

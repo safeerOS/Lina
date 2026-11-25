@@ -258,7 +258,7 @@
     <string name="local_note_saved">Note enregistrée : %1$s</string>
     <string name="local_task_proposed">Lina propose une tâche pour l\'ordinateur : %1$s\nLa conversation contient du texte d\'une autre personne (appelant, application partagée ou document) : la tâche n\'est envoyée qu\'après votre confirmation.</string>
     <string name="local_task_sprejeta">L\'ordinateur a accepté la tâche n° %2$s : %1$s\nLe suivi et le résultat sont dans l\'onglet Ordinateur.</string>
-    <string name="local_task_nedosegljiv">Je n\'ai pas pu envoyer la tâche car l\'ordinateur n\'est pas joignable (les tâches ne fonctionnent pour l\'instant que sur le réseau domestique). Je peux l\'enregistrer et l\'envoyer dès qu\'il sera joignable.</string>
+    <string name="local_task_nedosegljiv">Je n\'ai pas pu envoyer la tâche car l\'ordinateur n\'est pas joignable (ni sur le réseau domestique ni via Global Link). Je peux l\'enregistrer et l\'envoyer dès qu\'il sera joignable.</string>
     <string name="local_task_claude_code_ni">Je n\'ai pas pu transmettre la tâche : Claude Code n\'est pas lancé ou pas installé sur l\'ordinateur.</string>
     <string name="local_task_zavrnjena">L\'ordinateur a refusé la tâche (ce téléphone n\'est pas autorisé). Vérifiez la connexion dans Réglages > Ordinateur.</string>
     <string name="local_task_prevec">L\'ordinateur a refusé la tâche : trop de requêtes en peu de temps. Réessayez dans quelques minutes.</string>
@@ -632,4 +632,5 @@
     <string name="docs_source_page_fmt">%1$s, p. %2$d</string>
     <string name="docs_chat_send">Envoyer à Lina</string>
     <string name="docs_chat_send_prefix">De mes documents (recherche locale) :</string>
+    <string name="install_err_global">Le téléchargement de l\'APK via Global Link a été interrompu. Sur le réseau domestique, le téléchargement est fiable ; réessayez à la maison ou appuyez encore sur Installer.</string>
 </resources>

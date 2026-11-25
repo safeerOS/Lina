@@ -258,7 +258,7 @@
     <string name="local_note_saved">Nota salvata: %1$s</string>
     <string name="local_task_proposed">Lina propone un\'attività per il computer: %1$s\nLa conversazione contiene testo di un\'altra persona (chi chiama, un\'app condivisa o un documento), quindi l\'attività viene inviata solo dopo la tua conferma.</string>
     <string name="local_task_sprejeta">Il computer ha accettato l\'attività n. %2$s: %1$s\nAvanzamento ed esito sono nella scheda Computer.</string>
-    <string name="local_task_nedosegljiv">Non ho potuto inviare l\'attività perché il computer non è raggiungibile (per ora le attività funzionano solo sulla rete di casa). Posso salvarla e inviarla quando sarà raggiungibile.</string>
+    <string name="local_task_nedosegljiv">Non ho potuto inviare l\'attività perché il computer non è raggiungibile (né sulla rete di casa né tramite Global Link). Posso salvarla e inviarla quando sarà raggiungibile.</string>
     <string name="local_task_claude_code_ni">Non ho potuto consegnare l\'attività: Claude Code non è avviato o non è installato sul computer.</string>
     <string name="local_task_zavrnjena">Il computer ha rifiutato l\'attività (questo telefono non è autorizzato). Controlla la connessione in Impostazioni > Computer.</string>
     <string name="local_task_prevec">Il computer ha rifiutato l\'attività per troppe richieste in poco tempo. Riprova tra qualche minuto.</string>
@@ -632,4 +632,5 @@
     <string name="docs_source_page_fmt">%1$s, pag. %2$d</string>
     <string name="docs_chat_send">Invia a Lina</string>
     <string name="docs_chat_send_prefix">Dai miei documenti (ricerca locale):</string>
+    <string name="install_err_global">Il download dell\'APK tramite Global Link è stato interrotto. Sulla rete di casa il download è affidabile; riprova a casa o tocca di nuovo Installa.</string>
 </resources>

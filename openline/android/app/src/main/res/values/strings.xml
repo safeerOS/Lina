@@ -258,7 +258,7 @@
     <string name="local_note_saved">Note saved: %1$s</string>
     <string name="local_task_proposed">Lina proposes a task for your computer: %1$s\nThe conversation contains text from someone else (a caller, a shared app or a document), so the task is sent only when you confirm it.</string>
     <string name="local_task_sprejeta">The computer accepted task no. %2$s: %1$s\nProgress and result are in the Computer tab.</string>
-    <string name="local_task_nedosegljiv">I could not send the task because the computer is not reachable (tasks currently work only on the home network). I can save it and send it when it is reachable.</string>
+    <string name="local_task_nedosegljiv">I could not send the task because the computer is not reachable (neither on the home network nor via Global Link). I can save it and send it when it is reachable.</string>
     <string name="local_task_claude_code_ni">I could not hand over the task: Claude Code is not running or not installed on the computer.</string>
     <string name="local_task_zavrnjena">The computer rejected the task (this phone is not allowed). Check the connection in Settings > Computer.</string>
     <string name="local_task_prevec">The computer rejected the task because of too many requests in a short time. Try again in a few minutes.</string>

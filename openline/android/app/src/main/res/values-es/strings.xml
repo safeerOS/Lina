@@ -258,7 +258,7 @@
     <string name="local_note_saved">Nota guardada: %1$s</string>
     <string name="local_task_proposed">Lina propone una tarea para el ordenador: %1$s\nLa conversación contiene texto de otra persona (quien llama, una app compartida o un documento), así que la tarea se envía solo cuando la confirmes.</string>
     <string name="local_task_sprejeta">El ordenador aceptó la tarea n.º %2$s: %1$s\nEl progreso y el resultado están en la pestaña Ordenador.</string>
-    <string name="local_task_nedosegljiv">No pude enviar la tarea porque el ordenador no está accesible (por ahora las tareas solo funcionan en la red de casa). Puedo guardarla y enviarla cuando esté accesible.</string>
+    <string name="local_task_nedosegljiv">No pude enviar la tarea porque el ordenador no está accesible (ni en la red de casa ni a través de Global Link). Puedo guardarla y enviarla cuando esté accesible.</string>
     <string name="local_task_claude_code_ni">No pude entregar la tarea: Claude Code no está en ejecución o no está instalado en el ordenador.</string>
     <string name="local_task_zavrnjena">El ordenador rechazó la tarea (este teléfono no tiene permiso). Revisa la conexión en Ajustes > Ordenador.</string>
     <string name="local_task_prevec">El ordenador rechazó la tarea por demasiadas solicitudes en poco tiempo. Inténtalo dentro de unos minutos.</string>
@@ -632,4 +632,5 @@
     <string name="docs_source_page_fmt">%1$s, pág. %2$d</string>
     <string name="docs_chat_send">Enviar a Lina</string>
     <string name="docs_chat_send_prefix">De mis documentos (búsqueda local):</string>
+    <string name="install_err_global">La descarga del APK a través de Global Link se interrumpió. En la red de casa la descarga es fiable; inténtelo de nuevo en casa o pulse Instalar otra vez.</string>
 </resources>

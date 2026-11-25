@@ -258,7 +258,7 @@
     <string name="local_note_saved">Notiz gespeichert: %1$s</string>
     <string name="local_task_proposed">Lina schlägt eine Aufgabe für den Computer vor: %1$s\nDas Gespräch enthält Text von jemand anderem (Anrufer, geteilte App oder Dokument), daher wird die Aufgabe erst nach deiner Bestätigung gesendet.</string>
     <string name="local_task_sprejeta">Der Computer hat Aufgabe Nr. %2$s angenommen: %1$s\nVerlauf und Ergebnis im Tab Computer.</string>
-    <string name="local_task_nedosegljiv">Ich konnte die Aufgabe nicht senden, weil der Computer nicht erreichbar ist (Aufgaben funktionieren derzeit nur im Heimnetz). Ich kann sie speichern und senden, sobald er erreichbar ist.</string>
+    <string name="local_task_nedosegljiv">Ich konnte die Aufgabe nicht senden, weil der Computer nicht erreichbar ist (weder im Heimnetz noch über Global Link). Ich kann sie speichern und senden, sobald er erreichbar ist.</string>
     <string name="local_task_claude_code_ni">Ich konnte die Aufgabe nicht übergeben: Claude Code läuft nicht oder ist auf dem Computer nicht installiert.</string>
     <string name="local_task_zavrnjena">Der Computer hat die Aufgabe abgelehnt (dieses Telefon ist nicht berechtigt). Prüfe die Verbindung unter Einstellungen > Computer.</string>
     <string name="local_task_prevec">Der Computer hat die Aufgabe wegen zu vieler Anfragen abgelehnt. Versuche es in ein paar Minuten erneut.</string>
@@ -632,4 +632,5 @@
     <string name="docs_source_page_fmt">%1$s, S. %2$d</string>
     <string name="docs_chat_send">An Lina senden</string>
     <string name="docs_chat_send_prefix">Aus meinen Dokumenten (lokale Suche):</string>
+    <string name="install_err_global">Der APK-Download über Global Link wurde unterbrochen. Im Heimnetz ist der Download zuverlässig; versuchen Sie es zu Hause erneut oder tippen Sie noch einmal auf Installieren.</string>
 </resources>
