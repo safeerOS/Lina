@@ -84,12 +84,17 @@ function izGlavnegaOkvirja(podrobnosti, okno, naslov) {
 /**
  * Prisilni konec streznika (naloga 9, V10). Windows: kill() je TerminateProcess samo za streznik - OpenLine, tunel in RSDO bi ostali
  * brez starsa; zato taskkill /T /F po PID (celo drevo, vzorec tunel.server.ts). Linux: SIGKILL kot doslej.
+ * Naloga 11 N7: samo, ce otrok se tece (tudi signalCode: otrok, ki ga je ubil signal, ima exitCode null, njegov PID pa je lahko ze
+ * tuj); izid taskkill gre v dnevnik. Node drzi rocaj procesa do dogodka exit, zato Windows PID-a pred tem ne dodeli znova.
  */
-function prisilniKonec(otrok, platforma, zazeni = execFile) {
-  if (!otrok || otrok.exitCode !== null) return;
+function prisilniKonec(otrok, platforma, zazeni = execFile, dnevnik = (v) => console.error(v)) {
+  if (!otrok || otrok.exitCode !== null || (otrok.signalCode !== undefined && otrok.signalCode !== null)) return;
   try {
-    if (platforma === "win32" && otrok.pid) zazeni("taskkill", ["/pid", String(otrok.pid), "/T", "/F"], { windowsHide: true }, () => {});
-    else otrok.kill("SIGKILL");
+    if (platforma === "win32" && otrok.pid) {
+      const pid = otrok.pid;
+      zazeni("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, (napaka) =>
+        dnevnik(`lina-lupina: taskkill ${pid}: ${napaka ? `napaka ${napaka.code ?? napaka.message}` : "uspeh"}`));
+    } else otrok.kill("SIGKILL");
   } catch {
     /* ze koncan */
   }
