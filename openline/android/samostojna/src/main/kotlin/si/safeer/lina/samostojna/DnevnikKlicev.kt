@@ -453,11 +453,15 @@ class DnevnikKlicev(
         val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
         predlaganiZapisi[zapis.id] = zapis
         predlaganiCakajoci[zapis.id] = zapis.zaSinhronizacijo()
-        uveljaviHrambo(predlaganiZapisi, predlaganiCakajoci.keys + zadrzaniPrepisi)
-        shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values)
+        val predlaganiZadrzani = LinkedHashSet(zadrzaniPrepisi)
+        uveljaviHrambo(predlaganiZapisi, predlaganiCakajoci, predlaganiZadrzani)
+        shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values, predlaganiZadrzani)
         zapisi.clear()
         zapisi.putAll(predlaganiZapisi)
-        vrstaSinhronizacije[zapis.id] = zapis.zaSinhronizacijo()
+        vrstaSinhronizacije.clear()
+        vrstaSinhronizacije.putAll(predlaganiCakajoci)
+        zadrzaniPrepisi.clear()
+        zadrzaniPrepisi.addAll(predlaganiZadrzani)
         return true
     }
 
@@ -627,31 +631,44 @@ class DnevnikKlicev(
             predlagani[zapis.id] = zapis
             dodanih++
         }
-        if (uveljaviHrambo(predlagani, vrstaSinhronizacije.keys + zadrzaniPrepisi) || dodanih > 0) {
-            shraniVShrambo(predlagani.values, vrstaSinhronizacije.values)
+        val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
+        val predlaganiZadrzani = LinkedHashSet(zadrzaniPrepisi)
+        if (uveljaviHrambo(predlagani, predlaganiCakajoci, predlaganiZadrzani) || dodanih > 0) {
+            shraniVShrambo(predlagani.values, predlaganiCakajoci.values, predlaganiZadrzani)
             zapisi.clear()
             zapisi.putAll(predlagani)
+            vrstaSinhronizacije.clear()
+            vrstaSinhronizacije.putAll(predlaganiCakajoci)
+            zadrzaniPrepisi.clear()
+            zadrzaniPrepisi.addAll(predlaganiZadrzani)
         }
         return dodanih
     }
 
     /**
      * Rok hrambe in meja rasti (slepi pregled 17t, N4; pravila hrambe lastnika 22. 11. 2026): prepis podjetniskega klica 90 dni, osebni do
-     * izbrisa uporabnika; dnevnik najvec MEJA_ZAPISOV_TELEFON zapisov (kot racunalnik MEJA_KLICEV), odstranijo se najstarejsi. Zapisi v [varni]
-     * (vrsta za racunalnik, zadrzani prepisi) se ne spremenijo, da racunalnik ne izgubi niti zapisa niti prepisa. true = sprememba.
+     * izbrisa uporabnika; dnevnik najvec MEJA_ZAPISOV_TELEFON zapisov (kot racunalnik MEJA_KLICEV, ki prav tako hrani samo najnovejsih 1000).
+     * Prepis zapisa v vrsti za racunalnik ali med zadrzanimi se ne skrajsa (racunalnik ga se ni dobil). Cez mejo se odstranijo najstarejsi,
+     * najprej tisti, ki jih racunalnik ze ima; ce jih ni dovolj (telefon brez racunalnika, star racunalnik), tudi najstarejsi cakajoci -
+     * hkrati iz vrste in zadrzanih. Izbrisa za racunalnik to ne ustvari (samo uporabnikov izbris). true = sprememba.
      */
-    private fun uveljaviHrambo(predlagani: MutableMap<String, ZapisKlica>, varni: Set<String>): Boolean {
+    private fun uveljaviHrambo(
+        predlagani: MutableMap<String, ZapisKlica>,
+        cakajoci: MutableMap<String, ZapisKlicaSinhronizacija>,
+        zadrzani: MutableSet<String>
+    ): Boolean {
         var sprememba = false
         val meja = ura() - ROK_PREPISA_PODJETJE_MS
         for (z in predlagani.values.toList()) {
-            if (z.nacin == NacinKlica.PODJETJE && z.casZacetka < meja && z.prepisPogovora.isNotEmpty() && z.id !in varni) {
+            if (z.nacin == NacinKlica.PODJETJE && z.casZacetka < meja && z.prepisPogovora.isNotEmpty() && z.id !in cakajoci && z.id !in zadrzani) {
                 predlagani[z.id] = z.copy(prepisPogovora = emptyList()); sprememba = true
             }
         }
         val presezek = predlagani.size - MEJA_ZAPISOV_TELEFON
         if (presezek > 0) {
-            predlagani.values.filter { it.id !in varni }.sortedWith(compareBy<ZapisKlica> { it.casZacetka }.thenBy { it.id })
-                .take(presezek).forEach { predlagani.remove(it.id); sprememba = true }
+            predlagani.values.sortedWith(compareBy<ZapisKlica> { it.id in cakajoci || it.id in zadrzani }.thenBy { it.casZacetka }.thenBy { it.id })
+                .take(presezek).forEach { predlagani.remove(it.id); cakajoci.remove(it.id); zadrzani.remove(it.id) }
+            sprememba = true
         }
         return sprememba
     }

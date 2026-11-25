@@ -114,6 +114,34 @@ class NajdbeSlepi17tTest {
         assertEquals(listOf("nov"), DnevnikKlicev(shramba).cakajociZaSinhronizacijo().map { it.id })
     }
 
+    @Test
+    fun `N4 - meja 1000 zapisov velja tudi za telefon brez racunalnika (vsi zapisi v vrsti)`() {
+        val shramba = PomnilniskaShramba()
+        val d = DnevnikKlicev(shramba)
+        for (i in 1..1001) assertTrue(d.dodaj(zapisSPrepisom("k-$i", i * 1000L)))
+        val d2 = DnevnikKlicev(shramba)
+        assertEquals(1000, d2.seznam().size, "dnevnik brez racunalnika je presegel mejo")
+        assertEquals(1000, d2.cakajociZaSinhronizacijo().size)
+        assertTrue(d2.seznam().none { it.id == "k-1" } && d2.cakajociZaSinhronizacijo().none { it.id == "k-1" }, "odstraniti se mora najstarejsi, tudi iz vrste")
+    }
+
+    @Test
+    fun `N4 - meja 1000 zapisov velja tudi s starim racunalnikom (zadrzani prepisi)`() {
+        val shramba = PomnilniskaShramba()
+        val reviziji = PomnilniskaShramba()
+        val d = DnevnikKlicev(shramba)
+        for (i in 1..1001) {
+            assertTrue(d.dodaj(zapisSPrepisom("k-$i", i * 1000L)))
+            assertTrue(SinhronLine.izmenjaj(d, reviziji, poslji = { ODGOVOR_STAR }))
+        }
+        assertEquals(1000, DnevnikKlicev(shramba).seznam().size, "dnevnik s starim racunalnikom je presegel mejo")
+        // Po posodobitvi racunalnika gre znova 1000 zadrzanih (brez odstranjenega najstarejsega).
+        val poslano = mutableListOf<String>()
+        assertTrue(SinhronLine.izmenjaj(DnevnikKlicev(shramba), reviziji, poslji = { poslano.add(it); ODGOVOR_NOV }))
+        assertFalse(poslano.any { it.contains("\"k-1\"") })
+        assertTrue(poslano.any { it.contains("\"k-1001\"") })
+    }
+
     // N2: meja celega zapisa v BAJTIH tudi za kontrolne znake (JSON \u0001 = 6 B).
     @Test
     fun `N2 - zapis s polji polnimi kontrolnih znakov in narekovajev ostane pod 46 KiB`() {
