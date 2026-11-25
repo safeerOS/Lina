@@ -313,12 +313,13 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         return dosegljiv
     }
 
-    private val shrambaCakajoce get() = context.getSharedPreferences("lina_cakajoca_naloga", Context.MODE_PRIVATE)
+    private val shrambaCakajoce get() = context.getSharedPreferences(AsistentShramba.CAKAJOCA, Context.MODE_PRIVATE)
 
-    /** Ena shranjena naloga (lastnik jo je potrdil v oknu); nova zamenja staro. */
+    /** Ena shranjena naloga (lastnik jo je potrdil v oknu); nova zamenja staro. Odtis in cas: T3 (gre samo temu racunalniku, v roku). */
     fun shraniZaPozneje(besedilo: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null): Boolean {
         obIzidu?.let { obIzidShranjene = it }
-        return shrambaCakajoce.edit().putString("besedilo", besedilo).commit()
+        return shrambaCakajoce.edit().putString("besedilo", besedilo).putString("odtis", AsistentShramba.beri(context)?.odtis)
+            .putLong("cas", System.currentTimeMillis()).commit()
     }
 
     /** Klic klepeta za izid shranjene naloge (samo v pomnilniku: po ponovnem zagonu gre izid le v dnevnik zavihka Racunalnik). */
@@ -328,13 +329,20 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private fun posljiShranjeno() {
         val b = shrambaCakajoce.getString("besedilo", null) ?: return
         if (posiljam || nalogaId != null) return
-        shrambaCakajoce.edit().remove("besedilo").apply()
+        val odtis = shrambaCakajoce.getString("odtis", null)
+        val cas = shrambaCakajoce.getLong("cas", 0L)
+        shrambaCakajoce.edit().clear().apply()
+        // T3 (pregled 0213): drug (ali pozabljen) racunalnik ali potekel rok - ne poslje se sama, lastnik jo poslje znova
+        if (!si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, AsistentShramba.beri(context)?.odtis, cas, System.currentTimeMillis())) {
+            dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_potekla, b.take(120)))
+            return
+        }
         // nazaj v shrambo samo ob nedosegljivem (403/429/napaka bi se sicer ponavljali v nedogled); izid gre v dnevnik zavihka Racunalnik
         poslji(b) { izid, id ->
             if (izid != IzidPredaje.NEDOSEGLJIV) obIzidShranjene?.also { obIzidShranjene = null }?.invoke(izid, id)
             when (izid) {
                 IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
-                IzidPredaje.NEDOSEGLJIV -> shrambaCakajoce.edit().putString("besedilo", b).apply()
+                IzidPredaje.NEDOSEGLJIV -> shrambaCakajoce.edit().putString("besedilo", b).putString("odtis", odtis).putLong("cas", cas).apply()
                 else -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_ni, b.take(120)))
             }
         }
@@ -396,7 +404,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             var zaporednih = 0
             try {
                 // koncana naloga se spremlja naprej (redkeje), dokler je Lina ne pozabi (1 h, 404) ali telefon ne da nove
-                while (!ustavljen && (nalogaId == id || spremljana == id)) {
+                // T13 (pregled 0213): po »Pozabi racunalnik« se spremljanje ustavi (ne tece naprej po stari povezavi)
+                while (!ustavljen && (nalogaId == id || spremljana == id) && AsistentShramba.beri(context) != null) {
                     val cas = System.currentTimeMillis()
                     val enkratni = NalogaLine.nakljucno(32)
                     val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()

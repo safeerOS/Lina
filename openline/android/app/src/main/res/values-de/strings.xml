@@ -270,6 +270,7 @@
     <string name="local_task_shranjena">Ich habe die Aufgabe gespeichert. Das Telefon sendet sie, sobald der Computer erreichbar ist; das Ergebnis steht im Tab Computer.</string>
     <string name="local_task_shranjena_poslana">Die gespeicherte Aufgabe wurde angenommen: %1$s</string>
     <string name="local_task_shranjena_ni">Der Computer hat die gespeicherte Aufgabe nicht angenommen (abgelehnt oder Fehler), daher wird sie nicht erneut gesendet: %1$s</string>
+    <string name="local_task_shranjena_potekla">Die gespeicherte Aufgabe wurde nicht gesendet: Sie wurde für einen anderen Computer gespeichert oder ist älter als 24 Stunden. Senden Sie sie erneut, falls Sie sie noch brauchen: %1$s</string>
     <string name="local_task_confirm_title">Aufgabe an den Computer senden?</string>
     <string name="local_task_confirm_msg">Das Gespräch enthält Text von jemand anderem. Diese Aufgabe an den Computer senden?\n\n%1$s</string>
     <string name="local_task_confirm_send">Senden</string>

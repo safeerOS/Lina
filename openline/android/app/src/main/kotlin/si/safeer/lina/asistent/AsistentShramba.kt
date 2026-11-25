@@ -38,6 +38,14 @@ object AsistentShramba {
      * Pozabi samo seznanitev z racunalnikom. Datoteka »lina_asistent« hrani tudi tajnopise kljucev (Gemini, Brave, TinyFish,
      * Twilio, Google), zato NIKOLI clear(): 19. 11. 2026 je gumb »Pozabi racunalnik« zbrisal vse vnesene kljuce.
      */
-    fun pozabi(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("naslov").remove("vrata").remove("odtis").remove("rele").commit()
+    fun pozabi(context: Context): Boolean {
+        // T3 (pregled 0213): shranjena naloga je bila potrjena za TA racunalnik - po »Pozabi« je ne posljemo nikomur (datoteka hrani samo njo)
+        context.getSharedPreferences(CAKAJOCA, Context.MODE_PRIVATE).edit().clear().commit()
+        // T13 (pregled 0213): kanali releja, ki ze tecejo, se zaprejo takoj (ne sele ob naslednji povezavi)
+        PovezavaLine.zapriRele()
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("naslov").remove("vrata").remove("odtis").remove("rele").commit()
+    }
+
+    /** Ena shranjena naloga za pozneje (besedilo, odtis racunalnika, cas shranjevanja); AsistentKontroler.shraniZaPozneje. */
+    const val CAKAJOCA = "lina_cakajoca_naloga"
 }

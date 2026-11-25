@@ -270,6 +270,7 @@
     <string name="local_task_shranjena">I saved the task. The phone will send it when the computer is reachable; the result will be in the Computer tab.</string>
     <string name="local_task_shranjena_poslana">The saved task was accepted: %1$s</string>
     <string name="local_task_shranjena_ni">The computer did not accept the saved task (rejected or error), so it will not be sent again: %1$s</string>
+    <string name="local_task_shranjena_potekla">The saved task was not sent: it was saved for another computer or is older than 24 hours. Send it again if you still need it: %1$s</string>
     <string name="local_task_confirm_title">Send task to computer?</string>
     <string name="local_task_confirm_msg">The conversation contains text from someone else. Send this task to your computer?\n\n%1$s</string>
     <string name="local_task_confirm_send">Send</string>

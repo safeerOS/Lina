@@ -270,6 +270,7 @@
     <string name="local_task_shranjena">He guardado la tarea. El teléfono la enviará cuando el ordenador esté accesible; el resultado aparecerá en la pestaña Ordenador.</string>
     <string name="local_task_shranjena_poslana">La tarea guardada fue aceptada: %1$s</string>
     <string name="local_task_shranjena_ni">El ordenador no aceptó la tarea guardada (rechazada o error), así que no se volverá a enviar: %1$s</string>
+    <string name="local_task_shranjena_potekla">No envié la tarea guardada: se guardó para otro ordenador o tiene más de 24 horas. Envíela de nuevo si todavía la necesita: %1$s</string>
     <string name="local_task_confirm_title">¿Enviar la tarea al ordenador?</string>
     <string name="local_task_confirm_msg">La conversación contiene texto de otra persona. ¿Enviar esta tarea al ordenador?\n\n%1$s</string>
     <string name="local_task_confirm_send">Enviar</string>

@@ -43,8 +43,9 @@ object PovezavaLine {
             .getOrNull()?.also { vrata = it; ciljVrat = cilj }
     }
 
+    /** Zapre lokalna vrata releja in vse kanale, ki tecejo (ReleVrata.close); klice ga tudi AsistentShramba.pozabi (T13). */
     @Synchronized
-    private fun zapriRele() {
+    fun zapriRele() {
         vrata?.close()
         vrata = null
         ciljVrat = null

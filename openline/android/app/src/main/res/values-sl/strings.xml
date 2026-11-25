@@ -270,6 +270,7 @@
     <string name="local_task_shranjena">Nalogo sem shranila. Telefon jo pošlje, ko bo računalnik dosegljiv; izid bo v zavihku Računalnik.</string>
     <string name="local_task_shranjena_poslana">Shranjena naloga je sprejeta: %1$s</string>
     <string name="local_task_shranjena_ni">Shranjene naloge računalnik ni sprejel (zavrnjena ali napaka), zato je ne pošiljam znova: %1$s</string>
+    <string name="local_task_shranjena_potekla">Shranjene naloge ne pošljem: shranjena je bila za drug računalnik ali je starejša od 24 ur. Pošlji jo znova, če jo še potrebuješ: %1$s</string>
     <string name="local_task_confirm_title">Pošljem nalogo računalniku?</string>
     <string name="local_task_confirm_msg">Pogovor vsebuje besedilo nekoga drugega. Pošljem to nalogo računalniku?\n\n%1$s</string>
     <string name="local_task_confirm_send">Pošlji</string>

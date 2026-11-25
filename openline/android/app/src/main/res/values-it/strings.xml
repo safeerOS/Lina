@@ -270,6 +270,7 @@
     <string name="local_task_shranjena">Ho salvato l\'attività. Il telefono la invierà quando il computer sarà raggiungibile; l\'esito sarà nella scheda Computer.</string>
     <string name="local_task_shranjena_poslana">L\'attività salvata è stata accettata: %1$s</string>
     <string name="local_task_shranjena_ni">Il computer non ha accettato l\'attività salvata (rifiutata o errore), quindi non verrà inviata di nuovo: %1$s</string>
+    <string name="local_task_shranjena_potekla">Non ho inviato l\'attività salvata: era stata salvata per un altro computer o ha più di 24 ore. Inviala di nuovo se ti serve ancora: %1$s</string>
     <string name="local_task_confirm_title">Inviare l\'attività al computer?</string>
     <string name="local_task_confirm_msg">La conversazione contiene testo di un\'altra persona. Inviare questa attività al computer?\n\n%1$s</string>
     <string name="local_task_confirm_send">Invia</string>

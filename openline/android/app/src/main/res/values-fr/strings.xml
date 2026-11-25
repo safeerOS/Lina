@@ -270,6 +270,7 @@
     <string name="local_task_shranjena">J\'ai enregistré la tâche. Le téléphone l\'enverra quand l\'ordinateur sera joignable ; le résultat sera dans l\'onglet Ordinateur.</string>
     <string name="local_task_shranjena_poslana">La tâche enregistrée a été acceptée : %1$s</string>
     <string name="local_task_shranjena_ni">L\'ordinateur n\'a pas accepté la tâche enregistrée (refus ou erreur) : elle ne sera pas renvoyée : %1$s</string>
+    <string name="local_task_shranjena_potekla">La tâche enregistrée n\'a pas été envoyée : elle a été enregistrée pour un autre ordinateur ou date de plus de 24 heures. Renvoyez-la si vous en avez encore besoin : %1$s</string>
     <string name="local_task_confirm_title">Envoyer la tâche à l\'ordinateur ?</string>
     <string name="local_task_confirm_msg">La conversation contient du texte d\'une autre personne. Envoyer cette tâche à l\'ordinateur ?\n\n%1$s</string>
     <string name="local_task_confirm_send">Envoyer</string>
