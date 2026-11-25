@@ -10,15 +10,20 @@ import { preberi as preberiImenik } from "./imenik.server.ts";
 import { imeVImeniku, klicIzTelefona, potekelKlicTelefona } from "./klici-telefon.ts";
 import { loadPravila } from "./pravila.server.ts";
 import type { CallSession } from "./types.ts";
-import { zapisiZapisekKlica } from "./zapiski.server.ts";
+import { mapaZaPisanje, zapisiZapisekKlica } from "./zapiski.server.ts";
 
 /**
- * Sinhronizacija telefona z racunalnikom (lastnik 20. 11. 2026): zapisi klicev (ime, stevilka, podjetje, sporocilo), pogovor in
- * navodila lastnika. Racunalnik steje REVIZIJE (po zgledu Codync: vsaka sprememba dobi narascajoco stevilko, naprava se po
+ * Sinhronizacija telefona z racunalnikom (lastnik 20. 11. 2026): zapisi klicev (ime, stevilka, podjetje, sporocilo; od 0.2.14 tudi
+ * celoten prepis pogovora, naloga 17), pogovor in navodila lastnika. Racunalnik steje REVIZIJE (po zgledu Codync: vsaka sprememba dobi narascajoco stevilko, naprava se po
  * ponovni povezavi nadaljuje od zadnje, ki jo pozna): ni primerjanja ur in ni izgube ob prekinitvi. Zapisi klicev so nespremenljivi
  * (isti id = isti zapis), zato dvojnikov ni.
  */
 export const DATOTEKA_SINHRON = "sinhron-telefon.json";
+/**
+ * Mape klicev s telefona (naloga 17): id klica -> id zapiska (zapiski.server.ts); "" = iz zapisa mape ni bilo mogoce narediti.
+ * Locena majhna datoteka: velikega stanja sinhronizacije ni treba prepisati, ko nastane mapa, in k ostane enak, kot ga je poslal telefon.
+ */
+export const DATOTEKA_MAP = "sinhron-telefon-mape.json";
 export const MEJA_KLICEV = 1000;
 export const MEJA_ODGOVORA = 300;
 /** Odgovor telefona sme imeti najvec 64 KiB (AsistentProtokol.NAJVEC_ODGOVORA): vnosi se dodajajo do te meje, ostalo v naslednjem krogu. */
@@ -36,8 +41,11 @@ const ID_KLICA = /^[A-Za-z0-9._-]{1,80}$/;
 export const MEJA_IZMENJAV = 400;
 export const MEJA_PREPISA_B = 24 * 1024;
 export const MEJA_ZAPISA_B = 46 * 1024;
-/** Najvec novih map klicev v enem krogu sinhronizacije (stari zapisi dobijo mapo postopoma). */
-const NAJVEC_MAP_NA_KROG = 50;
+/**
+ * Najvec novih map klicev v enem krogu sinhronizacije (stari zapisi dobijo mapo postopoma): vsaka mapa je zapis s fsync v vrsti
+ * sinhronizacije, zato vec map podaljsa odgovor telefonu (50 na krog je v preizkusu s 305 klici preseglo 5 s).
+ */
+const NAJVEC_MAP_NA_KROG = 10;
 
 export type KlicSinhron = {
   id: string;
@@ -64,8 +72,7 @@ type Stanje = {
   /** Nakljucni id stanja: ce se stanje na racunalniku ponastavi, telefon opazi novo epoho in zacne pri reviziji 0. */
   epoha: string;
   rev: number;
-  /** zapisek = id mape klica (zapiski.server.ts); "" = mape ni bilo mogoce narediti iz zapisa. Ni v k, ker k gre nazaj telefonu. */
-  klici: Array<{ rev: number; k: KlicSinhron; zapisek?: string }>;
+  klici: Array<{ rev: number; k: KlicSinhron }>;
   pogovor: Array<{ rev: number; id: string; p: PogovorSinhron }>;
   navodila: { rev: number; n: NavodilaSinhron } | null;
 };
@@ -223,26 +230,37 @@ async function rokZapiskov(root: string): Promise<number> {
  * Mapa klica (lastnik 22. 11. 2026) za klice s telefona, ki je se nimajo: nov klic in stari zapisi (postopoma). Mapa nastane enkrat;
  * ce jo uporabnik izbrise, se ne vrne. Napaka mape zapiskov (ni pisljiva) ne podre sinhronizacije: poskusi znova v naslednjem krogu.
  */
-async function zapisiMapeKlicev(root: string, st: Stanje): Promise<boolean> {
-  const brez = st.klici.filter((x) => x && typeof x === "object" && x.zapisek === undefined).slice(0, NAJVEC_MAP_NA_KROG);
-  if (brez.length === 0) return false;
+async function preberiMape(root: string): Promise<Record<string, string>> {
+  const m = await readJsonFile<unknown>(root, DATOTEKA_MAP).catch(() => null);
+  const izid: Record<string, string> = Object.create(null);
+  if (m && typeof m === "object" && !Array.isArray(m)) for (const [id, v] of Object.entries(m)) if (typeof v === "string") izid[id] = v;
+  return izid;
+}
+
+async function zapisiMapeKlicev(root: string, st: Stanje): Promise<void> {
+  const mape = await preberiMape(root);
+  const brez = st.klici.filter((x) => x && typeof x === "object" && typeof x.k?.id === "string" && !(x.k.id in mape)).slice(0, NAJVEC_MAP_NA_KROG);
+  if (brez.length === 0) return;
+  try {
+    await mapaZaPisanje(root);
+  } catch {
+    return; // mapa zapiskov ni pisljiva: nobenega klica ne oznacimo, poskus v naslednjem krogu
+  }
   const stiki = await preberiImenik(root).catch(() => []);
   let sprememba = false;
   for (const x of brez) {
-    const c = klicIzTelefona(x.k, imeVImeniku(stiki, x.k?.stevilka));
-    if (!c) {
-      x.zapisek = "";
-      sprememba = true;
-      continue;
-    }
+    const c = klicIzTelefona(x.k, imeVImeniku(stiki, x.k.stevilka));
     try {
-      x.zapisek = await zapisiZapisekKlica(c, root);
+      mape[x.k.id] = c ? await zapisiZapisekKlica(c, root) : "";
       sprememba = true;
     } catch {
-      break;
+      // napaka enega zapisa ne ustavi ostalih; zapis ostane brez oznake in se poskusi znova
     }
   }
-  return sprememba;
+  if (!sprememba) return;
+  // samo klici, ki so se v stanju (po roku hrambe ali meji odstranjeni ne ostanejo v datoteki)
+  const ostali = new Set(st.klici.map((x) => x?.k?.id));
+  await writeJson(root, DATOTEKA_MAP, Object.fromEntries(Object.entries(mape).filter(([id]) => ostali.has(id))));
 }
 
 /** Klici s telefona za zaslon Klici (samo branje). Pokvarjen ali neberljiv zapis se preskoci; seznam klicev racunalnika ostane. */
@@ -257,9 +275,10 @@ export async function kliciTelefona(dir?: string, odv: { zdaj?: () => number } =
   const rok = await rokZapiskov(root);
   const zdaj = (odv.zdaj ?? Date.now)();
   const stiki = await preberiImenik(root).catch(() => []);
+  const mape = await preberiMape(root);
   return st.klici.flatMap((x) => {
     if (!x || typeof x !== "object" || potekelKlicTelefona(x.k, rok, zdaj)) return [];
-    const c = klicIzTelefona(x.k, imeVImeniku(stiki, x.k?.stevilka), x.zapisek || undefined);
+    const c = klicIzTelefona(x.k, imeVImeniku(stiki, x.k?.stevilka), (typeof x.k?.id === "string" && mape[x.k.id]) || undefined);
     return c ? [c] : [];
   });
 }
@@ -332,7 +351,8 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
       const zeljen = st.pogovor.map((x) => x.p);
       if (sprememba || JSON.stringify(Array.isArray(lokalni) ? lokalni : []) !== JSON.stringify(zeljen)) await writeJson(root, "asistent.json", zeljen);
     });
-    if (await zapisiMapeKlicev(root, st)) await writeJson(root, DATOTEKA_SINHRON, st);
+    // Mapa klica za nove in stare klice (po zapisu stanja: klic je ze sprejet, ce mapa ne uspe).
+    await zapisiMapeKlicev(root, st).catch(() => undefined);
     for (const p of noviIzTelefona) {
       try {
         await zapisiObrat({ seja: SEJA_ASISTENTA, vloga: p.vloga === "lina" ? "lina" : "uporabnik", besedilo: p.besedilo, cas: p.cas }, { dir: root });

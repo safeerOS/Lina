@@ -277,6 +277,8 @@ export async function recordCaller(
 ): Promise<TurnResult> {
   const root = resolveDataDir(dir);
   const sid = input.callSid.trim().slice(0, 80) || "_";
+  // Klic s telefona (naloga 17) je koncan zapis: odlozi ali replika (talk, phoneTurn) ne sme v calls.json narediti klica z njegovim id-jem.
+  if (sid.startsWith(PREDPONA_KLICA_TELEFONA)) throw new Error(t("klicTelefonaSamoBranje"));
   const kljuc = `${root}\n${moznosti.vaja ? "vaja\n" : ""}${sid}`;
   return vVrsti(vrsteSida, kljuc, async () => {
     // Merjenje po stopnjah: ce webhook ze ima zbiralnik (podpis, TTS), ga deli; sicer ima ta obrat svojega.
@@ -2095,8 +2097,6 @@ export async function talk(
   const root = resolveDataDir(dir);
   await requireOwner(ctx.token, root);
   const callSid = input.callSid?.trim() || `pisarna-${crypto.randomUUID()}`;
-  // Klic s telefona je koncan zapis: odlozi ali replika ne sme v calls.json narediti novega klica z njegovim id-jem.
-  if (callSid.startsWith(PREDPONA_KLICA_TELEFONA)) throw new Error(t("klicTelefonaSamoBranje"));
   return recordCaller({ ...input, callSid }, root);
 }
 

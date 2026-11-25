@@ -57,6 +57,9 @@ describe("naloga 17: klic s telefona na zaslonu", () => {
     const vir = readFileSync(new URL("../../components/lina-desk.tsx", import.meta.url), "utf8");
     expect(vir).toContain("<PrepisKlica call={active} />");
     expect(vir).toContain("<ZnackaTelefon call={call} />");
-    expect(vir).toMatch(/active\?\.izvor === "telefon" \? \(\s*<p[^>]*>\{t\("klicTelefonaSamoBranje"\)\}/);
+    expect(vir).toContain('active?.izvor === "telefon" ? null : (');
+    expect(vir).toContain('active?.izvor === "telefon" ? t("klicTelefonaSamoBranje") : t("uiSlusalkaPripravljena")');
+    // po odhodu s prikaza klica s telefona simulator spet dobi Sprejmi (active se pocisti)
+    expect(vir).toMatch(/if \(tab !== "klic"\) setActive\(\(a\) => \(a\?\.izvor === "telefon" \? null : a\)\)/);
   });
 });

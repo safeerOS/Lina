@@ -11,7 +11,8 @@ export function ZnackaTelefon({ call }: { call: Pick<CallSession, "izvor"> }) {
 export function PrepisKlica({ call }: { call: CallSession | null | undefined }) {
   const vrstice = call?.transcript ?? [];
   return (
-    <div className="mt-4 flex max-h-64 min-h-24 flex-col gap-2 overflow-y-auto text-sm" aria-live="polite" data-prepis-klica="1">
+    // klic s telefona nima gumbov pod prepisom: prepis dobi njihov prostor
+    <div className={`mt-4 flex ${call?.izvor === "telefon" ? "max-h-[26rem]" : "max-h-64"} min-h-24 flex-col gap-2 overflow-y-auto text-sm`} aria-live="polite" data-prepis-klica="1">
       {vrstice.length === 0 ? (
         <p className="m-auto max-w-[16rem] text-center text-xs text-[var(--color-moss)]">
           {call?.izvor === "telefon" ? t("klicPrepisNi") : t("uiPogovorPrazen")}

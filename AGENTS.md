@@ -1086,6 +1086,10 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   ni mogoce spremeniti ali ponoviti. Naprava mora biti na seznamu kanala. -> 200 {rev, epoha, klici[], pogovor[], navodila, ostane} (izmenjajSinhron v
   sinhron-telefon.server.ts: revizije, brez dvojnikov); 400 neveljavna vsebina, 403 podpis/naprava/ponovitev, 413 telo nad 768 KiB. Samo domace omrezje
   (ni v POTI_ODDALJENO). Preizkusi: asistent-streznik.test.ts (sinhronizacija, velik paket); Kotlin: SinhronLine.kt.
+  Naloga 17 (lastnik 25. 11. 2026): zapis klica nosi prepisPogovora [{govorec klicatelj|lina, cas, besedilo}] in prepisOkrnjen (nezaupano: 400 izmenjav,
+  prepis <= 24 KiB, zapis <= 46 KiB, neveljavna izmenjava se preskoci). Klici s telefona so v listCalls (izvor "telefon", id s-telefona-<id>, samo branje:
+  recordCaller ga zavrne); vsak dobi mapo klica (zapisiZapisekKlica, do 10 na krog, oznake v sinhron-telefon-mape.json; izbrisana mapa se ne vrne);
+  podjetniski zapis po zapiskiHrambaDni tudi iz sinhronizacije. Preizkusi: naloga-17-klici-telefon.test.ts, naloga-17-klici-telefon-ui.spec.ts.
 - Vsebina QR (ena vrstica, shema kot QR konzole OpenLine; razdelek url/code/fp od T1-S1 NI vec v QR):
   httpgateway://pair?v=1[&url=<https://zasebni-naslov:vrata OpenLine>&code=<koda OpenLine, 8 znakov>&fp=<SHA-256 lista OpenLine,
   64 hex>]&lina=<https://zasebni-naslov:vrata/api/asistent/v1>&linafp=<SHA-256 lista asistentke, 64 hex>&linakoda=<enkratna koda,

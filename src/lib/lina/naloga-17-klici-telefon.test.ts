@@ -12,9 +12,9 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { setupOwner } from "./auth.server.ts";
 import { t } from "./besedila.ts";
-import { MEJA_IZMENJAV, MEJA_ODGOVORA_B, MEJA_PREPISA_B, MEJA_ZAPISA_B, izmenjajSinhron, preveriKlic, type KlicSinhron } from "./sinhron-telefon.server.ts";
+import { MEJA_IZMENJAV, MEJA_ODGOVORA_B, MEJA_PREPISA_B, MEJA_ZAPISA_B, izmenjajSinhron, kliciTelefona, preveriKlic, type KlicSinhron } from "./sinhron-telefon.server.ts";
 import { PREDPONA_KLICA_TELEFONA, klicIzTelefona } from "./klici-telefon.ts";
-import { listCalls, talk } from "./service.server.ts";
+import { listCalls, phoneTurn, talk } from "./service.server.ts";
 
 process.env.LINA_LLM = "0";
 const KOREN = mkdtempSync(path.join(tmpdir(), "lina-n17r-"));
@@ -183,6 +183,10 @@ describe("naloga 17: vsak klic s telefona dobi svojo mapo z zapiskom in prepisom
     await izmenjajSinhron({ rev: 0, klici: [], pogovor: [], navodila: null }, dir, { zdaj: () => zdaj });
     const st = JSON.parse(await readFile(path.join(dir, "sinhron-telefon.json"), "utf8")) as { klici: Array<{ k: { id: string } }> };
     assert.deepEqual(st.klici.map((x) => x.k.id), ["klic-o"]);
+    // seznam (zaslon) tudi brez sinhronizacije: podjetniski zapis po roku se ne kaze, osebni ostane
+    await izmenjajSinhron({ rev: 0, klici: [klic("klic-p2", { nacin: "podjetje" })], pogovor: [], navodila: null }, dir);
+    assert.deepEqual((await kliciTelefona(dir, { zdaj: () => zdaj })).map((c) => c.callSid), [`${PREDPONA_KLICA_TELEFONA}klic-o`]);
+    assert.equal((await kliciTelefona(dir, { zdaj: () => CAS + 89 * 86_400_000 })).length, 2);
   });
 });
 
@@ -228,5 +232,8 @@ describe("naloga 17: zaslon Klici vidi klice s telefona", () => {
     const dir = await novaMapa();
     const token = await setupOwner("geslo-test-1234", dir);
     await assert.rejects(talk({ callSid: `${PREDPONA_KLICA_TELEFONA}klic-1`, hangup: true }, { token }, dir));
+    await assert.rejects(phoneTurn({ callSid: `${PREDPONA_KLICA_TELEFONA}klic-1`, hangup: true }, { token }, dir));
+    await assert.rejects(phoneTurn({ callSid: `${PREDPONA_KLICA_TELEFONA}klic-1`, text: "replika" }, { token }, dir));
+    assert.deepEqual(await listCalls({ token }, dir), []);
   });
 });

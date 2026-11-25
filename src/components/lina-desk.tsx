@@ -174,6 +174,10 @@ export function LinaDesk({
   const osnovaPravil = useRef(pravilaIn);
   // Osebni nacin nima zavihka Znanje (poslovno): izbran zavihek, ki ga v tem nacinu ni, pade na »Klic«; »telefon« je v obeh nacinih.
   const tab: Tab = tabIzbran === "telefon" ? "telefon" : veljavenZavihek(tabIzbran, pravila.nacinKlica);
+  // Klic s telefona je samo za branje (naloga 17): ko zapustis njegov prikaz, simulator klica spet dobi Sprejmi/Odlozi.
+  useEffect(() => {
+    if (tab !== "klic") setActive((a) => (a?.izvor === "telefon" ? null : a));
+  }, [tab]);
   const [vrzeli, setVrzeli] = useState(vrzeliIn);
   useEffect(() => {
     if (!line.glas.vTeku) return;
@@ -570,7 +574,7 @@ export function LinaDesk({
               <div className="text-center">
                 <p className="display text-lg tracking-wide">LINA</p>
                 <p className="text-xs text-[var(--color-brass)]" role="status">
-                  {vTeku ? `${t("uiKlicVTeku")} · ${clock}` : t("uiSlusalkaPripravljena")}
+                  {vTeku ? `${t("uiKlicVTeku")} · ${clock}` : active?.izvor === "telefon" ? t("klicTelefonaSamoBranje") : t("uiSlusalkaPripravljena")}
                 </p>
                 {vTeku ? (
                   <div className="wave mx-auto mt-3 justify-center" aria-hidden="true">
@@ -582,9 +586,7 @@ export function LinaDesk({
               </div>
               <PrepisKlica call={active} />
               <div className="mt-auto pt-4">
-                {active?.izvor === "telefon" ? (
-                  <p className="text-xs text-[var(--color-moss)]">{t("klicTelefonaSamoBranje")}</p>
-                ) : (
+                {active?.izvor === "telefon" ? null : (
                 <>
                 <div className="flex gap-2">
                   <button
