@@ -83,7 +83,7 @@ describe("naloga 29: umaknjeni modeli Claude", () => {
     assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-4-5", "2026-11-23"), "claude-sonnet-5-5", "7 dni pred umikom");
     assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-4-5", "2026-11-30"), "claude-sonnet-5-5");
     assert.equal(naslednikUmaknjenegaClaude("claude-opus-4-5", "2027-01-14"), null);
-    assert.equal(naslednikUmaknjenegaClaude("claude-opus-4-5", "2027-01-15"), "claude-opus-5-5", "prek meje meseca/leta");
+    assert.equal(naslednikUmaknjenegaClaude("claude-opus-4-5", "2027-01-15"), "claude-opus-5-5", "opus: 7 dni pred 22. 1. 2027");
     assert.equal(naslednikUmaknjenegaClaude("toString", "2030-01-01"), null, "lastnosti predmeta niso modeli");
     assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-5-5", "2030-01-01"), null);
   });
