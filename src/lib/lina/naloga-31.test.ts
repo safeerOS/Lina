@@ -85,7 +85,9 @@ describe("naloga 31: OmniRoute ne tece", () => {
     const { dir, token } = await nova();
     await assert.rejects(shraniPrehod(token, { vklop: true, naslov: mrtev, kljuc: KLJUC }, dir), (e: Error) => e.message === OMNIROUTE_NE_TECE);
     assert.equal((await stanjePrehoda(token, dir)).vklop, false);
+    assert.equal((await stanjePrehoda(token, dir)).povezan, false, "zavrnjen vklop ne zapise kljuca");
     assert.equal((await shraniPrehod(token, { vklop: true, naslov: ziv, kljuc: KLJUC }, dir)).vklop, true);
+    await assert.rejects(shraniPrehod(token, { naslov: mrtev }, dir), (e: Error) => e.message === OMNIROUTE_NE_TECE, "nov naslov vklopljenega prehoda se preveri");
     assert.match(besedila.sl.omRazlaga, /namest/);
     assert.match(besedila.en.omRazlaga, /install/);
   });

@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { odsifrirajSkrivnost, sifrirajSkrivnost, teceOmniroute } from "./keys.server.ts";
-import { OMNIROUTE_NE_TECE, veljavenNaslovPrehoda, type PrehodNastavitve } from "./omniroute.ts";
+import { OMNIROUTE_NE_TECE, veljavenNaslovOmniroute, veljavenNaslovPrehoda, type PrehodNastavitve } from "./omniroute.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
 /**
@@ -50,16 +50,21 @@ export async function shraniOmniroute(token: string | null, vnos: VnosOmniroute,
     }
     naslov = vnos.naslov.trim();
   }
+  let novKljuc: string | null = null;
   if (vnos.kljuc !== undefined) {
     const k = typeof vnos.kljuc === "string" ? vnos.kljuc.trim() : "";
     if (!jeVeljavenKljucPrehoda(k)) throw new Error("Kljuc prehoda ni veljaven.");
-    await writeJson(root, KLJUC, await sifrirajSkrivnost(k, root));
+    novKljuc = k;
   }
-  const imaKljuc = (await preberiKljuc(root)) !== null;
+  const imaKljuc = novKljuc !== null || (await preberiKljuc(root)) !== null;
   const vklop = vnos.vklop === undefined ? prej.vklop : vnos.vklop === true;
   if (vklop && (!naslov || !imaKljuc)) throw new Error("Za vklop vpisi veljaven naslov in kljuc prehoda.");
-  // Naloga 31: prehod, ki ne tece, se ne vklopi (zahteve bi padale).
-  if (vklop && !prej.vklop && !(await teceOmniroute(naslov))) throw new Error(OMNIROUTE_NE_TECE);
+  // Naloga 31: prehod, ki ne tece, se ne vklopi (tudi ob novem naslovu vklopljenega); preverba PRED zapisom kljuca (CodeRabbit).
+  // Naslov, ki ga strozja preverba OmniRoute ne sprejme (npr. http://[::1]), ostane brez preverbe kot prej.
+  if (vklop && (!prej.vklop || naslov !== prej.naslov) && veljavenNaslovOmniroute(naslov) && !(await teceOmniroute(naslov))) {
+    throw new Error(OMNIROUTE_NE_TECE);
+  }
+  if (novKljuc !== null) await writeJson(root, KLJUC, await sifrirajSkrivnost(novKljuc, root));
   const klici = vnos.klici === undefined ? prej.klici : vnos.klici === true;
   await writeJson(root, NASTAVITVE, { vklop, naslov, klici });
   return stanjeOmniroute(token, dir);

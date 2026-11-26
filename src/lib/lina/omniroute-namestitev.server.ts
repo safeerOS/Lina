@@ -13,7 +13,7 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, readlink, rm, statfs, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readlink, realpath, rename, rm, statfs, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
@@ -95,11 +95,13 @@ type Globalno = {
   zaganjam: Promise<Skrivnosti> | null;
   /** Slepi pregled #3: tudi namestitveni otroci (tar, npm, playwright) se ob koncu Line ustavijo. */
   otroci: Set<ChildProcess>;
+  /** Pregled 2 #7: nas OmniRoute iz prejsnjega zagona Line, ki ga je Lina prevzela; ob koncu Line se ustavi. */
+  sirotaPid: number | null;
 };
 
 function g(): Globalno {
   const x = globalThis as { [KLJUC_STANJA]?: Globalno };
-  x[KLJUC_STANJA] ??= { vTeku: null, koraki: zacetniKoraki(), napaka: null, pripravljeno: false, otrok: null, izhodPrijavljen: false, vrata: VRATA_OMNIROUTE, zaganjam: null, otroci: new Set() };
+  x[KLJUC_STANJA] ??= { vTeku: null, koraki: zacetniKoraki(), napaka: null, pripravljeno: false, otrok: null, izhodPrijavljen: false, vrata: VRATA_OMNIROUTE, zaganjam: null, otroci: new Set(), sirotaPid: null };
   return x[KLJUC_STANJA];
 }
 
@@ -116,6 +118,13 @@ export function korenOmniroute(dir?: string): string {
 
 export function naslovLokalnega(vrata = VRATA_OMNIROUTE): string {
   return `http://127.0.0.1:${vrata}/v1`;
+}
+
+/** Pregled 2 #4: localhost in 127.0.0.1 sta isti naslov tega racunalnika. */
+function istiNaslov(a: unknown, b: unknown): boolean {
+  const n = (x: unknown) => veljavenNaslovOmniroute(x)?.replace("://localhost:", "://127.0.0.1:") ?? null;
+  const na = n(a);
+  return na !== null && na === n(b);
 }
 
 /** Okolje otroka: samo dovoljeni seznam (nikoli process.env: kljuci ponudnikov, zetoni lupine, LINA_*). */
@@ -233,11 +242,11 @@ async function seznamModelov(odv: Odvisnosti, naslov: string, kljuc: string): Pr
 async function ustvariKljuc(odv: Odvisnosti, vrata: number, geslo: string): Promise<string> {
   const osnova = `http://127.0.0.1:${vrata}`;
   const glave = { "content-type": "application/json", origin: osnova };
-  const prijava = await odv.fetch(`${osnova}/api/auth/login`, { method: "POST", headers: glave, body: JSON.stringify({ password: geslo }), redirect: "error" });
+  const prijava = await odv.fetch(`${osnova}/api/auth/login`, { method: "POST", headers: glave, body: JSON.stringify({ password: geslo }), redirect: "error", signal: AbortSignal.timeout(odv.rokOdgovoraMs) });
   const piskotki = prijava.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
   await prijava.body?.cancel();
   if (!prijava.ok || !piskotki) throw new NapakaNamestitve("Lina se ni mogla prijaviti v OmniRoute (geslo). Odstranite OmniRoute in ga namestite znova.");
-  const r = await odv.fetch(`${osnova}/api/keys`, { method: "POST", headers: { ...glave, cookie: piskotki }, body: JSON.stringify({ name: "Lina" }), redirect: "error" });
+  const r = await odv.fetch(`${osnova}/api/keys`, { method: "POST", headers: { ...glave, cookie: piskotki }, body: JSON.stringify({ name: "Lina" }), redirect: "error", signal: AbortSignal.timeout(odv.rokOdgovoraMs) });
   const j = (await r.json().catch(() => null)) as { key?: unknown } | null;
   if (!r.ok || typeof j?.key !== "string" || j.key.length < 8) throw new NapakaNamestitve("OmniRoute ni ustvaril ključa za Lino.");
   return j.key;
@@ -250,6 +259,14 @@ function prijaviIzhod(s: Globalno): void {
   process.on("exit", () => {
     g().otrok?.kill("SIGTERM");
     for (const o of g().otroci) o.kill("SIGKILL");
+    const pid = g().sirotaPid;
+    if (pid) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        /* ze ustavljen */
+      }
+    }
   });
 }
 
@@ -266,11 +283,19 @@ function sledi(otrok: ChildProcess): ChildProcess {
  * Slepi pregled #3: OmniRoute iz prejsnjega zagona Line (Lina je bila ubita, exit se ni izvedel) ustavi po streznik.pid, samo ce je
  * to res nas proces (delovna mapa = nas dist). Brez /proc (Windows) ga ne ustavi.
  */
-async function ustaviSiroto(koren: string): Promise<void> {
+/** PID iz streznik.pid samo, ce je delovna mapa procesa nas dist (realpath: pot podatkov je lahko simbolna povezava). */
+async function nasProces(koren: string): Promise<number | null> {
   const pid = Number((await readFile(path.join(koren, "streznik.pid"), "utf8").catch(() => "")).trim());
-  if (!Number.isInteger(pid) || pid <= 1) return;
+  if (!Number.isInteger(pid) || pid <= 1) return null;
   const cwd = await readlink(`/proc/${pid}/cwd`).catch(() => "");
-  if (cwd !== path.join(koren, "app", "node_modules", "omniroute", "dist")) return;
+  const dist = await realpath(path.join(koren, "app", "node_modules", "omniroute", "dist")).catch(() => null);
+  return dist && cwd === dist ? pid : null;
+}
+
+async function ustaviSiroto(koren: string): Promise<void> {
+  const pid = await nasProces(koren);
+  if (!pid) return;
+  if (g().sirotaPid === pid) g().sirotaPid = null;
   try {
     process.kill(pid, "SIGTERM");
   } catch {
@@ -307,10 +332,19 @@ async function zazeniEnkrat(root: string, odv: Odvisnosti): Promise<Skrivnosti> 
   const naslov = naslovLokalnega(odv.vrata);
   if (s.otrok && s.otrok.exitCode === null && s.otrok.signalCode === null) return sk;
   if (!(await vrataProsta(odv.vrata))) {
-    // Na vratih ze nekaj tece: uporabimo ga samo, ce sprejme nas kljuc (nas proces iz prejsnjega zagona); tujega ne ustavimo.
-    if (sk.kljuc && (await seznamModelov(odv, naslov, sk.kljuc))) return sk;
+    // Na vratih ze nekaj tece: prevzamemo ga samo, ce je nas proces (streznik.pid + delovna mapa) in sprejme nas kljuc; tujega ne ustavimo
+    // in mu kljuca ne posljemo (pregled 2, CodeRabbit: odgovor seznama ni dokaz lastnistva).
+    const pid = await nasProces(koren);
+    const modeli = pid && sk.kljuc ? await seznamModelov(odv, naslov, sk.kljuc) : null;
+    if (pid && modeli && modeli.length > 0) {
+      s.sirotaPid = pid;
+      prijaviIzhod(s);
+      return sk;
+    }
     throw new NapakaNamestitve(`Vrata ${odv.vrata} že uporablja drug program, zato Lina OmniRoute ne more zagnati. Lina tega programa ne ustavi.`);
   }
+  // Ponovna preverba pod zaporo zagona (odstranitev med cakanjem, CodeRabbit).
+  if (!existsSync(path.join(koren, OZNAKA)) || !existsSync(path.join(koren, KONCANO))) throw new NapakaNamestitve("OmniRoute ni nameščen.");
   const dist = path.join(koren, "app", "node_modules", "omniroute", "dist");
   const vstop = existsSync(path.join(dist, "server-ws.mjs")) ? "server-ws.mjs" : "server.js";
   let otrok: ChildProcess;
@@ -321,6 +355,13 @@ async function zazeniEnkrat(root: string, odv: Odvisnosti): Promise<Skrivnosti> 
   }
   s.otrok = otrok;
   prijaviIzhod(s);
+  // Pregled 2 #5: neuspel zagon (npr. manjka mapa) sprozi »error«; brez poslusalca bi podrl Lino.
+  otrok.once("error", () => {
+    if (s.otrok === otrok) {
+      s.otrok = null;
+      s.pripravljeno = false;
+    }
+  });
   otrok.once("exit", () => {
     if (s.otrok === otrok) {
       s.otrok = null;
@@ -334,7 +375,9 @@ async function zazeniEnkrat(root: string, odv: Odvisnosti): Promise<Skrivnosti> 
     try {
       const r = await odv.fetch(`${naslov}/models`, { redirect: "error", signal: AbortSignal.timeout(2000) });
       await r.body?.cancel();
-      return sk;
+      // 503 med zagonom ni pripravljen; 401/403 je OmniRoute, ki zahteva kljuc (CodeRabbit).
+      if (r.ok || r.status === 401 || r.status === 403) return sk;
+      await new Promise((ok) => setTimeout(ok, 500));
     } catch {
       await new Promise((ok) => setTimeout(ok, 500));
     }
@@ -353,6 +396,10 @@ async function namestiDatoteke(root: string, odv: Odvisnosti, nastavi: (k: Korak
   if ((await odv.prostor(root)) < NAJMANJ_PROSTORA) {
     throw new NapakaNamestitve("Na disku je premalo prostora: OmniRoute potrebuje približno 5 GB. Sprostite prostor in poskusite znova.");
   }
+  // CodeRabbit: obstojece mape brez oznake Line (rocna namestitev) Lina ne prevzame in je kasneje ne izbrise.
+  if (existsSync(koren) && !existsSync(path.join(koren, OZNAKA))) {
+    throw new NapakaNamestitve(`Mapa ${koren} že obstaja in je ni ustvarila Lina, zato je Lina ne uporabi.`);
+  }
   await mkdir(koren, { recursive: true, mode: 0o700 });
   // Oznaka najprej: tudi napol namescen OmniRoute lahko Lina odstrani (samo mapo z oznako).
   if (!existsSync(path.join(koren, OZNAKA))) await writeFile(path.join(koren, OZNAKA), `${JSON.stringify({ omniroute: OMNIROUTE_RAZLICICA, npm: odv.npm.razlicica, namesceno: new Date().toISOString() })}\n`);
@@ -362,9 +409,14 @@ async function namestiDatoteke(root: string, odv: Odvisnosti, nastavi: (k: Korak
     const tgz = await prenesiPreverjeno(odv, `${odv.register}/npm/-/npm-${odv.npm.razlicica}.tgz`, odv.npm.sha512);
     const datoteka = path.join(prenos, "npm.tgz");
     await writeFile(datoteka, tgz);
-    await mkdir(path.join(koren, "npm"), { recursive: true });
-    const tar = sledi(odv.zazeni("tar", ["-xzf", datoteka, "-C", path.join(koren, "npm"), "--strip-components=1", "--no-same-owner"], { stdio: "ignore", shell: false }));
+    // CodeRabbit: razsiri v zacasno mapo in jo preimenuj sele po uspehu (napol razsirjen npm se ne uporabi).
+    const zacasna = path.join(koren, "npm.zacasno");
+    await rm(zacasna, { recursive: true, force: true });
+    await rm(path.join(koren, "npm"), { recursive: true, force: true });
+    await mkdir(zacasna, { recursive: true });
+    const tar = sledi(odv.zazeni("tar", ["-xzf", datoteka, "-C", zacasna, "--strip-components=1", "--no-same-owner"], { stdio: "ignore", shell: false }));
     if ((await pocakaj(tar, 120_000)) !== 0) throw new NapakaNamestitve("Razširjanje prenesenega paketa ni uspelo.");
+    await rename(zacasna, path.join(koren, "npm"));
   }
   nastavi("prenos", "uspeh");
   nastavi("namestitev", "tece");
@@ -405,8 +457,12 @@ async function namestiDatoteke(root: string, odv: Odvisnosti, nastavi: (k: Korak
  */
 async function soglasjeZaKlice(root: string, naslov: string): Promise<boolean | null> {
   const k = await readJsonFile<{ provider?: unknown; naslov?: unknown; klici?: unknown }>(root, "kljuci.json");
+  // Pregled 2 #2: tudi lasten OmniRoute na drugem naslovu v ponudniki.json (kljuc, asistentka) Lina ne prepise.
+  const p = await readJsonFile<{ ponudniki?: { omniroute?: { naslov?: unknown } } }>(root, "ponudniki.json");
+  const drugZapis = p?.ponudniki?.omniroute;
+  if (drugZapis && !istiNaslov(drugZapis.naslov, naslov)) return null;
   if (k?.provider !== "omniroute") return false;
-  if (veljavenNaslovOmniroute(k.naslov) !== veljavenNaslovOmniroute(naslov)) return null;
+  if (!istiNaslov(k.naslov, naslov)) return null;
   return k.klici === true;
 }
 
@@ -443,7 +499,7 @@ async function potek(token: string | null, root: string, odv: Odvisnosti): Promi
     // Lina sama vpise naslov in izbere delujoc model; soglasje za klice ostane, kot je bilo (nikoli ga ne vklopi sama).
     const zaKlice = await soglasjeZaKlice(root, naslov);
     if (zaKlice === null) {
-      throw new NapakaNamestitve("OmniRoute je nameščen in teče, a klici uporabljajo OmniRoute na drugem naslovu. Lina klicev ne preusmeri sama: naslov po želji spremenite v Možganih.");
+      throw new NapakaNamestitve("OmniRoute je nameščen in teče, a v Možganih je že OmniRoute na drugem naslovu. Lina ga ne zamenja sama: naslov po želji spremenite v Možganih.");
     }
     await saveBrain({ provider: "omniroute", key: sk.kljuc, naslov, samodejno: true, zaKlice }, token, root);
     nastavi("preverba", "uspeh");
@@ -523,13 +579,19 @@ export async function odstraniOmniroute(token: string | null, dir?: string): Pro
   s.vTeku = (async () => {
     const k = await readJsonFile<{ provider?: unknown }>(root, "kljuci.json");
     if (k?.provider === "omniroute") throw new Error("OmniRoute je izbran za klice. Najprej v Možganih izberite drugega ponudnika za klice.");
+    // CodeRabbit: vklopljen Prehod OmniRoute na Lininem naslovu bi po odstranitvi kazal v prazno.
+    const prehod = await readJsonFile<{ vklop?: unknown; naslov?: unknown }>(root, "omniroute-nastavitve.json");
+    if (prehod?.vklop === true && istiNaslov(prehod.naslov, naslovLokalnega(s.vrata))) {
+      throw new Error("Prehod OmniRoute je vklopljen. Najprej ga izklopite v nastavitvah prehoda.");
+    }
     await s.zaganjam?.catch(() => undefined);
     await ustaviOmniroute();
     await ustaviSiroto(koren);
-    await rm(koren, { recursive: true, force: true });
-    await rm(path.join(root, SKRIVNOSTI), { force: true });
+    // Najprej Mozgani in skrivnosti, mapa z oznako zadnja: ob napaki gre odstranitev ponoviti (CodeRabbit).
     // Slepi pregled #4: asistentka ne sme ostati na odstranjenem OmniRoute (samo zapis z naslovom Lininega OmniRoute).
     await odstraniOmnirouteNaslova(token, naslovLokalnega(s.vrata), root);
+    await rm(path.join(root, SKRIVNOSTI), { force: true });
+    await rm(koren, { recursive: true, force: true });
     s.koraki = zacetniKoraki();
     s.napaka = null;
     s.pripravljeno = false;
@@ -548,6 +610,7 @@ export async function odstraniOmniroute(token: string | null, dir?: string): Pro
 /** Ob zagonu Line: ce je OmniRoute namestila Lina in je v Mozganih, ga zazene (napaka ni usodna). */
 export async function zazeniObZagonu(dir?: string, odv: Odvisnosti = privzeteOdvisnosti()): Promise<void> {
   const root = resolveDataDir(dir);
+  if (g().vTeku) return;
   if (!existsSync(path.join(root, MAPA, OZNAKA)) || !existsSync(path.join(root, MAPA, KONCANO))) return;
   const p = await readJsonFile<{ ponudniki?: Record<string, unknown> }>(root, "ponudniki.json");
   const k = await readJsonFile<{ provider?: unknown }>(root, "kljuci.json");

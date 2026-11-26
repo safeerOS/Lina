@@ -316,6 +316,19 @@ describe("naloga 31: Lina namesti OmniRoute (nadomestni register)", () => {
     await ustaviOmniroute();
   });
 
+  it("obstojeca mapa omniroute brez oznake Line (rocna namestitev): Lina je ne prevzame in v njej nic ne spremeni", async () => {
+    const n = await nova();
+    mkdirSync(korenOmniroute(n.dir), { recursive: true });
+    writeFileSync(path.join(korenOmniroute(n.dir), "moje.txt"), "rocno");
+    await namestiOmniroute(n.token, n.dir, odvisnosti());
+    await pocakajNamestitev();
+    const st = await stanjeNamestitve(n.token, n.dir);
+    assert.match(st.napaka ?? "", /ni ustvarila Lina/);
+    assert.equal(existsSync(path.join(korenOmniroute(n.dir), "lina-namestitev.json")), false);
+    assert.equal(readFileSync(path.join(korenOmniroute(n.dir), "moje.txt"), "utf8"), "rocno");
+    await assert.rejects(odstraniOmniroute(n.token, n.dir), /ni namestila/);
+  });
+
   it("premalo prostora na disku: napaka pred prenosom", async () => {
     const n = await nova();
     await namestiOmniroute(n.token, n.dir, { ...odvisnosti(), prostor: async () => 1024 ** 3 });

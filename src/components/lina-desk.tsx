@@ -1194,7 +1194,7 @@ function Settings({
               />
             </label>
           </>
-        ) : omniroute && omStanje?.namescen ? null : (
+        ) : omniroute && omStanje?.namescen && jeLokalniPrivzeti(omNaslovVnos) ? null : (
           // Naloga 31: kljuc OmniRoute, ki ga je namestila Lina, ustvari in hrani Lina; polje samo za lasten OmniRoute.
           <label className={`${OZNAKA_POLJA} sm:col-span-2`} htmlFor="kljuc">
             {t("uiKljuc")}
