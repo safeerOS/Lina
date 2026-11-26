@@ -8,7 +8,7 @@ import { vidniZnaki } from "./claude-naloge.ts";
 import type { DefinicijaOrodja, KlicOrodja, SporociloOrodja } from "./providers.ts";
 import { zaznajVbrizg } from "./vbrizg.ts";
 
-/** branje = brez spremembe; pisanje = samo projektna mapa (kopija); peskovnik = ukaz v bwrap z mejo; zunanje = dejanje zunaj racunalnika ali drug agent. */
+/** branje = brez spremembe; pisanje = sprememba na racunalniku (datoteka v dovoljeni mapi, koledar); peskovnik = ukaz v bwrap z mejo; zunanje = dejanje ali zahteva zunaj racunalnika (splet) ali drug agent. */
 export const RAZREDI_TVEGANJA = ["branje", "pisanje", "peskovnik", "zunanje"] as const;
 export type RazredTveganja = (typeof RAZREDI_TVEGANJA)[number];
 
@@ -33,6 +33,10 @@ export type OrodjeOrkestratorja = {
    * Za orodja brez lastne potrditve, ki pa vodijo v dejanje drugje (dodeli_pomocniku: podobne naloge se tam lahko potrdijo same).
    */
   potrditevPoPodatkih?: boolean;
+  /** Naloga 19: izid vsebuje zasebne lokalne podatke (datoteke, znanje, spomin). */
+  zasebniIzid?: boolean;
+  /** Naloga 19: potrditev, ko je naloga ze prebrala zasebne podatke (zahteva na splet bi jih lahko nesla ven v naslovu ali poizvedbi). */
+  potrditevPoZasebnih?: boolean;
   /** Rok izvedbe orodja (privzeto ROK_ORODJA_MS); po roku se signal prekine in izid je napaka. */
   rokMs?: number;
   izvedi: (argumenti: Record<string, unknown>, k: KontekstOrodja) => Promise<IzidOrodja>;
@@ -56,14 +60,21 @@ export function ustvariRegister(orodja: ReadonlyArray<OrodjeOrkestratorja>): Reg
   return r;
 }
 
-export function zahtevaPotrditev(o: OrodjeOrkestratorja, okuzeno: boolean, imaPodatke = false): boolean {
+export function zahtevaPotrditev(o: OrodjeOrkestratorja, okuzeno: boolean, imaPodatke = false, imaZasebne = false): boolean {
   if (o.razred === "branje") return false;
   if (okuzeno) return true;
   if (imaPodatke && o.potrditevPoPodatkih) return true;
+  if (imaZasebne && o.potrditevPoZasebnih) return true;
   return o.potrditev ?? o.razred === "zunanje";
 }
 
 export const ROK_ORODJA_MS = 10 * 60_000;
+
+/** Naloga 19: vnos za potrditev s kratkimi polji najprej (pot, prepisi pred dolgo vsebino), da jih predogled ne odreze. */
+export function vnosZaPotrditev(argumenti: Record<string, unknown>): Record<string, unknown> {
+  const dolzina = (v: unknown) => (JSON.stringify(v) ?? "").length;
+  return Object.fromEntries(Object.entries(argumenti).sort(([, a], [, b]) => dolzina(a) - dolzina(b)));
+}
 
 // --- preverba argumentov (podmnozica JSON Schema, ki jo uporabljajo nasa orodja) -------------------------------------
 

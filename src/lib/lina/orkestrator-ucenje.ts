@@ -18,6 +18,8 @@ export type Izkusnja = {
   /** Razlog ustavitve ali ocena samopregleda (stalna koda). */
   razlog: string;
   koraki: number;
+  /** Naloga 19: za vsako orodje uspehi, napake in skupni cas izvedbe (ms); samo imena iz registra. */
+  orodja?: Array<{ ime: string; ok: number; napak: number; ms: number }>;
   /** Dokaz: id naloge (dnevnik <podatki>/orkestrator/<id>.dnevnik.jsonl ima vsak klic z izidom). */
   naloga: string;
   cas: string;
@@ -47,7 +49,12 @@ export function temaIzkusenj(tip: string): string {
 /** Besedilo izkusnje sestavi koda iz polj (brez prostega besedila). */
 export function besediloIzkusnje(i: Izkusnja): string {
   const imena = (s: string[]) => s.filter((x) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(x)).slice(0, 12).join(", ") || "-";
+  const n = (x: number) => (Number.isFinite(x) ? Math.max(0, Math.floor(x)) : 0);
+  // naloga 19: »ime uspehi/vsi casms« za vsako orodje (stevila in imena iz registra, nikoli besedilo modela ali izida)
+  const orodja = (i.orodja ?? []).filter((o) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(o.ime)).slice(0, 10)
+    .map((o) => `${o.ime} ${n(o.ok)}/${n(o.ok) + n(o.napak)} ${n(o.ms)}ms`).join(", ");
   return `Izid: ${i.izid}. Razlog: ${i.razlog.replace(/[^a-z0-9-]/gi, "").slice(0, 40)}. Korakov: ${Math.max(0, Math.floor(i.koraki))}. ` +
+    (orodja ? `Orodja (uspehi/klici, cas): ${orodja}. ` : "") +
     `Delovalo: ${imena(i.delovalo)}. Ni delovalo: ${imena(i.ni)}.` +
     (/^o-[a-f0-9]{16}$/.test(i.naloga) ? ` Dokaz: dnevnik naloge ${i.naloga}.` : "");
 }

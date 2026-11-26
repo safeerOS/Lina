@@ -439,6 +439,29 @@ async function resnicnaMapa(mapa: string, root: string, s: Stanje, o: Odvisnosti
 }
 
 /**
+ * Naloga 19: meje orodij orkestratorja (branje in pisanje datotek). SAMO mape, ki jih je lastnik izrecno dovolil v zavihku Racunalnik
+ * (ne ves dom kot pri predlogih nalog: model, ki bere splet, ne dobi domace mape), kanonicne in veljavne po razlogDovoljeneMape; podatki
+ * Line po realpath; prepovedane mape dobesedno in po realpath za vse (mozgani Line so lahko Gemini - pravilo lastnika o Googlu).
+ */
+export async function mejeOrodijOrkestratorja(dir?: string, o: Odvisnosti = {}): Promise<{ dovoljene: string[]; podatki: string; prepovedane: string[] }> {
+  const root = resolveDataDir(dir);
+  const s = await preberi(root);
+  const dom = (await kanonicna(o.dom ?? homedir())) ?? (o.dom ?? homedir());
+  const podatki = (await kanonicna(root)) ?? root;
+  const dovoljene: string[] = [];
+  for (const d of s.mape) {
+    const k = await kanonicna(d);
+    if (k && !razlogDovoljeneMape(k, dom, podatki)) dovoljene.push(k);
+  }
+  const prepovedane = [...(s.prepovedane ?? [])];
+  for (const p of s.prepovedane ?? []) {
+    const k = await kanonicna(p);
+    if (k) prepovedane.push(k);
+  }
+  return { dovoljene, podatki, prepovedane };
+}
+
+/**
  * Prepovedane mape (pravilo lastnika: Gemini in Google agenti nikoli ne dobijo kode Scita, YouTuba ali Google prijave). Primerja se pot
  * naloge (kanonicna) s prepovedanimi po zapisu IN po realpath; neobstojeca prepovedana mapa ostane dobesedno (fail-closed: njena nadmapa je prepovedana).
  */

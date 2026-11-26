@@ -1180,3 +1180,26 @@ export async function preberiStran(naslov: string, odv: SpletOdv): Promise<Branj
     .slice(0, 3500);
   return { predlog, besedilo };
 }
+
+/**
+ * Naloga 19 (orodje orkestratorja preberi_stran): ENA stran z istimi varovali kot ucenje kataloga - samo javni https (razberiNaslov),
+ * IP preverjen pred povezavo (ipZaGostitelja), preusmeritve samo na istega gostitelja, robots.txt, meja bajtov in rok. Vrne vidno
+ * besedilo (naslov, naslovi, odstavki, seznami); prazno besedilo = stran rise JavaScript (klicatelj lahko poskusi TinyFish).
+ * Besedilo je nezaupan podatek (klicatelj ga ovije in preveri za vbrizg).
+ */
+export async function preberiEnoStran(naslov: string, odv: SpletOdv): Promise<{ url: string; naslov: string; besedilo: string }> {
+  const url = razberiNaslov(naslov);
+  try {
+    const rob = await prenesi(new URL("/robots.txt", url), url.hostname, odv, "robots");
+    if (rob.status >= 200 && rob.status < 300 && !dovoliRobots(rob.telo.toString("utf8"), url.pathname || "/")) throw new Error(t("spletRobots"));
+  } catch (error) {
+    // zavrnjen gostitelj in prepoved robots ustavita; manjkajoc robots.txt ne
+    if (error instanceof Error && [t("spletZasebno"), t("spletHttps"), t("spletTuj"), t("spletRobots")].includes(error.message)) throw error;
+  }
+  const odg = await prenesi(url, url.hostname, odv, "html");
+  if (odg.status < 200 || odg.status >= 300) throw new Error(t("spletNapaka"));
+  if (!jeHtml(odg.glave) || !odg.telo.length) return { url: odg.url.toString(), naslov: "", besedilo: "" };
+  const iz = izHtml(odg.telo.toString("utf8"), odg.url, url.hostname);
+  const besedilo = [...iz.naslovi.map((n) => n.besedilo), ...iz.odstavki, ...iz.seznami].filter(Boolean).join("\n");
+  return { url: odg.url.toString(), naslov: iz.naslov, besedilo };
+}

@@ -5,8 +5,8 @@
  *
  * Varnost: izid orodja je podatek (ovijPodatek); vbrizg v izidu naredi nalogo okuzeno - od tedaj vsa orodja razen branja cakajo lastnika.
  * Potrditev je vezana na en klic (vprasanje z zgostitvijo vnosa, enkratno, rok = zavrnitev) po isti poti kot vprasanja agentov, zato jo
- * vidita tudi znacka/obvestilo namizja in telefon. Pisanja, ukazov in brisanja ta datoteka sama ne zna: taka orodja (F2, peskovnik) se
- * dodajo v register; brez njih Lina dela samo z vgrajenimi orodji. Tajnica (klici) te datoteke ne uvaza.
+ * vidita tudi znacka/obvestilo namizja in telefon. Prava orodja (naloga 19, F2: datoteke, splet, znanje, zapis, koledar) so v
+ * orkestrator-orodja.server.ts in jih dobi primerek Line (orkestrator()); ukazov in brisanja ni. Tajnica (klici) te datoteke ne uvaza.
  * Komentarji brez sumnikov.
  */
 import { access, appendFile, chmod, lstat, mkdir, readdir, rename, unlink } from "node:fs/promises";
@@ -28,6 +28,7 @@ import {
   ROK_ORODJA_MS,
   skrciZgodovino,
   ustvariRegister,
+  vnosZaPotrditev,
   zahtevaPotrditev,
   type IzidOrodja,
   type OrodjeOrkestratorja,
@@ -37,6 +38,7 @@ import {
   type RegisterOrodij,
 } from "./orkestrator.ts";
 import { izberiUcenje, normirajTip, type UcenjeVmesnik } from "./orkestrator-ucenje.ts";
+import { orodjaLine } from "./orkestrator-orodja.server.ts";
 import { zaznajVbrizg } from "./vbrizg.ts";
 import type { DefinicijaOrodja, KlicOrodja, MoznostiOrodij, RezultatOrodij, SporociloOrodja } from "./providers.ts";
 import { imaPosixDovoljenja } from "./platforma.server.ts";
@@ -98,6 +100,8 @@ export type StanjeNaloge = {
   gesloObZacetku: boolean;
   delovalo: string[];
   ni: string[];
+  /** Naloga 19: skupni cas izvedbe po orodju (ms) za izkusnjo; brez polja (starejsa stanja) = 0. */
+  casiOrodij?: Record<string, number>;
   zacetek: string;
   posodobljeno: string;
 };
@@ -221,6 +225,8 @@ export type Orkestrator = {
   seznam(): Promise<StanjeNaloge[]>;
   /** Naloga 14 N2: indeks verzij je bil izgubljen ali neveljaven in je obnovljen; naloge, ki so takrat obstajale, so samo za branje. */
   indeksObnovljen(): boolean;
+  /** Naloga 19: imena orodij v registru (vgrajena + dodana). */
+  imenaOrodij(): string[];
 };
 
 const VELJAVEN_ID = /^o-[a-f0-9]{16}$/;
@@ -281,6 +287,7 @@ export function razlogNeveljavnegaStanja(x: unknown, id: string, imaOrodje: (ime
   const ci = x.cilja;
   if (!obj(ci) || !st(ci.nadaljevanj) || !st(ci.brezNapredka) || !niz(ci.zadnjiIzid)) return "cilja";
   if (!nizi(x.delovalo) || !nizi(x.ni) || ![...(x.delovalo as string[]), ...(x.ni as string[])].every(imaOrodje)) return "delovalo/ni";
+  if (x.casiOrodij !== undefined && !(obj(x.casiOrodij) && Object.entries(x.casiOrodij).every(([k, v]) => imaOrodje(k) && st(v)))) return "casiOrodij";
   if (!niz(x.zacetek) || !niz(x.posodobljeno)) return "cas";
   return null;
 }
@@ -487,6 +494,8 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   };
 
   const imaPodatke = (s: StanjeNaloge) => s.sporocila.some((x) => x.vloga === "orodje" && x.ime !== "porocaj_vmesno" && x.ime !== "vprasaj_lastnika");
+  // naloga 19: naloga je ze prebrala zasebne lokalne podatke (izid orodja z zasebniIzid) - splet potem caka lastnika
+  const imaZasebne = (s: StanjeNaloge) => s.sporocila.some((x) => x.vloga === "orodje" && register.get(x.ime)?.zasebniIzid === true);
 
   const ucenjeZa = async (s: StanjeNaloge): Promise<UcenjeVmesnik | null> => {
     if (!s.ucenje) return null;
@@ -507,7 +516,10 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     const u = await ucenjeZa(s);
     if (u) {
       const izid = faza === "koncano" && razlog === "dosezeno" ? "uspeh" : faza === "koncano" ? "nepopolno" : "neuspeh";
-      await u.poNalogi({ tip: s.tip, izid, delovalo: [...new Set(s.delovalo)], ni: [...new Set(s.ni)], razlog: String(razlog ?? faza), koraki: s.koraki, naloga: s.id, cas: iso() }).catch(() => undefined);
+      // naloga 19: izkusnja vsakega orodja (uspehi, napake, cas) za LearnHarness
+      const imena = [...new Set([...s.delovalo, ...s.ni])];
+      const orodja = imena.map((ime) => ({ ime, ok: s.delovalo.filter((x) => x === ime).length, napak: s.ni.filter((x) => x === ime).length, ms: Math.round(s.casiOrodij?.[ime] ?? 0) }));
+      await u.poNalogi({ tip: s.tip, izid, delovalo: [...new Set(s.delovalo)], ni: [...new Set(s.ni)], orodja, razlog: String(razlog ?? faza), koraki: s.koraki, naloga: s.id, cas: iso() }).catch(() => undefined);
     }
   };
 
@@ -594,11 +606,11 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
       }
       const potrjeno = potrjeniVProcesu.delete(kljucPotrditve(s, k));
       const zDiska = !odprtiVProcesu.has(kljucPotrditve(s, k)) && orodje.razred !== "branje";
-      if (!potrjeno && (zDiska || zahtevaPotrditev(orodje, s.okuzeno, imaPodatke(s)))) {
+      if (!potrjeno && (zDiska || zahtevaPotrditev(orodje, s.okuzeno, imaPodatke(s), imaZasebne(s)))) {
         s.faza = "caka-potrditev";
         s.cakanje = { klicId: k.id, vprasanjeId: null };
         k.zacet = true;
-        s.cakanje.vprasanjeId = zastavi(s, k.ime, k.argumenti);
+        s.cakanje.vprasanjeId = zastavi(s, k.ime, vnosZaPotrditev(k.argumenti));
         dogodek(s, "caka-potrditev", `Caka potrditev: ${k.ime}`, { orodje: k.ime, klicId: k.id });
         await zapisi(s);
         return false;
@@ -631,6 +643,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
         izid = { ok: false, napaka: `Orodje ni uspelo: ${e instanceof Error ? e.message.slice(0, 200) : "napaka"}` };
       }
       s.casMs += Math.max(0, zdaj() - t0);
+      s.casiOrodij = { ...s.casiOrodij, [k.ime]: (s.casiOrodij?.[k.ime] ?? 0) + Math.max(0, zdaj() - t0) };
       if ("vmesno" in izid) {
         dogodek(s, "vmesno", izid.vmesno, { orodje: k.ime, klicId: k.id });
         await dodajIzid(s, k, { ok: true, besedilo: "Sporoceno lastniku." });
@@ -987,7 +1000,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
           }
           if ((s.faza === "caka-potrditev" || s.faza === "caka-lastnika") && s.cakanje) {
             const k = s.odprti.find((x) => x.id === s.cakanje!.klicId);
-            if (k) s.cakanje.vprasanjeId = zastavi(s, s.faza === "caka-lastnika" ? "vprasaj_lastnika" : k.ime, s.faza === "caka-lastnika" ? { vprasanje: s.cakanje.vprasanje ?? "" } : k.argumenti);
+            if (k) s.cakanje.vprasanjeId = zastavi(s, s.faza === "caka-lastnika" ? "vprasaj_lastnika" : k.ime, s.faza === "caka-lastnika" ? { vprasanje: s.cakanje.vprasanje ?? "" } : vnosZaPotrditev(k.argumenti));
           }
           await zapisi(s);
         });
@@ -1000,6 +1013,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     preberi,
     seznam: seznamVeljavnih,
     indeksObnovljen: () => brezVnosa.size > 0,
+    imenaOrodij: () => [...register.keys()],
   };
 }
 
@@ -1010,7 +1024,8 @@ export function orkestrator(dir?: string): Orkestrator {
   const root = resolveDataDir(dir);
   let p = primerki.get(root);
   if (!p) {
-    p = ustvariOrkestrator(dir);
+    // naloga 19: Lina dobi prava orodja (F2); preizkusi z ustvariOrkestrator podajo svoja
+    p = ustvariOrkestrator(dir, { orodja: orodjaLine(dir) });
     primerki.set(root, p);
   }
   return p;
