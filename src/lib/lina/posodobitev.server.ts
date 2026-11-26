@@ -11,7 +11,7 @@
  * kljucem Safeer (JAVNI_KLJUC_IZDAJ); podpis se preveri PRED prenosom paketa in pred uporabo katerekoli vsote.
  */
 import { execFile, spawn } from "node:child_process";
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
 import { constants, createReadStream, existsSync } from "node:fs";
 import { chmod, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -48,6 +48,8 @@ const NAJVEC_API = 1_000_000;
 /** SHA256SUMS izdaje (nekaj vrstic) in surov podpis Ed25519 (64 B): vecje datoteke so napad na disk in pomnilnik. */
 const NAJVEC_VSOT = 64 * 1024;
 const VELIKOST_PODPISA = 64;
+export const IME_OPOMB = "OPOMBE.txt";
+const NAJVEC_OPOMB_BAJTOV = 16 * 1024;
 const PREDPOMNILNIK_MS = 10 * 60_000;
 /** Stroga oblika razlicice (stevke in pike): poenostavi primerjavo v bashu in JSON izida ostane varen. */
 const RAZLICICA = /^[0-9]{1,6}(\.[0-9]{1,6}){0,3}$/;
@@ -57,8 +59,8 @@ const NADZORNI = /[\u0000-\u001f\u007f-\u009f]/;
 
 export type Vir = "github" | "mapa";
 /** urlPodpisa samo, ce izdaja ima SHA256SUMS.sig (brez njega zagon vrne razlog »podpis«). */
-/** opombe: besedilo izdaje (body) z GitHuba, NEZAUPANO in neobdelano; prikaze se samo po ocistiOpombe (posodobitev-samodejno). */
-export type Kandidat = { razlicica: string; vir: Vir; ime: string; url?: string; urlVsot?: string; urlPodpisa?: string; pot?: string; opombe?: string };
+/** urlOpomb: sredstvo OPOMBE.txt; prikaze se samo, ce ga nasteje podpisan SHA256SUMS (telo izdaje ni podpisano - slepi pregled 28, krog 2). */
+export type Kandidat = { razlicica: string; vir: Vir; ime: string; url?: string; urlVsot?: string; urlPodpisa?: string; pot?: string; urlOpomb?: string };
 export type KodaIzida = "namesceno" | "preklicano" | "napaka" | "ni_novejsa" | "napacen_paket" | "vsota";
 export type IzidPosodobitve = { cas: string; razlicica: string; ok: boolean; koda: KodaIzida };
 export type RazlogNiNaVoljo = "platforma" | "ni_skripte" | "ni_namescena";
@@ -284,6 +286,30 @@ export function ponastaviPredpomnilnik(): void {
   predpomnilnik.clear();
 }
 
+/** Telo odgovora najvec `najvec` bajtov: branje se ustavi pri meji (slepi pregled 28, krog 2: text() bi prebral vse, tudi gzip bombo). */
+async function beriOmejeno(odgovor: Response, najvec: number): Promise<string> {
+  const dolzina = Number(odgovor.headers.get("content-length") ?? "0");
+  if (dolzina > najvec || !odgovor.body) {
+    await odgovor.body?.cancel().catch(() => undefined);
+    if (dolzina > najvec) throw new Error("Odgovor je prevelik.");
+    return "";
+  }
+  const bralnik = odgovor.body.getReader();
+  const kosi: Uint8Array[] = [];
+  let skupaj = 0;
+  for (;;) {
+    const { done, value } = await bralnik.read();
+    if (done) break;
+    skupaj += value.byteLength;
+    if (skupaj > najvec) {
+      await bralnik.cancel().catch(() => undefined);
+      throw new Error("Odgovor je prevelik.");
+    }
+    kosi.push(value);
+  }
+  return Buffer.concat(kosi).toString("utf8");
+}
+
 /** Vir A: zadnja izdaja javnega repozitorija. Naslove sredstev sestavimo sami (ne browser_download_url). */
 export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
   const shranjen = predpomnilnik.get(paket);
@@ -311,11 +337,10 @@ export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = I
       await odgovor.body?.cancel().catch(() => undefined);
       throw new Error("GitHub ni odgovoril.");
     }
-    const besedilo = await odgovor.text();
-    if (besedilo.length > NAJVEC_API) throw new Error("Odgovor je prevelik.");
+    const besedilo = await beriOmejeno(odgovor, NAJVEC_API);
     const e = odgovor.headers.get("etag");
     if (e && e.length <= 200 && !NADZORNI.test(e)) etag = e;
-    const izdaja = JSON.parse(besedilo) as { tag_name?: unknown; body?: unknown; assets?: Array<{ name?: unknown }> };
+    const izdaja = JSON.parse(besedilo) as { tag_name?: unknown; assets?: Array<{ name?: unknown }> };
     const oznaka = izdaja.tag_name;
     const imena = Array.isArray(izdaja.assets) ? izdaja.assets.map((a) => (typeof a?.name === "string" ? a.name : "")) : [];
     const deb = najnovejsiPaket(imena, paket);
@@ -323,7 +348,8 @@ export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = I
       const osnova = `https://github.com/${PAKETI[paket]}/releases/download/${oznaka}/`;
       kandidat = { razlicica: deb.razlicica, vir: "github", ime: deb.ime, url: osnova + deb.ime, urlVsot: osnova + "SHA256SUMS" };
       if (imena.includes(IME_PODPISA)) kandidat.urlPodpisa = osnova + IME_PODPISA;
-      if (typeof izdaja.body === "string") kandidat.opombe = izdaja.body.slice(0, NAJVEC_API);
+      // prenese se samo, ce OPOMBE.txt nasteje podpisan SHA256SUMS (podpisaneOpombe); seznam sredstev v JSON ni podpisan
+      kandidat.urlOpomb = osnova + IME_OPOMB;
     }
   }
   predpomnilnik.set(paket, { cas: o.zdaj(), kandidat, etag });
@@ -402,8 +428,10 @@ export async function podpisanSeznam(o: Odv, root: string, k: Kandidat): Promise
   const mapa = path.join(root, MAPA_PRENOSA);
   await mkdir(mapa, { recursive: true, mode: 0o700 });
   await chmod(mapa, 0o700);
-  const zacasneVsote = path.join(mapa, `.vsote-${process.pid}.txt`);
-  const zacasniPodpis = path.join(mapa, `.vsote-${process.pid}.sig`);
+  // edinstveno ime: samodejna preverba in Posodobi lahko teceta hkrati (slepi pregled 28, krog 2)
+  const oznaka = `${process.pid}-${randomBytes(6).toString("hex")}`;
+  const zacasneVsote = path.join(mapa, `.vsote-${oznaka}.txt`);
+  const zacasniPodpis = path.join(mapa, `.vsote-${oznaka}.sig`);
   try {
     let vsote: Buffer;
     let podpis: Buffer;
@@ -419,6 +447,25 @@ export async function podpisanSeznam(o: Odv, root: string, k: Kandidat): Promise
   } finally {
     await rm(zacasneVsote, { force: true });
     await rm(zacasniPodpis, { force: true });
+  }
+}
+
+/**
+ * Opombe izdaje iz sredstva OPOMBE.txt, samo ce ga nasteje ze preverjen (podpisan) seznam vsot in se vsota ujema; sicer "".
+ * Napaka prenosa ni napaka preverbe: obvestilo pride brez opomb.
+ */
+export async function podpisaneOpombe(o: Odv, root: string, k: Kandidat, vsote: Buffer): Promise<string> {
+  const pricakovana = vsotaIzSeznama(vsote.toString("utf8"), IME_OPOMB);
+  if (!pricakovana || !k.urlOpomb) return "";
+  const pot = path.join(root, MAPA_PRENOSA, `.opombe-${process.pid}-${randomBytes(6).toString("hex")}.txt`);
+  try {
+    const vsota = await o.prenesi(k.urlOpomb, pot, NAJVEC_OPOMB_BAJTOV);
+    if (!vsotaEnaka(vsota, pricakovana)) return "";
+    return (await readFile(pot)).toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    await rm(pot, { force: true });
   }
 }
 

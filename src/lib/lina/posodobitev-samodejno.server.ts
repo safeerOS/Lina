@@ -7,7 +7,7 @@
  * zacniPosodobitev (podpis -> vsota -> pkexec); ta modul nicesar ne namesti.
  */
 import { requireOwner } from "./auth.server.ts";
-import { kandidat, odv, podpisanSeznam, predpogoj, primerjajRazlicici, vsotaIzSeznama, type Odvisnosti } from "./posodobitev.server.ts";
+import { kandidat, odv, podpisaneOpombe, podpisanSeznam, predpogoj, primerjajRazlicici, vsotaIzSeznama, type Odvisnosti } from "./posodobitev.server.ts";
 import { izvedljivaLupine } from "./samodejni-zagon.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
@@ -31,6 +31,11 @@ function nevidni(k: number): boolean {
     k === 0x34f ||
     k === 0x61c ||
     k === 0x180e ||
+    k === 0x115f ||
+    k === 0x1160 ||
+    k === 0x3164 ||
+    k === 0xffa0 ||
+    (k >= 0xfe00 && k <= 0xfe0f) ||
     (k >= 0x200b && k <= 0x200f) ||
     (k >= 0x202a && k <= 0x202e) ||
     (k >= 0x2060 && k <= 0x206f) ||
@@ -107,13 +112,15 @@ export async function preveriEnkrat(dir: string | undefined, odvisnosti: Odvisno
   }
   try {
     const k = await kandidat(o, root, true);
-    let najdeno = k && primerjajRazlicici(k.razlicica, p.namescena) > 0 ? { razlicica: k.razlicica, opombe: ocistiOpombe(k.opombe) } : null;
+    let najdeno = k && primerjajRazlicici(k.razlicica, p.namescena) > 0 ? { razlicica: k.razlicica, opombe: "" } : null;
     // slepi pregled S2: obvestilo (razlicica in besedilo opomb) samo za izdajo, katere SHA256SUMS je podpisan s kljucem Safeer in
     // nasteje ta paket; JSON izdaje sam ni podpisan. Vir »mapa« (razvojni racunalnik) nima podpisa (kot pri Posodobi).
     if (k && najdeno && k.vir === "github") {
       const vsote = await podpisanSeznam(o, root, k);
       if (vsote === "prenos") throw new Error("Prenos seznama vsot ni uspel.");
       if (vsote === "podpis" || !vsotaIzSeznama(vsote.toString("utf8"), k.ime)) najdeno = null;
+      // krog 2 #1: besedilo samo iz podpisanega OPOMBE.txt (telo izdaje lahko napise vsak, ki objavi izdajo)
+      else if (najdeno) najdeno.opombe = ocistiOpombe(await podpisaneOpombe(o, root, k, vsote));
     }
     s.napakZapored = 0;
     s.najdeno = najdeno;

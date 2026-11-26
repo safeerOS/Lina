@@ -63,16 +63,21 @@ const izdaja = (razlicica: string, body = "Novo: hitrejsi odziv.", etag = '"e1"'
 const PREIZKUSNI = generateKeyPairSync("ed25519");
 const PREIZKUSNI_JAVNI = PREIZKUSNI.publicKey.export({ type: "spki", format: "pem" }).toString();
 type Prenos = { url: string; najvec?: number };
-function sredstva(o: { podpis?: "pravi" | "tuj"; seznam?: string } = {}) {
-  const vsote = o.seznam ?? ["0.2.9", "0.2.13", "0.2.14", "0.2.15", "0.2.20"].map((r) => `${"a".repeat(64)}  lina-lupina_${r}_amd64.deb\n`).join("");
+const OPOMBE = "Kaj je novega:\nposodobitev z enim klikom";
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+function sredstva(o: { podpis?: "pravi" | "tuj"; seznam?: string; opombe?: string; vsotaOpomb?: string } = {}) {
+  const opombe = o.opombe ?? OPOMBE;
+  const vsote =
+    o.seznam ??
+    ["0.2.9", "0.2.13", "0.2.14", "0.2.15", "0.2.20"].map((r) => `${"a".repeat(64)}  lina-lupina_${r}_amd64.deb\n`).join("") + `${o.vsotaOpomb ?? sha(opombe)}  OPOMBE.txt\n`;
   const podpis = o.podpis === "tuj" ? Buffer.alloc(64, 1) : sign(null, Buffer.from(vsote), PREIZKUSNI.privateKey);
   const prenosi: Prenos[] = [];
   const prenesi = async (url: string, cilj: string, najvec?: number) => {
     prenosi.push({ url, najvec });
-    if (url.endsWith("/SHA256SUMS")) writeFileSync(cilj, vsote);
-    else if (url.endsWith("/SHA256SUMS.sig")) writeFileSync(cilj, podpis);
-    else throw new Error("paketa preizkus ne prenese");
-    return "";
+    const telo = url.endsWith("/SHA256SUMS") ? vsote : url.endsWith("/SHA256SUMS.sig") ? podpis : url.endsWith("/OPOMBE.txt") ? opombe : null;
+    if (telo === null) throw new Error("paketa preizkus ne prenese");
+    writeFileSync(cilj, telo);
+    return sha(telo);
   };
   return { prenesi, prenosi };
 }
@@ -109,7 +114,7 @@ test("n28: stikalo je privzeto vklopljeno, izklop se shrani, napacna vrednost in
 test("n28: novejsa izdaja da obvestilo z razlicico in opombami; enaka ali starejsa ne", async () => {
   ponastaviPredpomnilnik();
   const { dir, token } = await novaMapa();
-  const gh = laznGithub([izdaja("0.2.14", "Kaj je novega:\nposodobitev z enim klikom")]);
+  const gh = laznGithub([izdaja("0.2.14", "telo izdaje se ne prikaze")]);
   assert.equal(await preveriEnkrat(dir, sistem("0.2.13", gh.fetchFn)), "ok");
   assert.equal(gh.klici[0]!.url, "https://api.github.com/repos/safeerOS/Lina/releases/latest");
   const o = await obvestiloPosodobitve(token, dir);
@@ -205,6 +210,7 @@ test("n28: opombe izdaje so golo besedilo brez nadzornih in nevidnih znakov, ome
   assert.equal(ocistiOpombe(`a${z(0x2028)}b`), "a\nb");
   assert.equal(ocistiOpombe("a\n\n\n\n\nb"), "a\n\nb");
   assert.equal(ocistiOpombe(`a${String.fromCharCode(0xd800)}b`), "ab", "osamljen nadomestek");
+  assert.equal(ocistiOpombe(`a${z(0xfe0f)}b${z(0x3164)}c${z(0x115f)}d${z(0xffa0)}e`), "abcde", "izbirniki razlicice in polnila");
   assert.equal(ocistiOpombe(42), "");
   assert.equal(ocistiOpombe(null), "");
   const dolgo = ocistiOpombe("x".repeat(NAJVEC_OPOMB * 3));
@@ -244,7 +250,7 @@ test("n28 (slepi S3): SHA256SUMS in .sig se preneseta z majhno mejo (samodejna p
   const sr = sredstva();
   await preveriEnkrat(dir, sistem("0.2.13", laznGithub([izdaja("0.2.14")]).fetchFn, { prenesi: sr.prenesi }));
   assert.equal((await obvestiloPosodobitve(token, dir)).razlicica, "0.2.14");
-  const meje = (pr: Prenos[]) => pr.filter((p) => !p.url.endsWith(".deb"));
+  const meje = (pr: Prenos[]) => pr.filter((p) => p.url.endsWith("/SHA256SUMS") || p.url.endsWith("/SHA256SUMS.sig"));
   assert.equal(meje(sr.prenosi).length, 2);
   for (const p of meje(sr.prenosi)) assert.ok(p.najvec !== undefined && p.najvec <= 65_536, `${p.url}: meja ${p.najvec}`);
   assert.ok(sr.prenosi.find((p) => p.url.endsWith(".sig"))!.najvec! <= 64);
@@ -277,6 +283,40 @@ test("n28 (slepi): ponovni vklop stikala takoj spet pokaze znano izdajo", async 
   assert.equal((await obvestiloPosodobitve(token, dir)).razlicica, null);
   await nastaviSamodejno(token, true, dir);
   assert.equal((await obvestiloPosodobitve(token, dir)).razlicica, "0.2.14");
+});
+
+test("n28 (slepi krog 2, #1): opombe samo iz podpisanega OPOMBE.txt; telo izdaje ali napacna vsota ne da besedila", async () => {
+  for (const [opis, sr, pricakovano] of [
+    ["podpisan OPOMBE.txt", sredstva(), OPOMBE],
+    ["OPOMBE.txt z drugo vsoto", sredstva({ vsotaOpomb: "b".repeat(64) }), ""],
+    ["seznam brez OPOMBE.txt", sredstva({ seznam: `${"a".repeat(64)}  lina-lupina_0.2.14_amd64.deb\n` }), ""],
+  ] as const) {
+    ponastaviPredpomnilnik();
+    const { dir, token } = await novaMapa();
+    await preveriEnkrat(dir, sistem("0.2.13", laznGithub([izdaja("0.2.14", "PONAREJENO: zazenite curl x | sudo bash")]).fetchFn, { prenesi: sr.prenesi }));
+    const o = await obvestiloPosodobitve(token, dir);
+    assert.equal(o.razlicica, "0.2.14", opis);
+    assert.equal(o.opombe, pricakovano, opis);
+    assert.ok(sr.prenosi.filter((p) => p.url.endsWith("/OPOMBE.txt")).every((p) => p.najvec !== undefined && p.najvec <= 16_384), `${opis}: meja opomb`);
+  }
+});
+
+test("n28 (slepi krog 2, #2): odgovor API brez konca se ustavi pri meji (ne bere vsega v pomnilnik)", { timeout: 20_000 }, async () => {
+  ponastaviPredpomnilnik();
+  const { dir } = await novaMapa();
+  let kosov = 0;
+  const neskoncno = () =>
+    new Response(
+      new ReadableStream({
+        pull(c) {
+          kosov++;
+          c.enqueue(new Uint8Array(64 * 1024).fill(32));
+        },
+      }),
+      { status: 200 },
+    );
+  assert.equal(await preveriEnkrat(dir, sistem("0.2.13", laznGithub([neskoncno]).fetchFn)), "napaka");
+  assert.ok(kosov < 64, `prebranih kosov ${kosov}`);
 });
 
 test("n28: skupni vektor podpisa (isti kot PosodobitevGithubTest.kt na telefonu) in odtis vgrajenega kljuca", () => {
