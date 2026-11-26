@@ -33,11 +33,11 @@ class Naloga26tLastnostiTest {
     enum class Faza { CAKA, OZNACENA, KONEC }
     enum class Post { OK, IZGUBLJEN, NEDOSEGLJIV, ZAGON }
 
-    class Nit(val id: String, val besedilo: String, val gen: Int) {
+    class Nit(val id: String, val besedilo: String, val gen: Int, val klepet: Boolean = false) {
         var faza = Faza.CAKA
         var oznaka: Boolean? = null
         var konec: NalogaRacunalnika.Konec? = null
-        fun kopija() = Nit(id, besedilo, gen).also { it.faza = faza; it.oznaka = oznaka; it.konec = konec }
+        fun kopija() = Nit(id, besedilo, gen, klepet).also { it.faza = faza; it.oznaka = oznaka; it.konec = konec }
     }
 
     class Zaslon(val z: ZaslonNaloge) {
@@ -49,7 +49,7 @@ class Naloga26tLastnostiTest {
     }
 
     sealed class Ev {
-        data class Oddaj(val zaslon: Int) : Ev()
+        data class Oddaj(val zaslon: Int, val klepet: Boolean) : Ev()
         data class Preklici(val zaslon: Int) : Ev()
         data class Oznaci(val zaslon: Int, val nit: Int) : Ev()
         data class Poslji(val zaslon: Int, val nit: Int, val post: Post) : Ev()
@@ -60,11 +60,13 @@ class Naloga26tLastnostiTest {
         data class Preveri(val zaslon: Int) : Ev()
         data class Ponovi(val zaslon: Int) : Ev()
         data class Ustavi(val id: String) : Ev()
-        object CasMine : Ev()
+        /** Ura se premakne (enkrat): naprej cez rok cakanja, naprej 2 h ali nazaj 5 s. */
+        data class Ura(val ms: Long) : Ev()
     }
 
     /** Meje iskanja: logicnih nalog, rocnih ponovitev, hkrati odprtih zaslonov, smrti (zasuk ali smrt procesa). */
-    data class Meje(val naloge: Int, val ponovitve: Int, val zasloni: Int, val smrti: Int)
+    data class Meje(val naloge: Int, val ponovitve: Int, val zasloni: Int, val smrti: Int, val klepet: Boolean = true,
+                    val ure: List<Long> = listOf(T0 + Svet.CAKANJE_MS + 1, T0 + 2 * 3_600_000L, T0 - 5_000))
 
     class Svet(val meje: Meje, val io: LaznaIoNaloge = LaznaIoNaloge(), zacetni: List<Zaslon?>? = null) {
         val zasloni: MutableList<Zaslon?> = (zacetni ?: listOf(Zaslon(io))).toMutableList()
@@ -76,8 +78,8 @@ class Naloga26tLastnostiTest {
                 k.pot += pot
                 k.sprejeti += sprejeti; k.ustavljeni += ustavljeni; k.grob += grob; k.oznaka += oznaka; k.potrjene += potrjene
                 k.spremljane += spremljane; k.sporocene += sporocene; k.preklicane += preklicane
-                k.preklicPredOznako += preklicPredOznako; k.preklicPoOznaki += preklicPoOznaki
-                k.cas = cas; k.rokMinil = rokMinil; k.nalog = nalog; k.idjev = idjev; k.smrti = smrti; k.ponovitev = ponovitev; k.odprtih = odprtih
+                k.preklicPredOznako += preklicPredOznako; k.preklicPoOznaki += preklicPoOznaki; k.oznaceni += oznaceni
+                k.cas = cas; k.uraPremaknjena = uraPremaknjena; k.nalog = nalog; k.idjev = idjev; k.smrti = smrti; k.ponovitev = ponovitev; k.odprtih = odprtih
             }
         }
         // racunalnik
@@ -92,8 +94,10 @@ class Naloga26tLastnostiTest {
         val preklicane = mutableSetOf<String>()
         val preklicPredOznako = mutableSetOf<String>()
         val preklicPoOznaki = mutableSetOf<String>()
+        /** Id, za katere je predOddajo vrnil true (neodvisno od stevca oddaj v stroju). */
+        val oznaceni = mutableSetOf<String>()
         var cas = T0
-        var rokMinil = false
+        var uraPremaknjena = false
         var nalog = 0; var idjev = 0; var smrti = 0; var ponovitev = 0; var odprtih = 1
 
         private val stroj get() = NalogaRacunalnika(io)
@@ -102,7 +106,7 @@ class Naloga26tLastnostiTest {
         private fun nalogaBesedila(b: String) = b.removePrefix("Naredi ")
 
         /** AsistentKontroler.poslji: preklic cakanja, porabi rocno, prva oddaja dobi 503 odpira -> cakajNaSejo. */
-        private fun oddaj(zi: Int, naloga: String) {
+        private fun oddaj(zi: Int, naloga: String, klepet: Boolean) {
             val zs = zasloni[zi]!!
             preklici(zs)
             zs.z.naloga.porabiRocno(besedilo(naloga))
@@ -110,7 +114,7 @@ class Naloga26tLastnostiTest {
             oznaka[id] = naloga
             potrjene += naloga
             val gen = zs.z.zacni(id, besedilo(naloga), ODTIS, cas)
-            zs.niti += Nit(id, besedilo(naloga), gen)
+            zs.niti += Nit(id, besedilo(naloga), gen, klepet)
         }
 
         /** AsistentKontroler.prekliciCakanje (PREPOZNO -> posljiUstavitve: dostava je dogodek Ustavi). */
@@ -120,7 +124,7 @@ class Naloga26tLastnostiTest {
             if (pred != null) {
                 val n = oznaka.getValue(pred.id)
                 preklicane += n
-                if (pred.oddaj == 0) preklicPredOznako += pred.id else preklicPoOznaki += pred.id
+                if (pred.id in oznaceni) preklicPoOznaki += pred.id else preklicPredOznako += pred.id
             }
             if (s != null && pred == null) Unit // drug zaslon je ze preklical: samo sporocilo
         }
@@ -147,13 +151,14 @@ class Naloga26tLastnostiTest {
         fun uporabi(e: Ev) {
             pot += e
             when (e) {
-                is Ev.Oddaj -> oddaj(e.zaslon, "N${++nalog}")
+                is Ev.Oddaj -> oddaj(e.zaslon, "N${++nalog}", e.klepet)
                 is Ev.Preklici -> preklici(zasloni[e.zaslon]!!)
                 is Ev.Oznaci -> {
                     val zs = zasloni[e.zaslon]!!; val n = zs.niti[e.nit]
                     // seja odprta: preklicano -> rok -> (podpis) -> preklicano -> rok -> predOddajo -> preklicano
                     if (preklicano(zs, n)) { n.faza = Faza.KONEC; n.konec = NalogaRacunalnika.Konec.Preklicano; return }
                     n.oznaka = zs.z.naloga.predOddajo(n.id)
+                    if (n.oznaka == true) oznaceni += n.id
                     if (preklicano(zs, n)) { n.faza = Faza.KONEC; n.konec = NalogaRacunalnika.Konec.Preklicano; return }
                     n.faza = Faza.OZNACENA
                 }
@@ -167,7 +172,7 @@ class Naloga26tLastnostiTest {
                 is Ev.Koncaj -> {
                     val zs = zasloni[e.zaslon]!!; val n = zs.niti.removeAt(e.nit)
                     val naloga = oznaka.getValue(n.id)
-                    when (val u = zs.z.koncaj(n.gen, n.id, n.konec!!, sKlepetom = false)) {
+                    when (val u = zs.z.koncaj(n.gen, n.id, n.konec!!, sKlepetom = n.klepet)) {
                         // zastarela nit ali tuje mesto: sporocilo »preklicano« ne steje za sporocilo O TEJ nalogi (I3 mora drzati brez njega)
                         null, NalogaRacunalnika.Ukrep.Tuje -> Unit
                         is NalogaRacunalnika.Ukrep.Spremljaj -> { zs.sledi = n.id; spremljane += naloga }
@@ -200,7 +205,7 @@ class Naloga26tLastnostiTest {
                     if (e.id in sprejeti) ustavljeni += e.id else grob += e.id
                     stroj.ustavitevPotrjena(e.id)
                 }
-                Ev.CasMine -> { rokMinil = true; cas = T0 + CAKANJE_MS + 1 }
+                is Ev.Ura -> { uraPremaknjena = true; cas = e.ms }
             }
         }
 
@@ -221,7 +226,7 @@ class Naloga26tLastnostiTest {
             val st = stroj.stanje()
             zasloni.forEachIndexed { zi, zs ->
                 if (zs == null) return@forEachIndexed
-                if (nalog < meje.naloge && zs.sledi == null) ev += Ev.Oddaj(zi)
+                if (nalog < meje.naloge && zs.sledi == null) { ev += Ev.Oddaj(zi, false); if (meje.klepet) ev += Ev.Oddaj(zi, true) }
                 if (zs.sledi == null) ev += Ev.Preklici(zi)
                 zs.niti.forEachIndexed { ni, n ->
                     when (n.faza) {
@@ -236,8 +241,9 @@ class Naloga26tLastnostiTest {
                 if (ponovitev < meje.ponovitve && st.rocno != null && zs.sledi == null) ev += Ev.Ponovi(zi)
             }
             if (zasloni.count { it != null } < meje.zasloni && odprtih < meje.zasloni + meje.smrti) ev += Ev.NovZaslon
-            st.zaUstaviti.forEach { ev += Ev.Ustavi(it.id) }
-            if (!rokMinil) ev += Ev.CasMine
+            // kot AsistentKontroler.posljiUstavitve: dolgovi samo prek zaUstavitev (slepi 26t N1/N2: ta klic je bil zunaj prostora)
+            stroj.zaUstavitev(cas).forEach { ev += Ev.Ustavi(it) }
+            if (!uraPremaknjena) for (ms in meje.ure) ev += Ev.Ura(ms)
             return ev
         }
 
@@ -245,7 +251,7 @@ class Naloga26tLastnostiTest {
             append(io.m[NalogaRacunalnika.KLJUC]).append('|').append(sprejeti.sorted()).append(ustavljeni.sorted()).append(grob.sorted())
             append(potrjene.sorted()).append(spremljane.sorted()).append(sporocene.sorted()).append(preklicane.sorted())
             append(preklicPredOznako.sorted()).append(preklicPoOznaki.sorted())
-            append(rokMinil).append(nalog).append(idjev).append(smrti).append(ponovitev).append(odprtih)
+            append(cas).append(oznaceni.sorted()).append(nalog).append(idjev).append(smrti).append(ponovitev).append(odprtih)
             for (zs in zasloni) {
                 if (zs == null) { append("[x]"); continue }
                 append("[").append(zs.z.cakaSejo).append(zs.sledi)
@@ -308,5 +314,8 @@ class Naloga26tLastnostiTest {
 
     @Test fun `dva zaslona, ena naloga in rocna ponovitev, dve smrti`() { isci(Meje(naloge = 1, ponovitve = 1, zasloni = 2, smrti = 2)) }
 
-    @Test fun `dva zaslona, dve nalogi, ena smrt`() { isci(Meje(naloge = 2, ponovitve = 0, zasloni = 2, smrti = 1)) }
+    // najvecji prostor: brez klepeta in z enim premikom ure (ostali dve konfiguraciji z dvema zaslonoma imata vse)
+    @Test fun `dva zaslona, dve nalogi, ena smrt`() {
+        isci(Meje(naloge = 2, ponovitve = 0, zasloni = 2, smrti = 1, klepet = false, ure = listOf(T0 + Svet.CAKANJE_MS + 1)))
+    }
 }

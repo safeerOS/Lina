@@ -85,8 +85,11 @@ class Naloga23tTest {
         // nobenega neposrednega branja starih kljucev (CRA2: typed getString na Boolean)
         assertFalse(Regex("""getString\("z_|getBoolean\("z_|Z_ODDANO|Z_ROCNO""").containsMatchIn(k), "stari kljuci v kontrolerju")
         assertTrue(k.contains("val id = nalogaId ?: run { prekliciCakanje(); return }"), "Ustavi preklice cakanje")
-        assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(\)""").containsMatchIn(k), "nova naloga preklice staro")
+        assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,6}\s+prekliciCakanje\(\)""").containsMatchIn(k), "nova naloga preklice staro")
         assertTrue(k.contains("when (zaslon.preklici(System.currentTimeMillis()))"), "preklic prek stroja")
+        // slepi 26t N5: sporocilo o preklicu prejsnje naloge se zapise PO ciscenju dnevnika nove naloge
+        val poslji = k.substring(k.indexOf("    fun poslji(vnos: String"), k.indexOf("    fun poslji(vnos: String") + 2500)
+        assertTrue(poslji.indexOf("dnevnik.clear()") in 0 until poslji.indexOf("prekliciCakanje()"), "dnevnik.clear() za preklicem izbrise sporocilo")
         // CRA4: oznaka pod zaklepom; zavrnjena oznaka ustavi POST
         assertTrue(k.contains("predOddajo = { oznaka = shrambaNaloge.predOddajo(id) }") && k.contains("preklicano = { ustavljen || oznaka == false || !zaslon.nitVelja(gen, id) ||"), "oznaka")
         // vmesni izid ne porabi enkratnega klica klepeta za shranjeno nalogo

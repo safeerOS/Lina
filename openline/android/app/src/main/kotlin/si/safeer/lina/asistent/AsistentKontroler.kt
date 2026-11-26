@@ -399,10 +399,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         // izid vedno asinhrono (glavna nit), da pride za klicateljevim »Preverjam …«
         if (posiljam || nalogaId != null) { obIzidu?.let { glavna.post { it(IzidPredaje.ZASEDENO, null) } }; return false }
         if (NalogaLine.besedilo(vnos) == null) { obIzidu?.let { glavna.post { it(IzidPredaje.NAPAKA, null) } }; return false }
-        prekliciCakanje() // naloga 23t: nova naloga zamenja tisto, ki caka na sejo - stara se ne poslje
+        posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
+        // naloga 23t: nova naloga zamenja tisto, ki caka na sejo - stara se ne poslje (slepi 26t N5: PO ciscenju dnevnika, da sporocilo ostane)
+        prekliciCakanje()
         // slepi pregled 24 krog 2 N3: isto besedilo kot naloga za ponovitev (npr. iz klepeta) jo porabi - ne ponudi se znova (dvojna izvedba)
         shrambaNaloge.porabiRocno(vnos)
-        posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
         obSpremembi()
         // T3 / slepi pregled 23t N9: racunalnik, kateremu je lastnik nalogo potrdil, se zapomni ob potrditvi (ne sele po odgovoru)
         val odtisOb = AsistentShramba.beri(context)?.odtis

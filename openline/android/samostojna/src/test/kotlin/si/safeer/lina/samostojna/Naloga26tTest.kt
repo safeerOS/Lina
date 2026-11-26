@@ -85,8 +85,10 @@ class Naloga26tTest {
         n.nastaviRocno("R"); n.shrani("S", "odtis-1", t0)
         val pred = n.stanje()
         assertEquals(pred, NalogaRacunalnika(LaznaIoNaloge(io.m)).stanje())
-        assertTrue((io.m[NalogaRacunalnika.KLJUC] as String).contains("\"v\":1") || !(io.m[NalogaRacunalnika.KLJUC] as String).contains("\"v\""),
-            "verzija")
+        // slepi 26t N3: verzija mora biti v zapisu, sicer prihodnja v2 ni locljiva od v1
+        assertTrue((io.m[NalogaRacunalnika.KLJUC] as String).contains("\"v\":1"), "verzija ni zapisana: ${io.m[NalogaRacunalnika.KLJUC]}")
+        val v2 = LaznaIoNaloge(mapOf(NalogaRacunalnika.KLJUC to """{"v":2,"rocno":"R"}"""))
+        assertTrue(NalogaRacunalnika(v2).preberiInPopravi(), "zapis prihodnje verzije je prebran kot v1")
     }
 
     // CRA4: A prestane preverbo preklica, lastnik jo preklice, B zacne cakati in odda, A nato zapise oznako - A ne sme oditi ne prepisati B.
@@ -207,8 +209,6 @@ class Naloga26tTest {
         assertEquals(NalogaRacunalnika.Preklic(idB, false), m.preklici(t0))
         assertFalse(m.predOddajo(idB))
         assertEquals(emptyList(), m.zaUstavitev(t0))
-        // dolg po 1 h nima pomena (racunalnik nalogo pozabi)
-        assertEquals(emptyList(), NalogaRacunalnika(LaznaIoNaloge(io.m)).zaUstavitev(t0 + 10 + NalogaRacunalnika.ROK_USTAVITVE_MS + 1))
     }
 
     @Test fun `23t krog 2 N1 in 24 CR10 - obnova po zagonu`() {
@@ -230,6 +230,48 @@ class Naloga26tTest {
         assertNull(z.koncaj(gen, idA, NalogaRacunalnika.Konec.Rok(IzidPredaje.ZAGON_ROK), false))
         assertNull(z.naloga.rocno())
         assertNull(z.preklici(t0), "preklic brez cakanja je javil sporocilo")
+    }
+
+    // slepi 26t N1, N2: dolgovan /ustavi ne izgine ne zaradi ure nazaj ne po dolgem casu brez racunalnika (nekoncana naloga zivi 24 h)
+    @Test fun `slepi N1 N2 - dolg ustavi prezivi uro nazaj in dolgo odsotnost racunalnika`() {
+        val io = LaznaIoNaloge()
+        val n = NalogaRacunalnika(io)
+        n.zacniCakanje(idA, "A", "o", t0)
+        assertTrue(n.predOddajo(idA))
+        n.preklici(t0 + 10_000)
+        assertEquals(listOf(idA), n.zaUstavitev(t0), "ura nazaj: dolg ni ponujen")
+        assertEquals(listOf(idA), n.zaUstavitev(t0 + 20_000), "ura nazaj je dolg trajno izbrisala")
+        assertEquals(listOf(idA), NalogaRacunalnika(LaznaIoNaloge(io.m)).zaUstavitev(t0 + 2 * 3_600_000L), "dolg je potekel po 1 h")
+    }
+
+    // slepi 26t N4: isti id oddata dva zaslona; prvi dobi nedosegljiv (neznan), drugi 202 - drugi mora nalogo spremljati, ne javiti preklica.
+    @Test fun `slepi N4 - sprejeta naloga po tujem mestu se spremlja, preklicana ne`() {
+        val io = LaznaIoNaloge()
+        val z1 = ZaslonNaloge(NalogaRacunalnika(io)); val z2 = ZaslonNaloge(NalogaRacunalnika(io))
+        val g1 = z1.zacni(idA, "A", "o", t0)
+        assertTrue(z1.naloga.predOddajo(idA))
+        val o = z2.naloga.obnovi("o", t0 + 1, rok) as NalogaRacunalnika.Obnova.Nadaljuj
+        val g2 = z2.zacni(o.naloga.id, o.naloga.besedilo, o.naloga.odtis, o.naloga.zacetek)
+        assertTrue(z2.naloga.predOddajo(idA))
+        assertEquals(NalogaRacunalnika.Ukrep.Neznan, z1.koncaj(g1, idA, NalogaRacunalnika.Konec.Odgovor(IzidPredaje.NEDOSEGLJIV), false))
+        assertEquals(NalogaRacunalnika.Ukrep.Spremljaj(idA), z2.koncaj(g2, idA, NalogaRacunalnika.Konec.Odgovor(IzidPredaje.SPREJETA), false),
+            "sprejeto nalogo nihce ne spremlja")
+        // preklicana: tuje (ustavitev je dolgovana)
+        val m = NalogaRacunalnika(LaznaIoNaloge())
+        m.zacniCakanje(idB, "B", "o", t0); assertTrue(m.predOddajo(idB)); m.preklici(t0)
+        assertEquals(NalogaRacunalnika.Ukrep.Tuje, m.koncaj(idB, NalogaRacunalnika.Konec.Odgovor(IzidPredaje.SPREJETA), false))
+        assertEquals(listOf(idB), m.zaUstavitev(t0))
+    }
+
+    // slepi 26t N4 (druga pot): zacetek cakanja druge naloge prepise oznaceno nalogo - ta je preklicana in /ustavi zanjo dolgovan.
+    @Test fun `slepi N4 - zacetek cakanja druge naloge preklice prejsnjo`() {
+        val n = NalogaRacunalnika(LaznaIoNaloge())
+        n.zacniCakanje(idA, "A", "o", t0)
+        assertTrue(n.predOddajo(idA))
+        n.zacniCakanje(idB, "B", "o", t0)
+        assertTrue(idA in n.stanje().preklicani, "prepisana naloga ni preklicana")
+        assertEquals(listOf(idA), n.zaUstavitev(t0), "za prepisano oddano nalogo /ustavi ni dolgovan")
+        assertFalse(n.predOddajo(idA))
     }
 
     // CRA5: 1001 izbrisov brez racunalnika; racunalnik sprejme najvec 300 na zahtevo (sinhron-telefon.server.ts MEJA_VNOSOV_ZAHTEVE).

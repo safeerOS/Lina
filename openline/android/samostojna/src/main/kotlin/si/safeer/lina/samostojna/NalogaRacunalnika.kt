@@ -100,12 +100,11 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
         const val KLJUC = "naloga_v1"
         /** Kljuci pred nalogo 26t: preberejo se strpno (CRA2: z_oddano je bil v c5b10d1/40466a4 Boolean) in se ob prvem zapisu odstranijo. */
         val STARI_KLJUCI = listOf("z_id", "z_besedilo", "z_odtis", "z_cas", "z_oddano", "z_rocno", "z_preklic", "besedilo", "odtis", "cas")
-        /** /ustavi za preklicano: racunalnik pozabi nalogo po 1 h (in grob po 10 min) - starejsi dolg nima vec pomena. */
-        const val ROK_USTAVITVE_MS = 60 * 60_000L
         const val NAJVEC_USTAVITEV = 20
         /** En zaklep procesa za vse prehode (in AsistentShramba.pozabi): vec zaslonov in niti deli eno shrambo. */
         val ZAKLEP = Any()
-        private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+        // slepi 26t N3: encodeDefaults, sicer se verzija (privzeta vrednost) ne zapise in prihodnja v2 ni locljiva od v1
+        private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
         fun beri(vse: Map<String, *>): Branje {
             val j = vse[KLJUC]
@@ -168,9 +167,17 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
 
     /** Prva oddaja je dobila 503 odpira: naloga caka na sejo. Isti id (obnova) ohrani stevec oddaj, nova naloga zacne pri 0. */
     fun zacniCakanje(id: String, besedilo: String, odtis: String?, zacetek: Long): Boolean = spremeni { s ->
-        val oddaj = s.cakajoca?.takeIf { it.id == id }?.oddaj ?: 0
-        s.copy(cakajoca = CakajocaZapis(id, besedilo, odtis, zacetek, oddaj)) to true
+        val prej = s.cakajoca
+        val oddaj = prej?.takeIf { it.id == id }?.oddaj ?: 0
+        // slepi 26t N4: druga naloga (drug zaslon je medtem zacel cakati) se ne prepise tiho - je preklicana, za oddano je /ustavi dolgovan
+        val b = if (prej != null && prej.id != id) preklicano(s, prej, zacetek) else s
+        b.copy(cakajoca = CakajocaZapis(id, besedilo, odtis, zacetek, oddaj)) to true
     }.second
+
+    private fun preklicano(s: StanjeNaloge, c: CakajocaZapis, zdaj: Long): StanjeNaloge {
+        val zaUstaviti = if (c.oddaj > 0) (s.zaUstaviti.filter { it.id != c.id } + UstavitevZapis(c.id, zdaj)).takeLast(NAJVEC_USTAVITEV) else s.zaUstaviti
+        return s.copy(cakajoca = null, preklicani = dodajPreklic(s.preklicani, c.id), zaUstaviti = zaUstaviti)
+    }
 
     /**
      * CRA4: tik pred POST ponovne oddaje - pod zaklepom preveri, da mesto se pripada TEJ nalogi in da ni preklicana, in zapise oznako.
@@ -187,16 +194,15 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
     /** Lastnik preklice (Ustavi) ali da drugo nalogo. Rocna ponovitev in shranjena ostaneta. */
     fun preklici(zdaj: Long): Preklic? = spremeni { s ->
         val c = s.cakajoca ?: return@spremeni s to null
-        val oddana = c.oddaj > 0
-        val zaUstaviti = if (oddana) (s.zaUstaviti.filter { it.id != c.id } + UstavitevZapis(c.id, zdaj)).takeLast(NAJVEC_USTAVITEV) else s.zaUstaviti
-        s.copy(cakajoca = null, preklicani = dodajPreklic(s.preklicani, c.id), zaUstaviti = zaUstaviti) to Preklic(c.id, oddana)
+        preklicano(s, c, zdaj) to Preklic(c.id, c.oddaj > 0)
     }.first
 
-    /** Dolgovane ustavitve (brez potekle); nit oddaje jih po odgovoru in app ob dosegljivem racunalniku poslje. */
-    fun zaUstavitev(zdaj: Long): List<String> = spremeni { s ->
-        val ziv = s.zaUstaviti.filter { zdaj >= it.cas && zdaj - it.cas <= ROK_USTAVITVE_MS }
-        s.copy(zaUstaviti = ziv) to ziv.map { it.id }
-    }.first
+    /**
+     * Dolgovane ustavitve; nit oddaje jih po odgovoru in app ob dosegljivem racunalniku poslje. Samo branje: dolg izgine SAMO s potrditvijo
+     * racunalnika (slepi 26t N1: ura nazaj ga je brisala; N2: rok 1 h, racunalnik pa nekoncano nalogo hrani 24 h).
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun zaUstavitev(zdaj: Long): List<String> = stanje().zaUstaviti.map { it.id }
 
     /** Racunalnik je /ustavi sprejel (202) ali naloge ne pozna vec (404). */
     fun ustavitevPotrjena(id: String) {
@@ -213,7 +219,17 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
      */
     fun koncaj(id: String, konec: Konec, sKlepetom: Boolean): Ukrep = spremeni { s ->
         val c = s.cakajoca
-        if (c == null || c.id != id) return@spremeni s to Ukrep.Tuje
+        if (c == null || c.id != id) {
+            // slepi 26t N4: mesto je medtem pocistil drug zaslon (npr. njegov poskus je dobil neznan izid), ta poskus pa je racunalnik
+            // sprejel: naloga ni preklicana, zato jo ta zaslon spremlja (ali javi neznan izid), ne javi »preklicano«
+            val preklicana = id in s.preklicani
+            val i = (konec as? Konec.Odgovor)?.izid
+            return@spremeni s to when {
+                !preklicana && i == IzidPredaje.SPREJETA -> Ukrep.Spremljaj(id)
+                !preklicana && i == IzidPredaje.NEZNAN -> Ukrep.Neznan
+                else -> Ukrep.Tuje
+            }
+        }
         val brez = s.copy(cakajoca = null)
         val rocno = brez.copy(rocno = c.besedilo)
         when (konec) {
