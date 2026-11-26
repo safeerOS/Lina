@@ -8,15 +8,16 @@ import { describe, expect, it } from "vitest";
 import { t } from "./besedila.ts";
 
 describe("naloga 33: Poveži telefon na 127.0.0.1", () => {
-  it("besedila v sl in en, razlicna; razlaga omeni 127.0.0.1 in Global Link", () => {
+  it("besedila v sl in en, razlicna; razlaga omeni 127.0.0.1 in da nov telefon ne more povezati (seznanitev ne gre prek releja)", () => {
     const besedila = readFileSync(new URL("./besedila.ts", import.meta.url), "utf8");
     for (const k of ["telZankaRazlaga", "telUporabiDomace"]) {
       const v = [...besedila.matchAll(new RegExp(`${k}: "([^"]+)"`, "g"))].map((m) => m[1]);
       expect(v.length, k).toBe(2);
       expect(v[0], k).not.toBe(v[1]);
     }
-    expect(t("telZankaRazlaga", "sl")).toMatch(/127\.0\.0\.1.*Global Link/);
-    expect(t("telZankaRazlaga", "en")).toMatch(/127\.0\.0\.1.*Global Link/);
+    expect(t("telZankaRazlaga", "sl")).toMatch(/127\.0\.0\.1.*ne s kodo ne s QR/);
+    expect(t("telZankaRazlaga", "en")).toMatch(/127\.0\.0\.1.*cannot connect/);
+    for (const j of ["sl", "en"] as const) expect(t("telZankaRazlaga", j)).not.toMatch(/Global Link/);
   });
 
   it("gumb se pokaze samo ob vklopu, naslovu zanke in predlogu; poslje odobriOmrezje s predlaganim naslovom in ga pokaze", () => {

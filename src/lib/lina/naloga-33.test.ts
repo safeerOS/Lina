@@ -106,7 +106,7 @@ test("naloga 33: vzrokIzhoda in vzrokIzStderr dajo samo kratke kode; vsaka koda 
   assert.equal(vzrokIzStderr("Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express'"), "manjka modul");
   assert.equal(vzrokIzStderr("listen EACCES"), "dovoljenje");
   assert.equal(vzrokIzStderr("nekaj drugega TAJNO"), null);
-  for (const k of ["zapis", "disk poln", "rok", "zagon", "zaganjalnik", "uvoz", "vrata zasedena", "dovoljenje", "manjka modul", "ustavljen", "izhod", "OpenLine ni v paketu"]) {
+  for (const k of ["priprava", "zamenjava", "zapis", "disk poln", "rok", "zagon", "zaganjalnik", "uvoz", "vrata zasedena", "dovoljenje", "manjka modul", "ustavljen", "izhod", "OpenLine ni v paketu"]) {
     const m = slovenskoSporociloOpenLine(new Error(k));
     assert.notEqual(m, "OpenLine se ni zagnal", k);
     assert.doesNotMatch(m, /pravočasno/, k);
@@ -129,6 +129,16 @@ test("naloga 33 (slepi pregled): sinhrona napaka spawn je »zagon«, ne »prekin
     await assert.rejects(
       zagotoviOpenLine(p.root, "127.0.0.1", { korenOpenLine: () => p.koren, pripraviLino: lina, zazeni: () => { throw new Error("EAGAIN TAJNO"); } }),
       /^Error: zagon$/,
+    );
+  } finally { await rm(p.root, { recursive: true, force: true }); }
+});
+
+test("naloga 33 (svetovalec): napaka seznama dovoljenih stevilk je »priprava«, ne obce sporocilo", async () => {
+  const p = paket("setInterval(() => {}, 1000);\n");
+  try {
+    await assert.rejects(
+      zagotoviOpenLine(p.root, "127.0.0.1", { korenOpenLine: () => p.koren, pripraviLino: lina, dovoljeni: async () => { throw new Error("TAJNO"); } }),
+      /^Error: priprava$/,
     );
   } finally { await rm(p.root, { recursive: true, force: true }); }
 });

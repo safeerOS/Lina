@@ -377,7 +377,8 @@ export async function zagotoviOpenLine(
           s.tekoci = null;
           if (jeOtrokZiv(stari.otrok)) {
             varnoZabelezi(stari.dnevnik, "openline:zamenjava");
-            await ustaviOtroka(stari.otrok, stari.rokUstavitveMs);
+            // naloga 33: vsak neuspeh ima vzrok
+            await ustaviOtroka(stari.otrok, stari.rokUstavitveMs).catch(() => { throw new Error("zamenjava"); });
           }
         }
 
@@ -397,8 +398,9 @@ export async function zagotoviOpenLine(
         const kljuc = novKljucApi();
 
         // 5. Strogo omejeno okolje otroka (brez dedovanja process.env).
-        const dovoljeni = await o.dovoljeni(root);
-        const okolje = sestaviOkoljeOpenLine({
+        const dovoljeni = await o.dovoljeni(root).catch(() => { throw new Error("priprava"); });
+        let okolje: Record<string, string>;
+        try { okolje = sestaviOkoljeOpenLine({
           kljucApi: kljuc,
           naslov,
           vrata,
@@ -408,7 +410,7 @@ export async function zagotoviOpenLine(
           linaZeton: p.zeton,
           linaOdtis: p.odtis,
           dovoljeni,
-        });
+        }); } catch { throw new Error("priprava"); }
 
         if (s.generacija !== mojaGeneracija) {
           throw new Error("OpenLine se ni pripravil");

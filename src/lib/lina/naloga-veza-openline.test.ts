@@ -108,6 +108,8 @@ describe("openline-veza.server: slovenska sporocila in vezava zagona", () => {
       izhod: "OpenLine se je ustavil takoj ob zagonu",
       zapis: "Lina ni mogla zapisati nastavitev OpenLine v svojo mapo podatkov",
       "disk poln": "disk računalnika je poln; sprostite prostor, nato Lina poskusi znova",
+      priprava: "Lina ni mogla pripraviti nastavitev za OpenLine (dovoljene številke ali okolje)",
+      zamenjava: "prejšnji OpenLine se ni ustavil, zato novega ni bilo mogoče zagnati",
       "glas telefona": "glas telefona se ni zagnal",
       odvisnost: "notranja napaka priprave",
     };
