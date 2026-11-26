@@ -624,6 +624,11 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
   QR in koda z napisom, zakaj ju ni); neznan MAC (ARP) tekocega streznika ne ustavi, novega ne zazene. Brez zapisa `omrezja` (nadgradnja) ni
   odobreno nobeno omrezje (fail-closed, en klik). Rezerva »vrata« preveri prosta vrata vsakih 5 min (nadzorVrat) in se zamenja samo, ce so res
   prosta. Odtis za nadzor (odtisLan) brez docker/veth in zacasnih IPv6 (ULA kot predpona /64). Preizkusi: naloga-21.test.ts.
+  Naloga 33 (26. 11. 2026, testni PC): shranjen naslov 127.0.0.1 (sveza namestitev) -> stanjeAsistenta sproti da predlogNaslova
+  (izberiLanNaslov) in zaslon pokaze razlago + en gumb »Uporabi domace omrezje (<naslov>)« (isto dejanje kot »Uporabi ta naslov«); Lina sama
+  NE preklopi. Seznanjanje gre samo po domacem omrezju (ne prek releja). Neuspeh zagona OpenLine ima vedno kratko kodo vzroka (rok, zagon,
+  zaganjalnik, uvoz, vrata zasedena, dovoljenje, manjka modul, ustavljen, izhod, zapis, disk poln, priprava, zamenjava; stderr se samo
+  pregleda za vzorec, nikoli shrani) in svoje besedilo v openline-veza.server.ts SPOROCILA. Preizkusi: naloga-33.test.ts, naloga-33-ui.spec.ts.
   Naloge agentov in gradnje so od 25. 11. 2026 (lastnik »da«) tudi v POTI_ODDALJENO, od pregleda 0213 (A10) tudi vprasanja agentov
   (GET /agent-vprasanja, POST /agent-vprasanje/odgovor - sicer naloga, dodeljena od zunaj, caka do roka); seznanjanje, /koda/*,
   sinhronizacija in klici ostanejo samo doma.
