@@ -269,6 +269,7 @@
     <string name="local_task_zagon_omejitev">Naloge nisem mogla oddati: seja Claude Code se ni odprla po več poskusih (največ 3 na uro). Odpri jo na računalniku sam ali poskusi pozneje. Naloga ostane shranjena.</string>
     <string name="local_task_zagon_napaka">Naloge nisem mogla oddati: Lina seje Claude Code ni mogla odpreti (terminal se je končal z napako ali mapa seje ni na voljo). Naloga ostane shranjena.</string>
     <string name="local_task_zagon_rok">Claude Code se na računalniku v 3 minutah ni odprl, zato naloge nisem oddala. Naloga ostane shranjena; preveri terminal na računalniku in jo pošlji znova.</string>
+    <string name="local_task_zagon_ni_sprejela">Claude Code je na računalniku odprt, a naloge ni sprejel. Naloga ostane shranjena; pošlji jo znova (zavihek Računalnik).</string>
     <string name="local_task_odpiranje_preklicano">Čakanje na Claude Code je preklicano; ta naloga ne bo oddana.</string>
     <string name="local_task_preklic_prepozno">Naloga je bila že oddana, ko je prišel preklic; računalnik sem prosila, naj jo ustavi.</string>
     <string name="local_task_zavrnjena">Računalnik je nalogo zavrnil (ta telefon nima dovoljenja). Preveri povezavo v Nastavitvah > Računalnik.</string>

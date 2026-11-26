@@ -58,6 +58,8 @@ enum class IzidPredaje {
     ODPIRA,
     /** Razlogi zagona seje (stanje.zagon v 503) in rok cakanja; naloga ostane shranjena za rocno ponovitev. */
     ZAGON_NI_TERMINALA, ZAGON_NI_CLAUDE, ZAGON_IZKLOPLJENO, ZAGON_OPOZORILO, ZAGON_OMEJITEV, ZAGON_NAPAKA, ZAGON_ROK,
+    /** Seja je odprta, ponovne oddaje pa ni sprejela (503 brez razloga zagona). */
+    ZAGON_NI_SPREJELA,
 }
 
 object PredajaNaloge {
@@ -90,7 +92,9 @@ object PredajaNaloge {
 
     /** Ponovna oddaja po odprti seji: nikoli ODPIRA (drugega kroga cakanja ni) - spet »odpira« pomeni, da se seja ni odprla. */
     fun izidPonovne(ok: Boolean, nedosegljiva: Boolean, status: Int?, zagon: String?): IzidPredaje =
-        izidPrve(ok, nedosegljiva, status, zagon).let { if (it == IzidPredaje.ODPIRA) IzidPredaje.ZAGON_ROK else it }
+        izidPrve(ok, nedosegljiva, status, zagon).let {
+            when (it) { IzidPredaje.ODPIRA -> IzidPredaje.ZAGON_ROK; IzidPredaje.CLAUDE_CODE_NI -> IzidPredaje.ZAGON_NI_SPREJELA; else -> it }
+        }
 
     /** Rok cakanja: razlog, ce ga je racunalnik poslal, sicer ZAGON_ROK. */
     fun izidRoka(razlog: String?): IzidPredaje = izZagona(razlog).let { if (it == IzidPredaje.ODPIRA || it == IzidPredaje.CLAUDE_CODE_NI) IzidPredaje.ZAGON_ROK else it }

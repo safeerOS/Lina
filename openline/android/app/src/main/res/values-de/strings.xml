@@ -269,6 +269,7 @@
     <string name="local_task_zagon_omejitev">Ich konnte die Aufgabe nicht übergeben: Die Claude-Code-Sitzung hat sich nach mehreren Versuchen nicht geöffnet (höchstens 3 pro Stunde). Öffne sie selbst am Computer oder versuche es später. Die Aufgabe bleibt gespeichert.</string>
     <string name="local_task_zagon_napaka">Ich konnte die Aufgabe nicht übergeben: Lina konnte die Claude-Code-Sitzung nicht öffnen (das Terminal endete mit einem Fehler oder der Sitzungsordner ist nicht verfügbar). Die Aufgabe bleibt gespeichert.</string>
     <string name="local_task_zagon_rok">Claude Code hat sich auf dem Computer nicht innerhalb von 3 Minuten geöffnet, daher habe ich die Aufgabe nicht übergeben. Die Aufgabe bleibt gespeichert; prüfe das Terminal am Computer und sende sie erneut.</string>
+    <string name="local_task_zagon_ni_sprejela">Claude Code ist auf dem Computer offen, hat die Aufgabe aber nicht angenommen. Die Aufgabe bleibt gespeichert; sende sie erneut (Reiter Computer).</string>
     <string name="local_task_odpiranje_preklicano">Das Warten auf Claude Code wurde abgebrochen; diese Aufgabe wird nicht übergeben.</string>
     <string name="local_task_preklic_prepozno">Die Aufgabe war bereits übergeben, als der Abbruch kam; ich habe den Computer gebeten, sie zu stoppen.</string>
     <string name="local_event_cancel">Abbrechen</string>

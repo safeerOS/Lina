@@ -30,6 +30,8 @@ class Naloga23tTest {
         assertEquals(IzidPredaje.ZAGON_OMEJITEV, PredajaNaloge.izidPonovne(false, false, 503, "omejitev"))
         assertEquals(IzidPredaje.SPREJETA, PredajaNaloge.izidPonovne(true, false, null, null))
         assertEquals(IzidPredaje.ZAVRNJENA, PredajaNaloge.izidPonovne(false, false, 403, null))
+        // seja je odprta, a naloge ni sprejela (asistent-streznik.server.ts naloga: 503 brez zagon ob napaki izvajalca) - ne »ni namescen«
+        assertEquals(IzidPredaje.ZAGON_NI_SPREJELA, PredajaNaloge.izidPonovne(false, false, 503, null))
         assertEquals(IzidPredaje.ZAGON_ROK, PredajaNaloge.izidRoka(null))
         assertEquals(IzidPredaje.ZAGON_ROK, PredajaNaloge.izidRoka("odpira"))
         assertEquals(IzidPredaje.ZAGON_NI_CLAUDE, PredajaNaloge.izidRoka("ni-claude"))
@@ -66,6 +68,11 @@ class Naloga23tTest {
         assertEquals(NalogaCakaSejo.Ob.NEZNAN, NalogaCakaSejo.obZagonu(true, "id-1", "odtis-a", "odtis-a", t, t + rok + 1, rok, oddano = true))
         // v roku: nadaljuj z istim id (racunalnik ga ze ima -> 409 obstaja, ne dvakrat)
         assertEquals(NalogaCakaSejo.Ob.OBNOVI, NalogaCakaSejo.obZagonu(true, "id-1", "odtis-a", "odtis-a", t, t + 5_000, rok, oddano = true))
+        // oznaka stare naloge (pozen zapis niti po preklicu) ne velja za novo nalogo
+        assertTrue(NalogaCakaSejo.oddanoZa("id-1", "id-1"))
+        assertFalse(NalogaCakaSejo.oddanoZa("id-stara", "id-1"))
+        assertFalse(NalogaCakaSejo.oddanoZa(null, "id-1"))
+        assertFalse(NalogaCakaSejo.oddanoZa("id-1", null))
     }
 
     @Test fun `kontroler - cakajoca naloga se ne poslje sama, nova naloga in Ustavi preklicata cakanje`() {
@@ -76,6 +83,10 @@ class Naloga23tTest {
         // »shrani za pozneje« in cakanje na sejo imata loceni mesti: posljiShranjeno ne zbrise cakajoce (N3, N4 slepega pregleda)
         assertFalse(Regex("""private fun posljiShranjeno\(\)[\s\S]{0,2000}shrambaCakajoce\.edit\(\)\.clear\(\)""").containsMatchIn(k), "posljiShranjeno brise vse")
         assertTrue(k.contains("const val Z_BESEDILO = \"z_besedilo\""))
+        // krog 2 svetovalec: oznaka oddaje je id naloge (preklic tik pred oznako ne pusti oznake za NASLEDNJO nalogo)
+        assertTrue(k.contains("putString(Z_ODDANO, id)") && Regex("oddanoZa\\(").findAll(k).count() == 4, "oznaka oddaje = id")
+        // krog 3 N1/N1b: oznaka iz prejsnjega zaslona ali procesa - preklic poslje /ustavi, rok ali brez podpisa = izid neznan (brez ponovitve)
+        assertTrue(k.contains("(!nasaNit || oznakaObZacetku)") && k.contains("if (bilaOddana && (izid is CakanjeSeje.Izid.Rok"), "obnova z oznako")
         assertTrue(k.contains("val id = nalogaId ?: run { prekliciCakanje(); return }"), "Ustavi preklice cakanje")
         assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(\)""").containsMatchIn(k), "nova naloga preklice staro")
         // vmesni izid ne porabi enkratnega klica klepeta za shranjeno nalogo

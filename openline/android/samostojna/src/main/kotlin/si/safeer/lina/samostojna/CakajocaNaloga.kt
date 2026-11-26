@@ -20,6 +20,9 @@ object NalogaCakaSejo {
     /** NEZNAN: ponovna oddaja je bila morda ze na poti (oznaka [oddano]), rok pa je potekel - lastnik preveri, ne poslje znova. */
     enum class Ob { OBNOVI, ROK, NEZNAN, NIC }
 
+    /** Oznaka oddaje velja samo za svoj id: pozno zapisana oznaka stare (preklicane) naloge ne velja za novo. */
+    fun oddanoZa(oznaka: String?, id: String?): Boolean = id != null && oznaka == id
+
     fun obZagonu(caka: Boolean, id: String?, shranjenOdtis: String?, zdajOdtis: String?, zacetekMs: Long, zdajMs: Long, rokMs: Long,
                  oddano: Boolean = false): Ob = when {
         !caka || id == null -> Ob.NIC

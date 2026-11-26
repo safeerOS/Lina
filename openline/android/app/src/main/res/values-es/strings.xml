@@ -269,6 +269,7 @@
     <string name="local_task_zagon_omejitev">No pude entregar la tarea: la sesión de Claude Code no se abrió tras varios intentos (máximo 3 por hora). Ábrela tú mismo en el ordenador o inténtalo más tarde. La tarea sigue guardada.</string>
     <string name="local_task_zagon_napaka">No pude entregar la tarea: Lina no pudo abrir la sesión de Claude Code (el terminal terminó con un error o la carpeta de la sesión no está disponible). La tarea sigue guardada.</string>
     <string name="local_task_zagon_rok">Claude Code no se abrió en el ordenador en 3 minutos, así que no entregué la tarea. La tarea sigue guardada; revisa el terminal del ordenador y envíala de nuevo.</string>
+    <string name="local_task_zagon_ni_sprejela">Claude Code está abierto en el ordenador, pero no aceptó la tarea. La tarea sigue guardada; envíala de nuevo (pestaña Ordenador).</string>
     <string name="local_task_odpiranje_preklicano">Se canceló la espera de Claude Code; esta tarea no se entregará.</string>
     <string name="local_task_preklic_prepozno">La tarea ya se había entregado cuando llegó la cancelación; he pedido al ordenador que la detenga.</string>
     <string name="local_event_cancel">Cancelar</string>

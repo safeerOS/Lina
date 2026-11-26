@@ -269,6 +269,7 @@
     <string name="local_task_zagon_omejitev">Je n\'ai pas pu transmettre la tâche : la session Claude Code ne s\'est pas ouverte après plusieurs essais (3 par heure au plus). Ouvrez-la vous-même sur l\'ordinateur ou réessayez plus tard. La tâche reste enregistrée.</string>
     <string name="local_task_zagon_napaka">Je n\'ai pas pu transmettre la tâche : Lina n\'a pas pu ouvrir la session Claude Code (le terminal s\'est terminé avec une erreur ou le dossier de session n\'est pas disponible). La tâche reste enregistrée.</string>
     <string name="local_task_zagon_rok">Claude Code ne s\'est pas ouvert sur l\'ordinateur en 3 minutes, je n\'ai donc pas transmis la tâche. La tâche reste enregistrée ; vérifiez le terminal de l\'ordinateur et renvoyez-la.</string>
+    <string name="local_task_zagon_ni_sprejela">Claude Code est ouvert sur l\'ordinateur, mais n\'a pas accepté la tâche. La tâche reste enregistrée ; renvoyez-la (onglet Ordinateur).</string>
     <string name="local_task_odpiranje_preklicano">L\'attente de Claude Code a été annulée ; cette tâche ne sera pas transmise.</string>
     <string name="local_task_preklic_prepozno">La tâche avait déjà été transmise quand l\'annulation est arrivée ; j\'ai demandé à l\'ordinateur de l\'arrêter.</string>
     <string name="local_event_cancel">Annuler</string>

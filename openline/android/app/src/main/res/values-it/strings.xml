@@ -269,6 +269,7 @@
     <string name="local_task_zagon_omejitev">Non ho potuto consegnare l\'attività: la sessione di Claude Code non si è aperta dopo diversi tentativi (al massimo 3 all\'ora). Aprila tu stesso sul computer o riprova più tardi. L\'attività resta salvata.</string>
     <string name="local_task_zagon_napaka">Non ho potuto consegnare l\'attività: Lina non è riuscita ad aprire la sessione di Claude Code (il terminale è terminato con un errore o la cartella della sessione non è disponibile). L\'attività resta salvata.</string>
     <string name="local_task_zagon_rok">Claude Code non si è aperto sul computer entro 3 minuti, quindi non ho consegnato l\'attività. L\'attività resta salvata; controlla il terminale del computer e inviala di nuovo.</string>
+    <string name="local_task_zagon_ni_sprejela">Claude Code è aperto sul computer, ma non ha accettato l\'attività. L\'attività resta salvata; inviala di nuovo (scheda Computer).</string>
     <string name="local_task_odpiranje_preklicano">L\'attesa di Claude Code è stata annullata; questa attività non verrà consegnata.</string>
     <string name="local_task_preklic_prepozno">L\'attività era già stata consegnata quando è arrivato l\'annullamento; ho chiesto al computer di fermarla.</string>
     <string name="local_event_cancel">Annulla</string>
