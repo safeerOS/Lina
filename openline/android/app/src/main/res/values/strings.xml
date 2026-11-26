@@ -219,9 +219,9 @@
     <string name="assistant_code_searching">Looking for Lina on your home network…</string>
     <string name="assistant_code_pick">Choose Lina</string>
     <string name="assistant_code_manual_title">Address of the computer with Lina</string>
-    <string name="assistant_code_manual_message">Lina was not found on your home network. Check that you clicked \u201cPoveži s kodo\u201d in Lina on the computer, or type the computer\u2019s address on your home network. The default port is 8446.</string>
+    <string name="assistant_code_manual_message">The phone did not find the computer with Lina (the search works only when the phone and the computer are on the same Wi\u2011Fi network). On the computer, open \u201cConnect phone\u201d in Lina: if it shows 127.0.0.1, click \u201cUse home network\u201d. Or type the address Lina shows there (e.g. 192.168.0.20). The default port is 8446.</string>
     <string name="assistant_code_manual_hint">e.g. 192.168.1.20 or 192.168.1.20:8446</string>
-    <string name="assistant_code_bad_address">That is not an address on your home network.</string>
+    <string name="assistant_code_bad_address">The phone cannot use this address. Type the private address Lina shows on the computer under \u201cConnect phone\u201d (e.g. 192.168.0.20); 127.0.0.1 is the computer\u2019s address for itself and does not work from the phone.</string>
     <string name="assistant_code_next">Continue</string>
     <string name="assistant_code_enter_title">Code from Lina</string>
     <string name="assistant_code_enter_message">Type the 6-digit code shown by Lina on the computer.</string>

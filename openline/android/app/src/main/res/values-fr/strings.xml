@@ -219,9 +219,9 @@
     <string name="assistant_code_searching">Recherche de Lina sur votre réseau domestique…</string>
     <string name="assistant_code_pick">Choisissez Lina</string>
     <string name="assistant_code_manual_title">Adresse de l’ordinateur avec Lina</string>
-    <string name="assistant_code_manual_message">Lina est introuvable sur votre réseau domestique. Vérifiez que vous avez cliqué sur « Poveži s kodo » dans Lina sur l’ordinateur, ou saisissez l’adresse de l’ordinateur sur votre réseau domestique. Le port par défaut est 8446.</string>
+    <string name="assistant_code_manual_message">Le téléphone n’a pas trouvé l’ordinateur avec Lina (la recherche ne fonctionne que si le téléphone et l’ordinateur sont sur le même réseau Wi‑Fi). Sur l’ordinateur, ouvrez « Connect phone » dans Lina : s’il affiche 127.0.0.1, cliquez sur « Use home network ». Ou saisissez l’adresse que Lina y affiche (p. ex. 192.168.0.20). Le port par défaut est 8446.</string>
     <string name="assistant_code_manual_hint">p. ex. 192.168.1.20 ou 192.168.1.20:8446</string>
-    <string name="assistant_code_bad_address">Ce n’est pas une adresse de votre réseau domestique.</string>
+    <string name="assistant_code_bad_address">Le téléphone ne peut pas utiliser cette adresse. Saisissez l’adresse privée que Lina affiche sur l’ordinateur dans « Connect phone » (p. ex. 192.168.0.20) ; 127.0.0.1 est l’adresse de l’ordinateur pour lui-même et ne fonctionne pas depuis le téléphone.</string>
     <string name="assistant_code_next">Continuer</string>
     <string name="assistant_code_enter_title">Code de Lina</string>
     <string name="assistant_code_enter_message">Saisissez le code à 6 chiffres affiché par Lina sur l’ordinateur.</string>
