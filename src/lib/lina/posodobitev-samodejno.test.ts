@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setupOwner } from "./auth.server.ts";
+import { prenesiPreverjeno } from "./tunel.server.ts";
 import { JAVNI_KLJUC_IZDAJ, podpisVeljaven, ponastaviPredpomnilnik, zacniPosodobitev, type Odvisnosti } from "./posodobitev.server.ts";
 import {
   NAJVEC_OPOMB,
@@ -211,6 +212,7 @@ test("n28: opombe izdaje so golo besedilo brez nadzornih in nevidnih znakov, ome
   assert.equal(ocistiOpombe("a\n\n\n\n\nb"), "a\n\nb");
   assert.equal(ocistiOpombe(`a${String.fromCharCode(0xd800)}b`), "ab", "osamljen nadomestek");
   assert.equal(ocistiOpombe(`a${z(0xfe0f)}b${z(0x3164)}c${z(0x115f)}d${z(0xffa0)}e`), "abcde", "izbirniki razlicice in polnila");
+  assert.equal(ocistiOpombe(`a${z(0x2800)}b${z(0x180b)}c${z(0xfffc)}d${z(0x1bca0)}e`), "abcde", "krog 3: prazna brajica, mongolski izbirnik, nadomestni objekt, stenografski oblikovalnik");
   assert.equal(ocistiOpombe(42), "");
   assert.equal(ocistiOpombe(null), "");
   const dolgo = ocistiOpombe("x".repeat(NAJVEC_OPOMB * 3));
@@ -317,6 +319,28 @@ test("n28 (slepi krog 2, #2): odgovor API brez konca se ustavi pri meji (ne bere
     );
   assert.equal(await preveriEnkrat(dir, sistem("0.2.13", laznGithub([neskoncno]).fetchFn)), "napaka");
   assert.ok(kosov < 64, `prebranih kosov ${kosov}`);
+});
+
+test("n28 (slepi krog 3, #2): en rok velja za ves prenos, tudi cez vec preusmeritev", { timeout: 10_000 }, async () => {
+  const mapa = mkdtempSync(path.join(KOREN, "rok-"));
+  let skokov = 0;
+  const fetchFn = (async (_u: string | URL, init?: RequestInit) => {
+    skokov++;
+    await new Promise<void>((koncano, napaka) => {
+      const t = setTimeout(koncano, 150);
+      init?.signal?.addEventListener("abort", () => {
+        clearTimeout(t);
+        napaka(new Error("prekinjeno ob roku"));
+      });
+    });
+    return new Response(null, { status: 302, headers: { location: `https://release-assets.githubusercontent.com/x/${skokov}` } });
+  }) as typeof fetch;
+  const zacetek = Date.now();
+  const napaka = await prenesiPreverjeno("https://github.com/safeerOS/Lina/releases/download/v1/SHA256SUMS", path.join(mapa, "v"), fetchFn, { najvecBajtov: 1000, rokMs: 300 }).catch((e: Error) => e);
+  assert.ok(napaka instanceof Error);
+  assert.notEqual(napaka.message, "Preveč preusmeritev.", "vsak skok ne sme dobiti novega roka");
+  assert.ok(Date.now() - zacetek < 600, `trajalo ${Date.now() - zacetek} ms`);
+  assert.ok(skokov <= 3, `skokov ${skokov}`);
 });
 
 test("n28: skupni vektor podpisa (isti kot PosodobitevGithubTest.kt na telefonu) in odtis vgrajenega kljuca", () => {

@@ -92,9 +92,11 @@ export async function prenesiPreverjeno(
   const najvec = moznosti.najvecBajtov ?? NAJVEC_BAJTOV;
   let u = new URL(url);
   if (u.protocol !== "https:" || u.hostname !== "github.com") throw new Error("Nedovoljen naslov prenosa.");
+  // en rok za ves prenos (vsi skoki in telo): nov rok na skok bi preusmeritve s kapljanjem raztegnile (slepi pregled 28, krog 3)
+  const konec = Date.now() + (moznosti.rokMs ?? 5 * 60_000);
   for (let skok = 0; skok <= NAJVEC_SKOKOV; skok++) {
     if (u.protocol !== "https:" || !GOSTITELJI_PRENOSA.has(u.hostname) || u.username || u.password || u.port !== "") throw new Error("Nedovoljen naslov prenosa.");
-    const odgovor = await fetchFn(u, { redirect: "manual", signal: AbortSignal.timeout(moznosti.rokMs ?? 5 * 60_000) });
+    const odgovor = await fetchFn(u, { redirect: "manual", signal: AbortSignal.timeout(Math.max(1, konec - Date.now())) });
     if (odgovor.status >= 300 && odgovor.status < 400) {
       const kam = odgovor.headers.get("location");
       // Telo preusmeritve zapremo, da povezava ne ostane odprta (pregled P10).

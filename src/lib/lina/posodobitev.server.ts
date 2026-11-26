@@ -44,6 +44,7 @@ export const DATOTEKA_IZIDA = "posodobitev-izid.json";
 export const MAPA_PRENOSA = "posodobitev";
 const NAJVEC_PAKETA = 400_000_000;
 const ROK_PAKETA_MS = 30 * 60_000;
+const ROK_MALO_MS = 60_000;
 const NAJVEC_API = 1_000_000;
 /** SHA256SUMS izdaje (nekaj vrstic) in surov podpis Ed25519 (64 B): vecje datoteke so napad na disk in pomnilnik. */
 const NAJVEC_VSOT = 64 * 1024;
@@ -241,7 +242,8 @@ export function odv(o: Odvisnosti) {
     obstaja: o.obstaja ?? existsSync,
     izvedi: o.izvedi ?? privzetoIzvedi,
     fetchFn,
-    prenesi: o.prenesi ?? ((u: string, c: string, n?: number) => prenesiPreverjeno(u, c, fetchFn, { najvecBajtov: n ?? NAJVEC_PAKETA, rokMs: ROK_PAKETA_MS })),
+    // majhne datoteke (vsote, podpis, opombe) imajo kratek rok, paket 30 min (slepi pregled 28, krog 3)
+    prenesi: o.prenesi ?? ((u: string, c: string, n?: number) => prenesiPreverjeno(u, c, fetchFn, { najvecBajtov: n ?? NAJVEC_PAKETA, rokMs: n === undefined ? ROK_PAKETA_MS : ROK_MALO_MS })),
     vsotaDatoteke: o.vsotaDatoteke ?? privzetaVsota,
     beriMapo: o.beriMapo ?? ((m: string) => readdir(m)),
     zazeni: o.zazeni ?? privzetoZazeni,

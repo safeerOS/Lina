@@ -36,6 +36,10 @@ function nevidni(k: number): boolean {
     k === 0x3164 ||
     k === 0xffa0 ||
     (k >= 0xfe00 && k <= 0xfe0f) ||
+    (k >= 0x180b && k <= 0x180d) ||
+    k === 0x2800 ||
+    k === 0xfffc ||
+    (k >= 0x1bca0 && k <= 0x1bca3) ||
     (k >= 0x200b && k <= 0x200f) ||
     (k >= 0x202a && k <= 0x202e) ||
     (k >= 0x2060 && k <= 0x206f) ||
