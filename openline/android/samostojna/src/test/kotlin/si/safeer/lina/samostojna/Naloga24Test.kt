@@ -142,7 +142,7 @@ class Naloga24Test {
         assertTrue(k.contains("if (zaPonovitev?.trim() == vnos.trim()) zaPonovitev = null"), "krog 2 N3")
         // krog 2 N1b: oznaka preklica in stevec pred branjem oznake oddaje; N1: tuja mesta Z_* se ne cistijo; N5: ustavitev ob preklicu tiho
         assertTrue(Regex("""putString\(Z_PREKLIC[^\n]*\n\s+generacija\.incrementAndGet\(\)\n\s+val oddana = """).containsMatchIn(k), "krog 2 N1b")
-        assertTrue(k.contains("if (generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id) return"), "krog 2 N1")
+        assertTrue(Regex("""if \(generacija\.get\(\) != gen\) return\n(\s*//[^\n]*\n)*\s+if \(shrambaCakajoce\.getString\(Z_ID, null\) != id\) \{\s+cakaSejo = null\n[^\n]*\n\s+return""").containsMatchIn(k), "krog 2 N1")
         assertEquals(2, Regex("""posljiUstavitev\([^)]*izPreklica = true\)""").findAll(k).count(), "krog 2 N5")
         // CR3/CR6: seznam preklicev pred /ustavi; nit oddaje po odgovoru (ne glede na zaslon) ustavi preklicano nalogo
         assertTrue(Regex("""putString\(Z_PREKLIC, CakanjeSeje\.dodajPreklic\([\s\S]{0,700}if \(oddana && zapisanId != null\) \{\s+posljiUstavitev\(zapisanId, izPreklica = true\)""").containsMatchIn(k), "CR3 oznaka preklica")

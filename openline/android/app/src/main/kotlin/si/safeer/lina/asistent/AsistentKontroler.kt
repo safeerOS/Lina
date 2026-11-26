@@ -573,9 +573,14 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private fun koncajCakanje(gen: Int, id: String, besedilo: String, izid: CakanjeSeje.Izid, obIzidu: ((IzidPredaje, String?) -> Unit)?) {
         // preklic ali nova naloga: sprejeto oddajo je ustavila nit (Z_PREKLIC, oznaka zapisana pred povecanjem stevca) ali preklic sam
         // (oznaka oddaje je bila zapisana pred POST) - tu se nic vec ne poslje (slepi pregled N1, 24 N2)
-        // slepi pregled 24 krog 2 N1: mesta Z_* zdaj pripadajo drugi nalogi (preklic ali nova naloga na drugi instanci zaslona) - ta
-        // instanca jih ne cisti in ne pise naloge za ponovitev
-        if (generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id) return
+        if (generacija.get() != gen) return
+        // slepi pregled 24 krog 2 N1: mesta Z_* zdaj pripadajo drugi nalogi ali so pobrisana (preklic ali nova naloga na drugi instanci
+        // zaslona, »Pozabi racunalnik«) - ta instanca neha cakati, mest pa ne cisti in ne pise naloge za ponovitev
+        if (shrambaCakajoce.getString(Z_ID, null) != id) {
+            cakaSejo = null
+            dodaj(context.getString(si.safeer.lina.R.string.local_task_odpiranje_preklicano))
+            return
+        }
         cakaSejo = null
         // krog 3 N1b: prejsnji poskus (zaslon ali proces) je oddajo morda ze poslal - brez odgovora te niti je izid neznan, ne »ni oddana«
         val bilaOddana = si.safeer.lina.samostojna.NalogaCakaSejo.oddanoZa(shrambaCakajoce.getString(Z_ODDANO, null), id)
