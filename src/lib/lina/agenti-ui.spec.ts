@@ -57,7 +57,7 @@ describe("AgentiKartica", () => {
     expect(html).not.toContain(sl.agPotrdiSeznam);
   });
 
-  it("naloga 30: nepotrjen seznam - opozorilo (sl in en), prikazan seznam s streznika, gumb potrdi natanko ta seznam; brez gesla onemogocen", () => {
+  it("naloga 30: nepotrjen seznam - opozorilo (sl in en), prikazan seznam s streznika, gumb potrdi natanko ta seznam; brez gesla ga ni", () => {
     const nepotrjen = { ...STANJE, prepovedaneNepotrjene: true, prepovedane: ["/home/a/scit", "/home/a/yt"] };
     const h = renderToStaticMarkup(createElement(AgentiKartica, { stanje: nepotrjen, zaposlen: false, onUkaz: ni }));
     const opozorilo = h.slice(h.indexOf(sl.agPrepovedaneNepotrjene));
@@ -68,8 +68,10 @@ describe("AgentiKartica", () => {
     expect(ukazPotrdiPrepovedane(nepotrjen)).toEqual({ ukaz: "prepovedane", mape: ["/home/a/scit", "/home/a/yt"] });
     const prazen = renderToStaticMarkup(createElement(AgentiKartica, { stanje: { ...nepotrjen, prepovedane: [] }, zaposlen: false, onUkaz: ni }));
     expect(prazen).toContain(sl.agPrepovedanePrazen);
+    // brez gesla seznama nihce ne uporablja (ukazi z geslom so zavrnjeni), zavihek ze pove rcBrezGesla
     const brezGesla = renderToStaticMarkup(createElement(AgentiKartica, { stanje: { ...nepotrjen, geslo: false }, zaposlen: false, onUkaz: ni }));
-    expect(brezGesla.slice(brezGesla.indexOf(sl.agPrepovedaneNepotrjene))).toMatch(new RegExp(`<button type="button" disabled=""[^>]*>${sl.agPotrdiSeznam}`));
+    expect(brezGesla).not.toContain(sl.agPrepovedaneNepotrjene);
+    expect(brezGesla).not.toContain(sl.agPotrdiSeznam);
     for (const k of ["agPrepovedaneNepotrjene", "agPrepovedaneNepotrjeneNamig", "agPrepovedanePrazen", "agPotrdiSeznam"] as const) {
       expect(en[k].length).toBeGreaterThan(0);
       expect(en[k]).not.toBe(sl[k]);

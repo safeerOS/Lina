@@ -1413,7 +1413,8 @@ async function javno(root: string, s: Stanje, o: Odvisnosti, zdaj: Date): Promis
   const omrezjeAgentov = !omejeni ? null : (await pastaDeluje(o)) ? "loceno" : "gostitelj";
   return {
     naVoljo: razlog === null, razlogNiNaVoljo: razlog, geslo: await ownerExists(root), mape: s.mape, naloge, agenti, prepovedane: s.prepovedane ?? [],
-    prepovedaneNepotrjene: !(await seznamVelja(root, "prepovedane", s.prepovedane ?? [], s.podpisPrepovedanih)),
+    // neberljiv kljuc celovitosti ne podre zavihka (stanje se vrne tudi po ze zapisanem ukazu): steje kot nepotrjeno
+    prepovedaneNepotrjene: !(await seznamVelja(root, "prepovedane", s.prepovedane ?? [], s.podpisPrepovedanih).catch(() => false)),
     pregledovalec: s.pregledovalec ?? "claude", preizkusi: s.preizkusi ?? {}, zdruzitve, omrezjeAgentov,
   };
 }
