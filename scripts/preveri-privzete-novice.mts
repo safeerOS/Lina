@@ -6,7 +6,7 @@
 // Izhod 0 samo, ce vsi viri delujejo na obeh napravah.
 import { prenesiBesedilo, preberiVir } from "../src/lib/lina/novice.server.ts";
 import { PRIVZETI_VIRI_NOVIC } from "../src/lib/lina/novice-pogovor.ts";
-import { poveziHttps, razresiDns } from "../src/lib/lina/splet.server.ts";
+import { poveziHttps, razresiDns } from "../src/lib/lina/splet-povezava.server.ts";
 
 const odv = { razresi: razresiDns, povezava: poveziHttps };
 let napak = 0;

@@ -41,7 +41,7 @@ import {
 import { NOVIC_V_ODGOVORU, PRIVZETI_VIRI_NOVIC, izmenicnoPoVirih, odgovorNovic, poTemi, type NovicaOdgovora } from "./novice-pogovor.ts";
 import { callProvider, hideSecret } from "./providers.ts";
 import { MEJA_BAJTOV, MEJA_SKOKOV, jeZasebniIp, razberiNaslov, type SpletOdgovor, type SpletPovezava, type SpletZahteva } from "./splet.ts";
-import { poveziHttps, razresiDns } from "./splet.server.ts";
+import { poveziHttps, razresiDns } from "./splet-povezava.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
 const D_NASTAVITVE = "novice.json";

@@ -3,9 +3,7 @@
  * Shrani se loceno od line.json. Velja sele po potrditvi.
  * Model, ce ga lastnik ima, vidi stran samo kot oznacene podatke.
  */
-import { lookup } from "node:dns/promises";
 import { unlink } from "node:fs/promises";
-import https from "node:https";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { t } from "./besedila.ts";
@@ -38,61 +36,10 @@ export const PREDLOG_DATOTEKA = "predlog.json";
 const POTEK_DATOTEKA = "splet-potek.json";
 const DNEVNIK_DATOTEKA = "splet-dnevnik.json";
 
-export async function razresiDns(gostitelj: string): Promise<string[]> {
-  const zapisi = await lookup(gostitelj, { all: true, verbatim: true });
-  return zapisi.map((z) => z.address);
-}
-
-/** HTTPS na tocno podan IP. SNI ostane gostitelj. Drugega DNS ni. */
-export function poveziHttps(zahteva: SpletZahteva, signal: AbortSignal): Promise<SpletOdgovor> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new Error(t("spletRok")));
-      return;
-    }
-    const family = zahteva.ip.includes(":") ? 6 : 4;
-    const req = https.request(
-      {
-        host: zahteva.ip,
-        servername: zahteva.gostitelj,
-        port: zahteva.vrata,
-        path: zahteva.pot || "/",
-        method: "GET",
-        family,
-        headers: {
-          host: zahteva.gostitelj,
-          "user-agent": zahteva.agent || LINA_AGENT,
-          accept: zahteva.sprejmi || "text/html, application/xhtml+xml;q=0.9",
-        },
-        rejectUnauthorized: true,
-        timeout: zahteva.rokMs,
-      },
-      (res) => {
-        const glave: Record<string, string> = {};
-        for (const [k, v] of Object.entries(res.headers)) {
-          glave[k.toLowerCase()] = Array.isArray(v) ? v.join(", ") : String(v ?? "");
-        }
-        resolve({
-          status: res.statusCode ?? 0,
-          glave,
-          telo: res,
-          prekini: () => {
-            res.destroy();
-            req.destroy();
-          },
-        });
-      },
-    );
-    const ustavi = () => req.destroy(new Error(t("spletRok")));
-    signal.addEventListener("abort", ustavi, { once: true });
-    req.on("timeout", ustavi);
-    req.on("error", (error) => {
-      signal.removeEventListener("abort", ustavi);
-      reject(error);
-    });
-    req.end();
-  });
-}
+// Naloga 32 (kanal-claude T1-S2): DNS in HTTPS na preverjen IP sta v splet-povezava.server.ts, da jih novice uvozijo brez poti klica
+// (ta modul uvaza service.server.ts); tu ostaneta izvozena za obstojece klicatelje.
+export { poveziHttps, razresiDns } from "./splet-povezava.server.ts";
+import { poveziHttps, razresiDns } from "./splet-povezava.server.ts";
 
 async function odstrani(dir: string, ime: string): Promise<void> {
   try {
