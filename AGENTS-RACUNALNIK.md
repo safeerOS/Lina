@@ -1627,7 +1627,8 @@ Lastnik: »OmniRoute ponuja več brezplacbih modelov zato kot ponudnika pri mož
   (src/lib/lina/omniroute-zaklep.json), `npm ci --ignore-scripts`, Electron kot Node, mapa <podatki Line>/omniroute, poslušanje samo 127.0.0.1,
   okolje samo z dovoljenega seznama (nikoli ključi Line), geslo in ključ API ustvari Lina (šifrirano), ob koncu Line se ustavi,
   »Odstrani OmniRoute« odstrani samo mapo z oznako Line. Nedosegljiv naslov se ne shrani (klici ostanejo na prejšnjem ponudniku).
-  Novejšo različico prinese nova Lina (nova zaklepna datoteka), nikoli »latest« ob namestitvi.
+  Nikoli »latest« ob namestitvi. ODPRTO: posodobitev obstoječe namestitve ni narejena (nova Lina z novo zaklepno datoteko
+  ne posodobi že nameščenega OmniRoute; oznaka `koncano` nosi različico, primerjave še ni).
 - Dopolnitev 24. 11. 02:35 (lastnikova NALOGA-LINA-MODELI-KLICI-IN-ASISTENTKA.md, B9): Lina NIKOLI samodejno ne poslje vsebine drugemu
   ponudniku, ki ga uporabnik ni izrecno dolocil za to vlogo; rezervni ponudnik obstaja samo, ce ga uporabnik izrecno doda na seznam
   rezervnih (privzeto prazen - soglasje za osebne podatke). Znotraj OpenRouter velja C6.

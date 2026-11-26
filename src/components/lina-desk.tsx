@@ -37,7 +37,7 @@ import { GOVOR_MODELI } from "@/lib/lina/govor-model.ts";
 import { razvrstiKlice } from "@/lib/lina/tajnica.ts";
 import { OMNIROUTE_NE_TECE, OMNIROUTE_PRIVZETI_NASLOV } from "@/lib/lina/omniroute.ts";
 import type { StanjeNamestitve } from "@/lib/lina/omniroute-namestitev.server.ts";
-import { OmniRouteNamestitev } from "@/components/omniroute-namestitev.tsx";
+import { jeLokalniPrivzeti, OmniRouteNamestitev } from "@/components/omniroute-namestitev.tsx";
 import { stanjeOmnirouteFn, shraniOmnirouteFn, pozabiOmnirouteFn, stanjeNamestitveOmnirouteFn, namestiOmnirouteFn, odstraniOmnirouteFn, preveriOmnirouteFn, readBrainFn, logoutFn, setupOwnerFn, phoneTurn, publishLine, speak, saveBrainFn, checkBrainFn, chooseStorageFn, savePravilaFn, dodajVrzelFn, vajaKlicaFn, preberiSpletFn, preberiPredlogFn, potekSpletaFn, potrdiPredlogFn, zavrziPredlogFn, pogledMapeZapiskovFn, izberiMapoZapiskovFn, odpriMapoZapiskovFn, seznamZapiskovFn, preberiZapisekFn, preberiPosnetekFn, zdruziZapiskeFn, povzetekKlicateljaFn } from "@/lib/lina/functions.ts";
 import type { MapaZapiskov, Zapisek, ZapisekVsebina } from "@/lib/lina/zapiski.ts";
 import { delezKratkih } from "@/lib/lina/povzetek.ts";
@@ -963,7 +963,9 @@ function Settings({
       const s = await osveziOm();
       if (konec || s?.vTeku) return;
       const r = await preveriOmnirouteFn({ data: { naslov: omNaslovVnos } }).catch(() => ({ tece: false }));
-      if (!konec) setOmVprasaj(!r.tece);
+      if (konec || r.tece) return;
+      if (jeLokalniPrivzeti(omNaslovVnos)) setOmVprasaj(true);
+      else onError(t("omNeTece"));
     })();
     return () => {
       konec = true;
@@ -1030,7 +1032,7 @@ function Settings({
       setNote(next.sporociloModela ? `${shranjeno} ${next.sporociloModela}` : shranjeno);
     } catch (cause) {
       // Naloga 31: OmniRoute ne tece -> vprasanje za namestitev namesto napake (ni shranjen, klici ostanejo na prejsnjem ponudniku).
-      if (omniroute && cause instanceof Error && cause.message === OMNIROUTE_NE_TECE) {
+      if (omniroute && cause instanceof Error && cause.message === OMNIROUTE_NE_TECE && jeLokalniPrivzeti(omNaslovVnos)) {
         setOmVprasaj(true);
         void osveziOm();
       } else onError(fault(cause));
@@ -1073,7 +1075,7 @@ function Settings({
           t("uiMozganiVertex")
         ) : (
           <>
-            {t("uiMozganiKljucOpis")}
+            {omniroute ? null : t("uiMozganiKljucOpis")}
             {provider === "openrouter" ? <span className="mt-1 block">{t("uiMozganiOpenRouter")}</span> : null}
             {omniroute ? <span className="mt-1 block">{t("omPonudnikOpis")}</span> : null}
             {brain.shranjeni && brain.shranjeni.length > 0 ? (
@@ -1192,7 +1194,8 @@ function Settings({
               />
             </label>
           </>
-        ) : (
+        ) : omniroute && omStanje?.namescen ? null : (
+          // Naloga 31: kljuc OmniRoute, ki ga je namestila Lina, ustvari in hrani Lina; polje samo za lasten OmniRoute.
           <label className={`${OZNAKA_POLJA} sm:col-span-2`} htmlFor="kljuc">
             {t("uiKljuc")}
             <input

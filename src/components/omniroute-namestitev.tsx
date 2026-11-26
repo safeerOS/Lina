@@ -4,8 +4,18 @@
  */
 import { t, type Beseda } from "@/lib/lina/besedila.ts";
 import type { Korak, StanjeKoraka, StanjeNamestitve } from "@/lib/lina/omniroute-namestitev.server.ts";
+import { veljavenNaslovOmniroute } from "@/lib/lina/omniroute.ts";
 import { vstavi } from "@/lib/lina/ui-videz.ts";
 import { GUMB, GUMB_OBROBA } from "@/components/ui-lina.tsx";
+
+/**
+ * Namestitev Lina ponudi samo za lokalni privzeti naslov (127.0.0.1 ali localhost, vrata 20128). Za drug naslov (lasten streznik)
+ * samo pove, da ne tece: namestitev ne sme tiho zamenjati OmniRoute, ki ga je uporabnik izbral (svetovalec, naloga 31).
+ */
+export function jeLokalniPrivzeti(naslov: string): boolean {
+  const n = veljavenNaslovOmniroute(naslov);
+  return n === "http://127.0.0.1:20128/v1" || n === "http://localhost:20128/v1";
+}
 
 const IME_KORAKA: Record<Korak, Beseda> = {
   prenos: "omKorakPrenos",

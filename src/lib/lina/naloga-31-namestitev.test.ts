@@ -15,7 +15,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { setupOwner } from "./auth.server.ts";
-import { readBrain } from "./keys.server.ts";
+import { readBrain, saveBrain } from "./keys.server.ts";
 import {
   korenOmniroute,
   namestiOmniroute,
@@ -283,6 +283,37 @@ describe("naloga 31: Lina namesti OmniRoute (nadomestni register)", () => {
     assert.match(st.napaka ?? "", /integritete/);
     assert.equal(existsSync(path.join(korenOmniroute(n.dir), "npm-klici.json")), false);
     assert.equal(existsSync(path.join(korenOmniroute(n.dir), "app")), false);
+  });
+
+  it("klici na OmniRoute z drugim naslovom: namestitev jih ne preusmeri (kljuci.json bajt za bajtom enak)", async () => {
+    const n = await nova();
+    const drug = createServer((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ data: [{ id: "auto" }], choices: [{ message: { content: "da" } }] }));
+    });
+    await new Promise<void>((ok) => drug.listen(0, "127.0.0.1", ok));
+    try {
+      const naslovDrugega = `http://localhost:${(drug.address() as AddressInfo).port}/v1`;
+      await saveBrain({ provider: "omniroute", key: "om-drug-kljuc-00031", naslov: naslovDrugega, model: "auto", zaKlice: true }, n.token, n.dir);
+      const prej = readFileSync(path.join(n.dir, "kljuci.json"));
+      await namestiOmniroute(n.token, n.dir, odvisnosti());
+      await pocakajNamestitev();
+      const st = await stanjeNamestitve(n.token, n.dir);
+      assert.match(st.napaka ?? "", /drugem naslovu/);
+      assert.deepEqual(readFileSync(path.join(n.dir, "kljuci.json")), prej);
+      await ustaviOmniroute();
+    } finally {
+      await new Promise<void>((ok) => drug.close(() => ok()));
+    }
+  });
+
+  it("klici na drugem ponudniku: namestitev kljuci.json ne spremeni in soglasja ne vklopi", async () => {
+    const n = await nova();
+    const zapis = JSON.stringify({ provider: "grok", model: "grok-4", iv: "x", tag: "y", ciphertext: "z" });
+    writeFileSync(path.join(n.dir, "kljuci.json"), zapis);
+    await namestiOmniroute(n.token, n.dir, odvisnosti());
+    await pocakajNamestitev();
+    assert.equal(readFileSync(path.join(n.dir, "kljuci.json"), "utf8"), zapis);
+    await ustaviOmniroute();
   });
 
   it("premalo prostora na disku: napaka pred prenosom", async () => {

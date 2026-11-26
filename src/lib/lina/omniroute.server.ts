@@ -1,8 +1,8 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
-import { odsifrirajSkrivnost, sifrirajSkrivnost } from "./keys.server.ts";
-import { veljavenNaslovPrehoda, type PrehodNastavitve } from "./omniroute.ts";
+import { odsifrirajSkrivnost, sifrirajSkrivnost, teceOmniroute } from "./keys.server.ts";
+import { OMNIROUTE_NE_TECE, veljavenNaslovPrehoda, type PrehodNastavitve } from "./omniroute.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
 /**
@@ -58,6 +58,8 @@ export async function shraniOmniroute(token: string | null, vnos: VnosOmniroute,
   const imaKljuc = (await preberiKljuc(root)) !== null;
   const vklop = vnos.vklop === undefined ? prej.vklop : vnos.vklop === true;
   if (vklop && (!naslov || !imaKljuc)) throw new Error("Za vklop vpisi veljaven naslov in kljuc prehoda.");
+  // Naloga 31: prehod, ki ne tece, se ne vklopi (zahteve bi padale).
+  if (vklop && !prej.vklop && !(await teceOmniroute(naslov))) throw new Error(OMNIROUTE_NE_TECE);
   const klici = vnos.klici === undefined ? prej.klici : vnos.klici === true;
   await writeJson(root, NASTAVITVE, { vklop, naslov, klici });
   return stanjeOmniroute(token, dir);

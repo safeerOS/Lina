@@ -19,6 +19,7 @@ import path from "node:path";
 import { requireOwner } from "./auth.server.ts";
 import { odsifrirajSkrivnost, odstraniOmnirouteNaslova, saveBrain, sifrirajSkrivnost } from "./keys.server.ts";
 import ZAKLEP from "./omniroute-zaklep.json" with { type: "json" };
+import { veljavenNaslovOmniroute } from "./omniroute.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
 export const OMNIROUTE_RAZLICICA = "3.8.54";
@@ -398,9 +399,15 @@ async function namestiDatoteke(root: string, odv: Odvisnosti, nastavi: (k: Korak
   nastavi("namestitev", "uspeh");
 }
 
-async function soglasjeZaKlice(root: string): Promise<boolean> {
-  const k = await readJsonFile<{ provider?: unknown; klici?: unknown }>(root, "kljuci.json");
-  return k?.provider === "omniroute" && k.klici === true;
+/**
+ * Soglasje za klice ostane, kot je bilo. Ce klici uporabljajo OmniRoute na DRUGEM naslovu, jih namestitev ne sme preusmeriti
+ * na lokalnega (svetovalec, naloga 31): vrne null in Mozganov Lina ne spremeni.
+ */
+async function soglasjeZaKlice(root: string, naslov: string): Promise<boolean | null> {
+  const k = await readJsonFile<{ provider?: unknown; naslov?: unknown; klici?: unknown }>(root, "kljuci.json");
+  if (k?.provider !== "omniroute") return false;
+  if (veljavenNaslovOmniroute(k.naslov) !== veljavenNaslovOmniroute(naslov)) return null;
+  return k.klici === true;
 }
 
 async function potek(token: string | null, root: string, odv: Odvisnosti): Promise<void> {
@@ -434,7 +441,11 @@ async function potek(token: string | null, root: string, odv: Odvisnosti): Promi
     const modeli = await seznamModelov(odv, naslov, sk.kljuc);
     if (!modeli) throw new NapakaNamestitve("OmniRoute teče, a ni vrnil seznama modelov.");
     // Lina sama vpise naslov in izbere delujoc model; soglasje za klice ostane, kot je bilo (nikoli ga ne vklopi sama).
-    await saveBrain({ provider: "omniroute", key: sk.kljuc, naslov, samodejno: true, zaKlice: await soglasjeZaKlice(root) }, token, root);
+    const zaKlice = await soglasjeZaKlice(root, naslov);
+    if (zaKlice === null) {
+      throw new NapakaNamestitve("OmniRoute je nameščen in teče, a klici uporabljajo OmniRoute na drugem naslovu. Lina klicev ne preusmeri sama: naslov po želji spremenite v Možganih.");
+    }
+    await saveBrain({ provider: "omniroute", key: sk.kljuc, naslov, samodejno: true, zaKlice }, token, root);
     nastavi("preverba", "uspeh");
     s.pripravljeno = true;
   } catch (e) {

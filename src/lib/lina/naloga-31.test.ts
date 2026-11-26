@@ -14,6 +14,7 @@ import { after, before, describe, it } from "node:test";
 import { setupOwner } from "./auth.server.ts";
 import { readBrain, saveBrain } from "./keys.server.ts";
 import { OMNIROUTE_NE_TECE } from "./omniroute.ts";
+import { shraniOmniroute as shraniPrehod, stanjeOmniroute as stanjePrehoda } from "./omniroute.server.ts";
 import { besedila } from "./besedila.ts";
 
 const KOREN = mkdtempSync(path.join(tmpdir(), "lina-n31-"));
@@ -78,6 +79,15 @@ describe("naloga 31: OmniRoute ne tece", () => {
       saveBrain({ provider: "omniroute", key: KLJUC, naslov: ziv.replace(/\/v1$/, "/drugo"), model: "auto" }, token, dir),
       (e: Error) => e.message === OMNIROUTE_NE_TECE,
     );
+  });
+
+  it("Prehod OmniRoute: nedosegljiv se ne vklopi; dosegljiv se vklopi; besedilo pove, da je program treba namestiti", async () => {
+    const { dir, token } = await nova();
+    await assert.rejects(shraniPrehod(token, { vklop: true, naslov: mrtev, kljuc: KLJUC }, dir), (e: Error) => e.message === OMNIROUTE_NE_TECE);
+    assert.equal((await stanjePrehoda(token, dir)).vklop, false);
+    assert.equal((await shraniPrehod(token, { vklop: true, naslov: ziv, kljuc: KLJUC }, dir)).vklop, true);
+    assert.match(besedila.sl.omRazlaga, /namest/);
+    assert.match(besedila.en.omRazlaga, /install/);
   });
 
   it("besedilo napake ni surova napaka omrezja in je prevedeno (sl, en)", () => {
