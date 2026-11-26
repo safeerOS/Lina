@@ -91,7 +91,11 @@ object CakanjeSeje {
                 val n = o.podpisiNalogo(o.zdaj(), o.nakljucno()) ?: return Izid.BrezPodpisa
                 // naloga 24 CR6: preklic med podpisom - zastarela naloga ne odide in oznaka oddaje se ne zapise
                 if (o.preklicano()) return Izid.Preklicano
+                // naloga 26t CRA3: podpis (KeyStore) je lahko trajal cez rok - po roku naloga ne odide
+                if (o.zdaj() >= konec) return Izid.Rok(null)
                 o.predOddajo()
+                // naloga 26t CRA4: oznako zapise kontroler pod zaklepom samo, ce mesto se pripada tej nalogi; sicer preklicano velja
+                if (o.preklicano()) return Izid.Preklicano
                 return Izid.Oddana(n, o.pov.naloga(AsistentProtokol.teloNaloge(n)))
             }
             AsistentProtokol.razberiZagon(odg.telo)?.takeIf { it != ODPIRA }?.let { return Izid.Rok(it) }

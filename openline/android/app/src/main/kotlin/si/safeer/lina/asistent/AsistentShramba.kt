@@ -40,7 +40,8 @@ object AsistentShramba {
      */
     fun pozabi(context: Context): Boolean {
         // T3 (pregled 0213): shranjena naloga je bila potrjena za TA racunalnik - po »Pozabi« je ne posljemo nikomur (datoteka hrani samo njo)
-        context.getSharedPreferences(CAKAJOCA, Context.MODE_PRIVATE).edit().clear().commit()
+        // naloga 26t: pod istim zaklepom kot prehodi naloge (nit oddaje ne sme po brisanju zapisati stare naloge nazaj)
+        synchronized(si.safeer.lina.samostojna.NalogaRacunalnika.ZAKLEP) { context.getSharedPreferences(CAKAJOCA, Context.MODE_PRIVATE).edit().clear().commit() }
         // T13 (pregled 0213): kanali releja, ki ze tecejo, se zaprejo takoj (ne sele ob naslednji povezavi)
         PovezavaLine.zapriRele()
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("naslov").remove("vrata").remove("odtis").remove("rele").commit()

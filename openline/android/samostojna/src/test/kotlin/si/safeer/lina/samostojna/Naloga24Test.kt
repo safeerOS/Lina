@@ -135,21 +135,16 @@ class Naloga24Test {
     @Test
     fun `CR1 CR2 CR3 - kontroler in zaslon (besedilo kode)`() {
         val k = app("asistent/AsistentKontroler.kt")
-        // CR1 (+ slepi pregled 24 N5, N6): Z_ROCNO brise samo lastnikov vzem; samodejna oddaja shranjene caka, dokler je mesto zasedeno
-        assertTrue(Regex("""private fun posljiShranjeno\(\) \{\s+if \(cakaSejo != null\) return[^\n]*\n\s+if \(obnoviCakanje\(\)\) return\n(\s*//[^\n]*\n)*\s+if \(zaPonovitev != null\) return""").containsMatchIn(k), "CR1 posljiShranjeno")
-        // Z_ROCNO brisejo samo lastnikov vzem in oddaja ISTEGA besedila (krog 2 N3), ne preklic ali druga naloga
-        assertEquals(2, Regex("""zaPonovitev = null""").findAll(k).count(), "CR1 Z_ROCNO brise se kaj drugega")
-        assertTrue(k.contains("if (zaPonovitev?.trim() == vnos.trim()) zaPonovitev = null"), "krog 2 N3")
-        // krog 2 N1b: oznaka preklica in stevec pred branjem oznake oddaje; N1: tuja mesta Z_* se ne cistijo; N5: ustavitev ob preklicu tiho
-        assertTrue(Regex("""putString\(Z_PREKLIC[^\n]*\n\s+generacija\.incrementAndGet\(\)\n\s+val oddana = """).containsMatchIn(k), "krog 2 N1b")
-        assertTrue(Regex("""if \(generacija\.get\(\) != gen\) return\n(\s*//[^\n]*\n)*\s+if \(shrambaCakajoce\.getString\(Z_ID, null\) != id\) \{\s+cakaSejo = null\n[^\n]*\n\s+return""").containsMatchIn(k), "krog 2 N1")
-        assertEquals(2, Regex("""posljiUstavitev\([^)]*izPreklica = true\)""").findAll(k).count(), "krog 2 N5")
-        // CR3/CR6: seznam preklicev pred /ustavi; nit oddaje po odgovoru (ne glede na zaslon) ustavi preklicano nalogo
-        assertTrue(Regex("""putString\(Z_PREKLIC, CakanjeSeje\.dodajPreklic\([\s\S]{0,700}if \(oddana && zapisanId != null\) \{\s+posljiUstavitev\(zapisanId, izPreklica = true\)""").containsMatchIn(k), "CR3 oznaka preklica")
-        assertTrue(Regex("""\n\s+CakanjeSeje\.ustaviPoZaprtju\(izid, shrambaCakajoce\.getString\(Z_PREKLIC, null\)\)\?\.let \{ posljiUstavitev\(it, izPreklica = true\) \}[^\n]*\n(\s*//[^\n]*\n)*\s+naGlavni \{ koncajCakanje""").containsMatchIn(k), "CR3 nit")
-        assertFalse(Regex("""fun pocistiCakanje\(\) \{[^\n]*\n[^\n]*Z_PREKLIC""").containsMatchIn(k), "CR3 oznako brise ciscenje")
-        // slepi pregled 24 N1: preklic na drugem zaslonu (Z_ID) ustavi tudi to nit
-        assertTrue(k.contains("preklicano = { ustavljen || generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id ||"), "N1")
+        // naloga 26t: CR1, krog 2 N1/N1b/N3/N5 so vedenje stroja (Naloga26tTest); tu samo, da kontroler klice prehode
+        assertTrue(k.contains("val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null) ?: return"), "koncaj prek stroja")
+        assertEquals(1, Regex("""shrambaNaloge\.vzemiRocno\(\)""").findAll(k).count(), "rocno vzame samo lastnikov vzem")
+        assertTrue(k.contains("shrambaNaloge.porabiRocno(vnos)"), "krog 2 N3")
+        // CR3/CR6, 26t: nit po odgovoru (ne glede na zaslon) poslje dolgovan /ustavi; dolg se poravna samo s 202 ali 404
+        assertTrue(Regex("""\n\s+CakanjeSeje\.ustaviPoPreklicu\(izid\)\?\.takeIf \{ shrambaNaloge\.dolgujeUstavitev\(it\) \}\?\.let \{ posljiUstavitve\(\) \}\n(\s*//[^\n]*\n)*\s+naGlavni \{ koncajCakanje""").containsMatchIn(k), "CR3 nit")
+        assertTrue(k.contains("if (izPreklica && (odg is OdgovorLine.Ok || (odg is OdgovorLine.Napaka && odg.status == 404))) shrambaNaloge.ustavitevPotrjena(id)"), "poravnava dolga")
+        assertEquals(1, Regex("""posljiUstavitev\([^)]*izPreklica = true\)""").findAll(k).count(), "krog 2 N5: ustavitev ob preklicu samo iz posljiUstavitve")
+        // »Pozabi racunalnik« brise pod istim zaklepom
+        assertTrue(app("asistent/AsistentShramba.kt").contains("synchronized(si.safeer.lina.samostojna.NalogaRacunalnika.ZAKLEP)"), "pozabi pod zaklepom")
         // CR2: naloga za ponovitev se vzame sele po obnovi stanja pogleda (post), ne neposredno v renderAssistant
         val a = app("DialerActivity.kt")
         assertTrue(Regex("""assistantTaskInput\.post \{\s+val q = AsistentPrikaz\.izracunaj\(asistent\.stanje\(\)\)[^\n]*\n\s+if \(!isDestroyed && q\.vnos && !q\.odgovor && assistantTaskInput\.text\.isNullOrEmpty\(\)\) asistent\.vzemiZaPonovitev\(\)""").containsMatchIn(a), "CR2 post")

@@ -75,21 +75,20 @@ class Naloga23tTest {
         assertFalse(NalogaCakaSejo.oddanoZa("id-1", null))
     }
 
+    // Naloga 26t: pravila cakanja so vedenje stroja stanj (Naloga26tTest, Naloga26tLastnostiTest); tu samo, da jih kontroler klice.
     @Test fun `kontroler - cakajoca naloga se ne poslje sama, nova naloga in Ustavi preklicata cakanje`() {
         val k = listOf("../app/src/main/kotlin/si/safeer/lina/asistent/AsistentKontroler.kt", "app/src/main/kotlin/si/safeer/lina/asistent/AsistentKontroler.kt")
             .map(::File).first { it.isFile }.readText()
-        // med cakanjem posljiShranjeno ne poslje nicesar (bi preklicalo cakajoco); cakanje po zasuku nadaljuje, preden vzame shranjeno
-        assertTrue(Regex("""private fun posljiShranjeno\(\) \{\s+if \(cakaSejo != null\) return[^\n]*\n\s+if \(obnoviCakanje\(\)\) return""").containsMatchIn(k), "posljiShranjeno")
-        // »shrani za pozneje« in cakanje na sejo imata loceni mesti: posljiShranjeno ne zbrise cakajoce (N3, N4 slepega pregleda)
-        assertFalse(Regex("""private fun posljiShranjeno\(\)[\s\S]{0,2000}shrambaCakajoce\.edit\(\)\.clear\(\)""").containsMatchIn(k), "posljiShranjeno brise vse")
-        assertTrue(k.contains("const val Z_BESEDILO = \"z_besedilo\""))
-        // krog 2 svetovalec: oznaka oddaje je id naloge (preklic tik pred oznako ne pusti oznake za NASLEDNJO nalogo)
-        assertTrue(k.contains("putString(Z_ODDANO, id)") && Regex("oddanoZa\\(").findAll(k).count() == 3, "oznaka oddaje = id") // naloga 24: oznakaObZacetku odstranjena
-        // krog 3 N1/N1b: oznaka iz prejsnjega zaslona ali procesa - preklic poslje /ustavi, rok ali brez podpisa = izid neznan (brez ponovitve)
-        // naloga 24 (slepi pregled 24 N2): preklic z oznako oddaje poslje /ustavi vedno (ne glede na nit, ki je oddajala)
-        assertTrue(k.contains("if (oddana && zapisanId != null) {") && k.contains("if (bilaOddana && (izid is CakanjeSeje.Izid.Rok"), "obnova z oznako")
+        // dolgovane ustavitve najprej; med cakanjem posljiShranjeno ne poslje nicesar; cakanje po zasuku nadaljuje, preden vzame shranjeno
+        assertTrue(Regex("""private fun posljiShranjeno\(\) \{\n(\s*//[^\n]*\n)*\s+posljiUstavitve\(\)\n\s+if \(cakaSejo != null\) return[^\n]*\n\s+if \(obnoviCakanje\(\)\) return""").containsMatchIn(k), "posljiShranjeno")
+        assertTrue(k.contains("val z = shrambaNaloge.vzemiShranjeno() ?: return"), "shranjena samo prek stroja (rocna in cakajoca imata prednost)")
+        // nobenega neposrednega branja starih kljucev (CRA2: typed getString na Boolean)
+        assertFalse(Regex("""getString\("z_|getBoolean\("z_|Z_ODDANO|Z_ROCNO""").containsMatchIn(k), "stari kljuci v kontrolerju")
         assertTrue(k.contains("val id = nalogaId ?: run { prekliciCakanje(); return }"), "Ustavi preklice cakanje")
         assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(\)""").containsMatchIn(k), "nova naloga preklice staro")
+        assertTrue(k.contains("when (zaslon.preklici(System.currentTimeMillis()))"), "preklic prek stroja")
+        // CRA4: oznaka pod zaklepom; zavrnjena oznaka ustavi POST
+        assertTrue(k.contains("predOddajo = { oznaka = shrambaNaloge.predOddajo(id) }") && k.contains("preklicano = { ustavljen || oznaka == false || !zaslon.nitVelja(gen, id) ||"), "oznaka")
         // vmesni izid ne porabi enkratnega klica klepeta za shranjeno nalogo
         assertTrue(k.contains("if (izid != IzidPredaje.NEDOSEGLJIV && izid != IzidPredaje.ODPIRA) obIzidShranjene"), "posljiShranjeno ODPIRA")
     }
