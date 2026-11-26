@@ -271,7 +271,8 @@ async function preberiStanje(root: string): Promise<Stanje> {
 async function rokIzPravil(root: string): Promise<number | null> {
   try {
     // CRR6: veljaven JSON, ki ni objekt (null, [], stevilo), loadPravila tiho zamenja s privzetimi - to ni znan rok (manjkajoca datoteka je)
-    // CRR3-4: en posnetek datoteke - drugo branje (loadPravila) bi lahko videlo »null« ali izbrisano datoteko in vrnilo zasilnih 90
+    // CRR3-4: en posnetek datoteke - drugo branje (loadPravila) bi lahko videlo »null« in vrnilo zasilnih 90. Manjkajoca datoteka ostane
+    // privzetih 90 (CRR6; Lina pise s tmp+rename, zato je med zapisom ne zmanjka)
     const surovo = await readFile(path.join(root, "pravila.json"), "utf8").catch((e: NodeJS.ErrnoException) => { if (e.code === "ENOENT") return null; throw e; });
     const j: unknown = surovo === null ? null : JSON.parse(surovo);
     if (surovo !== null && (!j || typeof j !== "object" || Array.isArray(j))) return null;

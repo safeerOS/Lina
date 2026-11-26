@@ -974,6 +974,7 @@ test("naloga 26r CRR3-3: ponavljanje odlozene ustavitve se konca, ko se streznik
   ponovitevUstavitve.ms = 20;
   const z = ustavitevPoZacni(Number.MAX_SAFE_INTEGER);
   const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  let n = 0;
   try {
     const id = idNaloge();
     const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
@@ -983,11 +984,13 @@ test("naloga 26r CRR3-3: ponavljanje odlozene ustavitve se konca, ko se streznik
     await p;
     await caka(() => z.ustavitve.length >= 3, 3000);
   } finally {
-    await s.pospravi();
+    // slepi pregled 26r N5: stevec preberi SINHRONO ob ustavitvi (pospravi do prvega await ustavi streznik); klic izvajalca se zapise
+    // ob zacetku, zato n vsebuje vsak klic, ki je tekel ob ustavitvi - casovnik, ki sprozi med zapiranjem, se steje kot nov poskus
+    const zapri = s.pospravi();
+    n = z.ustavitve.length;
+    await zapri;
     ponovitevUstavitve.ms = prej;
   }
-  // klic izvajalca se zapise ob zacetku (sinhrono), zato n ze vsebuje vsak klic, ki je tekel ob ustavitvi
-  const n = z.ustavitve.length;
   await premor(150);
   assert.equal(z.ustavitve.length, n, "po ustavitvi streznika ni novih poskusov (tudi casovnik, ki je ze cakal, ne poskusi)");
 });

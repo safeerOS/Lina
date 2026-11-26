@@ -439,18 +439,23 @@ export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolea
     const t = stanje().tekoci;
     if (t && (!n.vklop || t.zeleniNaslov !== n.naslov || t.zelenaVrata !== n.vrata || t.globalLink !== n.globalLink
       // rezerva zaradi naslova: naslov je spet tu; doma dosegljiv: vezani naslov je izginil ali omrezje ni (vec) odobreno (N1);
-      // rezerva »vrata« po poskusu na prostih vratih (N3) ali ko bi zagon zdaj dal drug razlog (CRR3-2: neodobreno omrezje ->
-      // »omrezje« z gumbom za odobritev; naslova ni vec = tudi »ne« -> »naslov«); »ne-vem«, nespremenjeno omrezje in zasedena vrata:
-      // rele ne utripa
+      // rezerva »vrata« samo po poskusu na prostih vratih (N3), sicer rele ne utripa (spremenjen razlog spodaj, brez ponovnega zagona)
       || (t.rezerva === "naslov" ? naslovNaVmesniku(n.naslov, v)
         : t.rezerva === "omrezje" ? dovoljeno === "da"
-          : t.rezerva === "vrata" ? o.zamenjajRezervoVrat === true || dovoljeno === "ne"
+          : t.rezerva === "vrata" ? o.zamenjajRezervoVrat === true
             : !naslovNaVmesniku(t.naslov, v) || (dovoljeno === "ne" && t.neodobreno >= 2)))) await ustavi();
     if (!n.vklop || stanje().tekoci) {
       if (!n.vklop) { stanje().napaka = ""; stanje().napakaKoda = ""; stanje().predlogNaslova = ""; }
       // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi(); v rezervi ne (127.0.0.1)
       const tek = stanje().tekoci;
       if (tek) tek.omrezje = odtisOmrezja(v, p, n.naslov); // ista sprememba omrezja ne sprozi uskladitve vsakih 30 s
+      // CRR3-2: rezerva »vrata« v neodobrenem omrezju (ali brez shranjenega naslova) dobi razlog, ki bi ga dal nov zagon - »omrezje«
+      // pokaze gumb za odobritev. Ista rezerva (127.0.0.1 + rele) tece naprej: brez ponovnega zagona, naloge Global Linka ostanejo
+      // (slepi pregled 26r N1); »ne-vem« razloga ne spremeni (naloga 21 N1)
+      if (tek?.rezerva === "vrata" && dovoljeno === "ne") {
+        tek.rezerva = predlog !== null ? "omrezje" : "naslov";
+        nastaviNapako(Object.assign(new Error(""), { code: predlog !== null ? NEODOBRENO : "EADDRNOTAVAIL" }));
+      }
       if (tek && !tek.rezerva) void pripraviPotKlicev(root, tek.naslov);
       return;
     }

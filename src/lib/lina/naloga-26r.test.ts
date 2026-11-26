@@ -1,5 +1,6 @@
 // Naloga 26r: najdbe CodeRabbit r3 na racunalniku 0.2.14 (slepi-0214/coderabbit-r3-najdbe.md). CRR3-1 in CRR3-3 sta v
-// asistent-streznik.test.ts (potrebujeta njegov streznik). Vsak preizkus brez popravka pade. Lazno omrezje: vmesnik »enp1s0« z
+// asistent-streznik.test.ts (potrebujeta njegov streznik). Vsak preizkus brez popravka pade, razen »(ohrani)«, ki zaklene vedenje,
+// ki ga popravek ne sme spremeniti. Lazno omrezje: vmesnik »enp1s0« z
 // naslovi 127.0.0.x. Komentarji brez sumnikov.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -67,26 +68,32 @@ async function rezervaVrata(t: (o: { dir: string; token: string; okolje: { vm: N
 // ------------------------------------------------------------------ CRR3-2
 
 test("CRR3-2: rezerva »vrata«, prehod se zamenja (neodobreno omrezje), vrata se zasedena - razlog postane »omrezje« z gumbom za odobritev", async () => {
-  await rezervaVrata(async ({ dir, token, okolje }) => {
+  await rezervaVrata(async ({ dir, token, okolje, ustavitve }) => {
     okolje.mac = MAC_TUJ;
     assert.equal(await preveriNaslovAsistenta(dir), true, "sprememba prehoda sprozi uskladitev");
     const s = await stanjeAsistenta(token, dir);
     assert.equal(s.napakaKoda, "omrezje", "zaslon Povezi telefon pokaze gumb za odobritev samo pri »omrezje«");
+    assert.equal(s.predlogNaslova, "127.0.0.5", "gumb »Uporabi ta naslov« ima naslov");
     assert.equal(s.samoGlobalLink, true, "Global Link tece naprej");
+    assert.equal(ustavitve(), 0, "slepi pregled 26r N1: rezerva se ne zazene znova (naloge Global Linka ostanejo)");
     assert.equal(await preveriNaslovAsistenta(dir), false, "nespremenjeno omrezje: brez ponovne uskladitve (rele ne utripa)");
     assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "omrezje");
+    // omrezje se vrne in je odobreno: rezerva »omrezje« poskusi doma; vrata so se zasedena -> spet »vrata«
+    okolje.mac = MAC_DOMA;
+    assert.equal(await preveriNaslovAsistenta(dir), true);
+    assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "vrata");
   });
 });
 
-// Na pravem vmesniku da vezava izginulega naslova EADDRNOTAVAIL (vrstaNapake -> »naslov«); 127.0.0.5 jedro tu se vedno veze (in vrata so
-// zasedena), zato preizkus preveri, da se rezerva ZAZENE ZNOVA (nov razlog doloci zagon), ne besedila razloga.
-test("CRR3-2: rezerva »vrata«, shranjeni naslov izgine brez novega naslova - rezerva se zazene znova (razlog doloci nov zagon)", async () => {
-  await rezervaVrata(async ({ dir, okolje, ustavitve }) => {
+test("CRR3-2: rezerva »vrata«, shranjeni naslov izgine brez novega naslova - razlog postane »naslov«, brez ponovnega zagona", async () => {
+  await rezervaVrata(async ({ dir, token, okolje, ustavitve }) => {
     okolje.vm = { enp1s0: [] };
     assert.equal(await preveriNaslovAsistenta(dir), true);
-    assert.equal(ustavitve(), 1, "rezerva »vrata« se je ustavila in zagnala znova");
+    const s = await stanjeAsistenta(token, dir);
+    assert.equal(s.napakaKoda, "naslov");
+    assert.equal(s.samoGlobalLink, true);
+    assert.equal(ustavitve(), 0);
     assert.equal(await preveriNaslovAsistenta(dir), false, "brez utripanja");
-    assert.equal(ustavitve(), 1);
   });
 });
 
