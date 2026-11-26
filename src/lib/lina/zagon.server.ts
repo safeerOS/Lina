@@ -57,6 +57,8 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
   registrirajRele({}); // Global Link do pravega releja samo v tekocem programu, nikoli v preizkusih
   // vnaprej dodeljene naloge agentov (24. 11. 2026): casovnik razporejevalnika; zamujene ob zagonu se NE zazenejo (»zamujeno, potrdi«)
   zazeniRazporejevalnik(dir);
+  // naloga 29: umaknjen shranjen model Claude -> naslednik z obvestilom, pred orkestratorjem in asistentko; brez omrezja
+  await import("./keys.server.ts").then((m) => m.preslikajUmaknjeneModele(dir)).catch(() => undefined);
   // orkestrator (25. 11. 2026): nadaljuje naloge iz shranjenega stanja in caka konec nalog pomocnikov; napaka ne podre zagona
   await import("./orkestrator.server.ts").then((m) => m.zazeniOrkestrator(dir)).catch(() => undefined);
   // telefon za asistentko: zazene se samo, ce ga je lastnik vklopil (privzeto izklopljeno); napaka ne podre zagona glasu

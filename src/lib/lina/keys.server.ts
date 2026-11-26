@@ -14,6 +14,7 @@ import {
   DEFAULT_BRAIN_MODELS,
   jeBrezplacenModel,
   jeTocnoBrezplacen,
+  naslednikUmaknjenegaClaude,
   PRIVZETI_BREZPLACNI,
   type BrainProvider,
   type BrainPublic,
@@ -432,6 +433,29 @@ async function zamenjajModelZdaj(
   // Obvestilo samo, ce je bil res zamenjan shranjen zapis.
   if (spremenjeno || pogovorStar) await zapisiPonudnike(root, { ponudniki, pogovor, zamenjavaModela: obvestilo.slice(0, 300) });
   return spremenjeno || pogovorStar;
+}
+
+/**
+ * Ob zagonu (naloga 29): shranjen model Claude, ki ga je Anthropic ze umaknil, se brez omrezja preslika na naslednika iz
+ * UMAKNJENI_MODELI_CLAUDE (klici, ponudnik, izbira asistentke) in lastnik dobi eno vrstico (zamenjavaModela). Vrne zamenjane.
+ */
+export async function preslikajUmaknjeneModele(dir?: string, danes = new Date().toISOString().slice(0, 10)): Promise<string[]> {
+  const root = resolveDataDir(dir);
+  const saved = await readFileState(root);
+  const t = await preberiPonudnike(root);
+  const shranjeni = [
+    saved?.provider === "claude" ? saved.model || DEFAULT_BRAIN_MODELS.claude : "",
+    t.ponudniki.claude ? t.ponudniki.claude.model || DEFAULT_BRAIN_MODELS.claude : "",
+    t.pogovor?.provider === "claude" ? t.pogovor.model : "",
+  ];
+  const zamenjani: string[] = [];
+  for (const staro of new Set(shranjeni.filter(Boolean))) {
+    const novo = naslednikUmaknjenegaClaude(staro, danes);
+    if (!novo) continue;
+    const obvestilo = `Anthropic je model ${staro} umaknil; Lina zdaj uporablja naslednika ${novo}.`;
+    if (await zamenjajModel("claude", staro, novo, obvestilo, root)) zamenjani.push(staro);
+  }
+  return zamenjani;
 }
 
 /** Samo kljuc, ki ga je lastnik shranil. Kljuc iz okolja se ne uporabi. */

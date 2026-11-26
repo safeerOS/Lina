@@ -123,6 +123,9 @@ export type RezultatPonudnika =
   | { ok: true; text: string; opozorilo?: string; povratek?: string }
   | { ok: false; sporocilo: string; vzrok?: VzrokNapake };
 
+/** D3 (naloga 29): ponudnik je vrnil ovojnico (choices/content/candidates) brez besedila. */
+export const PRAZEN_ODGOVOR = "Ponudnik je vrnil prazen odgovor.";
+
 /** Pravi vzrok zavrnitve ponudnika (lastnik 24. 11. 2026: uporabnik mora izvedeti pravi vzrok, ne »model: <ime>«). */
 export type VzrokNapake = "model" | "kljuc" | "dobroimetje" | "omejitev";
 
@@ -643,7 +646,9 @@ export async function preizkusiModel(input: ProviderCall): Promise<RezultatPonud
   if (jeBrezplacenModel(modelKlica) && input.brezplacniDovoljeni !== true) {
     return { ok: false, sporocilo: "OpenRouter: vklopite stikalo za brezplačne modele." };
   }
-  return callProviderNeposredno({ ...input, brezZamenjave: true, prehod: undefined });
+  const r = await callProviderNeposredno({ ...input, brezZamenjave: true, prehod: undefined });
+  // Model, ki pri 8 zetonih porabi vse za razmislek, vrne prazno ovojnico s 200: obstaja in dela (D3 velja za pravi odgovor).
+  return !r.ok && r.sporocilo === PRAZEN_ODGOVOR ? { ok: true, text: "" } : r;
 }
 
 /**
@@ -719,12 +724,26 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
       return { ok: false, sporocilo: hideSecret(`Ponudnik je zavrnil klic (${response.status}).`, secret), ...(vzrok ? { vzrok } : {}) };
     }
     let text = raw.trim();
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(raw) as Parameters<typeof readText>[0];
-      text = readText(parsed) || text;
-      zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(parsed), "pogovor");
+      parsed = JSON.parse(raw);
     } catch {
       /* Kratek odgovor je lahko golo besedilo. */
+    }
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const telo = parsed as Parameters<typeof readText>[0];
+      zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(telo), "pogovor");
+      // D3 (naloga 29): ovojnica ponudnika brez besedila ni uspeh - surovi JSON nikoli ne gre naprej kot odgovor.
+      if (["choices", "content", "candidates"].some((k) => Object.hasOwn(telo, k))) {
+        let iz = "";
+        try {
+          iz = readText(telo);
+        } catch {
+          /* napacna oblika ovojnice = prazno */
+        }
+        if (!iz) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
+        text = iz;
+      }
     }
     return { ok: true, text: hideSecret(text.slice(0, input.audio ? 2000 : mejaZnakov(input.najvecZnakov)), secret) };
   } catch (error) {
@@ -1067,10 +1086,10 @@ export function providerRequestZOrodji(
         ? [{ type: "text", text: moznosti.system, cache_control: { type: "ephemeral" } }]
         : moznosti.system
       : undefined;
+    // Naloga 29 (D1): Anthropic vrne 400 za temperature, ki ni privzet, na Claude 4.7 in novejsih (model-deprecations, 26. 11. 2026): moznosti.temperatura tu ne velja.
     body = {
       model,
       max_tokens: maxTokens,
-      temperature: temperatura,
       ...(systemField !== undefined ? { system: systemField } : {}),
       messages: sporocilaZaClaude(sporocila),
       ...(orodja.length > 0

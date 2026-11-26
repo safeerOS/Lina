@@ -474,7 +474,7 @@ export type BrainProvider = "gemini" | "vertex" | "openai" | "claude" | "grok" |
 /**
  * Privzeti modeli, preverjeni proti javni dokumentaciji ponudnikov 24. 11. 2026: gemini-2.0-flash ugasnjen (1. 6. 2026),
  * gpt-4.1-mini zastarel (nadomestek gpt-6-luna), claude-sonnet-4-5 se umakne 30. 11. 2026 (lastnik: claude-sonnet-5-5).
- * Ce ponudnik model kljub temu ne pozna, Lina sama izbere delujocega (samodejni-model.server.ts).
+ * Ce ponudnik model kljub temu ne pozna, Lina sama izbere delujocega (samodejni-model.server.ts). Umaknjeni Claude: UMAKNJENI_MODELI_CLAUDE.
  */
 export const DEFAULT_BRAIN_MODELS: Record<BrainProvider, string> = {
   gemini: "gemini-3.8-flash",
@@ -505,6 +505,31 @@ export const PRIPOROCENI_MODELI: Record<Exclude<BrainProvider, "custom">, readon
   // OmniRoute: »auto« je vedno prvi kandidat, ostali pridejo samo s seznama prehoda (samodejni-model.server.ts).
   omniroute: [DEFAULT_BRAIN_MODELS.omniroute],
 };
+
+/**
+ * Umaknjeni modeli Claude in naslednik po uradni tabeli Anthropic (platform.claude.com/docs/en/about-claude/model-deprecations,
+ * prebrano 26. 11. 2026). `umik` = datum umika; pred njim model se dela in lastnikova izbira ostane. Samo ID-ji, ki jih tabela
+ * izrecno nasteje (claude-sonnet-4, claude-opus-4-1 brez datuma tabela ne omenja: zanje velja zamenjava ob 404).
+ * claude-mythos-preview nima naslednika v tabeli, zato ga ni.
+ */
+export const UMAKNJENI_MODELI_CLAUDE: Readonly<Record<string, { naslednik: string; umik: string }>> = {
+  "claude-sonnet-4-5": { naslednik: "claude-sonnet-5-5", umik: "2026-11-30" },
+  "claude-sonnet-4-5-20250929": { naslednik: "claude-sonnet-5-5", umik: "2026-11-30" },
+  "claude-opus-4-5": { naslednik: "claude-opus-5-5", umik: "2027-01-22" },
+  "claude-opus-4-5-20251101": { naslednik: "claude-opus-5-5", umik: "2027-01-22" },
+  "claude-opus-4-1-20250805": { naslednik: "claude-opus-4-8", umik: "2026-08-05" },
+  "claude-opus-4-20250514": { naslednik: "claude-opus-4-8", umik: "2026-06-15" },
+  "claude-sonnet-4-20250514": { naslednik: "claude-sonnet-5-5", umik: "2026-06-15" },
+  "claude-3-7-sonnet-20250219": { naslednik: "claude-sonnet-5-5", umik: "2026-02-19" },
+  "claude-3-5-haiku-20241022": { naslednik: "claude-haiku-4-5-20251001", umik: "2026-02-19" },
+  "claude-3-haiku-20240307": { naslednik: "claude-haiku-4-5-20251001", umik: "2026-04-20" },
+};
+
+/** Naslednik modela Claude, ki je na dan `danes` (YYYY-MM-DD) ze umaknjen; null = model se dela ali ni v tabeli. */
+export function naslednikUmaknjenegaClaude(model: string, danes: string): string | null {
+  const z = Object.hasOwn(UMAKNJENI_MODELI_CLAUDE, model) ? UMAKNJENI_MODELI_CLAUDE[model] : undefined;
+  return z && danes >= z.umik ? z.naslednik : null;
+}
 
 /**
  * Brezplacni modeli OpenRouter (lastnik 24. 11. 2026): ponudnik lahko pozive uporabi za ucenje, zato so SAMO za asistentko.
