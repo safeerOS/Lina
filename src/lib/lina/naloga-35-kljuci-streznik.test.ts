@@ -182,6 +182,8 @@ test("naloga 35 (slepi S1): po odstranitvi kljuca v uporabi Lina ne preklopi sam
   assert.equal(await activeBrain(dir), null);
   await pregledKljucev(dir);
   assert.equal(await activeBrain(dir), null, "naslednji korak prazno mesto ne zapolni z drugim kljucem");
+  assert.ok(!(await readBrain(token, dir)).shranjeni?.some((x) => x.provider === "gemini"), "tudi ne za asistentko");
+  assert.ok(!(await pregledKljucev(dir)).kljuci.some((k) => k.vUporabi));
   // oddaljeno: telefon odstrani kljuc v uporabi, drugi kljuc istega ponudnika ostane neuporabljen
   const { dir: dir2, token: t2 } = await nova();
   await saveBrain({ provider: "gemini", key: K1 }, t2, dir2);
@@ -192,6 +194,7 @@ test("naloga 35 (slepi S1): po odstranitvi kljuca v uporabi Lina ne preklopi sam
   await t.izmenjaj(dir2, [{ ...g, cas: Date.now(), naprava: TEL, izbrisan: true, prej: `${g.cas}/${g.naprava}`, vrednost: "" }], prvi.odg.javni);
   await pregledKljucev(dir2);
   assert.equal(await activeBrain(dir2), null);
+  assert.ok(!(await readBrain(t2, dir2)).shranjeni?.some((x) => x.provider === "gemini"));
   assert.deepEqual((await pregledKljucev(dir2)).odstranjeni, ["gemini"]);
 });
 
