@@ -276,16 +276,22 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
         const stevilo = typeof a.stevilo === "number" ? a.stevilo : 1;
         const porabljeno = slikNaNalogo.get(k.nalogaId) ?? 0;
         if (porabljeno + stevilo > NAJVEC_SLIK_NA_NALOGO) return napaka(`Dosezena meja ${NAJVEC_SLIK_NA_NALOGO} slik na nalogo.`);
+        // rezervacija PRED prvim await (socasni klici iste naloge ne preberejo istega stanja); ponovni zagon stevec ponastavi,
+        // a nadaljevana naloga je okuzena (vsako ne-bralno orodje caka lastnika)
+        slikNaNalogo.set(k.nalogaId, porabljeno + stevilo);
         const mozgani = odv.slike?.mozgani ?? (async () => (await import("./keys.server.ts")).activeBrain(root));
         const izbira = izberiGeneratorSlik(await mozgani(), (a.kakovost as KakovostSlike | undefined) ?? "standard");
-        if (!izbira.ok) return napaka(izbira.sporocilo);
-        if (k.signal.aborted) return napaka("Naloga je bila ustavljena.");
-        // shortcut: stevec je v pomnilniku procesa (ponovni zagon ga ponastavi); trajen stevec, ce bo to kdaj zlorabljeno
-        slikNaNalogo.set(k.nalogaId, porabljeno + stevilo);
-        const { ustvariSliko } = await import("./slike-generator.server.ts");
+        if (!izbira.ok) {
+          slikNaNalogo.set(k.nalogaId, (slikNaNalogo.get(k.nalogaId) ?? stevilo) - stevilo);
+          return napaka(izbira.sporocilo);
+        }
+        const [{ ustvariSliko }, { googlePrevajalnik, verigaPrevajalnikov }] = await Promise.all([import("./slike-generator.server.ts"), import("./mediji-opis.server.ts")]);
+        // prevod samo prek Googla v lastnikovem projektu; brez rezerve v mozgane asistentke (lahko tretji, npr. OpenRouter - B9)
+        const g = { fetch: odv.slike?.fetch, zeton: odv.slike?.zeton };
+        const prevedi = odv.slike?.prevedi ?? verigaPrevajalnikov(googlePrevajalnik(izbira.projekt, { ...g, model: "nmt" }), googlePrevajalnik(izbira.projekt, { ...g, model: "llm" }));
         let izid;
         try {
-          izid = await ustvariSliko(root, a.opis, { ...odv.slike, projekt: izbira.projekt, model: izbira.model, stevilo, razmerje: a.razmerje, signal: k.signal });
+          izid = await ustvariSliko(root, a.opis, { ...odv.slike, prevedi, projekt: izbira.projekt, model: izbira.model, stevilo, razmerje: a.razmerje, signal: k.signal });
         } catch (e) {
           return napaka(`Slike ni bilo mogoce ustvariti: ${e instanceof Error ? e.message.slice(0, 200) : "napaka"}`);
         }

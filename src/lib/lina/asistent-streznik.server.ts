@@ -1266,48 +1266,66 @@ export class AsistentStreznik {
   private async seznamSlik(url: URL) {
     const { posiljatelj, t } = this.podpisPoizvedbe(url);
     await this.preveri(posiljatelj, t, (c, e) => nizSeznamaSlik(posiljatelj as string, c, e));
-    const slike = (await preberiKnjiznico(this.m.root)).slike
+    // branje s telefona ne premakne pokvarjene datoteke (to naredi samo lastnikova pot); polja so omejena (slike.json je lokalni vnos)
+    const slike = (await preberiKnjiznico(this.m.root, { premakniPokvarjen: false })).slike
       .filter((s) => typeof s.datoteka === "string" && DATOTEKA_KNJIZNICE.test(s.datoteka))
       .slice(0, 60)
       .map((s) => {
         const pripona = s.datoteka.split(".")[1] as keyof typeof MIME_KNJIZNICE;
-        return { id: s.id, serija: s.serija, cas: s.cas, opis: String(s.opis ?? "").slice(0, 200), model: String(s.model ?? "").slice(0, 60), bajtov: s.bajtov, mime: MIME_KNJIZNICE[pripona], vrsta: pripona === "mp4" ? "video" : "slika" };
+        return {
+          id: s.id, serija: typeof s.serija === "string" && /^[a-z0-9]{12}$/.test(s.serija) ? s.serija : "", cas: String(s.cas ?? "").slice(0, 30),
+          opis: String(s.opis ?? "").slice(0, 200), model: String(s.model ?? "").slice(0, 60), bajtov: Number.isSafeInteger(s.bajtov) ? s.bajtov : 0,
+          mime: MIME_KNJIZNICE[pripona], vrsta: pripona === "mp4" ? "video" : "slika",
+        };
       });
     return { slike: dogodkiDoMeje(slike, NAJVEC_ODGOVOR_DOGODKOV_B) };
   }
 
   /**
-   * Naloga 20: ena slika ali video iz knjiznice kot surovi bajti (kot APK): id iz knjiznice, ime po vzorcu, odpre se brez sledenja
-   * povezavi, vrsta in velikost se preverita na odprti datoteki, sha256 iz ISTE datoteke v glavi x-lina-sha256.
+   * Naloga 20: ena slika ali video iz knjiznice kot surovi bajti: id iz knjiznice, ime po vzorcu, mapa ni povezava, datoteka se odpre
+   * brez sledenja povezavi, velikost = zapis v knjiznici, vsebina = pripona (PNG/JPEG/MP4), sha256 in telo iz istega branja.
    */
   private async slikaKnjiznice(url: URL, res: ServerResponse): Promise<void> {
     const { posiljatelj, t } = this.podpisPoizvedbe(url);
     const id = url.searchParams.get("id") ?? "";
     if (!/^[a-z0-9]{12}$/.test(id)) throw new Napaka(400, "oblika", "Neveljaven id.");
     await this.preveri(posiljatelj, t, (c, e) => nizSlike(posiljatelj as string, id, c, e));
-    const z = (await preberiKnjiznico(this.m.root)).slike.find((s) => s.id === id);
+    const z = (await preberiKnjiznico(this.m.root, { premakniPokvarjen: false })).slike.find((s) => s.id === id);
     if (!z || typeof z.datoteka !== "string" || !DATOTEKA_KNJIZNICE.test(z.datoteka)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
     const pripona = z.datoteka.split(".")[1] as keyof typeof MIME_KNJIZNICE;
+    const mapa = path.join(this.m.root, MAPA_SLIK);
+    // O_NOFOLLOW velja samo za zadnji del poti: mapa slik sama ne sme biti povezava drugam
+    const sm = await lstat(mapa).catch(() => null);
+    if (!sm || sm.isSymbolicLink() || !sm.isDirectory()) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
     let ds;
     try {
-      ds = await open(path.join(this.m.root, MAPA_SLIK, z.datoteka), fsKonstante.O_RDONLY | (fsKonstante.O_NOFOLLOW ?? 0) | (fsKonstante.O_NONBLOCK ?? 0));
+      ds = await open(path.join(mapa, z.datoteka), fsKonstante.O_RDONLY | (fsKonstante.O_NOFOLLOW ?? 0) | (fsKonstante.O_NONBLOCK ?? 0));
     } catch {
       throw new Napaka(404, "ni", "Slike ni v knjiznici.");
     }
+    let bajti: Buffer;
     try {
       const st = await ds.stat();
-      if (!st.isFile() || st.size === 0 || st.size > (pripona === "mp4" ? NAJVEC_BAJTOV_VIDEA : NAJVEC_BAJTOV_SLIKE)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
-      if (res.destroyed) return;
-      const h = createHash("sha256");
-      for await (const k of ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false })) h.update(k as Buffer);
-      if (res.destroyed) return;
-      res.writeHead(200, { "content-type": MIME_KNJIZNICE[pripona], "content-length": st.size, "cache-control": "no-store", "x-lina-sha256": h.digest("hex") });
-      await pipeline(ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false }), res).catch(() => {
-        res.destroy();
-      });
+      if (!st.isFile() || st.size === 0 || st.size !== z.bajtov || st.size > (pripona === "mp4" ? NAJVEC_BAJTOV_VIDEA : NAJVEC_BAJTOV_SLIKE)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
+      // ENO branje: telo, vsota in preverba vrste so iz istih bajtov
+      bajti = Buffer.alloc(st.size);
+      let n = 0;
+      while (n < st.size) {
+        const { bytesRead } = await ds.read(bajti, n, st.size - n, n);
+        if (!bytesRead) break;
+        n += bytesRead;
+      }
+      if (n !== st.size) throw new Napaka(409, "vsota", "Datoteka se je spremenila.");
     } finally {
       await ds.close();
     }
+    const png = bajti.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const jpg = bajti[0] === 0xff && bajti[1] === 0xd8 && bajti[2] === 0xff;
+    const mp4 = bajti.length >= 12 && bajti.subarray(4, 8).toString("latin1") === "ftyp";
+    if (!(pripona === "png" ? png : pripona === "jpg" ? jpg : mp4)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
+    if (res.destroyed) return;
+    res.writeHead(200, { "content-type": MIME_KNJIZNICE[pripona], "content-length": bajti.length, "cache-control": "no-store", "x-lina-sha256": createHash("sha256").update(bajti).digest("hex") });
+    res.end(bajti);
   }
 
   private neznan(naslov: string): void {

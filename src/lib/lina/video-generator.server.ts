@@ -10,14 +10,14 @@
  * NEPREVERJENO: poraba kreditov na sekundo videa. Komentarji brez sumnikov.
  */
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { vertexAccessToken } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
 import { activeBrain } from "./keys.server.ts";
 import { prevajalnikPoZahtevnosti, pripraviPoziv, type Prevajalnik } from "./mediji-opis.server.ts";
-import { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_V_KNJIZNICI, NAJVEC_ZNAKOV_OPISA } from "./slike-generator.server.ts";
-import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
+import { NAJVEC_ZNAKOV_OPISA, dodajVKnjiznico, mapaKnjiznice, teloZMejo } from "./slike-generator.server.ts";
+import { resolveDataDir } from "./store.server.ts";
 
 /** Oba modela sta 26. 11. 2026 vrnila MP4 na pravo zahtevo (projekt lastnika, us-central1). */
 export const MODELI_VIDEA_PREVERJENI = "2026-11-26";
@@ -134,8 +134,7 @@ export async function generirajVideo(opis: unknown, token: string | null, dir?: 
     await cakaj(m.premorMs ?? PREMOR_POIZVEDBE_MS);
     const p = await f(poizvedba, { method: "POST", redirect: "error", headers: glave, body: JSON.stringify({ operationName: ime }), signal: AbortSignal.timeout(60_000) });
     if (!p.ok) throw new Error(`Poizvedba videa je bila zavrnjena (${p.status}).`);
-    const besediloOdg = await p.text();
-    if (besediloOdg.length > Math.ceil((NAJVEC_BAJTOV_VIDEA * 4) / 3) + 65_536) throw new Error("Video je prevelik.");
+    const besediloOdg = await teloZMejo(p, Math.ceil((NAJVEC_BAJTOV_VIDEA * 4) / 3) + 65_536, "Video je prevelik.");
     let op: unknown;
     try {
       op = JSON.parse(besediloOdg);
@@ -144,8 +143,7 @@ export async function generirajVideo(opis: unknown, token: string | null, dir?: 
     }
     video = razberiVideo(op);
   }
-  const mapa = path.join(root, MAPA_SLIK);
-  await mkdir(mapa, { recursive: true, mode: 0o700 });
+  const mapa = await mapaKnjiznice(root);
   const nov = m.nakljucno ?? nakljucniId;
   const id = nov();
   const datoteka = `${id}.mp4`;
@@ -153,13 +151,6 @@ export async function generirajVideo(opis: unknown, token: string | null, dir?: 
   await writeFile(pot, video, { mode: 0o600, flag: "wx" });
   await chmod(pot, 0o600);
   const zapis: ZapisVidea = { id, serija: (m.serija as string | undefined) ?? nov(), cas: (m.zdaj ?? (() => new Date()))().toISOString(), opis: besedilo, poziv, prevedeno, model, datoteka, bajtov: video.length, vrsta: "video", sekund };
-  let prej: unknown[] = [];
-  try {
-    const k = await readJsonFile<{ slike?: unknown[] }>(root, DATOTEKA_SLIK, { premakniPokvarjen: true });
-    prej = Array.isArray(k?.slike) ? k.slike : [];
-  } catch {
-    prej = [];
-  }
-  await writeJson(root, DATOTEKA_SLIK, { slike: [zapis, ...prej].slice(0, NAJVEC_V_KNJIZNICI) });
+  await dodajVKnjiznico(root, [zapis]);
   return zapis;
 }

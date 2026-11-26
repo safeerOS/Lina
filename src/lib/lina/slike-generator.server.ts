@@ -10,17 +10,19 @@
  * NEPREVERJENO: oblika pravega odgovora ob zavrnitvi (filter) - obravnavano kot »ni slike«. Komentarji brez sumnikov.
  */
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { vertexAccessToken } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
 import { prevajalnikPoZahtevnosti, pripraviPoziv, type Prevajalnik } from "./mediji-opis.server.ts";
 import { activeBrain } from "./keys.server.ts";
-import { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, preberiKnjiznico, type Knjiznica, type ZapisSlike } from "./slike-knjiznica.server.ts";
-import { resolveDataDir, writeJson } from "./store.server.ts";
+import {
+  DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_V_KNJIZNICI, dodajVKnjiznico, mapaKnjiznice, preberiKnjiznico, type Knjiznica, type ZapisSlike,
+} from "./slike-knjiznica.server.ts";
+import { resolveDataDir } from "./store.server.ts";
 
 // Knjiznica je v slike-knjiznica.server.ts (pot telefona jo bere brez generatorja); ponovni izvoz za obstojece klicatelje.
-export { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, preberiKnjiznico, type Knjiznica, type ZapisSlike };
+export { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_V_KNJIZNICI, dodajVKnjiznico, mapaKnjiznice, preberiKnjiznico, type Knjiznica, type ZapisSlike };
 /** Datum, ko je vsak model spodaj odgovoril na pravo zahtevo generateContent s sliko (projekt lastnika, lokacija global). */
 export const MODELI_PREVERJENI = "2026-11-26";
 /** Cas odgovora 26. 11. 2026: flash-lite 4,2 s (JPEG), 2.5-flash 5,8 s, flash 11,6 s, nano-banana-2.1 12,6 s, pro 16,4 s. */
@@ -32,7 +34,6 @@ export type KakovostSlike = (typeof KAKOVOSTI_SLIK)[number];
 export const MODEL_PO_KAKOVOSTI: Record<KakovostSlike, ModelSlike> = { hitri: "gemini-3.1-flash-lite-image", standard: "gemini-3.1-flash-image", ultra: "gemini-3-pro-image" };
 export const NAJVEC_ZNAKOV_OPISA = 2000;
 export const NAJVEC_SLIK_NA_ZAHTEVO = 4;
-export const NAJVEC_V_KNJIZNICI = 500;
 export const ROK_ZAHTEVE_MS = 60_000;
 export const RAZMERJA_SLIK = ["1:1", "3:4", "4:3", "9:16", "16:9"] as const;
 
@@ -182,8 +183,7 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
       signal: m.signal ? AbortSignal.any([rok, m.signal]) : rok,
     });
     if (!odg.ok) throw new Error(`Ponudnik slik je zavrnil zahtevo (${odg.status}).`);
-    const besediloOdg = await odg.text();
-    if (besediloOdg.length > NAJVEC_ZNAKOV_ODGOVORA) throw new Error("Odgovor ponudnika slik je prevelik.");
+    const besediloOdg = await teloZMejo(odg, NAJVEC_ZNAKOV_ODGOVORA, "Odgovor ponudnika slik je prevelik.");
     let json: unknown;
     try {
       json = JSON.parse(besediloOdg);
@@ -194,8 +194,9 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
     slike.push(...r.slike);
     zavrnjenih += r.zavrnjenih;
   }
-  const mapa = path.join(root, MAPA_SLIK);
-  await mkdir(mapa, { recursive: true, mode: 0o700 });
+  // ustavljena naloga ne objavi slike (prekinitev med zadnjo zahtevo in zapisom)
+  m.signal?.throwIfAborted();
+  const mapa = await mapaKnjiznice(root);
   const nov = m.nakljucno ?? nakljucniId;
   const serija = (m.serija as string | undefined) ?? nov();
   const cas = (m.zdaj ?? (() => new Date()))().toISOString();
@@ -208,10 +209,22 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
     await chmod(pot, 0o600);
     zapisi.push({ id, serija, cas, opis: besedilo, poziv, prevedeno, model, datoteka, bajtov: s.bajti.length });
   }
-  if (zapisi.length) {
-    const k = await preberiKnjiznico(root);
-    // Najnovejse na vrhu; knjiznica ima mejo (stare datoteke ostanejo na disku - brisanje samo po ukazu lastnika).
-    await writeJson(root, DATOTEKA_SLIK, { slike: [...zapisi, ...k.slike].slice(0, NAJVEC_V_KNJIZNICI) });
-  }
+  if (zapisi.length) await dodajVKnjiznico(root, zapisi);
   return { slike: zapisi, zavrnjenih };
+}
+
+/** Telo odgovora po kosih z mejo znakov (UTF-8 bajti): pokvarjen ali zlonameren odgovor ne napolni pomnilnika procesa. */
+export async function teloZMejo(odg: Response, meja: number, sporocilo: string): Promise<string> {
+  if (!odg.body) return "";
+  const kosi: Buffer[] = [];
+  let n = 0;
+  for await (const k of odg.body as unknown as AsyncIterable<Uint8Array>) {
+    n += k.byteLength;
+    if (n > meja) {
+      await odg.body.cancel().catch(() => undefined);
+      throw new Error(sporocilo);
+    }
+    kosi.push(Buffer.from(k));
+  }
+  return Buffer.concat(kosi).toString("utf8");
 }

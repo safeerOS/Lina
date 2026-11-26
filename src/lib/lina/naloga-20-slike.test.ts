@@ -448,3 +448,159 @@ describe("naloga 20: slika na telefon", () => {
     }
   });
 });
+
+// --- najdbe slepega pregleda 20 in CodeRabbita (preizkusi padejo brez popravka) ----------------------------------------
+
+async function streznikSlik(dir: string) {
+  await pripraviKanal([{ id: ANA.id, kljuc: ANA.kljuc }], dir);
+  const s = new AsistentStreznik({ root: dir, izvajalec: neIzvajalec, dnevnik: () => {} });
+  const { vrata, odtis } = await s.zazeni();
+  const { cert } = await potrdiloAsistenta(dir);
+  return {
+    slika: (id: string) => zahteva(vrata, cert, odtis, q("/slika", ANA, podpisi(ANA, (c, e) => nizSlike(ANA.id, id, c, e)), `&id=${id}`)),
+    seznam: () => zahteva(vrata, cert, odtis, q("/slike", ANA, podpisi(ANA, (c, e) => nizSeznamaSlik(ANA.id, c, e)))),
+    ustavi: () => s.ustavi(),
+  };
+}
+const zapisK = (id: string, datoteka: string, bajtov: number, dodatno: Record<string, unknown> = {}) =>
+  ({ id, serija: id, cas: "2026-11-26T01:00:00.000Z", opis: "o", poziv: "p", prevedeno: false, model: "m", datoteka, bajtov, ...dodatno });
+
+describe("naloga 20: popravki po pregledu", () => {
+  it("sočasni generaciji (lastnik + naloga): obe sliki ostaneta v knjiznici", async () => {
+    const { dir, token } = await lastnik();
+    let spusti!: () => void;
+    const vrata = new Promise<void>((r) => (spusti = r));
+    let cakajo = 0;
+    const f = (async () => {
+      if (++cakajo === 2) spusti();
+      await vrata;
+      return new Response(JSON.stringify(odgovorFlash()), { status: 200 });
+    }) as typeof fetch;
+    const m = { fetch: f, zeton: async () => ZETON, projekt: "moj-projekt", prevedi: PREVOD, nakljucno: ids };
+    const [a, b] = await Promise.all([generirajSliko("pes ena", token, dir, m), generirajSliko("pes dva", token, dir, m)]);
+    assert.deepEqual((await knjiznicaSlik(token, dir)).slike.map((s) => s.id).sort(), [a.slike[0]!.id, b.slike[0]!.id].sort());
+  });
+
+  it("odgovor ponudnika 120 MB: branje se ustavi blizu meje (ne cel odgovor v pomnilnik)", async () => {
+    const { dir, token } = await lastnik();
+    let prebrano = 0;
+    const KOS = new Uint8Array(1024 * 1024).fill(0x61);
+    const f = (async () => new Response(new ReadableStream({
+      pull(c) {
+        if (prebrano >= 120 * 1024 * 1024) return c.close();
+        prebrano += KOS.length;
+        c.enqueue(KOS);
+      },
+    }), { status: 200 })) as typeof fetch;
+    await assert.rejects(generirajSliko("pes", token, dir, { fetch: f, zeton: async () => ZETON, projekt: "moj-projekt", prevedi: PREVOD }), /prevelik/);
+    assert.ok(prebrano < 40 * 1024 * 1024, `prebrano ${prebrano} B`);
+  });
+
+  it("prekinitev po odgovoru ponudnika, pred zapisom: nic na disku", async () => {
+    const { dir, token } = await lastnik();
+    const ac = new AbortController();
+    const f = (async () => {
+      ac.abort();
+      return new Response(JSON.stringify(odgovorFlash()), { status: 200 });
+    }) as typeof fetch;
+    await assert.rejects(generirajSliko("pes", token, dir, { fetch: f, zeton: async () => ZETON, projekt: "moj-projekt", prevedi: PREVOD, signal: ac.signal }));
+    await assert.rejects(stat(path.join(dir, DATOTEKA_SLIK)));
+  });
+
+  it("orodje: opis gre samo v lastnikov Google projekt - ob neuspelem prevodu NE k mozganom asistentke (OpenRouter)", async () => {
+    const { root } = await okolje();
+    const token = await setupOwner("geslo-test-1234", root);
+    const { shraniKljucAsistentke, pogovorBrain } = await import("./keys.server.ts");
+    await shraniKljucAsistentke({ key: "sk-or-v1-izmisljen-kljuc-asistentke-2020", soglasje: true }, token, root);
+    assert.equal((await pogovorBrain(root))?.provider, "openrouter", "predpogoj: asistentka na OpenRouter");
+    const naslovi: string[] = [];
+    const prej = globalThis.fetch;
+    globalThis.fetch = (async (u: string | URL | Request) => {
+      const url = String(u);
+      naslovi.push(new URL(url).hostname);
+      if (url.includes(":generateContent")) return new Response(JSON.stringify(odgovorFlash()), { status: 200 });
+      if (url.startsWith("https://translation.googleapis.com/")) return new Response("napaka", { status: 500 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "A dog on a meadow" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    try {
+      const o = poImenu(orodjaLine(root, { slike: { mozgani: vertex, zeton: async () => ZETON, nakljucno: ids } })).get("ustvari_sliko")!;
+      const izid = await o.izvedi({ opis: "pes na travniku z zasebnimi podatki" }, ctx("o-000000000prevod"));
+      assert.ok("ok" in izid && izid.ok, JSON.stringify(izid));
+    } finally {
+      globalThis.fetch = prej;
+    }
+    assert.ok(naslovi.includes("aiplatform.googleapis.com"), naslovi.join(","));
+    assert.deepEqual(naslovi.filter((h) => !h.endsWith(".googleapis.com")), [], naslovi.join(","));
+  });
+
+  it("orodje: socasni klici iste naloge ne presezejo meje (stevec rezerviran pred cakanjem)", async () => {
+    const { root } = await okolje();
+    const { f, klici } = lazni([{ status: 200, telo: odgovorFlash() }]);
+    let spusti!: () => void;
+    const vrata = new Promise<void>((r) => (spusti = r));
+    const o = poImenu(orodjaLine(root, { slike: { mozgani: async () => (await vrata, vertex()), fetch: f, zeton: async () => ZETON, prevedi: PREVOD, nakljucno: ids } })).get("ustvari_sliko")!;
+    const tekoci = Array.from({ length: NAJVEC_SLIK_NA_NALOGO + 3 }, (_, i) => o.izvedi({ opis: `pes ${i}` }, ctx("o-0000000socasno")));
+    spusti();
+    const izidi = await Promise.all(tekoci);
+    assert.equal(izidi.filter((r) => "ok" in r && r.ok).length, NAJVEC_SLIK_NA_NALOGO);
+    assert.equal(klici.length, NAJVEC_SLIK_NA_NALOGO);
+  });
+
+  it("telefon: mapa slike/ kot povezava drugam - datoteke ne poslje", async () => {
+    const { dir } = await lastnik();
+    const drugam = await mkdtemp(path.join(tmpdir(), "lina-n20-drugam-"));
+    await writeFile(path.join(drugam, "aaaaaaaaaaaa.png"), PNG);
+    const { symlink } = await import("node:fs/promises");
+    await symlink(drugam, path.join(dir, MAPA_SLIK));
+    await writeFile(path.join(dir, DATOTEKA_SLIK), JSON.stringify({ slike: [zapisK("aaaaaaaaaaaa", "aaaaaaaaaaaa.png", PNG.length)] }));
+    const s = await streznikSlik(dir);
+    try {
+      assert.notEqual((await s.slika("aaaaaaaaaaaa")).status, 200);
+    } finally {
+      await s.ustavi();
+    }
+  });
+
+  it("telefon: vsebina se mora ujemati s pripono (PNG/JPEG/MP4) in velikostjo iz zapisa", async () => {
+    const { dir } = await lastnik();
+    await mkdir(path.join(dir, MAPA_SLIK), { recursive: true, mode: 0o700 });
+    const svg = Buffer.from("<svg onload=alert(1)>ni png</svg>");
+    await writeFile(path.join(dir, MAPA_SLIK, "bbbbbbbbbbbb.png"), svg);
+    await writeFile(path.join(dir, MAPA_SLIK, "cccccccccccc.png"), PNG);
+    await writeFile(path.join(dir, MAPA_SLIK, "dddddddddddd.png"), PNG);
+    await writeFile(path.join(dir, DATOTEKA_SLIK), JSON.stringify({ slike: [
+      zapisK("bbbbbbbbbbbb", "bbbbbbbbbbbb.png", svg.length),
+      zapisK("cccccccccccc", "cccccccccccc.png", PNG.length + 1),
+      zapisK("dddddddddddd", "dddddddddddd.png", PNG.length),
+    ] }));
+    const s = await streznikSlik(dir);
+    try {
+      assert.notEqual((await s.slika("bbbbbbbbbbbb")).status, 200, "ne-PNG");
+      assert.notEqual((await s.slika("cccccccccccc")).status, 200, "velikost");
+      const ok = await s.slika("dddddddddddd");
+      assert.equal(ok.status, 200);
+      assert.equal(ok.glave["x-lina-sha256"], createHash("sha256").update(ok.telo).digest("hex"));
+    } finally {
+      await s.ustavi();
+    }
+  });
+
+  it("telefon: seznam omeji polja iz slike.json (dolga serija ne potisne odgovora cez mejo telefona)", async () => {
+    const { dir } = await lastnik();
+    const slike = Array.from({ length: 40 }, (_, i) => zapisK(`e${String(i).padStart(11, "0")}`, `e${String(i).padStart(11, "0")}.png`, 10, { serija: "s".repeat(5000), cas: "c".repeat(5000), bajtov: "x".repeat(5000) }));
+    await writeFile(path.join(dir, DATOTEKA_SLIK), JSON.stringify({ slike }));
+    const s = await streznikSlik(dir);
+    try {
+      const r = await s.seznam();
+      assert.equal(r.status, 200);
+      const t = JSON.parse(r.telo.toString("utf8")) as { slike: Array<{ serija: string; cas: string; bajtov: unknown }> };
+      assert.equal(t.slike.length, 40);
+      for (const x of t.slike) {
+        assert.ok(x.serija.length <= 12 && x.cas.length <= 30, JSON.stringify(x).slice(0, 80));
+        assert.equal(typeof x.bajtov, "number");
+      }
+    } finally {
+      await s.ustavi();
+    }
+  });
+});
