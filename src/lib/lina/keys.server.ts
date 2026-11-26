@@ -4,7 +4,7 @@ import { chmod, link, lstat, mkdir, open, unlink, type FileHandle } from "node:f
 import path from "node:path";
 import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
-import { callProvider, gcpLocation, gcpProject, hideSecret, razlogVzroka } from "./providers.ts";
+import { callProvider, gcpLocation, gcpProject, hideSecret, PRAZEN_ODGOVOR, razlogVzroka, type RezultatPonudnika } from "./providers.ts";
 import { normirajNaslov } from "./lastni-streznik.ts";
 import { OMNIROUTE_PRIVZETI_NASLOV, veljavenNaslovOmniroute } from "./omniroute.ts";
 import { imaPosixDovoljenja } from "./platforma.server.ts";
@@ -441,6 +441,12 @@ async function zamenjajModelZdaj(
  */
 export async function preslikajUmaknjeneModele(dir?: string, danes = new Date().toISOString().slice(0, 10)): Promise<string[]> {
   const root = resolveDataDir(dir);
+  // N3: pokvarjen ponudniki.json bi preberiPonudnike prebral kot prazen in zamenjava bi ga prepisala brez drugih kljucev
+  try {
+    await readJsonFile<PonudnikiFile>(root, PONUDNIKI_DATOTEKA);
+  } catch {
+    return [];
+  }
   const saved = await readFileState(root);
   const t = await preberiPonudnike(root);
   const shranjeni = [
@@ -448,14 +454,20 @@ export async function preslikajUmaknjeneModele(dir?: string, danes = new Date().
     t.ponudniki.claude ? t.ponudniki.claude.model || DEFAULT_BRAIN_MODELS.claude : "",
     t.pogovor?.provider === "claude" ? t.pogovor.model : "",
   ];
-  const zamenjani: string[] = [];
-  for (const staro of new Set(shranjeni.filter(Boolean))) {
+  const pari = [...new Set(shranjeni.filter(Boolean))].flatMap((staro) => {
     const novo = naslednikUmaknjenegaClaude(staro, danes);
-    if (!novo) continue;
-    const obvestilo = `Anthropic je model ${staro} umaknil; Lina zdaj uporablja naslednika ${novo}.`;
-    if (await zamenjajModel("claude", staro, novo, obvestilo, root)) zamenjani.push(staro);
-  }
+    return novo ? [[staro, novo] as const] : [];
+  });
+  // N4: eno obvestilo za vse zamenjave (vsak zapis zamenjave prepise prejsnjega)
+  const obvestilo = `Anthropic je umaknil ${pari.map(([s, n]) => `${s} (zdaj ${n})`).join(", ")}; Lina uporablja naslednika.`;
+  const zamenjani: string[] = [];
+  for (const [staro, novo] of pari) if (await zamenjajModel("claude", staro, novo, obvestilo, root)) zamenjani.push(staro);
   return zamenjani;
+}
+
+/** Preverba z 8 zetoni: prazna ovojnica s 200 (model je porabil zetone za razmislek) pomeni, da kljuc in model delata (N1). */
+function prazenJeOdziv(r: RezultatPonudnika): RezultatPonudnika {
+  return !r.ok && r.sporocilo === PRAZEN_ODGOVOR ? { ok: true, text: "" } : r;
 }
 
 /** Samo kljuc, ki ga je lastnik shranil. Kljuc iz okolja se ne uporabi. */
@@ -783,22 +795,24 @@ export async function checkBrain(
     const shranjen = zapis && veljavenNaslovOmniroute(zapis.naslov) === naslov ? skrivnostZapisa("omniroute", zapis, await masterKey(root)) : null;
     const kljuc = typed || shranjen;
     if (!kljuc) return { ok: false, sporocilo: "Ključ ni nastavljen." };
-    const r = await callProvider({ provider, model, key: kljuc, naslov, text: "Odgovori samo z besedo: da.", maxTokens: 8, brezZamenjave: true, vsebinaKlica: false });
+    const r = prazenJeOdziv(await callProvider({ provider, model, key: kljuc, naslov, text: "Odgovori samo z besedo: da.", maxTokens: 8, brezZamenjave: true, vsebinaKlica: false }));
     if (!r.ok) return { ok: false, sporocilo: r.vzrok === "model" ? razlogVzroka(provider, "model") : r.sporocilo };
     return { ok: true, sporocilo: "OmniRoute deluje." };
   }
   const stored = saved && saved.provider === provider ? decrypt(saved, await masterKey(root)) : null;
   const key = typed || stored || envKey(provider);
   if (!key) return { ok: false, sporocilo: "Ključ ni nastavljen." };
-  const result = await callProvider({
-    provider,
-    model,
-    key,
-    text: "Odgovori samo z besedo: da.",
-    maxTokens: 8,
-    // Preverba ne zamenja shranjenega modela; vzrok pove razumljivo (model, kljuc, dobroimetje, omejitev).
-    brezZamenjave: true,
-  });
+  const result = prazenJeOdziv(
+    await callProvider({
+      provider,
+      model,
+      key,
+      text: "Odgovori samo z besedo: da.",
+      maxTokens: 8,
+      // Preverba ne zamenja shranjenega modela; vzrok pove razumljivo (model, kljuc, dobroimetje, omejitev).
+      brezZamenjave: true,
+    }),
+  );
   // Samo »model ni na voljo« dobi novo besedilo; ostala sporocila (in podrobna OpenRouter) ostanejo kot prej.
   if (!result.ok) return { ok: false, sporocilo: result.vzrok === "model" ? razlogVzroka(provider, "model") : result.sporocilo };
   return { ok: true, sporocilo: "Ključ deluje." };
@@ -1065,7 +1079,7 @@ export async function preveriAsistentko(token: string | null, dir?: string): Pro
     const stanje = await preberiPonudnike(root);
     return { ok: false, sporocilo: stanje.pogovor ? await razlogBrezAsistentke(root) : "Ključ ni nastavljen." };
   }
-  const result = await callProvider({ ...brain, text: "Odgovori samo z besedo: da.", maxTokens: 8, vsebinaKlica: false, timeoutMs: 20_000 });
+  const result = prazenJeOdziv(await callProvider({ ...brain, text: "Odgovori samo z besedo: da.", maxTokens: 8, vsebinaKlica: false, timeoutMs: 20_000 }));
   if (!result.ok) return { ok: false, sporocilo: hideSecret(result.sporocilo, brain.key) };
   return { ok: true, sporocilo: `Asistentka deluje (${brain.model}).`, ...(result.povratek ? { opozorilo: result.povratek } : {}) };
 }

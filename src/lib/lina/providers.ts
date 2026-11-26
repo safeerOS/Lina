@@ -123,7 +123,7 @@ export type RezultatPonudnika =
   | { ok: true; text: string; opozorilo?: string; povratek?: string }
   | { ok: false; sporocilo: string; vzrok?: VzrokNapake };
 
-/** D3 (naloga 29): ponudnik je vrnil ovojnico (choices/content/candidates) brez besedila. */
+/** D3 (naloga 29): ponudnik je vrnil JSON (ovojnico ali drug predmet) brez besedila. */
 export const PRAZEN_ODGOVOR = "Ponudnik je vrnil prazen odgovor.";
 
 /** Pravi vzrok zavrnitve ponudnika (lastnik 24. 11. 2026: uporabnik mora izvedeti pravi vzrok, ne »model: <ime>«). */
@@ -421,12 +421,14 @@ async function zNaslovomOmniroute(input: ProviderCall): Promise<ProviderCall> {
 }
 
 function readText(json: {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
   content?: Array<{ text?: string }>;
   candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 }): string {
+  const c = json.choices?.[0]?.message?.content;
   return (
-    json.choices?.[0]?.message?.content ??
+    // N8: OpenAI-zdruzljivi (OpenRouter) lahko vrnejo content kot polje delov
+    (Array.isArray(c) ? c.map((d) => (typeof d?.text === "string" ? d.text : "")).join("") : c) ??
     json.content?.map((part) => part.text ?? "").join("") ??
     json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ??
     ""
@@ -730,20 +732,19 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
     } catch {
       /* Kratek odgovor je lahko golo besedilo. */
     }
-    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    // D3 (naloga 29): JSON predmet ali polje brez besedila (prazna ovojnica, promptFeedback, {error} s 200) ni uspeh in surovi JSON
+    // nikoli ne gre naprej kot odgovor. Lasten streznik (custom) ima svojo pot in sem ne pride.
+    if (parsed !== null && typeof parsed === "object") {
       const telo = parsed as Parameters<typeof readText>[0];
-      zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(telo), "pogovor");
-      // D3 (naloga 29): ovojnica ponudnika brez besedila ni uspeh - surovi JSON nikoli ne gre naprej kot odgovor.
-      if (["choices", "content", "candidates"].some((k) => Object.hasOwn(telo, k))) {
-        let iz = "";
-        try {
-          iz = readText(telo);
-        } catch {
-          /* napacna oblika ovojnice = prazno */
-        }
-        if (!iz) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
-        text = iz;
+      if (!Array.isArray(parsed)) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(telo), "pogovor");
+      let iz = "";
+      try {
+        iz = Array.isArray(parsed) ? "" : readText(telo);
+      } catch {
+        /* napacna oblika ovojnice = prazno */
       }
+      if (!iz) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
+      text = iz;
     }
     return { ok: true, text: hideSecret(text.slice(0, input.audio ? 2000 : mejaZnakov(input.najvecZnakov)), secret) };
   } catch (error) {
