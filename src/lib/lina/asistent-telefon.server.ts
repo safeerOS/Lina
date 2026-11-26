@@ -36,7 +36,7 @@ import { nastaviDodatekZaTelefon, opisStanjaDodatkov, stanjeDodatkovZaTelefon } 
 import { kanalSeznamN8n, kanalUstvariN8n, kanalZazeniN8n, telefonPotrdiN8n, telefonPredlogN8n, telefonStanjeN8n } from "./n8n.server.ts";
 import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gradnje-github.server.ts";
 import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
-import { odpriSejoClaude, zadnjiRazlogSeje, type RazlogSeje } from "./seja-claude.server.ts";
+import { odpriSejoClaude, zadnjiRazlogSeje, zapisiRazlogSeje, type RazlogSeje } from "./seja-claude.server.ts";
 import { opozoriloPotrjeno } from "./opozorilo.server.ts";
 import { telefonOdgovor, telefonVprasanja } from "./vprasanja-agentov.server.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
@@ -441,7 +441,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         // naloga 18: stikalo se prebere ob vsaki nalogi (izklop velja takoj); streznik klice samo po preverbi podpisa naprave
         // brez potrjenega opozorila ob prvem zagonu agentov (lastnik 24. 11.) Lina ne zazene nobenega agenta - tudi seje ne (slepi pregled 18 N6)
         odpriSejoClaude: async () => !(await preberiNastavitve(root)).samodejniAgenti ? { ok: false, razlog: "izklopljeno" }
-          : !(await opozoriloPotrjeno(root)) ? { ok: false, razlog: "opozorilo" } : odpriSejoClaude(root) });
+          : !(await opozoriloPotrjeno(root)) ? (zapisiRazlogSeje(root, "opozorilo"), { ok: false, razlog: "opozorilo" }) : odpriSejoClaude(root) });
       try {
         let rezerva: Tekoci["rezerva"] = null;
         let napakaLan: unknown = null;

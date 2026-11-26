@@ -2,8 +2,8 @@
  * Naloga 18 (lastnik 25. 11. 2026 23:25 »Da«): Lina sama odpre stalno sejo Claude Code s kanalom Line (kanal-claude), ko lastnik na telefonu
  * potrdi (podpise) nalogo in seje ni. Klice jo SAMO asistent-streznik.server.ts v poti /naloga PO preverbi podpisa naprave ozjega kroga.
  *
- * Ukaz je stalen: terminal (ukazTerminala, argv brez lupine) -> claude --mcp-config <podatki>/kanal/seja-mcp.json
- * --dangerously-load-development-channels server:lina <stalen poziv>. Besedilo naloge NIKOLI ni v argv, okolju ali mapi: naloga gre v sejo
+ * Ukaz je stalen: terminal (ukazTerminala, argv brez lupine) -> claude <stalen poziv> --mcp-config <podatki>/kanal/seja-mcp.json
+ * --dangerously-load-development-channels server:lina. Besedilo naloge NIKOLI ni v argv, okolju ali mapi: naloga gre v sejo
  * po kanalu (podpis naprave preveri kanal znova). Mapa seje: <dom>/Lina-Claude (navadna mapa, ni povezava, ne v podatkih Line), 0700.
  * Ena seja naenkrat (rezervacija »zaganja« pred zagonom, PID), omejitev poskusov (brez zanke ob napaki), razlog ni-terminala / ni-claude.
  * Naloga se seji NE preda od tu: kanal zavrne podpis, starejsi od svojega zagona, telefon nalogo po odprtju seje podpise in poslje znova.
@@ -51,6 +51,11 @@ const stanjeZa = (root: string) => {
 /** Zadnji neuspel samodejni zagon (za sporocilo na racunalniku); prazno po uspehu ali brez poskusa. */
 export function zadnjiRazlogSeje(root: string): RazlogSeje | "" {
   return stanja.get(path.resolve(root))?.razlog ?? "";
+}
+
+/** Razlog, ki ga ugotovi klicatelj pred zagonom (opozorilo agentov ni potrjeno), da ga racunalnik pokaze kot ostale. */
+export function zapisiRazlogSeje(root: string, razlog: RazlogSeje): void {
+  stanjeZa(path.resolve(root)).razlog = razlog;
 }
 
 /** Za preizkuse: pozabi stanje zagonov tega korena. */
@@ -124,7 +129,8 @@ function odpri(root: string, s: StanjeZagona, o: OdvisnostiSeje): Promise<IzidOd
     try {
       const mapa = await mapaSeje(o.dom ?? homedir(), root);
       const mcp = await zapisiNastavitevMcp(root);
-      const argv = [...terminal.predpona, claude, "--mcp-config", mcp, "--dangerously-load-development-channels", "server:lina", POZIV_SEJE];
+      // poziv PRED moznostmi: --mcp-config in --dangerously-load-development-channels sta variadicni (poziv za njima bi bil se en streznik)
+      const argv = [...terminal.predpona, claude, POZIV_SEJE, "--mcp-config", mcp, "--dangerously-load-development-channels", "server:lina"];
       const pid = await (o.zazeni ?? privzetiZagonTerminala)(terminal.program, argv, mapa, okoljeZaAgenta());
       s.odprto = (o.zdaj ?? Date.now)();
       s.pid = typeof pid === "number" ? pid : null;

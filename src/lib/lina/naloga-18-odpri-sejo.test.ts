@@ -36,7 +36,8 @@ test("stalen ukaz: terminal + claude s kanalom Line, stalen poziv, mapa seje pod
   assert.equal(zagoni.length, 1);
   const z = zagoni[0];
   assert.equal(z.program, "/usr/bin/xterm");
-  assert.deepEqual(z.args.slice(-6), ["/usr/bin/claude", "--mcp-config", path.join(root, "kanal", "seja-mcp.json"), "--dangerously-load-development-channels", "server:lina", POZIV_SEJE]);
+  // poziv pred variadicnima moznostma (sicer bi ga --dangerously-load-development-channels prebral kot streznik)
+  assert.deepEqual(z.args.slice(-6), ["/usr/bin/claude", POZIV_SEJE, "--mcp-config", path.join(root, "kanal", "seja-mcp.json"), "--dangerously-load-development-channels", "server:lina"]);
   assert.equal(z.cwd, path.join(dom, IME_MAPE_SEJE));
   assert.equal(statSync(z.cwd).mode & 0o777, 0o700);
   const mcp = JSON.parse(readFileSync(path.join(root, "kanal", "seja-mcp.json"), "utf8"));

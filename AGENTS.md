@@ -982,8 +982,8 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   predvidljivim imenom; Node ne zna nastaviti ACL cevi - varujeta jo samo vzajemna prijava in podpis naprave, NEPREVERJENO).
   Ustavitev je sporocilo v sejo: Claude Code ga dobi ob naslednjem obratu, trenutnega orodja ne prekine.
 - Lina sama odpre sejo (naloga 18, lastnik 25. 11. 2026 23:25 in 23:35 »Da«; seja-claude.server.ts): SAMO pot /naloga po preverbi podpisa
-  naprave ozjega kroga, ko seje ni: terminal + `claude --mcp-config <podatki>/kanal/seja-mcp.json --dangerously-load-development-channels
-  server:lina <stalen poziv>` v <dom>/Lina-Claude (0700, ne povezava, ne v podatkih), okolje okoljeZaAgenta, brez besedila naloge v argv.
+  naprave ozjega kroga, ko seje ni: terminal + `claude <stalen poziv> --mcp-config <podatki>/kanal/seja-mcp.json
+  --dangerously-load-development-channels server:lina` (poziv pred variadicnima moznostma) v <dom>/Lina-Claude (0700, ne povezava, ne v podatkih), okolje okoljeZaAgenta, brez besedila naloge v argv.
   Ena seja naenkrat (rezervacija, 3 min, PID; mapa seje od tega uporabnika, brez pisanja za druge), najvec 3 poskusi na uro, brez potrjenega
   opozorila agentov se ne odpre. Odgovor je vedno 503 claude-code-ni s stanje.zagon = odpira | ni-terminala | ni-claude | opozorilo |
   omejitev | napaka (claudeCode ostane »zaprta«). Naloga se NE zadrzi: kanal zavrne podpis, starejsi od svojega zagona (preveriDokaz, N-C);
