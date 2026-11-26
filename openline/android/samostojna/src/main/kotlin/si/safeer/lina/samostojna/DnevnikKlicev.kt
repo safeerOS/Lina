@@ -88,7 +88,9 @@ data class ZapisKlica(
      */
     val prepisPogovora: List<IzmenjavaKlica> = emptyList(),
     /** true = prepis je bil zaradi meje skrajsan (konec pogovora manjka). */
-    val prepisOkrnjen: Boolean = false
+    val prepisOkrnjen: Boolean = false,
+    /** Samo lokalno: zapis je prisel z racunalnika (drug telefon, ponovna namestitev); cez mejo zapisov gre pred lastnimi (slepi pregled 0214 A8). */
+    val prejetZRacunalnika: Boolean = false
 ) {
     constructor(
         id: String,
@@ -128,7 +130,8 @@ data class ZapisKlica(
     // staro polje prepis (prost niz) in imeImenik ostaneta samo na telefonu.
     fun zaSinhronizacijo(): ZapisKlicaSinhronizacija {
         // Prepis dobi samo, kar od MEJA_ZAPISA_SINHRON_B ostane po ostalih poljih (vecbajtni znaki: slepi pregled N2).
-        val brez = jsonPrepis.encodeToString(projekcija(emptyList(), true)).toByteArray(Charsets.UTF_8).size
+        // Osnova s prepisOkrnjen=false kot na racunalniku (sPrepisom): "true" je 1 B krajsi, racunalnik bi okrnil zadnjo izmenjavo (0214 A3).
+        val brez = jsonPrepis.encodeToString(projekcija(emptyList(), false)).toByteArray(Charsets.UTF_8).size
         val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(prepisPogovora, minOf(MEJA_PREPISA_SINHRON_B, MEJA_ZAPISA_SINHRON_B - brez))
         return projekcija(prepis, prepisOkrnjen || skrajsan)
     }
@@ -192,8 +195,12 @@ const val MEJA_IZBRISANIH = 1000
 /** Najvec zapisov klicev na telefonu (N4): kot racunalnik (MEJA_KLICEV v sinhron-telefon.server.ts). */
 const val MEJA_ZAPISOV_TELEFON = 1000
 
-/** Rok hrambe prepisa podjetniskega klica (lastnik 22. 11. 2026: podjetniski zapis 90 dni); osebni prepis ostane do izbrisa. */
+/** Rok hrambe podjetniskega klica (lastnik 22. 11. 2026: podjetniski zapis 90 dni); osebni ostane do izbrisa. */
 const val ROK_PREPISA_PODJETJE_MS = 90L * 24 * 60 * 60 * 1000
+/** Meje roka z racunalnika (zapiskiHrambaDni, pravila.server.ts: privzeto 90, najvec 3650 dni). */
+const val ROK_HRAMBE_PRIVZETO_DNI = 90
+const val ROK_HRAMBE_NAJVEC_DNI = 3650
+private const val DAN_MS = 24L * 60 * 60 * 1000
 
 const val GOVOREC_KLICATELJ = "klicatelj"
 const val GOVOREC_LINA = "lina"
@@ -249,7 +256,9 @@ private data class DnevnikKlicevShramba(
     /** Id klicev, ki jih je uporabnik izbrisal (N3): z racunalnika se ne sprejmejo vec. */
     val izbrisani: List<String> = emptyList(),
     /** Izbrisi, ki jih racunalnik se ni potrdil (ZMOZNOST_IZBRIS). */
-    val izbrisiZaRacunalnik: List<String> = emptyList()
+    val izbrisiZaRacunalnik: List<String> = emptyList(),
+    /** Rok hrambe podjetniskih klicev, kot ga je zadnjic poslal racunalnik (0214 A7). */
+    val rokHrambeDni: Int = ROK_HRAMBE_PRIVZETO_DNI
 )
 
 @Serializable
@@ -431,6 +440,7 @@ class DnevnikKlicev(
     private val izbrisani = linkedSetOf<String>()
     private val izbrisiZaRac = linkedSetOf<String>()
     private var branjeSpodletelo = false
+    private var rokHrambeDni = ROK_HRAMBE_PRIVZETO_DNI
 
     init {
         try {
@@ -617,15 +627,18 @@ class DnevnikKlicev(
         if (branjeSpodletelo) return 0
         val predlagani = zapisi.toMutableMap()
         var dodanih = 0
+        val zdaj = ura()
         for (p in prejeti) {
             if (predlagani.containsKey(p.id) || p.id in izbrisani) continue
+            // Cas vec kot dan v prihodnosti (pokvarjena ura ali napaka druge naprave) se zavrne; podjetniski po roku se ne sprejme (0214 A8, A2).
+            if (p.casZacetka > zdaj + DAN_MS || potekel(p.nacin, p.casZacetka, zdaj)) continue
             // Prepis z racunalnika je nezaupan: iste meje kot za posiljanje (govorec, dolzina, bajti).
             val (prepis, skrajsan) = omejiPrepisZaSinhronizacijo(p.prepisPogovora)
             val zapis = ZapisKlica(
                 id = p.id, casZacetka = p.casZacetka, stevilka = p.stevilka, trajanjeS = p.trajanjeS, nujno = p.nujno,
                 povzetek = p.povzetek, nacin = p.nacin, klicatelj = p.klicatelj, podjetje = p.podjetje, sporocilo = p.sporocilo,
                 sporociloDobesedno = p.sporociloDobesedno, brezSporocilaRazlog = p.brezSporocilaRazlog,
-                prepisPogovora = prepis, prepisOkrnjen = p.prepisOkrnjen || skrajsan,
+                prepisPogovora = prepis, prepisOkrnjen = p.prepisOkrnjen || skrajsan, prejetZRacunalnika = true,
             )
             if (!jeVeljavenZapisKlica(zapis)) continue
             predlagani[zapis.id] = zapis
@@ -646,31 +659,50 @@ class DnevnikKlicev(
     }
 
     /**
-     * Rok hrambe in meja rasti (slepi pregled 17t, N4; pravila hrambe lastnika 22. 11. 2026): prepis podjetniskega klica 90 dni, osebni do
-     * izbrisa uporabnika; dnevnik najvec MEJA_ZAPISOV_TELEFON zapisov (kot racunalnik MEJA_KLICEV, ki prav tako hrani samo najnovejsih 1000).
-     * Prepis zapisa v vrsti za racunalnik ali med zadrzanimi se ne skrajsa (racunalnik ga se ni dobil). Cez mejo se odstranijo najstarejsi,
-     * najprej tisti, ki jih racunalnik ze ima; ce jih ni dovolj (telefon brez racunalnika, star racunalnik), tudi najstarejsi cakajoci -
-     * hkrati iz vrste in zadrzanih. Izbrisa za racunalnik to ne ustvari (samo uporabnikov izbris). true = sprememba.
+     * Rok hrambe in meja rasti (slepi pregled 17t N4 in 0214 A1, A2, A8; pravila hrambe lastnika 22. 11. 2026): podjetniski klic po roku
+     * (rokHrambeDni z racunalnika, privzeto 90 dni) gre V CELOTI, tudi iz vrste in zadrzanih - kot na racunalniku (sinhron-telefon.server.ts,
+     * potekelKlicTelefona), brez izbrisa za racunalnik (ta ga po svojem roku izbrise sam). Osebni ostane do izbrisa uporabnika.
+     * Dnevnik najvec MEJA_ZAPISOV_TELEFON zapisov (kot racunalnik MEJA_KLICEV): cez mejo gredo najprej zapisi z racunalnika, nato lastni,
+     * ki jih racunalnik ze ima, nazadnje cakajoci; znotraj skupine najstarejsi. true = sprememba.
      */
     private fun uveljaviHrambo(
         predlagani: MutableMap<String, ZapisKlica>,
         cakajoci: MutableMap<String, ZapisKlicaSinhronizacija>,
-        zadrzani: MutableSet<String>
+        zadrzani: MutableSet<String>,
+        rokDni: Int = rokHrambeDni
     ): Boolean {
         var sprememba = false
-        val meja = ura() - ROK_PREPISA_PODJETJE_MS
+        val zdaj = ura()
         for (z in predlagani.values.toList()) {
-            if (z.nacin == NacinKlica.PODJETJE && z.casZacetka < meja && z.prepisPogovora.isNotEmpty() && z.id !in cakajoci && z.id !in zadrzani) {
-                predlagani[z.id] = z.copy(prepisPogovora = emptyList()); sprememba = true
+            if (potekel(z.nacin, z.casZacetka, zdaj, rokDni)) {
+                predlagani.remove(z.id); cakajoci.remove(z.id); zadrzani.remove(z.id); sprememba = true
             }
         }
         val presezek = predlagani.size - MEJA_ZAPISOV_TELEFON
         if (presezek > 0) {
-            predlagani.values.sortedWith(compareBy<ZapisKlica> { it.id in cakajoci || it.id in zadrzani }.thenBy { it.casZacetka }.thenBy { it.id })
+            predlagani.values.sortedWith(compareBy<ZapisKlica> { !it.prejetZRacunalnika }.thenBy { it.id in cakajoci || it.id in zadrzani }.thenBy { it.casZacetka }.thenBy { it.id })
                 .take(presezek).forEach { predlagani.remove(it.id); cakajoci.remove(it.id); zadrzani.remove(it.id) }
             sprememba = true
         }
         return sprememba
+    }
+
+    private fun potekel(nacin: NacinKlica, cas: Long, zdaj: Long, rokDni: Int = rokHrambeDni) =
+        nacin == NacinKlica.PODJETJE && zdaj - cas > rokDni * DAN_MS
+
+    /** Rok hrambe podjetniskih klicev z racunalnika (zapiskiHrambaDni, 0214 A7); vrednost zunaj 1..3650 se ne uposteva. */
+    @Synchronized
+    fun nastaviRokHrambe(dni: Long) {
+        if (branjeSpodletelo || dni < 1 || dni > ROK_HRAMBE_NAJVEC_DNI || dni.toInt() == rokHrambeDni) return
+        val predlagani = zapisi.toMutableMap()
+        val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
+        val predlaganiZadrzani = LinkedHashSet(zadrzaniPrepisi)
+        uveljaviHrambo(predlagani, predlaganiCakajoci, predlaganiZadrzani, dni.toInt())
+        shraniVShrambo(predlagani.values, predlaganiCakajoci.values, predlaganiZadrzani, rok = dni.toInt())
+        rokHrambeDni = dni.toInt()
+        zapisi.clear(); zapisi.putAll(predlagani)
+        vrstaSinhronizacije.clear(); vrstaSinhronizacije.putAll(predlaganiCakajoci)
+        zadrzaniPrepisi.clear(); zadrzaniPrepisi.addAll(predlaganiZadrzani)
     }
 
     // Prebere zapise iz lokalne shrambe; poskodovano datoteko ali poskodovane posamezne vnose varno zavrne brez izgube ostalih zapisov.
@@ -715,6 +747,8 @@ class DnevnikKlicev(
                     if (poljeCakajoci != null && poljeCakajoci !is JsonArray) return false
                     cakajociElementi = poljeCakajoci as? JsonArray
                     zadrzaniElementi = koren["zadrzaniPrepisi"] as? JsonArray
+                    // Rok mora biti znan PRED uveljavitvijo hrambe ob nalaganju (sicer bi rok 365 dni ob vsakem zagonu padel na 90).
+                    rokHrambeDni = koren["rokHrambeDni"]?.jsonPrimitive?.intOrNull?.takeIf { it in 1..ROK_HRAMBE_NAJVEC_DNI } ?: ROK_HRAMBE_PRIVZETO_DNI
                     for ((polje, cilj) in listOf("izbrisani" to izbrisani, "izbrisiZaRacunalnik" to izbrisiZaRac)) {
                         (koren[polje] as? JsonArray)?.let { el -> cilj.clear(); el.mapNotNullTo(cilj) { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull() } }
                     }
@@ -780,9 +814,14 @@ class DnevnikKlicev(
                 el.mapNotNullTo(zadrzaniPrepisi) { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull()?.takeIf { it in zapisi } }
             }
 
+            // Rok hrambe velja tudi ob zagonu, ne sele ob naslednjem klicu (0214 A1).
+            val hramba = uveljaviHrambo(zapisi, vrstaSinhronizacije, zadrzaniPrepisi)
             if (vsajEnPoskodovan && zapisi.isNotEmpty()) {
                 // Ce smo iz delno poskodovane datoteke resili veljavne zapise, jih takoj varno zapisemo nazaj.
                 shraniVShrambo()
+            } else if (hramba) {
+                // Neuspel zapis ne blokira dnevnika: v pomnilniku je zapis ze izbrisan, datoteka se prepise ob naslednji spremembi.
+                runCatching { shraniVShrambo() }
             }
             !vsajEnPoskodovan || prebraniVeljavni.isNotEmpty()
         } catch (e: Exception) {
@@ -796,7 +835,8 @@ class DnevnikKlicev(
         predlaganiCakajoci: Collection<ZapisKlicaSinhronizacija> = vrstaSinhronizacije.values,
         predlaganiZadrzani: Collection<String> = zadrzaniPrepisi,
         predlaganiIzbrisani: Collection<String> = izbrisani,
-        predlaganiIzbrisiZaRac: Collection<String> = izbrisiZaRac
+        predlaganiIzbrisiZaRac: Collection<String> = izbrisiZaRac,
+        rok: Int = rokHrambeDni
     ) {
         val urejeni = urediZapise(predlaganiZapisi, nujniNaVrhu = true)
         val cakajoci = predlaganiCakajoci.sortedWith(
@@ -805,7 +845,7 @@ class DnevnikKlicev(
                 .thenBy { it.id }
         )
         val ovoj = DnevnikKlicevShramba(verzija = 1, zapisi = urejeni, cakajoci = cakajoci, zadrzaniPrepisi = predlaganiZadrzani.toList(),
-            izbrisani = predlaganiIzbrisani.toList(), izbrisiZaRacunalnik = predlaganiIzbrisiZaRac.toList())
+            izbrisani = predlaganiIzbrisani.toList(), izbrisiZaRacunalnik = predlaganiIzbrisiZaRac.toList(), rokHrambeDni = rok)
         val json = jsonDnevnik.encodeToString(ovoj)
         shramba.shrani(json)
     }

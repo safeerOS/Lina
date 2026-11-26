@@ -96,8 +96,9 @@ class NajdbeSlepi17tTest {
         val star = 1_000L // 1970: davno cez rok
         val podjetje = zapisSPrepisom("rac-p", star, NacinKlica.PODJETJE).zaSinhronizacijo()
         val osebni = zapisSPrepisom("rac-o", star, NacinKlica.OSEBNA).zaSinhronizacijo()
-        assertEquals(2, d.sprejmiIzRacunalnika(listOf(podjetje, osebni)))
-        assertTrue(d.seznam().single { it.id == "rac-p" }.prepisPogovora.isEmpty(), "podjetniski prepis po roku ostal")
+        // 0214 A2: podjetniski zapis po roku gre v celoti (kot na racunalniku), zato se z racunalnika ne sprejme (prej: sprejet brez prepisa).
+        assertEquals(1, d.sprejmiIzRacunalnika(listOf(podjetje, osebni)))
+        assertTrue(d.seznam().none { it.id == "rac-p" }, "podjetniski zapis po roku ostal")
         assertEquals(2, d.seznam().single { it.id == "rac-o" }.prepisPogovora.size, "osebni prepis se hrani do izbrisa")
     }
 
@@ -227,9 +228,11 @@ class NajdbeSlepi17tTest {
     // N10: osebni nacin = samo prepis, nikoli posnetek zvoka (tudi ne Lininega izhoda).
     @Test
     fun `N10 - klic v osebnem nacinu ne zapisuje Lininega izhodnega zvoka`() {
-        val upravljalnik = File("../app/src/main/kotlin/si/safeer/lina/telecom/LokalniPrehodUpravljalnik.kt").readText()
-        val odjemalec = File("src/main/kotlin/si/safeer/lina/samostojna/live/GeminiLiveOdjemalec.kt").readText()
-        assertFalse(upravljalnik.contains("ZajemIzhodaLine("), "pot klica ustvari zajem Lininega zvoka")
-        assertFalse(odjemalec.contains("zajemIzhoda"), "GeminiLiveOdjemalec ima pot za zajem izhodnega zvoka")
+        // Slepi pregled 0214 A10: vedenje namesto besedila kode - noben konstruktor ne sprejme ponora za zvok (bajti, tok, datoteka),
+        // ne glede na ime argumenta; stari posnetki se izbrisejo ob zagonu (NajdbeA0214Test, A4).
+        val zvok = Regex("""\[B|byte\[\]|ByteArray|ShortArray|java\.io\.(File|OutputStream)|java\.nio|OutputStream""")
+        for (k in si.safeer.lina.samostojna.live.GeminiLiveOdjemalec::class.java.constructors) {
+            for (t in k.genericParameterTypes) assertFalse(zvok.containsMatchIn(t.typeName), "GeminiLiveOdjemalec sprejme ponor zvoka: ${t.typeName}")
+        }
     }
 }

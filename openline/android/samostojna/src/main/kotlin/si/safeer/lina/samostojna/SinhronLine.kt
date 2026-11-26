@@ -39,6 +39,8 @@ data class OdgovorSinhron(
      * Brez tega polja (racunalnik 0.2.13) telefon zapisa s prepisom ne steje za sprejetega: zadrzi ga in ga poslje znova po posodobitvi.
      */
     val zmoznosti: List<String> = emptyList(),
+    /** Rok hrambe podjetniskih klicev v dneh (zapiskiHrambaDni na racunalniku, 0214 A7); null = racunalnik ga ne poslje, velja zadnji znani. */
+    val rokHrambeDni: Long? = null,
 )
 
 const val ZMOZNOST_PREPIS = "prepis-v1"
@@ -99,6 +101,8 @@ object SinhronLine {
             val telo = zahteva(ZahtevaSinhron(rev, cakajoci, if (prvi) pogovor.takeLast(NAJVEC_VNOSOV) else emptyList(), if (prvi) navodila else null, epoha.ifEmpty { null }, izbrisi))
             val odg = odgovor(poslji(telo) ?: return false) ?: return false
             val prepisSprejet = ZMOZNOST_PREPIS in odg.zmoznosti
+            // Rok pred sprejemom klicev: podjetniski klic po roku racunalnika se ne sprejme.
+            odg.rokHrambeDni?.let { try { dnevnik.nastaviRokHrambe(it) } catch (_: Exception) { return false } }
             dnevnik.potrdiPoslane(cakajoci, prepisSprejet)
             // Racunalnik zdaj zna prepis: zapisi, ki jih je star racunalnik dobil brez prepisa, gredo v vrsto (naslednji krog).
             if (prepisSprejet) dnevnik.vrniZadrzanePrepise()

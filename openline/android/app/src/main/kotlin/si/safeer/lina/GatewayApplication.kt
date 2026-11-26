@@ -18,6 +18,9 @@ class GatewayApplication : Application() {
         val opozorilo = si.safeer.lina.config.OpozoriloShramba(this)
         si.safeer.lina.podpis.NapravaKljuc.smeDelati = { opozorilo.smeDelati() }
         opozorilo.namestitev()
+        // Lastnik: nikoli posnetek zvoka. Posnetki Lininega izhoda iz 0.2.13 (files/lina_zvok/zajem) se izbrisejo; napaka ne ustavi zagona (0214 A4).
+        val files = filesDir
+        Thread({ runCatching { si.safeer.lina.samostojna.izbrisiStarePosnetkeZvoka(files) } }, "lina-pocisti-zvok").start()
         CallAudioBridge.initialize(this)
         LinaCallGate.setManualListener { GatewayRuntime.forgetCall(it) }
         GatewayRuntime.initialize(this)

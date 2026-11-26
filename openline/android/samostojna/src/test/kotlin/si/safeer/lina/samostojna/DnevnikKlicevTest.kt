@@ -5,12 +5,16 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Files
 
+
+// Ura pred vsemi zapisi preizkusa: ti preizkusi preverjajo shrambo in urejanje; rok hrambe podjetniskih klicev (0214 A1/A2) preizkusa NajdbeA0214Test.
+private val URA = { 0L }
+
 class DnevnikKlicevTest {
 
     @Test
     fun `zapisInBranje - ZapisKlica se pravilno shrani v Shramba in prebere nazaj z vsemi polji`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         val klicOsebna = ZapisKlica(
             id = "klic-1",
@@ -37,7 +41,7 @@ class DnevnikKlicevTest {
         assertTrue(dnevnik.dodaj(klicPodjetje))
 
         // Ustvarimo nov dnevnik nad isto shrambo, da preverimo dejansko branje iz shrambe
-        val prebranDnevnik = DnevnikKlicev(shramba)
+        val prebranDnevnik = DnevnikKlicev(shramba, ura = URA)
         val vsi = prebranDnevnik.seznamPoDatumu()
         assertEquals(2, vsi.size)
 
@@ -63,7 +67,7 @@ class DnevnikKlicevTest {
         try {
             val datoteka = File(zacasnaMapa, "dnevnik-klicev.json")
             val shramba = DatotecnaShramba(datoteka)
-            val dnevnik = DnevnikKlicev(shramba)
+            val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
             val klic = ZapisKlica(
                 id = "disk-1",
@@ -78,7 +82,7 @@ class DnevnikKlicevTest {
             assertTrue(dnevnik.dodaj(klic))
             assertTrue(datoteka.exists())
 
-            val znova = DnevnikKlicev(DatotecnaShramba(datoteka))
+            val znova = DnevnikKlicev(DatotecnaShramba(datoteka), ura = URA)
             val zapisi = znova.seznamPoDatumu()
             assertEquals(1, zapisi.size)
             assertEquals("disk-1", zapisi[0].id)
@@ -93,14 +97,14 @@ class DnevnikKlicevTest {
         val zacasnaMapa = Files.createTempDirectory("lina-dnevnik-nepreberljiv").toFile()
         val datoteka = File(zacasnaMapa, "dnevnik-klicev.json")
         try {
-            val prvi = DnevnikKlicev(DatotecnaShramba(datoteka))
+            val prvi = DnevnikKlicev(DatotecnaShramba(datoteka), ura = URA)
             assertTrue(prvi.dodaj(ZapisKlica(id = "star-1", casZacetka = 1_700_000_700_000L, stevilka = "+38640123456", trajanjeS = 30, nujno = false, povzetek = "Star klic.", prepis = "Star klic za ohranitev.", nacin = NacinKlica.OSEBNA)))
             val vsebinaPrej = datoteka.readText()
             assertTrue(datoteka.setReadable(false, false))
             // root datoteko vedno prebere: preizkus je tam brez pomena
             org.junit.jupiter.api.Assumptions.assumeFalse(datoteka.canRead(), "datoteke ni mogoce narediti nepreberljive (root?)")
 
-            val dnevnik = DnevnikKlicev(DatotecnaShramba(datoteka))
+            val dnevnik = DnevnikKlicev(DatotecnaShramba(datoteka), ura = URA)
             // branje je spodletelo: to NI prazen dnevnik, zato pisanje ne sme prepisati obstojece datoteke
             assertFalse(dnevnik.dodaj(ZapisKlica(id = "nov-1", casZacetka = 1_700_000_800_000L, stevilka = "+38640654321", trajanjeS = 10, nujno = false, povzetek = "Nov klic.", prepis = "Nov klic.", nacin = NacinKlica.OSEBNA)))
 
@@ -135,7 +139,7 @@ class DnevnikKlicevTest {
     @Test
     fun `vrstniRedInSeznamPoDatumu - navadni zapisi so urejeni od najnovejsega proti najstarejsemu`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         dnevnik.dodaj(
             ZapisKlica("k1", 1000L, "+38640000001", 30, false, "Prvi klic", "Prepis 1", NacinKlica.OSEBNA)
@@ -154,7 +158,7 @@ class DnevnikKlicevTest {
     @Test
     fun `nujniNaVrhu - nujni klici so vedno na vrhu seznama in imajo rdeco oznako ter napis Nujno`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         val navadenNovejsi = ZapisKlica(
             id = "navaden-novejsi",
@@ -209,7 +213,7 @@ class DnevnikKlicevTest {
     @Test
     fun `iskanje - najde klice po stevilki povzetku prepisu in nacinu ter ohrani nujne na vrhu`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         dnevnik.dodaj(
             ZapisKlica(
@@ -267,7 +271,7 @@ class DnevnikKlicevTest {
     @Test
     fun `brisanjeSamoNaUporabnikovoZahtevo - brez potrditve uporabnika izbris zavrne`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         dnevnik.dodaj(
             ZapisKlica("b1", 1000L, "+38640111222", 30, false, "Klic 1", "Prepis 1", NacinKlica.OSEBNA)
@@ -281,13 +285,13 @@ class DnevnikKlicevTest {
         // Z izrecno potrditvijo uporabnika se zapis izbrise in shrani v Shramba
         assertTrue(dnevnik.izbrisi("b1", potrditevUporabnika = true))
         assertTrue(dnevnik.seznamPoDatumu().isEmpty())
-        assertTrue(DnevnikKlicev(shramba).seznamPoDatumu().isEmpty())
+        assertTrue(DnevnikKlicev(shramba, ura = URA).seznamPoDatumu().isEmpty())
     }
 
     @Test
     fun `zasebnostCeneInObljube - v dnevnik ne gre nobena cena ali obljuba`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         val zCeno = ZapisKlica(
             id = "cena-1",
@@ -329,7 +333,7 @@ class DnevnikKlicevTest {
     @Test
     fun `zasebnostPrepisOstaneNaTelefonu - vrsta za sinhronizacijo ne vsebuje starega polja prepis (prepis pogovora gre v prepisPogovora, naloga 17)`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         val klic = ZapisKlica(
             id = "sync-1",
@@ -361,7 +365,7 @@ class DnevnikKlicevTest {
             fail("DnevnikKlicev ne sme nikoli klicati omrezja ali racunalnika med lokalnim delom!")
         }
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba, sleparskiOdjemalec)
+        val dnevnik = DnevnikKlicev(shramba, sleparskiOdjemalec, ura = URA)
 
         assertTrue(
             dnevnik.dodaj(
@@ -377,7 +381,7 @@ class DnevnikKlicevTest {
     @Test
     fun `sinhronizacijaSamoVOzadjuNikoliMedKlicem - med klicem ali uporabo asistentke sinhronizacija zavrnjena`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         dnevnik.dodaj(
             ZapisKlica("s1", 1000L, "+38640111222", 30, false, "Klic za sinhronizacijo", "Prepis", NacinKlica.PODJETJE)
@@ -441,7 +445,7 @@ class DnevnikKlicevTest {
     @Test
     fun `poskodovanaDatoteka - varna zavrnitev brez izgube ostalih zapisov`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         val prvi = ZapisKlica("v1", 1000L, "+38640111111", 20, false, "Prvi veljaven zapis", "Prepis 1", NacinKlica.OSEBNA)
         val drugi = ZapisKlica("v2", 2000L, "+38640222222", 35, true, "Drugi nujen zapis", "Prepis 2", NacinKlica.PODJETJE)
@@ -457,7 +461,7 @@ class DnevnikKlicevTest {
         // Ko dodamo nov veljaven zapis, se shramba popravi z vsemi tremi zapisi brez izgube
         val tretji = ZapisKlica("v3", 3000L, "+38640333333", 50, false, "Tretji veljaven zapis", "Prepis 3", NacinKlica.PODJETJE)
         assertTrue(dnevnik.dodaj(tretji))
-        assertEquals(3, DnevnikKlicev(shramba).seznamPoDatumu().size)
+        assertEquals(3, DnevnikKlicev(shramba, ura = URA).seznamPoDatumu().size)
 
         // 2. Scenarij: datoteka vsebuje seznam zapisov, kjer je en zapis poskodovan/neveljaven, ostala dva pa sta veljavna
         val delnoPoskodovanJson = """
@@ -473,7 +477,7 @@ class DnevnikKlicevTest {
         """.trimIndent()
 
         val shrambaDelno = PomnilniskaShramba(delnoPoskodovanJson)
-        val dnevnikIzDelnoPoskodovane = DnevnikKlicev(shrambaDelno)
+        val dnevnikIzDelnoPoskodovane = DnevnikKlicev(shrambaDelno, ura = URA)
         val ohranjeni = dnevnikIzDelnoPoskodovane.seznamPoDatumu()
         assertEquals(2, ohranjeni.size)
         assertEquals(listOf("ok-2", "ok-1"), ohranjeni.map { it.id })
@@ -513,7 +517,7 @@ class DnevnikKlicevTest {
     @Test
     fun `tocka1_nePrepisiPoNeuspelemPrvemBranju - ob napaki prvega branja zavrne pisanje dokler branje ne uspe`() {
         val laznaShramba = LaznaShramba()
-        val prviDnevnik = DnevnikKlicev(laznaShramba)
+        val prviDnevnik = DnevnikKlicev(laznaShramba, ura = URA)
         val obstojeci = ZapisKlica(
             id = "obstojeci-1",
             casZacetka = 1000L,
@@ -530,7 +534,7 @@ class DnevnikKlicevTest {
 
         // Prvo branje ob zagonu vrze izjemo: konstruktor ne sme pasti, pisanje pa mora biti zavrnjeno
         laznaShramba.vrziObBranju = true
-        val dnevnikPoIzjemi = DnevnikKlicev(laznaShramba)
+        val dnevnikPoIzjemi = DnevnikKlicev(laznaShramba, ura = URA)
         val novKlic = ZapisKlica(
             id = "nov-1",
             casZacetka = 2000L,
@@ -549,14 +553,14 @@ class DnevnikKlicevTest {
         assertTrue(dnevnikPoIzjemi.naloziIzShrambe())
         assertTrue(dnevnikPoIzjemi.dodaj(novKlic))
 
-        val prebrani = DnevnikKlicev(laznaShramba).seznamPoDatumu()
+        val prebrani = DnevnikKlicev(laznaShramba, ura = URA).seznamPoDatumu()
         assertEquals(listOf("nov-1", "obstojeci-1"), prebrani.map { it.id })
     }
 
     @Test
     fun `tocka2_potrditevPoPosiljanju - odstrani samo poslano revizijo in ohrani novejso revizijo istega ID`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
 
         val zacetni = ZapisKlica(
             id = "isti-id",
@@ -620,7 +624,7 @@ class DnevnikKlicevTest {
         var medShranjevanjemVSeznamu = false
         var medShranjevanjemVVrsti = false
         val laznaShramba = LaznaShramba(vrziObShranjevanju = true)
-        val dnevnik = DnevnikKlicev(laznaShramba)
+        val dnevnik = DnevnikKlicev(laznaShramba, ura = URA)
 
         laznaShramba.obShranjevanju = {
             medShranjevanjemVSeznamu = dnevnik.seznamPoDatumu().isNotEmpty()
@@ -658,7 +662,7 @@ class DnevnikKlicevTest {
     @Test
     fun `tocka4_potrjenIzbrisObIzjemiOstanePonovljiv - ob izjemi pri shranjevanju izbris ostane ponovljiv`() {
         val laznaShramba = LaznaShramba()
-        val dnevnik = DnevnikKlicev(laznaShramba)
+        val dnevnik = DnevnikKlicev(laznaShramba, ura = URA)
 
         val klic = ZapisKlica(
             id = "izbris-ponovi-1",
@@ -686,13 +690,13 @@ class DnevnikKlicevTest {
         assertTrue(dnevnik.izbrisi("izbris-ponovi-1", potrditevUporabnika = true))
         assertTrue(dnevnik.seznamPoDatumu().isEmpty())
         assertTrue(dnevnik.cakajociZaSinhronizacijo().isEmpty())
-        assertTrue(DnevnikKlicev(laznaShramba).seznamPoDatumu().isEmpty())
+        assertTrue(DnevnikKlicev(laznaShramba, ura = URA).seznamPoDatumu().isEmpty())
     }
 
     @Test
     fun `tocka5_cakajoceRevizijePrezvijoPonovniZagon - cakajoce spremembe prezivijo ponovni zagon potrjeni klici pa ne`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik1 = DnevnikKlicev(shramba)
+        val dnevnik1 = DnevnikKlicev(shramba, ura = URA)
 
         val klic1 = ZapisKlica(
             id = "sync-trajno-1",
@@ -718,7 +722,7 @@ class DnevnikKlicevTest {
         assertTrue(dnevnik1.dodaj(klic2))
 
         // Ponovni zagon pred posiljanjem: cakajoci reviziji morata preziveti
-        val dnevnikPoZagonu1 = DnevnikKlicev(shramba)
+        val dnevnikPoZagonu1 = DnevnikKlicev(shramba, ura = URA)
         assertEquals(
             listOf("sync-trajno-2", "sync-trajno-1"),
             dnevnikPoZagonu1.cakajociZaSinhronizacijo().map { it.id }
@@ -751,7 +755,7 @@ class DnevnikKlicevTest {
         assertTrue(dnevnikPoZagonu1.dodaj(klic3))
 
         // Ponovni zagon po potrditvi: ze potrjenih klicev ne uvrsti spet, nepovratno caka samo klic3
-        val dnevnikPoZagonu2 = DnevnikKlicev(shramba)
+        val dnevnikPoZagonu2 = DnevnikKlicev(shramba, ura = URA)
         assertEquals(3, dnevnikPoZagonu2.seznamPoDatumu().size)
         assertEquals(listOf("sync-trajno-3"), dnevnikPoZagonu2.cakajociZaSinhronizacijo().map { it.id })
     }
@@ -771,9 +775,9 @@ class DnevnikKlicevTest {
     @Test
     fun `f6a_ponovnaNaloziev - veljaven posnetek nadomesti vrsto cakajocih in potrjena revizija se ne poslje znova`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik1 = DnevnikKlicev(shramba)
+        val dnevnik1 = DnevnikKlicev(shramba, ura = URA)
         assertTrue(dnevnik1.dodaj(f6Klic("f6a-1", "+38640600001")))
-        val dnevnik2 = DnevnikKlicev(shramba)
+        val dnevnik2 = DnevnikKlicev(shramba, ura = URA)
         assertEquals(listOf("f6a-1"), dnevnik2.cakajociZaSinhronizacijo().map { it.id })
 
         // Druga instanca potrdi revizijo in zapise prazno vrsto
@@ -789,7 +793,7 @@ class DnevnikKlicevTest {
     @Test
     fun `f6b_osirotelaProjekcija - cakajoca revizija brez veljavnega klica se ne obnovi in ne postane trajna`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
         assertTrue(dnevnik.dodaj(f6Klic("f6b-x", "+38640600111", cas = 1000L)))
         assertTrue(dnevnik.dodaj(f6Klic("f6b-y", "+38640600222", cas = 2000L)))
         val surovo = shramba.preberi()!!
@@ -797,7 +801,7 @@ class DnevnikKlicevTest {
         val poskodovano = surovo.replaceFirst("+38640600111", "")
         assertNotEquals(surovo, poskodovano)
 
-        val po = DnevnikKlicev(PomnilniskaShramba(poskodovano))
+        val po = DnevnikKlicev(PomnilniskaShramba(poskodovano), ura = URA)
         assertEquals(listOf("f6b-y"), po.seznamPoDatumu().map { it.id })
         assertEquals(listOf("f6b-y"), po.cakajociZaSinhronizacijo().map { it.id })
     }
@@ -805,7 +809,7 @@ class DnevnikKlicevTest {
     @Test
     fun `f6g_zastarelaProjekcija - veljaven klic ostane v vrsti, projekcija se obnovi iz klica in ne iz datoteke (F6 pregled, najdba 3)`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
         assertTrue(dnevnik.dodaj(f6Klic("f6g-1", "+38640600701")))
         val surovo = shramba.preberi()!!
         // projekcija v datoteki je zastarela ali spremenjena (druga stevilka); klic sam je veljaven
@@ -813,7 +817,7 @@ class DnevnikKlicevTest {
         assertTrue(i > surovo.indexOf("+38640600701"), "stevilka mora biti v zapisu in v projekciji")
         val spremenjeno = surovo.substring(0, i) + "+38640600702" + surovo.substring(i + "+38640600701".length)
 
-        val po = DnevnikKlicev(PomnilniskaShramba(spremenjeno))
+        val po = DnevnikKlicev(PomnilniskaShramba(spremenjeno), ura = URA)
         assertEquals(listOf("f6g-1"), po.seznamPoDatumu().map { it.id })
         // klic se ne izgubi iz vrste, poslje pa se podatek iz klica (nikoli stevilka iz spremenjene projekcije)
         assertEquals(listOf("+38640600701"), po.cakajociZaSinhronizacijo().map { it.stevilka })
@@ -822,7 +826,7 @@ class DnevnikKlicevTest {
     @Test
     fun `f6c_potrditevPoNeuspeliNalozitvi - potrditev ne prepise novejsega posnetka ki ga ni bilo mogoce prebrati`() {
         val shramba = LaznaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
         assertTrue(dnevnik.dodaj(f6Klic("f6c-1", "+38640600301")))
         val novejsi = "NOVEJSI-POSNETEK-DRUGE-INSTANCE"
         assertTrue(
@@ -840,7 +844,7 @@ class DnevnikKlicevTest {
     @Test
     fun `f6d_napacenTipCakajocih - polje cakajoci ki ni polje je poskodba in blokira pisanje`() {
         val shramba = PomnilniskaShramba()
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
         assertTrue(dnevnik.dodaj(f6Klic("f6d-1", "+38640600401")))
         val surovo = shramba.preberi()!!
         val i = surovo.indexOf("\"cakajoci\"")
@@ -848,7 +852,7 @@ class DnevnikKlicevTest {
         val poskodovano = surovo.substring(0, i) + "\"cakajoci\": {\"a\": 1}\n}"
         val shramba2 = PomnilniskaShramba(poskodovano)
 
-        val po = DnevnikKlicev(shramba2)
+        val po = DnevnikKlicev(shramba2, ura = URA)
         assertFalse(po.dodaj(f6Klic("f6d-2", "+38640600402")))
         assertEquals(poskodovano, shramba2.preberi())
         assertFalse(po.naloziIzShrambe())
@@ -857,11 +861,11 @@ class DnevnikKlicevTest {
     @Test
     fun `f6e_zavrnjenaDatotekaPriPraznemPomnilniku - pisanje je blokirano dokler ponovna nalozitev ne uspe`() {
         val vir = PomnilniskaShramba()
-        assertTrue(DnevnikKlicev(vir).dodaj(f6Klic("f6e-0", "+38640600500")))
+        assertTrue(DnevnikKlicev(vir, ura = URA).dodaj(f6Klic("f6e-0", "+38640600500")))
         val posnetek = vir.preberi()!!
 
         val shramba = LaznaShramba(zacetnaVsebina = posnetek, vsiliNeveljavnoBranje = true)
-        val dnevnik = DnevnikKlicev(shramba)
+        val dnevnik = DnevnikKlicev(shramba, ura = URA)
         assertFalse(dnevnik.dodaj(f6Klic("f6e-1", "+38640600501")))
         assertEquals(0, shramba.steviloShranjevanj)
 
@@ -876,7 +880,7 @@ class DnevnikKlicevTest {
     fun `ime iz imenika prezivi shranjevanje in ponovno branje`() {
         val shramba = PomnilniskaShramba()
         val zapis = ZapisKlica(id = "klic-imenik-1", casZacetka = 1_000L, stevilka = "+99955501001", trajanjeS = 12, povzetek = "Poklici nazaj", imeImenik = "Ana Novak")
-        assertTrue(DnevnikKlicev(shramba).dodaj(zapis))
-        assertEquals("Ana Novak", DnevnikKlicev(shramba).seznam().single { it.id == "klic-imenik-1" }.imeImenik)
+        assertTrue(DnevnikKlicev(shramba, ura = URA).dodaj(zapis))
+        assertEquals("Ana Novak", DnevnikKlicev(shramba, ura = URA).seznam().single { it.id == "klic-imenik-1" }.imeImenik)
     }
 }
