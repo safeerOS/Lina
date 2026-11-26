@@ -92,7 +92,7 @@ class KljuciMozganovTest {
             val k = KljuciMozganov.kljucPara(par.zasebni, javni, idTel)
             // isto pravilo kot odTelefona v kljuci-mozganov.ts: tuja naprava samo za id, ki ga racunalnik se nima
             val znani = zapisi.map { it.id }.toSet()
-            korak((o["zapisi"] as JsonArray).mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_TR) }.filter { it.naprava == idTel || it.id !in znani })
+            korak((o["zapisi"] as JsonArray).mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_TR) }.filter { it.naprava == idTel || (it.id !in znani && !it.izbrisan) })
             val odg = buildJsonObject {
                 put("v", 1); put("naprava", jaz); put("javni", par.javni)
                 put("zapisi", JsonArray(zapisi.map { KljuciMozganov.zaZico(it, k, KljuciMozganov.SMER_RT) }))
@@ -348,5 +348,18 @@ class KljuciMozganovTest {
         assertNull(SinhronKljucev.odstrani(a.shramba, a.sloti, a.id, 2000, v.id))
         assertNull(SinhronKljucev.dodaj(a.shramba, a.sloti, a.id, 2100, "gemini", "Nov", K2))
         assertEquals(K2, a.sloti.m["gemini"])
+    }
+
+    @Test
+    fun vnosMedIzmenjavoNePrepiseTujegaZapisa() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sinhroniziraj(r)
+        r.sloti["gemini"] = K1; r.zdaj = 2000; r.korak(emptyList())
+        // telefon ima prazno mesto; med izmenjavo lastnik vpise svoj kljuc - zapis z racunalnika (K1) ne sme izginiti
+        a.sloti.medIzmenjavo { a.sloti.m["gemini"] = K2 }
+        r.zdaj = 2100; a.sinhroniziraj(r, 2100)
+        assertEquals(K2, a.sloti.m["gemini"])
+        assertTrue(r.zapisi.any { !it.izbrisan && it.vrednost == K1 }, "kljuc z racunalnika ostane")
+        assertTrue(r.zapisi.any { !it.izbrisan && it.vrednost == K2 })
     }
 }

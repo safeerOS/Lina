@@ -246,6 +246,8 @@ object KljuciMozganov {
             if (slotiZdaj[p].orEmpty() == slotiPrej[p].orEmpty()) continue
             sloti.remove(p)
             odstranjeni = odstranjeni.filter { it != p }
+            // tudi izbira ostane prejsnja (kot TS): sicer bi naslednji krog lastnikov kljuc vpisal cez tuj zapis
+            aktivni = st.aktivni[p]?.let { aktivni + (p to it) } ?: (aktivni - p)
             znova = true
         }
         if (!st.uvozeno) {
