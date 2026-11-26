@@ -211,13 +211,33 @@ async function ustaviOtroka(otrok: ChildProcess, rokMs: number): Promise<void> {
 /** Okno zivosti po zapisu nastavitev (ms): otrok, ki v tem casu umre, ni javljen kot pripravljen. */
 const OKNO_ZIVOSTI_MS = 150;
 
+/** Naloga 33: vzrok iz stderr otroka - samo znani vzorci postanejo kratka koda, besedilo stderr se nikoli ne shrani (lahko ima skrivnost). */
+export function vzrokIzStderr(kos: string): string | null {
+  if (/EADDRINUSE/.test(kos)) return "vrata zasedena";
+  if (/EACCES|EPERM/.test(kos)) return "dovoljenje";
+  if (/ERR_MODULE_NOT_FOUND|Cannot find (module|package)/.test(kos)) return "manjka modul";
+  return null;
+}
+
+/**
+ * Naloga 33: vzrok, zakaj se otrok ni pripravil (lastnik na testnem PC je videl samo »se ni pripravil pravocasno«): izhodna koda
+ * zaganjalnika (2 = brez poti, 3 = uvoz OpenLine ni uspel), znan vzorec v stderr, rok ali napaka zagona. Vedno kratka koda.
+ */
+export function vzrokIzhoda(koda: number | null, signal: NodeJS.Signals | null, stderr: string | null): string {
+  if (stderr) return stderr;
+  if (koda === 2) return "zaganjalnik";
+  if (koda === 3) return "uvoz";
+  return signal ? "ustavljen" : "izhod";
+}
+
 function pocakajPripravljenost(
   otrok: ChildProcess,
   zbiralnik: ZbiralnikIzpisa,
   rokMs: number,
+  vzrokStderr: () => string | null = () => null,
 ): Promise<void> {
   if (!otrok.stdout || otrok.exitCode !== null || otrok.signalCode !== null) {
-    return Promise.reject(new Error("OpenLine se ni pripravil"));
+    return Promise.reject(new Error(otrok.exitCode !== null || otrok.signalCode !== null ? vzrokIzhoda(otrok.exitCode, otrok.signalCode, vzrokStderr()) : "OpenLine se ni pripravil"));
   }
   const stdout = otrok.stdout;
   return new Promise((resolve, reject) => {
@@ -234,11 +254,11 @@ function pocakajPripravljenost(
       pocisti();
       resolve();
     };
-    const neuspeh = () => {
+    const neuspeh = (vzrok: string) => {
       if (koncano) return;
       koncano = true;
       pocisti();
-      reject(new Error("OpenLine se ni pripravil"));
+      reject(new Error(vzrok));
     };
     const obPodatkih = (kos: Buffer | string) => {
       zbiralnik.dodaj(kos);
@@ -246,11 +266,14 @@ function pocakajPripravljenost(
         uspeh();
       }
     };
-    const obIzhodu = () => neuspeh();
-    const obNapaki = () => neuspeh();
+    // stderr pride lahko za dogodkom exit: kratko okno, da se vzorec (npr. EADDRINUSE) se prebere
+    const obIzhodu = (koda: number | null, signal: NodeJS.Signals | null) => {
+      setTimeout(() => neuspeh(vzrokIzhoda(koda, signal, vzrokStderr())), 50); // brez unref: sicer se zanka dogodkov konca pred zavrnitvijo
+    };
+    const obNapaki = () => neuspeh("zagon");
 
     const rok = Number.isFinite(rokMs) && rokMs > 0 ? rokMs : PRIVZETI_ROK_PRIPRAVLJENOSTI_MS;
-    const casovnik = setTimeout(neuspeh, rok);
+    const casovnik = setTimeout(() => neuspeh("rok"), rok);
     casovnik.unref?.();
 
     stdout.on("data", obPodatkih);
@@ -416,20 +439,32 @@ export async function zagotoviOpenLine(
         otrok.stderr?.on("error", () => undefined);
 
         // 7. Stdout v ZbiralnikIzpisa, stderr se samo prazni brez shranjevanja.
+        // naloga 33: stderr se ne shrani; prvih 8 KB se samo pregleda za znan vzorec (kratka koda vzroka)
+        let vzrokStderr: string | null = null;
+        let pregledano = 0;
         if (otrok.stderr) {
-          otrok.stderr.on("data", () => undefined);
+          otrok.stderr.on("data", (kos: Buffer | string) => {
+            if (vzrokStderr || pregledano > 8192) return;
+            const del = String(kos).slice(0, 8192);
+            pregledano += del.length;
+            vzrokStderr = vzrokIzStderr(del);
+          });
         }
         const zbiralnik = new ZbiralnikIzpisa();
-        await pocakajPripravljenost(otrok, zbiralnik, o.rokPripravljenostiMs);
+        try {
+          await pocakajPripravljenost(otrok, zbiralnik, o.rokPripravljenostiMs, () => vzrokStderr);
+        } catch (e) {
+          varnoZabelezi(o.dnevnik, `openline:ni-pripravljen:${e instanceof Error ? e.message : "?"}`);
+          throw e;
+        }
 
         // Po pripravljenosti nadaljnji stdout praznimo, da se cev ne zapolni.
         if (otrok.stdout) {
           otrok.stdout.on("data", () => undefined);
         }
 
-        if (s.generacija !== mojaGeneracija || otrokKoncan) {
-          throw new Error("OpenLine se ni pripravil");
-        }
+        if (s.generacija !== mojaGeneracija) throw new Error("OpenLine se ni pripravil");
+        if (otrokKoncan) throw new Error("izhod"); // naloga 33: otrok je umrl, ne prekinitev
 
         // 8. Preverbe razclenjenega izpisa (vrata in gostitelj se morata ujemati).
         const najdenNaslov = zbiralnik.naslov();
@@ -470,9 +505,8 @@ export async function zagotoviOpenLine(
           }, OKNO_ZIVOSTI_MS);
           zivOtrok.once("exit", obIzhoduOkna);
         });
-        if (s.generacija !== mojaGeneracija || otrokKoncan || umrlVOknu || !jeOtrokZiv(otrok)) {
-          throw new Error("OpenLine se ni pripravil");
-        }
+        if (s.generacija !== mojaGeneracija) throw new Error("OpenLine se ni pripravil");
+        if (otrokKoncan || umrlVOknu || !jeOtrokZiv(otrok)) throw new Error("izhod");
 
         // 10. Zapomni stanje; ob poznejsem izhodu tece postane false (brez ponovnega zagona).
         const zapis: TekociProces = {

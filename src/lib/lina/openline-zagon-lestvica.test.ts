@@ -424,7 +424,7 @@ describe("openline-zagon.server: lestvica ustavljanja, zivost, cevi, razveljavit
         napaka = e;
       }
       assert.ok(napaka instanceof Error, "mrtev otrok ne sme biti javljen kot pripravljen");
-      assert.equal((napaka as Error).message, "OpenLine se ni pripravil");
+      assert.equal((napaka as Error).message, "izhod"); // naloga 33: vzrok, ne obce »se ni pripravil«
       assert.equal(stanjeOpenLineProcesa().tece, false);
     } finally {
       for (const pid of pidi) poskusiUbiti(pid);

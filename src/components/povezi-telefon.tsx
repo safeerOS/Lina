@@ -50,6 +50,8 @@ export type PovezavaPloscaLastnosti = {
   napaka?: string;
 };
 
+/** Naslov zanke (enako kot naslovZanke v zasebno-omrezje.server.ts, ki ga odjemalec ne sme uvoziti). */
+const ZANKA = /^(127\.0\.0\.1|::1|localhost)$/;
 const GUMB = "w-fit rounded-xl border border-[var(--color-rule)] px-4 py-2 text-sm disabled:opacity-50";
 const POLJE = "mt-1 w-full rounded-xl border border-[var(--color-rule)] bg-[var(--color-sheet)] text-[var(--color-ink)] px-3 py-2";
 const GUMB_MAJHEN = "w-fit rounded-xl border border-[var(--color-rule)] px-3 py-1 text-sm disabled:opacity-50";
@@ -328,6 +330,16 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     <section aria-labelledby="pt-naslov" className="grid gap-3 rounded-3xl bg-[var(--color-sheet)] p-5 xl:order-1">
       <h3 id="pt-naslov" className="text-lg">{t("telNaslov")}</h3>
       <p className="text-sm text-[var(--color-moss)]">{t("telRazlaga")}</p>
+      {/* naloga 33: na 127.0.0.1 telefon doma Line ne najde - en gumb z naslovom; klik je lastnikova odobritev omrezja (N1), nikoli samodejno */}
+      {s.vklop && ZANKA.test(s.naslov) && s.predlogNaslova ? (
+        <div className="grid gap-2 text-sm" data-predlog-domace="1">
+          <p role="status">{t("telZankaRazlaga")}</p>
+          <button type="button" disabled={zaposlen} className={gumb}
+            onClick={() => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { naslov: s.predlogNaslova, odobriOmrezje: true } })))}>
+            {t("telUporabiDomace")} ({s.predlogNaslova})
+          </button>
+        </div>
+      ) : null}
       <form
         className="grid gap-2 text-sm"
         onSubmit={(e) => {

@@ -637,7 +637,10 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
   for (const [koda, p] of stanje().prijave) if (p.stanje === "caka" && p.naprava && await jeClanKroga(p.naprava.kljuc, p.naprava.id)) ozjiKrog.push(koda);
   return {
     vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", samodejniAgenti: n.samodejniAgenti, zagonClaude: zadnjiRazlogSeje(root), naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(vmesniki()), tece: !!t && !t.rezerva, napaka: stanje().napaka,
-    napakaKoda: stanje().napakaKoda ?? "", samoGlobalLink: !!t?.rezerva, predlogNaslova: n.vklop ? stanje().predlogNaslova ?? "" : "", odtis: t?.odtis ?? "",
+    napakaKoda: stanje().napakaKoda ?? "", samoGlobalLink: !!t?.rezerva, predlogNaslova: !n.vklop ? ""
+      // naloga 33: na 127.0.0.1 (privzeta rezerva sveze namestitve) telefon doma Line ne najde; predlog je sproti izracunan naslov privzete
+      // poti (brez docker/bridge), preklop je se vedno samo lastnikov klic »Uporabi domace omrezje« (N1), nikoli samodejno
+      : naslovZanke(n.naslov) ? izberiLanNaslov(vmesniki(), await izvorPoti()) ?? "" : stanje().predlogNaslova ?? "", odtis: t?.odtis ?? "",
     claudeCode: t ? await t.izvajalec.razpolozljiv().catch(() => false) : false,
     cakajo,
     ozjiKrog,

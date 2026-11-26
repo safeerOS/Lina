@@ -400,7 +400,7 @@ describe("openline-zagon.server in openline-start.mjs", () => {
         }),
         (err: unknown) => {
           assert.ok(err instanceof Error);
-          assert.equal(err.message, "OpenLine se ni pripravil");
+          assert.equal(err.message, "izhod");
           const kljuc = sled1.zadnjeOpcije()?.env?.HTTP_GATEWAY_API_KEY;
           assert.ok(typeof kljuc === "string" && kljuc.length >= 32);
           preveriBrezSkrivnosti(err.message, okPadec.baza, kljuc);
@@ -422,7 +422,7 @@ describe("openline-zagon.server in openline-start.mjs", () => {
         }),
         (err: unknown) => {
           assert.ok(err instanceof Error);
-          assert.equal(err.message, "OpenLine se ni pripravil");
+          assert.equal(err.message, "rok");
           const kljuc = sled2.zadnjeOpcije()?.env?.HTTP_GATEWAY_API_KEY;
           assert.ok(typeof kljuc === "string" && kljuc.length >= 32);
           preveriBrezSkrivnosti(err.message, okMolci.baza, kljuc);
