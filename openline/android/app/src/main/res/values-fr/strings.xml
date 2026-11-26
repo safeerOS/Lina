@@ -219,7 +219,7 @@
     <string name="assistant_code_searching">Recherche de Lina sur votre réseau domestique…</string>
     <string name="assistant_code_pick">Choisissez Lina</string>
     <string name="assistant_code_manual_title">Adresse de l’ordinateur avec Lina</string>
-    <string name="assistant_code_manual_message">Le téléphone n’a pas trouvé l’ordinateur avec Lina (la recherche ne fonctionne que si le téléphone et l’ordinateur sont sur le même réseau Wi‑Fi). Sur l’ordinateur, ouvrez « Connect phone » dans Lina : s’il affiche 127.0.0.1, cliquez sur « Use home network ». Ou saisissez l’adresse que Lina y affiche (p. ex. 192.168.0.20). Le port par défaut est 8446.</string>
+    <string name="assistant_code_manual_message">Le téléphone n’a pas trouvé l’ordinateur avec Lina (la recherche ne fonctionne que si le téléphone et l’ordinateur sont sur le même réseau domestique (Wi‑Fi ou câble)). Sur l’ordinateur, ouvrez « Connect phone » dans Lina : s’il affiche 127.0.0.1, cliquez sur « Use home network ». Ou saisissez l’adresse que Lina y affiche (p. ex. 192.168.0.20). Le port par défaut est 8446.</string>
     <string name="assistant_code_manual_hint">p. ex. 192.168.1.20 ou 192.168.1.20:8446</string>
     <string name="assistant_code_bad_address">Le téléphone ne peut pas utiliser cette adresse. Saisissez l’adresse privée que Lina affiche sur l’ordinateur dans « Connect phone » (p. ex. 192.168.0.20) ; 127.0.0.1 est l’adresse de l’ordinateur pour lui-même et ne fonctionne pas depuis le téléphone.</string>
     <string name="assistant_code_next">Continuer</string>

@@ -219,7 +219,7 @@
     <string name="assistant_code_searching">Iščem Lino v domačem omrežju …</string>
     <string name="assistant_code_pick">Izberite Lino</string>
     <string name="assistant_code_manual_title">Naslov računalnika z Lino</string>
-    <string name="assistant_code_manual_message">Telefon računalnika z Lino ni našel (iskanje deluje samo, če sta telefon in računalnik v istem omrežju Wi‑Fi). Na računalniku v Lini odprite »Poveži telefon«: če piše 127.0.0.1, kliknite »Uporabi domače omrežje«. Lahko pa vpišete naslov, ki ga Lina tam pokaže (npr. 192.168.0.20). Privzeta vrata so 8446.</string>
+    <string name="assistant_code_manual_message">Telefon računalnika z Lino ni našel (iskanje deluje samo, če sta telefon in računalnik v istem domačem omrežju (Wi‑Fi ali kabel)). Na računalniku v Lini odprite »Poveži telefon«: če piše 127.0.0.1, kliknite »Uporabi domače omrežje«. Lahko pa vpišete naslov, ki ga Lina tam pokaže (npr. 192.168.0.20). Privzeta vrata so 8446.</string>
     <string name="assistant_code_manual_hint">npr. 192.168.1.20 ali 192.168.1.20:8446</string>
     <string name="assistant_code_bad_address">Tega naslova telefon ne more uporabiti. Vpišite zasebni naslov, ki ga Lina pokaže na računalniku v »Poveži telefon« (npr. 192.168.0.20); 127.0.0.1 je naslov računalnika samega zase in s telefona ne deluje.</string>
     <string name="assistant_code_next">Naprej</string>

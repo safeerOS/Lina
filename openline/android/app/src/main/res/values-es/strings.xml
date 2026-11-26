@@ -219,7 +219,7 @@
     <string name="assistant_code_searching">Buscando Lina en su red doméstica…</string>
     <string name="assistant_code_pick">Elija Lina</string>
     <string name="assistant_code_manual_title">Dirección del ordenador con Lina</string>
-    <string name="assistant_code_manual_message">El teléfono no encontró el ordenador con Lina (la búsqueda solo funciona si el teléfono y el ordenador están en la misma red Wi‑Fi). En el ordenador, abra «Connect phone» en Lina: si muestra 127.0.0.1, haga clic en «Use home network». O escriba la dirección que Lina muestra allí (p. ej. 192.168.0.20). El puerto predeterminado es el 8446.</string>
+    <string name="assistant_code_manual_message">El teléfono no encontró el ordenador con Lina (la búsqueda solo funciona si el teléfono y el ordenador están en la misma red doméstica (Wi‑Fi o cable)). En el ordenador, abra «Connect phone» en Lina: si muestra 127.0.0.1, haga clic en «Use home network». O escriba la dirección que Lina muestra allí (p. ej. 192.168.0.20). El puerto predeterminado es el 8446.</string>
     <string name="assistant_code_manual_hint">p. ej. 192.168.1.20 o 192.168.1.20:8446</string>
     <string name="assistant_code_bad_address">El teléfono no puede usar esta dirección. Escriba la dirección privada que Lina muestra en el ordenador en «Connect phone» (p. ej. 192.168.0.20); 127.0.0.1 es la dirección del ordenador para sí mismo y no funciona desde el teléfono.</string>
     <string name="assistant_code_next">Continuar</string>
