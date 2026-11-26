@@ -1,7 +1,7 @@
 /**
  * Linin generator videa (lastnik 22. 11. 2026: »Video« - ob generatorju slik iz ideje Muse4AI, brez novega racuna). Vertex Veo prek
  * obstojecega projekta: predictLongRunning vrne ime operacije, fetchPredictOperation jo preverja, dokler ni koncana. Slovenski opis
- * prevedejo Linini mozgani (mediji-opis.server.ts). Video gre v isto knjiznico (slike.json, mapa slike/), samo lastnik, nikoli v klicih.
+ * prevede Google v lastnikovem projektu (mediji-opis.server.ts; brez prevoda videa ni, B9). Video gre v isto knjiznico (slike.json, mapa slike/), samo lastnik, nikoli v klicih.
  * Vir API: Vertex AI Veo (durationSeconds za Veo 3: 4, 6 ali 8; generateAudio obvezen za Veo 3).
  * Naloga 20 (26. 11. 2026): Veo 3.1 NI opuscen - prava kratka zahteva (4 s, brez zvoka, us-central1) je uspela za oba modela:
  * fast 23,8 s / 470 kB, standard 56,2 s / 562 kB. Oblika odgovora operacije izmerjena: {name, done, response: {@type,
@@ -45,7 +45,7 @@ export type MoznostiVidea = {
   zdaj?: () => Date;
   nakljucno?: () => string;
   prevedi?: Prevajalnik;
-  /** Drugi prepis govorjenega opisa iz lokalnega RSDO (dodatno mnenje); samo ko je opis narekovan. */
+  /** Drugi prepis govorjenega opisa iz lokalnega RSDO; Googlov prevajalnik ga ne uporablja (naloga 30: mozganov ni vec v verigi). */
   namigRsdo?: string;
   /** Za preizkuse: cakanje med poizvedbami in skupni rok. */
   cakaj?: (ms: number) => Promise<void>;

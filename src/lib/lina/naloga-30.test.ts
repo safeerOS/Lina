@@ -189,6 +189,7 @@ describe("naloga 30 / 2: ustvari_sliko - potrditev samo po branju zasebnih podat
     const o = ustvariOrkestrator(root, { ...brez, klicModela: m, orodja: orodjaLine(root, { slike: { mozgani: vertex, fetch: v.f, zeton: async () => ZETON, prevedi: PREVOD, nakljucno: ids } }) });
     const s = await o.teci((await o.nova({ cilj: "Preberi zasebno.txt in naredi sliko." })).id);
     assert.equal(s.faza, "caka-potrditev");
+    assert.equal(s.okuzeno, false, "potrditev zaradi zasebnih podatkov, ne zaradi okuzbe");
     assert.equal(s.odprti[0]!.ime, "ustvari_sliko");
     assert.equal(v.zahteve.length, 0, "brez potrditve ni zahteve generatorju slik");
   });

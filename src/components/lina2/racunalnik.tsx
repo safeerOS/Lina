@@ -818,11 +818,11 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
         <button type="submit" disabled={zaposlen} className="lina-gumb-majhen self-start">{t("agShraniPrepovedane")}</button>
       </form>
       {stanje.prepovedaneNepotrjene ? (
-        <div role="alert" className="flex flex-col gap-2 text-sm">
-          <p className="font-semibold text-[var(--color-signal)]">{t("agPrepovedaneNepotrjene")}</p>
+        <div className="flex flex-col gap-2 text-sm">
+          <p role="alert" className="font-semibold text-[var(--color-signal)]">{t("agPrepovedaneNepotrjene")}</p>
           <p>{t("agPrepovedaneNepotrjeneNamig")}</p>
           {stanje.prepovedane.length ? (
-            <ul className="list-disc pl-5 font-mono text-xs">{stanje.prepovedane.map((m) => <li key={m}>{m}</li>)}</ul>
+            <ul className="list-disc pl-5 font-mono text-xs">{stanje.prepovedane.map((m, i) => <li key={`${i}-${m}`}>{m}</li>)}</ul>
           ) : (
             <p className="text-xs">{t("agPrepovedanePrazen")}</p>
           )}

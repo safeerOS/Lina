@@ -54,9 +54,9 @@ export type MoznostiGeneriranja = {
   signal?: AbortSignal;
   zdaj?: () => Date;
   nakljucno?: () => string;
-  /** Prevod slovenskega opisa v angleski poziv (privzeto Linini mozgani; mediji-opis.server.ts). */
+  /** Prevod slovenskega opisa v angleski poziv (privzeto Google v lastnikovem projektu; mediji-opis.server.ts). */
   prevedi?: Prevajalnik;
-  /** Drugi prepis govorjenega opisa iz lokalnega RSDO (dodatno mnenje); samo ko je opis narekovan. */
+  /** Drugi prepis govorjenega opisa iz lokalnega RSDO; Googlov prevajalnik ga ne uporablja (naloga 30: mozganov ni vec v verigi). */
   namigRsdo?: string;
 };
 
