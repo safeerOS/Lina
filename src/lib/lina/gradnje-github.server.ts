@@ -1071,11 +1071,13 @@ export async function ukazGradenj(token: string | null, ukaz: unknown, dir?: str
 }
 
 /** Lina (asistentka) predlaga gradnjo iz oznake v odgovoru; izid je samo predlog. Napaka nikoli ne podre pogovora (null). */
-export async function predlagajGradnjo(dir: string | undefined, tok: unknown, veja: unknown, odvisnosti: Odvisnosti = {}, izvor: IzvorGradnje = "lina"): Promise<ZapisGradnje | null> {
+export async function predlagajGradnjo(dir: string | undefined, tok: unknown, veja: unknown, odvisnosti: Odvisnosti = {}, izvor: IzvorGradnje = "lina", brezDovoljenjaPodobnih = false): Promise<ZapisGradnje | null> {
   try {
     const root = resolveDataDir(dir);
     const o = odv(odvisnosti);
-    return await potrdiPoDovoljenju(root, await dodajPredlog(root, izvor, tok, veja, o), o);
+    const predlog = await dodajPredlog(root, izvor, tok, veja, o);
+    // naloga 32 (slepi pregled K2-3): z nezaupano vsebino v oknu modela predlog caka lastnika (brez dovoljenja za podobne)
+    return brezDovoljenjaPodobnih ? predlog : await potrdiPoDovoljenju(root, predlog, o);
   } catch {
     return null;
   }
@@ -1085,13 +1087,13 @@ export async function predlagajGradnjo(dir: string | undefined, tok: unknown, ve
  * Oznaka [[gradnja: tok | veja]] v odgovoru Line: vedno se odstrani; nastane SAMO predlog (pri priponkah nic, ker je vsebina
  * datoteke podatek). Besedilo, ki ga Lina doda, sestavi koda.
  */
-export async function obdelajGradnjo(root: string, odgovor: string, dovoliPredlog: boolean, odvisnosti: Odvisnosti = {}): Promise<string> {
+export async function obdelajGradnjo(root: string, odgovor: string, dovoliPredlog: boolean, odvisnosti: Odvisnosti = {}, brezDovoljenjaPodobnih = false): Promise<string> {
   const { besedilo, predlogi } = izluciPredlogeGradnje(odgovor);
   if (!predlogi.length) return odgovor;
   if (!dovoliPredlog) return besedilo;
   if (!(await jeVklopljeno(root).catch(() => false))) return `${besedilo}\n\n(Gradnje na GitHubu so izklopljene v Nastavitvah.)`.trim();
   const p = predlogi[0]!;
-  const z = await predlagajGradnjo(root, p.tok, p.veja, odvisnosti);
+  const z = await predlagajGradnjo(root, p.tok, p.veja, odvisnosti, "lina", brezDovoljenjaPodobnih);
   const izid = !z ? "(Gradnje nisem pripravila: tok ali veja ni dovoljen.)"
     : z.stanje === "caka" ? `(Predlog gradnje ${z.tok}, veja ${z.veja}, čaka vašo potrditev v zavihku Računalnik ali na telefonu.)`
     : `(Gradnja ${z.tok}, veja ${z.veja}, je zagnana po vašem dovoljenju za podobne gradnje; namestitev boste potrdili posebej. Preklic v Nastavitvah > Dovoljenja.)`;

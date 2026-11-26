@@ -489,7 +489,12 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
       if (sprememba) await writeJson(root, DATOTEKA_SINHRON, st);
       // Racunalniski pogovor dobi sporocila s telefona (zadnjih MEJA_SPOROCIL, po casu). Preverimo tudi brez spremembe,
       // da neuspel prejsnji zapis asistent.json ob ponovnem poskusu popravimo (brez nove revizije).
-      const zeljen = st.pogovor.map((x) => x.p);
+      // naloga 32 (slepi pregled K2-2): zastavici podatka (priponka, novice) PogovorSinhron ne nese - ohrani ju iz lokalnega zapisa
+      const zastavice = new Map<string, Pick<SporociloAsistenta, "izPriponke" | "izVirov">>();
+      for (const s of Array.isArray(lokalni) ? lokalni : []) {
+        if (s && (s.izPriponke || s.izVirov)) zastavice.set(`${s.vloga}\n${s.cas}\n${String(s.besedilo).slice(0, MEJA_BESEDILA)}`, { ...(s.izPriponke ? { izPriponke: true as const } : {}), ...(s.izVirov ? { izVirov: true as const } : {}) });
+      }
+      const zeljen: SporociloAsistenta[] = st.pogovor.map((x) => ({ ...x.p, ...zastavice.get(`${x.p.vloga}\n${x.p.cas}\n${x.p.besedilo}`) }));
       if (sprememba || JSON.stringify(Array.isArray(lokalni) ? lokalni : []) !== JSON.stringify(zeljen)) await writeJson(root, "asistent.json", zeljen);
     });
     // Mape izbrisanih klicev (po zapisu stanja: zapisa ni vec, tudi ce mapa ne uspe; oznaka ostane za ponovni poskus).

@@ -412,7 +412,7 @@ export async function asistentPogovor(
   const rezultat = await callProvider({ ...brain, text: vhod.text, system: vhod.system + NAVODILO_OZNAKE + ((await jeGradnjaVklopljena(root).catch(() => false)) ? NAVODILO_OZNAKE_GRADNJE : "") + (pravila.dodatki?.n8n === true ? NAVODILO_OZNAKE_N8N : ""), maxTokens: 400, najvecZnakov: 2000, vsebinaKlica: false });
   const cas = new Date().toISOString();
   if (!rezultat.ok) return { ok: false, sporocilo: rezultat.sporocilo, zgodovina };
-  const obdelan = await obdelajOznakeN8n(root, await obdelajGradnjo(root, await obdelajClaudeCode(root, await obdelajUci(root, hideSecret(rezultat.text, brain.key).replace(/^Lina:\s*/i, "").trim(), uc.vklopljeno), true, {}, podatekVOknu), true), true);
+  const obdelan = await obdelajOznakeN8n(root, await obdelajGradnjo(root, await obdelajClaudeCode(root, await obdelajUci(root, hideSecret(rezultat.text, brain.key).replace(/^Lina:\s*/i, "").trim(), uc.vklopljeno), true, {}, podatekVOknu), true, {}, podatekVOknu), true);
   // C6: ce je odgovoril rezervni brezplacni model istega ponudnika, lastnik to izve v odgovoru.
   const odgovor = rezultat.povratek && obdelan ? `${obdelan}\n\n(${rezultat.povratek})` : obdelan;
   const nova = await dodajVPogovor(root, [

@@ -192,27 +192,40 @@ export function odkodiEntitete(s: string): string {
 
 /** Besedilo oznake: razveljavi CDATA, odstrani HTML, odkodira entitete, stisne presledke. */
 export function pocistiBesedilo(surovo: string): string {
-  // naloga 32 (S2): meja vhoda (naslov 200, odlomek 300 znakov); nezaprt CDATA in < brez > na 1 MB bi bila kvadratna
-  const deli = surovo.slice(0, 8000).split(/(<!\[CDATA\[[\s\S]*?\]\]>)/g);
-  const prvi = deli
-    .map((d) => (d.startsWith("<![CDATA[") ? d.slice(9, -3) : odkodiEntitete(d)))
-    .join("");
-  const brezOznak = prvi.replace(/<[^>]{0,2000}>/g, " ");
+  // naloga 32 (slepi pregled S2, K2-1, K2-5): CDATA z indexOf in znacke brez < v notranjosti - oboje linearno (prej kvadratno na 1 MB)
+  let prvi = "";
+  for (let i = 0; ; ) {
+    const z = surovo.indexOf("<![CDATA[", i);
+    const k = z < 0 ? -1 : surovo.indexOf("]]>", z + 9);
+    if (z < 0 || k < 0) {
+      prvi += odkodiEntitete(surovo.slice(i));
+      break;
+    }
+    prvi += odkodiEntitete(surovo.slice(i, z)) + surovo.slice(z + 9, k);
+    i = k + 3;
+  }
+  const brezOznak = prvi.replace(/<[^<>]{0,2000}>/g, " ");
   return stisni(odkodiEntitete(brezOznak));
 }
 
 function izrezi(blok: string, imena: readonly string[]): string | null {
   // naloga 32 (S2): vsak korak je eno linearno iskanje (lenivi regex z [^>]* je bil na zlonamernem bloku kvadraten)
   for (const ime of imena) {
-    const z = new RegExp(`<${ime}(?=[\\s>/])`, "i").exec(blok);
-    if (!z) continue;
-    const gt = blok.indexOf(">", z.index);
-    if (gt < 0) continue;
-    if (blok[gt - 1] === "/") continue;
+    const zacetek = new RegExp(`<${ime}(?=[\\s>/])`, "gi");
     const konec = new RegExp(`</${ime}>`, "gi");
-    konec.lastIndex = gt + 1;
-    const k = konec.exec(blok);
-    if (k) return blok.slice(gt + 1, k.index);
+    // K2-4: samozaprta znacka (<title/>, <link .../>) se preskoci in isce naslednja; brez zakljucne znacke ni nobene vec
+    for (let z = zacetek.exec(blok); z; z = zacetek.exec(blok)) {
+      const gt = blok.indexOf(">", z.index);
+      if (gt < 0) break;
+      if (blok[gt - 1] === "/") {
+        zacetek.lastIndex = gt + 1;
+        continue;
+      }
+      konec.lastIndex = gt + 1;
+      const k = konec.exec(blok);
+      if (k) return blok.slice(gt + 1, k.index);
+      break;
+    }
   }
   return null;
 }
@@ -285,7 +298,8 @@ function brezKomentarjev(s: string): string {
     if (z < 0) return ven + s.slice(i);
     ven += s.slice(i, z);
     const k = s.indexOf("-->", z + 4);
-    if (k < 0) return ven;
+    // K2-4a: nezaprt komentar (npr. v CDATA) ostane besedilo, kot prej
+    if (k < 0) return ven + s.slice(z);
     i = k + 3;
   }
 }

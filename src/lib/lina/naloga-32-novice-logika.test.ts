@@ -117,6 +117,9 @@ describe("naloga 32: slepi pregled", () => {
       "<rss><item>" + "<title ".repeat(120_000) + "</item>",
       "<rss><item><title>a</title>" + "<link ".repeat(120_000) + "</item>",
       "<rss><item><title><![CDATA[" + "<".repeat(900_000) + "</title><link>https://a.si/1</link></item>",
+      // K2-1: 200 blokov, vsak s 4900 znaki < v naslovu (rez na blok ni dovolj)
+      "<rss>" + `<item><title>${"<".repeat(4900)}</title><link>https://a.si/1</link></item>`.repeat(200),
+      "<rss>" + `<item><title><![CDATA[${"<![CDATA[".repeat(500)}</title><link>https://a.si/1</link></item>`.repeat(200),
     ]) {
       const t = performance.now();
       razberiFeed(xml, vir, zdaj);
@@ -127,6 +130,13 @@ describe("naloga 32: slepi pregled", () => {
     assert.deepEqual(ok.map((p) => [p.naslov, p.povezava]), [["A & B", "https://a.si/1"], ["C", "https://a.si/2"]]);
     const atom = razberiFeed('<feed><entry><title type="text">D</title><link rel="alternate" href="https://a.si/3"/></entry></feed>', vir, zdaj);
     assert.deepEqual(atom.map((p) => [p.naslov, p.povezava]), [["D", "https://a.si/3"]]);
+    // K2-4: samozaprta znacka pred pravo; K2-4a: nezaprt komentar v CDATA ne izbrise vira; K2-5: odlomek po dolgih oznakah
+    const k4 = razberiFeed("<rss><item><title/><title>E</title><link/><link>https://a.si/4</link></item></rss>", vir, zdaj);
+    assert.deepEqual(k4.map((p) => [p.naslov, p.povezava]), [["E", "https://a.si/4"]]);
+    const k4a = razberiFeed("<rss><item><title><![CDATA[F <!-- ni komentar]]></title><link>https://a.si/5</link></item><item><title>G</title><link>https://a.si/6</link></item></rss>", vir, zdaj);
+    assert.equal(k4a.length, 2, JSON.stringify(k4a));
+    const k5 = razberiFeed(`<rss><item><title>H</title><link>https://a.si/7</link><description><![CDATA[${'<span class="x">'.repeat(700)}Besedilo za oznakami]]></description></item></rss>`, vir, zdaj);
+    assert.match(k5[0]!.odlomek, /Besedilo za oznakami/);
   });
 
   it("V1 + S5: odgovor z novicami brez zastavice (po sinhronizaciji s telefonom) je v vhodu modela podatek in skrajsan", () => {
