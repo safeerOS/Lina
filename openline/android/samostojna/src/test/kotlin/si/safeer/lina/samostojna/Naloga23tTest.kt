@@ -88,7 +88,7 @@ class Naloga23tTest {
         // krog 3 N1/N1b: oznaka iz prejsnjega zaslona ali procesa - preklic poslje /ustavi, rok ali brez podpisa = izid neznan (brez ponovitve)
         assertTrue(k.contains("(!nasaNit || oznakaObZacetku)") && k.contains("if (bilaOddana && (izid is CakanjeSeje.Izid.Rok"), "obnova z oznako")
         assertTrue(k.contains("val id = nalogaId ?: run { prekliciCakanje(); return }"), "Ustavi preklice cakanje")
-        assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(\)""").containsMatchIn(k), "nova naloga preklice staro")
+        assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(ohraniRocno = samodejno\)""").containsMatchIn(k), "nova naloga preklice staro")
         // vmesni izid ne porabi enkratnega klica klepeta za shranjeno nalogo
         assertTrue(k.contains("if (izid != IzidPredaje.NEDOSEGLJIV && izid != IzidPredaje.ODPIRA) obIzidShranjene"), "posljiShranjeno ODPIRA")
     }

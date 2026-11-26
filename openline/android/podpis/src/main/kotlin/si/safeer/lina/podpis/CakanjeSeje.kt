@@ -55,6 +55,13 @@ object CakanjeSeje {
     fun ustaviPoPreklicu(izid: Izid): String? =
         (izid as? Izid.Oddana)?.takeIf { sprejeta(it.odgovor) || IzidOddaje.jeNeznan(it.odgovor) }?.naloga?.id
 
+    /**
+     * Naloga 24 (CR3, CR6): zaslon, ki je oddajo zacel, je zaprt (njegov izid se ne obdela), lastnik pa je to nalogo medtem preklical
+     * (trajna oznaka preklica [preklicanId], tudi z novega zaslona). /ustavi preklica je lahko prisel pred sprejemom zadrzane oddaje
+     * (404), zato jo po odgovoru ustavi nit oddaje sama. null = ni preklica te naloge ali racunalnik je ni sprejel.
+     */
+    fun ustaviPoZaprtju(izid: Izid, preklicanId: String?): String? = ustaviPoPreklicu(izid)?.takeIf { it == preklicanId }
+
     /** Blokira (najvec ROK_MS + en razmik + cas zahtev, do ~35 s na pot); klici samo v ozadju. */
     fun pocakajInOddaj(o: Odvisnosti): Izid {
         val konec = (o.zacetek ?: o.zdaj()) + ROK_MS
@@ -71,7 +78,11 @@ object CakanjeSeje {
             if (odg !is OdgovorLine.Ok) continue
             if (AsistentProtokol.razberiSejo(odg.telo) == true) {
                 if (o.preklicano()) return Izid.Preklicano
+                // naloga 24 CR5: spanje ali pocasen /stanje je rok lahko ze prestopil - po roku naloga ne odide
+                if (o.zdaj() >= konec) return Izid.Rok(null)
                 val n = o.podpisiNalogo(o.zdaj(), o.nakljucno()) ?: return Izid.BrezPodpisa
+                // naloga 24 CR6: preklic med podpisom - zastarela naloga ne odide in oznaka oddaje se ne zapise
+                if (o.preklicano()) return Izid.Preklicano
                 o.predOddajo()
                 return Izid.Oddana(n, o.pov.naloga(AsistentProtokol.teloNaloge(n)))
             }

@@ -26,6 +26,9 @@ object NalogaCakaSejo {
     fun obZagonu(caka: Boolean, id: String?, shranjenOdtis: String?, zdajOdtis: String?, zacetekMs: Long, zdajMs: Long, rokMs: Long,
                  oddano: Boolean = false): Ob = when {
         !caka || id == null -> Ob.NIC
+        // naloga 24 CR10: istovetnost loceno od casa - oddaja, ki je bila morda na poti, je pri istem racunalniku NEZNAN tudi po
+        // izklopu, daljsem od 24 h, ali premiku ure nazaj (ne tiho »potekla«, ki bi lastnika napeljala na ponovno oddajo)
+        oddano && shranjenOdtis != null && shranjenOdtis == zdajOdtis && (zdajMs < zacetekMs || zdajMs - zacetekMs > rokMs) -> Ob.NEZNAN
         !CakajocaNaloga.smePoslati(shranjenOdtis, zdajOdtis, zacetekMs, zdajMs) -> Ob.NIC
         zdajMs - zacetekMs > rokMs -> if (oddano) Ob.NEZNAN else Ob.ROK
         else -> Ob.OBNOVI

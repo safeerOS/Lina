@@ -40,6 +40,8 @@ private const val Z_ODTIS = "z_odtis"
 private const val Z_CAS = "z_cas"
 private const val Z_ODDANO = "z_oddano"
 private const val Z_ROCNO = "z_rocno"
+// naloga 24 CR3/CR6: id naloge, ki jo je lastnik preklical (bere ga nit oddaje zaprtega zaslona); pocistiCakanje ga ne brise
+private const val Z_PREKLIC = "z_preklic"
 
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
@@ -354,7 +356,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             return
         }
         // nazaj v shrambo samo ob nedosegljivem (403/429/napaka bi se sicer ponavljali v nedogled); izid gre v dnevnik zavihka Racunalnik
-        poslji(b) { izid, id ->
+        // naloga 24 CR1: samodejna oddaja shranjene naloge ne zbrise naloge za rocno ponovitev (Z_ROCNO)
+        poslji(b, samodejno = true, obIzidu = { izid, id ->
             if (izid != IzidPredaje.NEDOSEGLJIV && izid != IzidPredaje.ODPIRA) obIzidShranjene?.also { obIzidShranjene = null }?.invoke(izid, id)
             when (izid) {
                 IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
@@ -366,7 +369,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 IzidPredaje.NEZNAN -> dodaj(context.getString(si.safeer.lina.R.string.local_task_neznan))
                 else -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_ni, b.take(120)))
             }
-        }
+        })
     }
 
     /** Samodejna izbira poti (domace omrezje, nato Global Link) kot v Safeer OS; ena tovarna za vse klicatelje (PovezavaLine). */
@@ -385,11 +388,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
      * true, ce je bila naloga sprejeta v obdelavo (ne pomeni, da jo je Lina sprejela). [obIzidu] (glavna nit) dobi dejanski izid:
      * SPREJETA z id-jem sele po odgovoru racunalnika (naloga 11), sicer razlog; ob zavrnitvi takoj ZASEDENO ali NAPAKA.
      */
-    fun poslji(vnos: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null): Boolean {
+    fun poslji(vnos: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null, samodejno: Boolean = false): Boolean {
         // izid vedno asinhrono (glavna nit), da pride za klicateljevim »Preverjam …«
         if (posiljam || nalogaId != null) { obIzidu?.let { glavna.post { it(IzidPredaje.ZASEDENO, null) } }; return false }
         if (NalogaLine.besedilo(vnos) == null) { obIzidu?.let { glavna.post { it(IzidPredaje.NAPAKA, null) } }; return false }
-        prekliciCakanje() // naloga 23t: nova naloga zamenja tisto, ki caka na sejo - stara se ne poslje
+        prekliciCakanje(ohraniRocno = samodejno) // naloga 23t: nova naloga zamenja tisto, ki caka na sejo - stara se ne poslje
         posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
         obSpremembi()
         // T3 / slepi pregled 23t N9: racunalnik, kateremu je lastnik nalogo potrdil, se zapomni ob potrditvi (ne sele po odgovoru)
@@ -489,12 +492,14 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
      * oddajo, zato stara naloga ne odide; ce je bila oddaja ze na poti, jo koncajCakanje ustavi (slepi pregled N1). Ce je oddajo
      * zacela nit PREJSNJEGA zaslona (zasuk), te niti ni vec - ustavitev poslje preklic sam (krog 2 N2).
      */
-    private fun prekliciCakanje() {
-        zaPonovitev = null
+    private fun prekliciCakanje(ohraniRocno: Boolean = false) {
+        if (!ohraniRocno) zaPonovitev = null
         val zapisanId = shrambaCakajoce.getString(Z_ID, null)
         val oddana = si.safeer.lina.samostojna.NalogaCakaSejo.oddanoZa(shrambaCakajoce.getString(Z_ODDANO, null), zapisanId)
         pocistiCakanje()
         if (cakaSejo == null && zapisanId == null) return
+        // naloga 24 CR3/CR6: trajna oznaka preklica PRED /ustavi - nit oddaje zaprtega zaslona po odgovoru ustavi nalogo sama
+        (zapisanId ?: cakaSejo)?.let { shrambaCakajoce.edit().putString(Z_PREKLIC, it).commit() }
         val nasaNit = cakaSejo != null
         generacija.incrementAndGet()
         cakaSejo = null
@@ -558,7 +563,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 ))
             } catch (_: InterruptedException) { CakanjeSeje.Izid.Preklicano } finally { pov?.zapri() }
             // zaprt zaslon (zapri): naGlavni ne tece, mesta Z_* ostanejo in novi zaslon cakanje nadaljuje (obnoviCakanje)
-            naGlavni { koncajCakanje(gen, id, besedilo, izid, obIzidu) }
+            val obdelano = java.util.concurrent.atomic.AtomicBoolean()
+            naGlavni { obdelano.set(true); koncajCakanje(gen, id, besedilo, izid, obIzidu) }
+            // naloga 24 CR3/CR6: zaslon je zaprt in izida ne obdela (po ustavljen=true naGlavni ne tece vec); ce je lastnik to nalogo
+            // preklical (tudi z novega zaslona, /ustavi je morda prisel pred sprejemom te oddaje), jo ustavi ta nit
+            if (ustavljen && !obdelano.get()) CakanjeSeje.ustaviPoZaprtju(izid, shrambaCakajoce.getString(Z_PREKLIC, null))?.let { posljiUstavitev(it) }
         }.start()
     }
 

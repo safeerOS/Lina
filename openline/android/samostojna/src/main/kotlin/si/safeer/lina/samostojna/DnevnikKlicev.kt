@@ -189,7 +189,7 @@ fun omejiPrepisZaSinhronizacijo(prepis: List<IzmenjavaKlica>, mejaB: Int = MEJA_
     return izhod to skrajsan
 }
 
-/** Najvec zapomnjenih izbrisov (N3; ~30 B na id): toliko klicev hrani tudi racunalnik (MEJA_KLICEV). */
+/** Najvec zapomnjenih POTRJENIH izbrisov (N3; ~30 B na id): toliko klicev hrani tudi racunalnik (MEJA_KLICEV). Nepotrjeni se ne rezejo (naloga 24 CR8). */
 const val MEJA_IZBRISANIH = 1000
 
 /** Najvec zapisov klicev na telefonu (N4): kot racunalnik (MEJA_KLICEV v sinhron-telefon.server.ts). */
@@ -513,8 +513,12 @@ class DnevnikKlicev(
         val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
         predlaganiZapisi.remove(id)
         predlaganiCakajoci.remove(id)
-        val noviIzbrisani = (izbrisani + id).toList().takeLast(MEJA_IZBRISANIH)
-        val noviZaRac = (izbrisiZaRac + id).toList().takeLast(MEJA_IZBRISANIH)
+        // Naloga 24 CR8: izbris, ki ga racunalnik se ni potrdil, se ne odreze (sicer ga racunalnik nikoli ne dobi in klic vrne);
+        // seznam zavrnitev nad mejo izpusti samo najstarejse potrjene. Vrsta se prazni po NAJVEC_VNOSOV na izmenjavo.
+        val noviZaRac = (izbrisiZaRac + id).toList()
+        var presezek = izbrisani.size + (if (id in izbrisani) 0 else 1) - MEJA_IZBRISANIH
+        val nepotrjeni = noviZaRac.toSet()
+        val noviIzbrisani = (izbrisani + id).filter { presezek <= 0 || it in nepotrjeni || presezek-- <= 0 }
         shraniVShrambo(predlaganiZapisi.values, predlaganiCakajoci.values, zadrzaniPrepisi - id, noviIzbrisani, noviZaRac)
         zapisi.remove(id)
         vrstaSinhronizacije.remove(id)
@@ -527,7 +531,11 @@ class DnevnikKlicev(
     // Vrne zapise, ki cakajo v vrsti za sinhronizacijo z racunalnikom (s prepisPogovora, brez starega polja prepis).
     @Synchronized
     fun cakajociZaSinhronizacijo(): List<ZapisKlicaSinhronizacija> {
-        return vrstaSinhronizacije.values.sortedWith(
+        // Naloga 24 CR7: rok hrambe pred vsakim izhodnim posnetkom (klic lahko poteče, medtem ko je dnevnik naložen); potekel klic
+        // ne odide tudi, ce zapis ciscenja ne uspe.
+        uveljaviHramboInShrani()
+        val zdaj = ura()
+        return vrstaSinhronizacije.values.filter { !potekel(it.nacin, it.casZacetka, zdaj) }.sortedWith(
             compareByDescending<ZapisKlicaSinhronizacija> { it.nujno }
                 .thenByDescending { it.casZacetka }
                 .thenBy { it.id }
@@ -685,6 +693,19 @@ class DnevnikKlicev(
             sprememba = true
         }
         return sprememba
+    }
+
+    /** Uveljavi rok hrambe in ga zapise; ob neuspelem zapisu pomnilnik ostane (datoteka se prepise ob naslednji spremembi). */
+    private fun uveljaviHramboInShrani() {
+        if (branjeSpodletelo) return
+        val predlagani = zapisi.toMutableMap()
+        val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
+        val predlaganiZadrzani = LinkedHashSet(zadrzaniPrepisi)
+        if (!uveljaviHrambo(predlagani, predlaganiCakajoci, predlaganiZadrzani)) return
+        try { shraniVShrambo(predlagani.values, predlaganiCakajoci.values, predlaganiZadrzani) } catch (_: Exception) { return }
+        zapisi.clear(); zapisi.putAll(predlagani)
+        vrstaSinhronizacije.clear(); vrstaSinhronizacije.putAll(predlaganiCakajoci)
+        zadrzaniPrepisi.clear(); zadrzaniPrepisi.addAll(predlaganiZadrzani)
     }
 
     private fun potekel(nacin: NacinKlica, cas: Long, zdaj: Long, rokDni: Int = rokHrambeDni) =
