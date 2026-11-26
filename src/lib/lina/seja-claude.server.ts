@@ -1,15 +1,20 @@
 /**
  * Naloga 18 (lastnik 25. 11. 2026 23:25 »Da«): Lina sama odpre stalno sejo Claude Code s kanalom Line (kanal-claude), ko lastnik na telefonu
- * potrdi (podpise) nalogo in seje ni. Klice jo SAMO asistent-streznik.server.ts v poti /naloga PO preverbi podpisa naprave ozjega kroga.
+ * potrdi (podpise) nalogo in seje ni. Klice jo SAMO asistent-streznik.server.ts v poti /naloga PO preverbi podpisa naprave s seznama
+ * kanala (vsak telefon, ki ga je lastnik dodal z »Dodaj«; tudi prek releja Global Link, /naloga je v POTI_ODDALJENO - lastnik 25. 11. 2026),
+ * ne clanstva v ozjem krogu Safeer Linka.
  *
  * Ukaz je stalen: terminal (ukazTerminala, argv brez lupine) -> claude <stalen poziv> --mcp-config <podatki>/kanal/seja-mcp.json
  * --dangerously-load-development-channels server:lina. Besedilo naloge NIKOLI ni v argv, okolju ali mapi: naloga gre v sejo
  * po kanalu (podpis naprave preveri kanal znova). Mapa seje: <dom>/Lina-Claude (navadna mapa, ni povezava, ne v podatkih Line), 0700.
- * Ena seja naenkrat (rezervacija »zaganja« pred zagonom, PID), omejitev poskusov (brez zanke ob napaki), razlog ni-terminala / ni-claude.
+ * Ena seja naenkrat (rezervacija »zaganja« pred zagonom, rok odpiranja), omejitev poskusov (brez zanke ob napaki), razlog ni-terminala / ni-claude.
+ * Naloga 21 (N4): PID terminala po roku odpiranja velja samo, ce je to se ISTI proces (cas zagona iz /proc/<pid>/stat) in ga smemo
+ * signalizirati (EPERM = tuj proces, ne nasa seja); sicer odloci klicatelj (kanal ni dosegljiv -> nova seja).
  * Naloga se seji NE preda od tu: kanal zavrne podpis, starejsi od svojega zagona, telefon nalogo po odprtju seje podpise in poslje znova.
  * Zastavica --dangerously-load-development-channels: kanal brez nje ne deluje (kanal-claude.mts); ob zagonu Claude Code pokaze opozorilo
  * (DevChannelsDialog), ki ga lastnik potrdi v terminalu - NEPREVERJENO s pravim Claude Code.
  */
+import { readFileSync } from "node:fs";
 import { lstat, mkdir, realpath, writeFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -37,15 +42,15 @@ export type OdvisnostiSeje = {
   platforma?: Platforma;
   dom?: string;
   zdaj?: () => number;
-  /** Za preizkuse: ali proces s tem PID zivi. */
-  zivi?: (pid: number) => boolean;
+  /** Za preizkuse: ali proces s tem PID (in casom zagona iz /proc, null = neznan) se zivi kot nas terminal. */
+  zivi?: (pid: number, zacetek: string | null) => boolean;
 };
 
-type StanjeZagona = { zaganja: Promise<IzidOdpiranjaSeje> | null; odprto: number; pid: number | null; poskusi: number[]; razlog: RazlogSeje | "" };
+type StanjeZagona = { zaganja: Promise<IzidOdpiranjaSeje> | null; odprto: number; pid: number | null; zacetek: string | null; poskusi: number[]; razlog: RazlogSeje | "" };
 const stanja = new Map<string, StanjeZagona>();
 const stanjeZa = (root: string) => {
   let s = stanja.get(root);
-  if (!s) stanja.set(root, (s = { zaganja: null, odprto: 0, pid: null, poskusi: [], razlog: "" }));
+  if (!s) stanja.set(root, (s = { zaganja: null, odprto: 0, pid: null, zacetek: null, poskusi: [], razlog: "" }));
   return s;
 };
 /** Zadnji neuspel samodejni zagon (za sporocilo na racunalniku); prazno po uspehu ali brez poskusa. */
@@ -63,13 +68,24 @@ export function ponastaviSejo(root: string): void {
   stanja.delete(path.resolve(root));
 }
 
-const zivPid = (pid: number) => {
+/** Cas zagona procesa (polje 22 v /proc/<pid>/stat, za zadnjim »)«); null = ni Linuxa ali procesa. */
+export function casZagonaProcesa(pid: number): string | null {
+  try {
+    const st = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return st.slice(st.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** N4: zivi samo nas proces - signal dovoljen (EPERM = tuj uporabnik) in isti cas zagona kot ob odprtju (ponovna uporaba PID). */
+const zivPid = (pid: number, zacetek: string | null) => {
   try {
     process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "EPERM";
+  } catch {
+    return false;
   }
+  return zacetek !== null && casZagonaProcesa(pid) === zacetek;
 };
 
 /** Mapa seje: navadna mapa tega uporabnika pod domom (ustvari 0700), ne simbolna povezava in ne v podatkih Line. */
@@ -114,8 +130,8 @@ export async function odpriSejoClaude(root0: string, o: OdvisnostiSeje = {}): Pr
 function odpri(root: string, s: StanjeZagona, o: OdvisnostiSeje): Promise<IzidOdpiranjaSeje> {
   if (s.zaganja) return s.zaganja;
   const zdaj = (o.zdaj ?? Date.now)();
-  // ena seja naenkrat: terminal je bil pravkar odprt (ali PID se zivi) - ne odpri druge
-  if (zdaj - s.odprto < ROK_ODPIRANJA_MS || (s.pid !== null && (o.zivi ?? zivPid)(s.pid))) return Promise.resolve({ ok: true });
+  // ena seja naenkrat: terminal je bil pravkar odprt (ali je PID se isti nas proces) - ne odpri druge
+  if (zdaj - s.odprto < ROK_ODPIRANJA_MS || (s.pid !== null && (o.zivi ?? zivPid)(s.pid, s.zacetek))) return Promise.resolve({ ok: true });
   s.poskusi = s.poskusi.filter((t) => zdaj - t < OKNO_POSKUSOV_MS);
   if (s.poskusi.length >= NAJVEC_POSKUSOV) return Promise.resolve({ ok: false, razlog: "omejitev" });
   const najdi = o.najdi ?? ((ime: string) => najdiNaPoti(ime));
@@ -134,6 +150,7 @@ function odpri(root: string, s: StanjeZagona, o: OdvisnostiSeje): Promise<IzidOd
       const pid = await (o.zazeni ?? privzetiZagonTerminala)(terminal.program, argv, mapa, okoljeZaAgenta());
       s.odprto = (o.zdaj ?? Date.now)();
       s.pid = typeof pid === "number" ? pid : null;
+      s.zacetek = s.pid === null ? null : casZagonaProcesa(s.pid);
       return { ok: true };
     } catch {
       return { ok: false, razlog: "napaka" };

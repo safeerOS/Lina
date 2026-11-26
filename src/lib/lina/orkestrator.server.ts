@@ -38,7 +38,7 @@ import {
   type RegisterOrodij,
 } from "./orkestrator.ts";
 import { izberiUcenje, normirajTip, type UcenjeVmesnik } from "./orkestrator-ucenje.ts";
-import { orodjaLine } from "./orkestrator-orodja.server.ts";
+import { orodjaLine, pozabiSlikeNaloge } from "./orkestrator-orodja.server.ts";
 import { zaznajVbrizg } from "./vbrizg.ts";
 import type { DefinicijaOrodja, KlicOrodja, MoznostiOrodij, RezultatOrodij, SporociloOrodja } from "./providers.ts";
 import { imaPosixDovoljenja } from "./platforma.server.ts";
@@ -512,6 +512,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
     s.cakanje = null;
     // naloga 12 #12: potrditev v pomnilniku ne prezivi konca naloge (vrnjeno stanje z istim klicem bi jo porabilo)
     for (const mn of [potrjeniVProcesu, odprtiVProcesu]) for (const k of mn) if (k.startsWith(`${s.id}/`)) mn.delete(k);
+    pozabiSlikeNaloge(s.id); // naloga 21 (N6)
     dogodek(s, faza === "koncano" ? "konec" : "napaka", besedilo);
     koncajTekVLini(root, s.id, faza === "koncano");
     await zapisi(s);

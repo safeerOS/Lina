@@ -316,7 +316,7 @@ export type MoznostiStreznika = {
   root: string;
   /**
    * Naloga 18: Lina sama odpre sejo Claude Code (seja-claude.server.ts; stikalo in opozorilo preveri klicatelj). Klice se SAMO v poti /naloga
-   * po preverbi podpisa naprave ozjega kroga. Naloga se NE zadrzi: kanal zavrne podpis, starejsi od svojega zagona (kanal-claude.server.ts,
+   * po preverbi podpisa naprave s seznama kanala (vsak dodan telefon, tudi prek releja). Naloga se NE zadrzi: kanal zavrne podpis, starejsi od svojega zagona (kanal-claude.server.ts,
    * N-C), zato jo mora telefon po odprtju seje podpisati in poslati znova (odgovor 503 s stanje.zagon = "odpira").
    */
   odpriSejoClaude?: () => Promise<import("./seja-claude.server.ts").IzidOdpiranjaSeje>;
@@ -726,7 +726,8 @@ export class AsistentStreznik {
     this.pocisti();
     if (this.naloge.size >= NAJVEC_NALOG) throw new Napaka(429, "prevec", "Prevec nalog hkrati.");
     if (!(await this.m.izvajalec.razpolozljiv().catch(() => false))) {
-      // naloga 18: podpis naprave ozjega kroga je ze preverjen (preveri zgoraj) - samo ta pot sme odpreti sejo; naloga se ne zadrzi (glej odpriSejoClaude)
+      // naloga 18: podpis naprave s seznama kanala (vsak dodan telefon, tudi prek releja) je ze preverjen (preveri zgoraj) - samo ta pot
+      // sme odpreti sejo; to NI clanstvo ozjega kroga Safeer Linka. Naloga se ne zadrzi (glej odpriSejoClaude)
       const z = this.m.odpriSejoClaude ? await this.m.odpriSejoClaude().catch(() => ({ ok: false as const, razlog: "napaka" as const })) : null;
       throw new Napaka(503, "claude-code-ni", "Seja Claude Code na racunalniku ni odprta ali ni dosegljiva.", {
         stanje: { claudeCode: "zaprta", ...(z ? { zagon: z.ok ? "odpira" : z.razlog } : {}) },

@@ -32,7 +32,9 @@ async function pripravi(naslov: string, globalLink = false): Promise<Okolje> {
   const token = await setupOwner("geslo-test-1234", dir, { address: "127.0.0.1" });
   const vrata = await prostaVrata();
   // shranjen naslov, ki ga ta racunalnik nima (kot pri lastniku po menjavi Wi-Fi -> kabel); shraniAsistenta bi ga zavrnil
-  await writeFile(path.join(dir, NASTAVITVE_ASISTENTA), JSON.stringify({ vklop: true, naslov, vrata, imena: {}, ocenaIzida: true, globalLink }));
+  // naloga 21 (N1): samodejno sledenje in poslusanje samo v omrezju, ki ga je lastnik odobril - tu lazna omrezja preizkusov (127.0.0.0/24 in
+  // 192.168.77.0/24 brez prehoda); preizkusi neodobrenega omrezja so v naloga-21.test.ts
+  await writeFile(path.join(dir, NASTAVITVE_ASISTENTA), JSON.stringify({ vklop: true, naslov, vrata, imena: {}, ocenaIzida: true, globalLink, omrezja: ["127.0.0.0/24|", "192.168.77.0/24|"] }));
   return { dir, token, vrata };
 }
 async function pospravi(o: Okolje): Promise<void> {

@@ -52,7 +52,7 @@ import { stanjaDodatkov, uskladiEnkrat } from "./dodatki.server.ts";
 import { stanjeSlovenskega } from "./dodatki-telefon.server.ts";
 import { pozabiOmniroute, shraniOmniroute, stanjeOmniroute, type VnosOmniroute } from "./omniroute.server.ts";
 import {
-  odkleniPovezovanje, odlociSeznanitev, potrdiIdSeznanitve, odstraniNapravo, shraniAsistenta, stanjeAsistenta, telefonZaLinijo, vnesiKodoTelefona, zacniSeznanitev, zacniSeznanitevSKodo, zapriSeznanitevSKodo,
+  odkleniPovezovanje, odlociSeznanitev, prekliciSeznanitev, potrdiIdSeznanitve, odstraniNapravo, shraniAsistenta, stanjeAsistenta, telefonZaLinijo, vnesiKodoTelefona, zacniSeznanitev, zacniSeznanitevSKodo, zapriSeznanitevSKodo,
 } from "./asistent-telefon.server.ts";
 import { dnevnikAvtonomije, stanjeAvtonomije, ukazAvtonomije } from "./avtonomija.server.ts";
 import { jeNacrtVklopljen, nacrtClaudeNaloge, nastaviNacrt, stanjeClaudeNalog, ukazClaudeNalog } from "./claude-naloge.server.ts";
@@ -878,11 +878,11 @@ export const stanjeAsistentaFn = createServerFn({ method: "GET" }).handler(async
 });
 
 export const shraniAsistentaFn = createServerFn({ method: "POST" })
-  .validator((data: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown; samodejniAgenti?: unknown }) => data)
+  .validator((data: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown; samodejniAgenti?: unknown; odobriOmrezje?: unknown }) => data)
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
-    return shraniAsistenta(await sessionToken(), { vklop: data?.vklop, naslov: data?.naslov, vrata: data?.vrata, ocenaIzida: data?.ocenaIzida, globalLink: data?.globalLink, samodejniAgenti: data?.samodejniAgenti });
+    return shraniAsistenta(await sessionToken(), { vklop: data?.vklop, naslov: data?.naslov, vrata: data?.vrata, ocenaIzida: data?.ocenaIzida, globalLink: data?.globalLink, samodejniAgenti: data?.samodejniAgenti, odobriOmrezje: data?.odobriOmrezje });
   });
 
 export const zacniSeznanitevFn = createServerFn({ method: "POST" }).handler(async () => {
@@ -905,6 +905,14 @@ export const vnesiKodoTelefonaFn = createServerFn({ method: "POST" })
     clearLegacyCookie();
     return vnesiKodoTelefona(await sessionToken(), data?.pairId, data?.koda);
   });
+
+/** Naloga 21 (N2): ob zapustitvi zaslona »Poveži telefon« neporabljeni QR ne velja vec. */
+export const prekliciSeznanitevFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  await prekliciSeznanitev(await sessionToken());
+  return { ok: true };
+});
 
 export const zapriSeznanitevSKodoFn = createServerFn({ method: "POST" }).handler(async () => {
   noStore();

@@ -191,18 +191,93 @@ const NI_LAN = /^(lo\d*$|docker|br-|veth|virbr|vboxnet|vmnet|cni|flannel|podman|
  * ([izvor] = izvorni naslov privzete poti), nato drugi pravi vmesniki; zasebni IPv4 pred ULA; nikoli javni, notranji ali NI_LAN.
  */
 export function izberiLanNaslov(vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, izvor: string | null): string | null {
-  const kandidati: Array<{ naslov: string; ocena: number }> = [];
-  for (const [ime, v] of Object.entries(vmesniki)) {
-    if (NI_LAN.test(ime)) continue;
-    const privzeti = !!izvor && (v ?? []).some((e) => e.address === izvor);
-    for (const e of v ?? []) {
-      const je4 = e.family === "IPv4" || (e.family as unknown) === 4; // Node 18.0-18.3: stevilka
-      if (e.internal || !zasebenNaslov(e.address) || (!je4 && !/^f[cd]/i.test(e.address))) continue;
-      kandidati.push({ naslov: e.address, ocena: (je4 ? 0 : 2) + (privzeti ? 0 : 1) });
-    }
-  }
+  const kandidati = lanVnosi(vmesniki).map(({ v, e, je4 }) => ({ naslov: e.address, ocena: (je4 ? 0 : 2) + (izvor && v.some((x) => x.address === izvor) ? 0 : 1) }));
   kandidati.sort((a, b) => a.ocena - b.ocena);
   return kandidati[0]?.naslov ?? null;
+}
+
+/** Zasebni IPv4 in ULA na pravih vmesnikih (brez NI_LAN in notranjih): kandidati za naslov asistentke. */
+function lanVnosi(vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>): Array<{ ime: string; v: NetworkInterfaceInfo[]; e: NetworkInterfaceInfo; je4: boolean }> {
+  const izid: Array<{ ime: string; v: NetworkInterfaceInfo[]; e: NetworkInterfaceInfo; je4: boolean }> = [];
+  for (const [ime, v] of Object.entries(vmesniki)) {
+    if (NI_LAN.test(ime) || !v) continue;
+    for (const e of v) {
+      const je4 = e.family === "IPv4" || (e.family as unknown) === 4; // Node 18.0-18.3: stevilka
+      if (e.internal || !zasebenNaslov(e.address) || (!je4 && !/^f[cd]/i.test(e.address))) continue;
+      izid.push({ ime, v, e, je4 });
+    }
+  }
+  return izid;
+}
+
+/** IPv6 v polni obliki (8 skupin po 4 hex); null, ce naslov ni IPv6 oblike. */
+function razsiriIpv6(a: string): string[] | null {
+  const [glava, rep, prevec] = a.split("%")[0].toLowerCase().split("::");
+  if (prevec !== undefined) return null;
+  const g = glava ? glava.split(":") : [];
+  const r = rep === undefined ? [] : rep ? rep.split(":") : [];
+  const manjka = 8 - g.length - r.length;
+  if (rep === undefined ? manjka !== 0 : manjka < 0) return null;
+  const vse = [...g, ...Array<string>(rep === undefined ? 0 : manjka).fill("0"), ...r];
+  return vse.every((x) => /^[0-9a-f]{1,4}$/.test(x)) ? vse.map((x) => x.padStart(4, "0")) : null;
+}
+
+/** Podomrezje vmesnika: IPv4 »mreza/dolzina« iz maske; IPv6 (ULA) prvih 64 bitov (zacasni naslovi imajo isto predpono). */
+function podomrezje(e: NetworkInterfaceInfo): string | null {
+  const st = (s: string) => s.split(".").map(Number);
+  const a = st(e.address), m = st(e.netmask);
+  if (a.length === 4 && m.length === 4 && [...a, ...m].every((x) => Number.isInteger(x) && x >= 0 && x <= 255)) {
+    const dolzina = m.reduce((s, x) => s + x.toString(2).split("").filter((b) => b === "1").length, 0);
+    return `${a.map((x, i) => x & m[i]).join(".")}/${dolzina}`;
+  }
+  const x = razsiriIpv6(e.address);
+  return x ? `${x.slice(0, 4).join(":")}::/64` : null;
+}
+
+/**
+ * Naloga 21 (N10): odtis lokalnega omrezja za nadzor naslova - samo kandidati izberiLanNaslov (IPv4 naslovi, ULA kot predpona /64),
+ * brez docker/veth in brez zacasnih IPv6, ki se menjajo, ter MAC privzetih prehodov. Sprememba odtisa = omrezje se je res spremenilo.
+ */
+export function odtisLan(vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, prehodi: Readonly<Record<string, string>>): string {
+  const deli = new Set(lanVnosi(vmesniki).map(({ ime, e, je4 }) => `${ime}=${je4 ? e.address : podomrezje(e)}@${prehodi[ime] ?? ""}`));
+  return [...deli].sort().join(",");
+}
+
+/**
+ * Naloga 21 (N1): MAC privzetega prehoda po vmesniku iz /proc/net/route in /proc/net/arp. »« = privzeti prehod je, njegov MAC se ni
+ * znan (ARP); vmesnika brez privzete poti ni. Brez teh datotek (Windows) je izid {} - glej omrezjeNaslova.
+ */
+export async function prehodiVmesnikov(beri: (pot: string) => Promise<string> = (p) => readFile(p, "utf8")): Promise<Record<string, string>> {
+  const [route, arp] = await Promise.all([beri("/proc/net/route"), beri("/proc/net/arp")]).catch(() => ["", ""]);
+  const mac = new Map<string, string>();
+  for (const vrsta of arp.split("\n").slice(1)) {
+    const f = vrsta.trim().split(/\s+/); // IP, HW type, Flags, HW address, Mask, Device
+    if (f.length >= 6 && f[2] !== "0x0" && /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(f[3]) && !/^(00:){5}00$/.test(f[3])) mac.set(`${f[5]}|${f[0]}`, f[3].toLowerCase());
+  }
+  const izid: Record<string, string> = {};
+  for (const vrsta of route.split("\n").slice(1)) {
+    const f = vrsta.trim().split(/\s+/); // Iface, Destination, Gateway (hex, little-endian) ...
+    if (f.length < 3 || f[1] !== "00000000" || !/^[0-9a-f]{8}$/i.test(f[2]) || f[2] === "00000000" || f[0] in izid) continue;
+    const ip = [6, 4, 2, 0].map((i) => parseInt(f[2].slice(i, i + 2), 16)).join(".");
+    izid[f[0]] = mac.get(`${f[0]}|${ip}`) ?? "";
+  }
+  return izid;
+}
+
+/**
+ * Naloga 21 (N1): odtis omrezja, v katerem je [naslov] - podomrezje vmesnika in MAC privzetega prehoda (ob lastnikovi izbiri naslova
+ * se shrani, samodejno sledenje in poslusanje veljata samo v shranjenem omrezju). null = ne vemo (naslova ni ali MAC prehoda se ni znan).
+ */
+export function omrezjeNaslova(naslov: string, vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, prehodi: Readonly<Record<string, string>>): string | null {
+  for (const [ime, v] of Object.entries(vmesniki)) for (const e of v ?? []) {
+    if (e.address !== naslov) continue;
+    const mreza = podomrezje(e);
+    const mac = prehodi[ime];
+    if (!mreza || mac === "") return null;
+    // shortcut: brez /proc (Windows) ali brez privzete poti na vmesniku odtis nosi samo podomrezje; nadgradi z Get-NetNeighbor, ko Lina na Windows sprejema telefon doma
+    return `${mreza}|${mac ?? ""}`;
+  }
+  return null;
 }
 
 /** Izvorni naslov privzete poti IPv4 (UDP connect na TEST-NET, nic se ne poslje); deluje na Linuxu in Windows. null = ni poti. */
@@ -220,6 +295,9 @@ export function naslovNaVmesniku(naslov: string, vmesniki: NodeJS.Dict<NetworkIn
   if (naslov === "127.0.0.1" || naslov === "::1" || naslov === "localhost") return true;
   return Object.values(vmesniki).some((v) => (v ?? []).some((e) => e.address === naslov));
 }
+
+/** Naslov zanke (127.0.0.1, ::1, localhost): telefon ga ne doseze, zato ne potrebuje odobritve omrezja. */
+export const naslovZanke = (naslov: string) => naslov === "127.0.0.1" || naslov === "::1" || naslov === "localhost";
 
 /** Zasebni naslovi IPv4 tega racunalnika (izbira v nastavitvah) in 127.0.0.1; nikoli 0.0.0.0 ali javni naslov. */
 export function zasebniNaslovi(vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]> = networkInterfaces()): string[] {

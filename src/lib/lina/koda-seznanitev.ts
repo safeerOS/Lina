@@ -11,7 +11,7 @@
  */
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { Spake2 } from "./spake2.ts";
-import type { VarovalkaKode } from "./varovalka-kode.ts";
+import { VarovalkaKode } from "./varovalka-kode.ts";
 
 /** Kot PIN_VELJA_S, NAJVEC_POSKUSOV in NAJVEC_CAKAJOCIH v core/link_hub_streznik.py. */
 export const KODA_VELJA_MS = 300_000;
@@ -24,6 +24,12 @@ export const NAJVEC_KROGOV_KODE = 10;
  * ob /koda/odpovej Lina krog steje kot neuspel in v nacinu B lastniku spet odpre vnos kode (najdba telefona 414b526).
  */
 export const ROK_POTRDI_MS = 10_000;
+/**
+ * Naloga 21 (N2): vsak vir (naslov odjemalca ali kanal releja) ima svojo varovalko z mejami Linka in BREZ kredita vabila (okno se odpira
+ * samo, zato vabilo ne dokazuje lastnika); skupna varovalka (koda-varovalka.json) je visja meja cez vse vire. Tujec z enim naslovom tako
+ * zaklene samo sebe, ne prave seznanitve. Najvec toliko virov v pomnilniku (najstarejsi odpade, skupna meja ostane).
+ */
+export const NAJVEC_VIROV_VAROVALKE = 256;
 /** Identiteta strani A v SPAKE2 (v Linku "safeer-link-hub"); stran B je id telefona. */
 export const ID_LINE = "lina-asistent";
 export const PAIR_ID = /^[A-Za-z0-9_-]{22}$/;
@@ -64,6 +70,7 @@ export class SeznanitevSKodo {
   private readonly koda: () => string;
   private readonly nakljucno?: { pairId?: () => string; skalar?: () => bigint };
   private rok: ReturnType<typeof setTimeout> | null = null;
+  private readonly viri = new Map<string, VarovalkaKode>();
   /** Klic ob odprtju in zaprtju okna (uspeh, preklic, iztek): oglas DNS-SD tece samo vmes (mdns-oglas.server.ts). */
   obOdprtju?: () => void;
   obZaprtju?: () => void;
@@ -98,6 +105,21 @@ export class SeznanitevSKodo {
     if (bilo) try { this.obZaprtju?.(); } catch { /* oglas ni pogoj za seznanitev */ }
   }
 
+  /** Varovalka enega vira (N2); nov vir izrine najstarejsega, ko jih je NAJVEC_VIROV_VAROVALKE. */
+  private varovalkaVira(vir: string): VarovalkaKode {
+    let v = this.viri.get(vir);
+    if (!v) {
+      if (this.viri.size >= NAJVEC_VIROV_VAROVALKE) this.viri.delete(this.viri.keys().next().value as string);
+      this.viri.set(vir, (v = new VarovalkaKode({ ura: () => this.zdaj() / 1000 })));
+    }
+    return v;
+  }
+
+  /** Lastnik je odklenil povezovanje s kodo: tudi zapore posameznih virov se pocistijo. */
+  ponastaviVire(): void {
+    this.viri.clear();
+  }
+
   odprto(): boolean {
     if (this.okno && this.zdaj() >= this.okno.do) this.zapri();
     return !!this.okno;
@@ -126,7 +148,7 @@ export class SeznanitevSKodo {
     this.pocisti();
     if (this.pari.size >= NAJVEC_CAKAJOCIH) throw new NapakaKode(429, "prevec_cakajocih", "Prevec cakajocih prijav.");
     // okno je odprl lastnik sam: to je »vabilo« v smislu link_varovalka (med zaporo najvec KREDIT_VABILA poskusov)
-    if (!this.varovalka.zacetek(vir, true)) throw new NapakaKode(429, "seznanitev_zaprta", "Povezovanje s kodo je zaradi prevec poskusov zaprto.");
+    if (!this.varovalkaVira(vir).zacetek(vir) || !this.varovalka.zacetek(vir, true)) throw new NapakaKode(429, "seznanitev_zaprta", "Povezovanje s kodo je zaradi prevec poskusov zaprto.");
     const pairId = this.nakljucno?.pairId?.() ?? randomBytes(16).toString("base64url");
     this.pari.set(pairId, { id, ime, vir, cas: this.zdaj(), naTelefonu, koda: null, krogov: 0, napak: 0, s: null, krogCas: 0, napacna: false });
     return { pair_id: pairId, nacin: "spake2", hub_id: ID_LINE, fp: this.odtis(), expires_in_seconds: Math.max(0, Math.trunc(((this.okno as { do: number }).do - this.zdaj()) / 1000)) };
@@ -169,7 +191,7 @@ export class SeznanitevSKodo {
       if (okno.krogov > NAJVEC_KROGOV_KODE) this.zapri();
       throw new NapakaKode(429, "prevec_poskusov", "Prevec poskusov; na racunalniku kliknite Povezi s kodo znova.");
     }
-    if (!this.varovalka.poskus(p.vir, true)) {
+    if (!this.varovalkaVira(p.vir).poskus(p.vir) || !this.varovalka.poskus(p.vir, true)) {
       this.pari.delete(pairId);
       throw new NapakaKode(429, "seznanitev_zaprta", "Povezovanje s kodo je zaradi prevec poskusov zaprto.");
     }
@@ -205,6 +227,7 @@ export class SeznanitevSKodo {
       this.neuspel(p); // lastnik se je morda zatipkal: kodo vtipka znova
       throw new NapakaKode(401, "napacna_koda", "Koda ni prava.");
     }
+    this.varovalkaVira(p.vir).uspeh(p.vir);
     this.varovalka.uspeh(p.vir);
     this.zapri();
   }

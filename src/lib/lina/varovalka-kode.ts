@@ -6,7 +6,10 @@
  * sam odprl »Povezi s kodo«), in tudi takrat najvec KREDIT_VABILA poskusov na zaporo. Uspesna seznanitev svoj poskus in
  * zacetek vrne. Stanje prezivi ponovni zagon (shrani/izvozi), sicer bi vsak zagon napadalcu vrnil polno mejo.
  * Cas je v sekundah kot v Pythonu.
+ * Naloga 21 (N2, namerna razlika od Linka): `krat` pomnozi meje poskusov in zacetkov - Lina ima varovalko na vir (koda-seznanitev.ts)
+ * z mejami Linka in skupno varovalko s krat = SKUPNO_KRAT kot zgornjo mejo cez vse vire. Privzeto 1 = natanko Link.
  */
+export const SKUPNO_KRAT = 10;
 export const OKNO_S = 3600;
 export const POSKUSOV = 20;
 export const POSKUSOV_PO_ZAPORI = 5;
@@ -29,10 +32,12 @@ export class VarovalkaKode {
   private kredit = 0;
   private readonly ura: () => number;
   private readonly shrani?: (s: StanjeVarovalke) => void;
+  private readonly krat: number;
   obZapori?: (d: DogodekZapore) => void;
 
-  constructor(o: { ura?: () => number; stanje?: unknown; shrani?: (s: StanjeVarovalke) => void; obZapori?: (d: DogodekZapore) => void } = {}) {
+  constructor(o: { ura?: () => number; stanje?: unknown; shrani?: (s: StanjeVarovalke) => void; obZapori?: (d: DogodekZapore) => void; krat?: number } = {}) {
     this.ura = o.ura ?? (() => Date.now() / 1000);
+    this.krat = Number.isInteger(o.krat) && (o.krat as number) >= 1 ? (o.krat as number) : 1;
     this.shrani = o.shrani;
     this.obZapori = o.obZapori;
     this.uvozi(o.stanje);
@@ -48,7 +53,7 @@ export class VarovalkaKode {
         const t = Number(z[0]);
         if (Number.isFinite(t)) izid.push([t, String(z[1]).slice(0, 64)]);
       }
-      return izid.slice(-Math.max(POSKUSOV, ZACETKOV));
+      return izid.slice(-Math.max(POSKUSOV, ZACETKOV) * this.krat);
     };
     const st = (v: unknown) => (Number.isFinite(Number(v ?? 0)) ? Number(v ?? 0) : NaN);
     const zd = st(s.zaprto_do), po = st(s.ponovitev), kr = st(s.kredit);
@@ -80,7 +85,7 @@ export class VarovalkaKode {
   }
 
   private meji(): [number, number] {
-    return this.ponovitev ? [POSKUSOV_PO_ZAPORI, ZACETKOV_PO_ZAPORI] : [POSKUSOV, ZACETKOV];
+    return (this.ponovitev ? [POSKUSOV_PO_ZAPORI, ZACETKOV_PO_ZAPORI] : [POSKUSOV, ZACETKOV]).map((x) => x * this.krat) as [number, number];
   }
 
   private zapri(zdaj: number, razlog: "kode" | "zacetki"): DogodekZapore {

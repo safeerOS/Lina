@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "@/lib/lina/besedila.ts";
 import { idVSkupinah } from "@/lib/lina/id-naprave.ts";
 import {
-  odkleniPovezovanjeFn, odlociSeznanitevFn, potrdiIdSeznanitveFn, odstraniNapravoFn, shraniAsistentaFn, stanjeAsistentaFn, vnesiKodoTelefonaFn, zacniSeznanitevFn,
+  odkleniPovezovanjeFn, odlociSeznanitevFn, prekliciSeznanitevFn, potrdiIdSeznanitveFn, odstraniNapravoFn, shraniAsistentaFn, stanjeAsistentaFn, vnesiKodoTelefonaFn, zacniSeznanitevFn,
   zacniSeznanitevSKodoFn, zapriSeznanitevSKodoFn,
 } from "@/lib/lina/functions.ts";
 
@@ -27,6 +27,8 @@ function IdTelefona({ id }: { id: string }) {
 export function razlogBrezKode(s: Stanje | null, povabilo: Povabilo | null): string | null {
   if (!s) return t("telPripravljam");
   if (!s.vklop) return t("telIzklopljeno");
+  // naloga 21 (N2): na neodobrenem omrezju (N1) ni kode in ni QR - napis pove zakaj, ne »se pripravlja«
+  if (s.napakaKoda === "omrezje") return t("telNeodobrenoOmrezje");
   if (s.samoGlobalLink) return t("telSamoGlobalLink");
   if (!s.tece) return s.napakaKoda ? `${t(`telNapaka_${s.napakaKoda}`)} ${t("telPoskusamZnova")}` : t("telZaganjam");
   if (!povabilo || !s.sKodo.odprto) return s.sKodo.zaprtoSe ? null : t("telPripravljam");
@@ -273,12 +275,13 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       .finally(() => { vTeku.current.koda = false; });
   }, [tece, kodaOdprta, zaprtoSe, zdaj]);
 
-  // ob zapustitvi zaslona se okno s kodo zapre (koda ne velja vec, oglas mDNS se ustavi)
+  // ob zapustitvi zaslona se okno s kodo zapre (koda ne velja vec, oglas mDNS se ustavi); naloga 21 (N2): tudi neporabljeni QR ne velja vec
   useEffect(() => {
     ziv.current = true;
     return () => {
       ziv.current = false;
       void zapriSeznanitevSKodoFn().catch(() => undefined);
+      void prekliciSeznanitevFn().catch(() => undefined);
     };
   }, []);
 
@@ -325,7 +328,8 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
         className="grid gap-2 text-sm"
         onSubmit={(e) => {
           e.preventDefault();
-          void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { vklop: s.vklop, naslov, vrata: Number(vrata) } })));
+          // naloga 21 (N1): »Shrani« je lastnikova izbira naslova - omrezje tega naslova postane odobreno
+          void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { vklop: s.vklop, naslov, vrata: Number(vrata), odobriOmrezje: true } })));
         }}
       >
         <label className="flex items-center gap-2">
@@ -387,6 +391,16 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       </form>
       {/* naloga 15: napaka je vidna vedno (tudi ko tece samo Global Link), v jeziku vmesnika; podrobnost streznika samo pri »drugo« */}
       {s.napakaKoda ? <p role="alert" className="text-sm text-[var(--color-signal)]">{t(`telNapaka_${s.napakaKoda}`)}{s.napakaKoda === "drugo" && s.napaka ? ` (${s.napaka})` : ""}</p> : null}
+      {/* naloga 21 (N1): neodobreno omrezje - samo lastnik ga odobri z izrecnim klikom (naslov je viden) */}
+      {s.napakaKoda === "omrezje" && s.predlogNaslova ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-predlog-naslova="1">
+          <span>{t("telPredlogNaslova")} <strong>{s.predlogNaslova}</strong></span>
+          <button type="button" disabled={zaposlen} className={gumb}
+            onClick={() => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { naslov: s.predlogNaslova, odobriOmrezje: true } })))}>
+            {t("telUporabiNaslov")}
+          </button>
+        </div>
+      ) : null}
       {s.samoGlobalLink ? <p role="status" className="text-sm">{t("telSamoGlobalLink")}</p> : null}
       {s.tece ? (
         <>

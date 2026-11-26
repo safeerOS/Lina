@@ -358,5 +358,13 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
   ];
 }
 
-/** Naloga 20: porabljene slike po nalogi (meja NAJVEC_SLIK_NA_NALOGO). */
+/** Naloga 20: porabljene slike po nalogi (meja NAJVEC_SLIK_NA_NALOGO); naloga 21 (N6): vnos gre ob koncu naloge (pozabiSlikeNaloge). */
 const slikNaNalogo = new Map<string, number>();
+
+/** Naloga 21 (N6): konec naloge (orkestrator koncaj) - stevec slik naloge ne ostane v pomnilniku do ponovnega zagona. */
+export function pozabiSlikeNaloge(nalogaId: string): void {
+  slikNaNalogo.delete(nalogaId);
+}
+
+/** Za preizkuse: stevilo nalog s stevcem slik. */
+export const nalogSStevcemSlik = () => slikNaNalogo.size;

@@ -19,7 +19,8 @@ import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { IzvajalecClaudeCode } from "./asistent.server.ts";
 import { AsistentStreznik, zasebenNaslov, type Seznanitve, type StanjeSeznanitve } from "./asistent-streznik.server.ts";
-import { izberiLanNaslov, izvorPrivzetePoti, naslovNaVmesniku, zasebniNaslovi } from "./zasebno-omrezje.server.ts";
+import { izberiLanNaslov, izvorPrivzetePoti, naslovNaVmesniku, naslovZanke, odtisLan, omrezjeNaslova, prehodiVmesnikov, zasebniNaslovi } from "./zasebno-omrezje.server.ts";
+import { createServer } from "node:net";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import { requireOwner } from "./auth.server.ts";
 import { ID_NAPRAVE, potVticnice } from "./kanal-claude.ts";
@@ -30,7 +31,7 @@ import { idVSkupinah } from "./id-naprave.ts";
 import { jeClanKroga, PRESKOK_PRIMERJAVE_ZA_CLANE } from "./clan-kroga.server.ts";
 import { OglasMdns, type MoznostiOglasa } from "./mdns-oglas.server.ts";
 import { kodaQr, svgQr } from "./qr.ts";
-import { VarovalkaKode } from "./varovalka-kode.ts";
+import { SKUPNO_KRAT, VarovalkaKode } from "./varovalka-kode.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { nastaviDodatekZaTelefon, opisStanjaDodatkov, stanjeDodatkovZaTelefon } from "./dodatki-telefon.server.ts";
 import { kanalSeznamN8n, kanalUstvariN8n, kanalZazeniN8n, telefonPotrdiN8n, telefonPredlogN8n, telefonStanjeN8n } from "./n8n.server.ts";
@@ -58,14 +59,22 @@ export const VAROVALKA_KODE = "koda-varovalka.json";
  * ki jih je lastnik potrdil (podpisal) na telefonu; privzeto VKLOPLJENO. Izklop: naloga za Claude Code dobi 503 kot prej, naloga agentu caka
  * lastnikovo potrditev na racunalniku.
  */
-type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean; globalLink: boolean; samodejniAgenti: boolean };
+/**
+ * omrezja (naloga 21, N1): odtisi omrezij (podomrezje + MAC privzetega prehoda, omrezjeNaslova), ki jih je lastnik odobril z izbiro naslova
+ * (»Shrani« ali »Uporabi ta naslov«). Streznik za telefon in OpenLine poslusata na zasebnem naslovu SAMO v odobrenem omrezju; samodejno
+ * sledenje naslovu (naloga 15) tudi. Brez zapisa (tudi po nadgradnji) ni odobreno nobeno omrezje - fail-closed, lastnik odobri z enim klikom.
+ */
+type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean; globalLink: boolean; samodejniAgenti: boolean; omrezja: string[] };
+/** Najvec shranjenih odobrenih omrezij (najstarejse odpade). */
+export const NAJVEC_OMREZIJ = 16;
 
 function cisteNastavitve(n: Partial<Nastavitve> | null): Nastavitve {
   const vrata = Number.isInteger(n?.vrata) && (n!.vrata as number) >= 1024 && (n!.vrata as number) <= 65535 ? (n!.vrata as number) : PRIVZETA_VRATA_ASISTENTA;
   const naslov = typeof n?.naslov === "string" && zasebenNaslov(n.naslov) ? n.naslov : "127.0.0.1";
   const imena: Record<string, string> = {};
   for (const [id, ime] of Object.entries(n?.imena ?? {})) if (ID_NAPRAVE.test(id) && typeof ime === "string") imena[id] = ime.slice(0, 60);
-  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false, globalLink: n?.globalLink !== false, samodejniAgenti: n?.samodejniAgenti !== false };
+  const omrezja = Array.isArray(n?.omrezja) ? [...new Set(n.omrezja.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 120))].slice(-NAJVEC_OMREZIJ) : [];
+  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false, globalLink: n?.globalLink !== false, samodejniAgenti: n?.samodejniAgenti !== false, omrezja };
 }
 
 /**
@@ -123,14 +132,19 @@ type Tekoci = {
   /** Naslov in vrata iz nastavitev; naslov/vrata zgoraj sta dejansko vezana (v rezervi 127.0.0.1 in prosta vrata). */
   zeleniNaslov: string;
   zelenaVrata: number;
-  /** Naloga 15: lokalni naslov ni na voljo (»naslov«) ali vrata zasedena (»vrata«): tece samo Global Link; null = doma dosegljiv. */
-  rezerva: "naslov" | "vrata" | null;
-  /** Naslovi vseh vmesnikov ob zagonu: rezerva »naslov« se ponovi samo, ko se omrezje spremeni (sicer bi rele utripal vsakih 30 s). */
+  /**
+   * Naloga 15: lokalni naslov ni na voljo (»naslov«) ali vrata zasedena (»vrata«): tece samo Global Link; null = doma dosegljiv.
+   * Naloga 21 (N1): »omrezje« = racunalnik je v omrezju, ki ga lastnik ni odobril (doma ne poslusa, OpenLine ne tece).
+   */
+  rezerva: "naslov" | "vrata" | "omrezje" | null;
+  /** Odtis lokalnega omrezja (odtisLan): rezerva »naslov«/»omrezje« se ponovi samo, ko se omrezje spremeni (sicer bi rele utripal vsakih 30 s). */
   omrezje: string;
+  /** Naloga 21 (N3): zadnja preverba, ali so zelena vrata spet prosta (rezerva »vrata«). */
+  vrataPreverjena: number;
 };
 
 /** Koda napake asistenta za vmesnik (besedilo v jeziku vmesnika: telNapaka_<koda>); prazno = brez napake. */
-export type KodaNapakeAsistenta = "" | "naslov" | "vrata" | "drugo";
+export type KodaNapakeAsistenta = "" | "naslov" | "vrata" | "omrezje" | "drugo";
 
 type Stanje = {
   tekoci: Tekoci | null; napaka: string; prijave: Map<string, Prijava>; veriga: Promise<unknown>; opozoriloKlicev: string;
@@ -149,8 +163,11 @@ type Stanje = {
   omrezjeNaslovov?: OmrezjeNaslovov | null;
   /** Naloga 15: obcasno preverjanje naslova (zagon programa). */
   nadzor?: ReturnType<typeof setInterval> | null;
+  /** Naloga 21 (N1): naslov v omrezju, ki ga lastnik se ni odobril (gumb »Uporabi ta naslov«); prazno = ni predloga. */
+  predlogNaslova?: string;
 };
-type OmrezjeNaslovov = { vmesniki: () => NodeJS.Dict<NetworkInterfaceInfo[]>; izvor: () => Promise<string | null> };
+/** prehodi: MAC privzetih prehodov po vmesniku (prehodiVmesnikov); v preizkusih brez njih {} (nikoli pravi /proc). */
+type OmrezjeNaslovov = { vmesniki: () => NodeJS.Dict<NetworkInterfaceInfo[]>; izvor: () => Promise<string | null>; prehodi?: () => Promise<Record<string, string>> };
 const KLJUC = Symbol.for("lina.asistent.telefon");
 function stanje(): Stanje {
   const g = globalThis as { [KLJUC]?: Stanje };
@@ -216,6 +233,11 @@ function zaporedno<T>(delo: () => Promise<T>): Promise<T> {
 
 function pocistiPrijave(zdaj = Date.now()): void {
   for (const [k, p] of stanje().prijave) if (zdaj - p.cas > ROK_KODE_MS) stanje().prijave.delete(k);
+}
+
+/** Naloga 21 (N2): neporabljene QR (stanje »odprta«) ne veljajo vec; cakajoce in sprejete prijave ostanejo (telefon po »Dodaj« prevzame pot klicev). */
+function prekliciOdprte(): void {
+  for (const [k, p] of stanje().prijave) if (p.stanje === "odprta") stanje().prijave.delete(k);
 }
 
 const seznanitve: Seznanitve = {
@@ -295,27 +317,60 @@ export function nastaviOmrezjeNaslovov(o: OmrezjeNaslovov | null): void {
   stanje().omrezjeNaslovov = o;
 }
 const vmesniki = () => stanje().omrezjeNaslovov?.vmesniki() ?? networkInterfaces();
-const odtisOmrezja = (v: NodeJS.Dict<NetworkInterfaceInfo[]>) => Object.values(v).flatMap((x) => (x ?? []).map((e) => e.address)).sort().join(",");
+const prehodi = (): Promise<Record<string, string>> => {
+  const o = stanje().omrezjeNaslovov;
+  return o ? (o.prehodi?.() ?? Promise.resolve({})) : prehodiVmesnikov();
+};
+// naloga 21 (N10): samo pravi LAN naslovi in prehodi (zacasni IPv6, docker/veth ne sprozijo ponovnega zagona streznika in releja)
+const odtisOmrezja = (v: NodeJS.Dict<NetworkInterfaceInfo[]>, p: Readonly<Record<string, string>>) => odtisLan(v, p);
 const izvorPoti = () => stanje().omrezjeNaslovov?.izvor() ?? izvorPrivzetePoti();
+
+/**
+ * Naloga 21 (N1): ali je [naslov] v omrezju, ki ga je lastnik odobril. »ne-vem« = naslov je na vmesniku, a omrezja ni mogoce prepoznati
+ * (MAC prehoda se ni v ARP): nov streznik se takrat NE zazene doma, tekoci pa se zaradi tega ne ustavi.
+ */
+function odobritev(n: Nastavitve, naslov: string, v: NodeJS.Dict<NetworkInterfaceInfo[]>, p: Readonly<Record<string, string>>): "da" | "ne" | "ne-vem" {
+  if (naslovZanke(naslov)) return "da";
+  const o = omrezjeNaslova(naslov, v, p);
+  if (o === null) return naslovNaVmesniku(naslov, v) ? "ne-vem" : "ne";
+  return n.omrezja.includes(o) ? "da" : "ne";
+}
+
+/** Naloga 21 (N1): napaka zagona doma, ko omrezje ni odobreno (koda »omrezje«, rezerva samo Global Link). */
+const NEODOBRENO = "LINA_NEODOBRENO_OMREZJE";
 
 function vrstaNapake(e: unknown): Exclude<KodaNapakeAsistenta, ""> {
   const c = (e as NodeJS.ErrnoException)?.code;
-  return c === "EADDRNOTAVAIL" ? "naslov" : c === "EADDRINUSE" ? "vrata" : "drugo";
+  return c === "EADDRNOTAVAIL" ? "naslov" : c === "EADDRINUSE" ? "vrata" : c === NEODOBRENO ? "omrezje" : "drugo";
 }
 function nastaviNapako(e: unknown): void {
   const v = vrstaNapake(e);
   stanje().napakaKoda = v;
-  stanje().napaka = v === "vrata" ? "Vrata so zasedena." : v === "naslov" ? "Naslova ta racunalnik nima vec." : (e as Error).message.slice(0, 200);
+  stanje().napaka = v === "vrata" ? "Vrata so zasedena." : v === "naslov" ? "Naslova ta racunalnik nima vec."
+    : v === "omrezje" ? "Omrezje ni odobreno." : (e as Error).message.slice(0, 200);
+}
+
+/** Naloga 21 (N3): rezerva »vrata« preveri prosta vrata najvec tako pogosto (spremenljivo samo za preizkuse). */
+export const nadzorVrat = { ms: 5 * 60_000 };
+
+/** Ali lahko na [naslov]:[vrata] zdaj poslusamo (poskusna vticnica, takoj zaprta); vsaka napaka = ne. */
+function prostaVrata(naslov: string, vrata: number): Promise<boolean> {
+  return new Promise((ok) => {
+    const s = createServer();
+    s.once("error", () => ok(false));
+    s.listen(vrata, naslov, () => s.close(() => ok(true)));
+  });
 }
 
 /**
  * Naloga 15: shranjenega naslova ni vec na nobenem vmesniku (npr. Wi-Fi -> kabel) -> trenutni naslov lokalnega omrezja (izberiLanNaslov)
  * se uporabi in shrani, brez uporabnikovega klika. Ce novega ni, ostane shranjeni (ko se omrezje vrne, velja spet).
+ * Naloga 21 (N1): samo, ce je nov naslov v omrezju, ki ga je lastnik ze odobril; sicer ostane shranjeni (rezerva) in lastnik dobi predlog.
  */
 async function slediNaslovu(root: string, n: Nastavitve): Promise<Nastavitve> {
   if (!n.vklop || naslovNaVmesniku(n.naslov, vmesniki())) return n;
   const nov = izberiLanNaslov(vmesniki(), await izvorPoti());
-  if (!nov || nov === n.naslov) return n;
+  if (!nov || nov === n.naslov || odobritev(n, nov, vmesniki(), await prehodi()) !== "da") return n;
   // isti zaklep kot seznam naprav (A-12), z novim branjem: ne prepise imen ali lastnikove sprotne izbire
   return naSeznamu(async () => {
     const m = await preberiNastavitve(root);
@@ -332,13 +387,20 @@ async function slediNaslovu(root: string, n: Nastavitve): Promise<Nastavitve> {
  */
 export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
   const root = resolveDataDir(dir);
-  if (!(await preberiNastavitve(root)).vklop) return false;
+  const n = await preberiNastavitve(root);
+  if (!n.vklop) return false;
   const t = stanje().tekoci;
   const v = vmesniki();
-  const treba = !t
-    || (t.rezerva === "naslov" && odtisOmrezja(v) !== t.omrezje)
-    || (t.rezerva === null && !naslovNaVmesniku(t.naslov, v));
-  if (treba) await uskladiAsistenta(root);
+  const p = await prehodi();
+  const zdaj = Date.now();
+  // naloga 21 (N3): rezerva »vrata« ni trajna - najvec vsakih nadzorVrat.ms poskus na zelenih vratih; ponovni zagon SAMO, ce so res prosta
+  const vrata = !!t && t.rezerva === "vrata" && zdaj - t.vrataPreverjena >= nadzorVrat.ms
+    && (t.vrataPreverjena = zdaj, await prostaVrata(t.zeleniNaslov, t.zelenaVrata));
+  const treba = !t || vrata
+    || ((t.rezerva === "naslov" || t.rezerva === "omrezje") && odtisOmrezja(v, p) !== t.omrezje)
+    // naloga 21 (N1): tekoci streznik doma se ustavi, ce omrezje NI odobreno (npr. isti naslov za drugim prehodom); »ne-vem« ga ne ustavi
+    || (t.rezerva === null && (!naslovNaVmesniku(t.naslov, v) || odobritev(n, t.naslov, v, p) === "ne"));
+  if (treba) await uskladiAsistenta(root, { zamenjajRezervoVrat: vrata });
   return treba;
 }
 
@@ -352,21 +414,32 @@ export function zacniNadzorNaslova(dir?: string, ms = 30_000): void {
 }
 
 /** Uskladi tekoci streznik z nastavitvami (zagon Line, sprememba nastavitev). Napaka zagona se zapomni za prikaz. */
-export function uskladiAsistenta(dir?: string): Promise<void> {
+export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolean } = {}): Promise<void> {
   return zaporedno(async () => {
     const root = resolveDataDir(dir);
     const n = await slediNaslovu(root, await preberiNastavitve(root));
+    const v = vmesniki();
+    const p = await prehodi();
+    const dovoljeno = odobritev(n, n.naslov, v, p);
     const t = stanje().tekoci;
     if (t && (!n.vklop || t.zeleniNaslov !== n.naslov || t.zelenaVrata !== n.vrata || t.globalLink !== n.globalLink
-      // rezerva zaradi naslova: naslov je spet tu; doma dosegljiv: vezani naslov je izginil (rezerva »vrata« se ne ponavlja, da rele ne utripa)
-      || (t.rezerva === "naslov" ? naslovNaVmesniku(n.naslov, vmesniki()) : t.rezerva === null && !naslovNaVmesniku(t.naslov, vmesniki())))) await ustavi();
+      // rezerva zaradi naslova: naslov je spet tu; doma dosegljiv: vezani naslov je izginil ali omrezje ni (vec) odobreno (N1);
+      // rezerva »vrata« samo po poskusu na prostih vratih (N3), sicer rele ne utripa
+      || (t.rezerva === "naslov" ? naslovNaVmesniku(n.naslov, v)
+        : t.rezerva === "omrezje" ? dovoljeno === "da"
+          : t.rezerva === "vrata" ? o.zamenjajRezervoVrat === true
+            : !naslovNaVmesniku(t.naslov, v) || dovoljeno === "ne"))) await ustavi();
     if (!n.vklop || stanje().tekoci) {
-      if (!n.vklop) { stanje().napaka = ""; stanje().napakaKoda = ""; }
+      if (!n.vklop) { stanje().napaka = ""; stanje().napakaKoda = ""; stanje().predlogNaslova = ""; }
       // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi(); v rezervi ne (127.0.0.1)
       const tek = stanje().tekoci;
+      if (tek) tek.omrezje = odtisOmrezja(v, p); // ista sprememba omrezja ne sprozi uskladitve vsakih 30 s
       if (tek && !tek.rezerva) void pripraviPotKlicev(root, tek.naslov);
       return;
     }
+    // naloga 21 (N1): predlog za »Uporabi ta naslov« - shranjeni naslov na neodobrenem omrezju ali trenutni naslov lokalnega omrezja
+    const predlog = dovoljeno === "da" ? null : naslovNaVmesniku(n.naslov, v) ? n.naslov : izberiLanNaslov(v, await izvorPoti());
+    stanje().predlogNaslova = predlog ?? "";
     try {
       const k = await preberiKanal(root);
       // pregled 6: kljuc releja PRED izvajalcem in casovnikom (napaka tu ne pusti odprtih virov)
@@ -395,6 +468,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       osvezi.unref?.();
       let pisanje: Promise<unknown> = Promise.resolve();
       const varovalka = new VarovalkaKode({
+        krat: SKUPNO_KRAT, // naloga 21 (N2): skupna meja cez vse vire; vsak vir ima svojo varovalko z mejami Linka (koda-seznanitev.ts)
         stanje: await readJsonFile<unknown>(root, VAROVALKA_KODE).catch(() => null),
         shrani: (st) => { pisanje = pisanje.then(() => writeJson(root, VAROVALKA_KODE, st)).catch(() => undefined); },
       });
@@ -435,7 +509,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         stanje: async () => telefonVprasanja(root),
         odgovori: (id: string, odlocitev: string, zgostitev: string, naprava: string) => telefonOdgovor(root, id, odlocitev, zgostitev, naprava),
       };
-      const omrezje = odtisOmrezja(vmesniki());
+      const omrezje = odtisOmrezja(v, p);
       const novStreznik = (naslov: string, vrata: number) => new AsistentStreznik({ root, naslov, vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje,
         agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null,
         // naloga 18: stikalo se prebere ob vsaki nalogi (izklop velja takoj); streznik klice samo po preverbi podpisa naprave
@@ -447,6 +521,8 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         let napakaLan: unknown = null;
         let zagnan: { naslov: string; vrata: number; odtis: string };
         try {
+          // naloga 21 (N1): doma (zasebni naslov) samo v odobrenem omrezju; sicer nic ne poslusa na tem omrezju (in OpenLine se ne zazene)
+          if (dovoljeno !== "da" && predlog !== null) throw Object.assign(new Error("Omrezje ni odobreno."), { code: NEODOBRENO });
           streznik = novStreznik(n.naslov, n.vrata);
           zagnan = await streznik.zazeni();
         } catch (e) {
@@ -471,7 +547,7 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
         }) : null;
         rele?.zazeni();
         stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka, rele, globalLink: n.globalLink,
-          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva, omrezje };
+          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva, omrezje, vrataPreverjena: Date.now() };
         if (rezerva) nastaviNapako(napakaLan); // vidno v Poveži telefon: doma telefon Line ne doseze, Global Link tece
         else {
           stanje().napaka = "";
@@ -510,6 +586,8 @@ export type StanjeAsistenta = {
   napakaKoda: KodaNapakeAsistenta;
   /** Naloga 15: lokalnega naslova ni (ali vrata zasedena), tece samo Global Link. */
   samoGlobalLink: boolean;
+  /** Naloga 21 (N1): naslov v omrezju, ki ga lastnik se ni odobril (gumb »Uporabi ta naslov«); prazno = ni predloga. */
+  predlogNaslova: string;
   odtis: string;
   claudeCode: boolean;
   cakajo: Array<{ koda: string; id: string; ime: string }>;
@@ -536,8 +614,8 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
   const ozjiKrog: string[] = [];
   for (const [koda, p] of stanje().prijave) if (p.stanje === "caka" && p.naprava && await jeClanKroga(p.naprava.kljuc, p.naprava.id)) ozjiKrog.push(koda);
   return {
-    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", samodejniAgenti: n.samodejniAgenti, zagonClaude: zadnjiRazlogSeje(root), naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t && !t.rezerva, napaka: stanje().napaka,
-    napakaKoda: stanje().napakaKoda ?? "", samoGlobalLink: !!t?.rezerva, odtis: t?.odtis ?? "",
+    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", samodejniAgenti: n.samodejniAgenti, zagonClaude: zadnjiRazlogSeje(root), naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(vmesniki()), tece: !!t && !t.rezerva, napaka: stanje().napaka,
+    napakaKoda: stanje().napakaKoda ?? "", samoGlobalLink: !!t?.rezerva, predlogNaslova: n.vklop ? stanje().predlogNaslova ?? "" : "", odtis: t?.odtis ?? "",
     claudeCode: t ? await t.izvajalec.razpolozljiv().catch(() => false) : false,
     cakajo,
     ozjiKrog,
@@ -567,11 +645,19 @@ export async function telefonZaLinijo(token: string | null, dir?: string, telefo
   return naprav !== 0 ? "seznanjen" : "ne";
 }
 
-/** Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. */
-export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown; samodejniAgenti?: unknown }, dir?: string): Promise<StanjeAsistenta> {
+/**
+ * Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. Naloga 21 (N1): odobriOmrezje: true (gumb »Shrani« ali
+ * »Uporabi ta naslov«) shrani omrezje izbranega naslova kot lastnikovo; stikala tega ne storijo (en klik na stikalo ne odobri tujega omrezja).
+ */
+export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown; samodejniAgenti?: unknown; odobriOmrezje?: unknown }, dir?: string): Promise<StanjeAsistenta> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
-  if (typeof vnos.naslov === "string" && !zasebniNaslovi().includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
+  if (typeof vnos.naslov === "string" && !zasebniNaslovi(vmesniki()).includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
+  let odobri: string | null = null;
+  if (vnos.odobriOmrezje === true && typeof vnos.naslov === "string" && !naslovZanke(vnos.naslov)) {
+    odobri = omrezjeNaslova(vnos.naslov, vmesniki(), await prehodi());
+    if (odobri === null) throw new Error("Omrezja se ni mogoce prepoznati (prehod se ni znan). Poskusite znova cez nekaj sekund.");
+  }
   // isti zaklep kot seznam naprav (A-12): branje-sprememba-zapis se ne prepleta z odlociSeznanitev ali odstraniNapravo
   await naSeznamu(async () => {
     const n = await preberiNastavitve(root);
@@ -582,6 +668,7 @@ export async function shraniAsistenta(token: string | null, vnos: { vklop?: unkn
       ocenaIzida: typeof vnos.ocenaIzida === "boolean" ? vnos.ocenaIzida : n.ocenaIzida,
       globalLink: typeof vnos.globalLink === "boolean" ? vnos.globalLink : n.globalLink,
       samodejniAgenti: typeof vnos.samodejniAgenti === "boolean" ? vnos.samodejniAgenti : n.samodejniAgenti,
+      omrezja: odobri === null ? n.omrezja : [...n.omrezja.filter((x) => x !== odobri), odobri].slice(-NAJVEC_OMREZIJ),
     } satisfies Nastavitve);
   });
   await uskladiAsistenta(root);
@@ -650,6 +737,8 @@ export async function zacniSeznanitev(token: string | null, dir?: string): Promi
   if (t.rezerva) throw new Error(NI_LAN_SEZNANITEV);
   await pocakajPotKlicev(root, t.naslov); // pot klicev tece ze od vklopa; to jo zagotovi, ce je med tem padla
   pocistiPrijave();
+  // naloga 21 (N2): nov QR preklice prejsnjega neporabljenega (samodejna osvezitev ne pusti vec veljavnih QR hkrati)
+  prekliciOdprte();
   const koda = randomBytes(16).toString("base64url");
   const zdaj = Date.now();
   stanje().prijave.set(koda, { stanje: "odprta", cas: zdaj });
@@ -682,6 +771,12 @@ export async function vnesiKodoTelefona(token: string | null, pairId: unknown, k
   return stanjeAsistenta(token, root);
 }
 
+/** Naloga 21 (N2): lastnik zapusti zaslon »Poveži telefon« - neporabljeni QR ne velja vec (cakajoce prijave ostanejo). */
+export async function prekliciSeznanitev(token: string | null, dir?: string): Promise<void> {
+  await requireOwner(token, resolveDataDir(dir));
+  prekliciOdprte();
+}
+
 /** Lastnik zapre okno s kodo (koda ne velja vec). */
 export async function zapriSeznanitevSKodo(token: string | null, dir?: string): Promise<StanjeAsistenta> {
   const root = resolveDataDir(dir);
@@ -699,6 +794,7 @@ export async function odkleniPovezovanje(token: string | null, dir?: string): Pr
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
   stanje().tekoci?.varovalka.ponastavi();
+  stanje().tekoci?.koda.ponastaviVire();
   return stanjeAsistenta(token, root);
 }
 

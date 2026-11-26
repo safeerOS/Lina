@@ -729,7 +729,10 @@ describe("naloga 20: drugi krog", () => {
     assert.equal((JSON.parse(await readFile(pot, "utf8")) as { slike: unknown[] }).slike.length, 2);
     await writeFile(pot, JSON.stringify({ slike: "x", drugo: 1 }));
     await dodajVKnjiznico(dir, [zapisK("bbbbbbbbbbb2", "bbbbbbbbbbb2.png", 10)]);
-    assert.deepEqual(JSON.parse(await readFile(`${pot}.pokvarjen`, "utf8")), { slike: "x", drugo: 1 });
+    // naloga 21 (N9): kopija s casovnim zigom (slike.json.pokvarjen-<cas>-<nakljucno>), prejsnja se ne prepise
+    const kopija = (await readdir(dir)).filter((x) => x.startsWith(`${DATOTEKA_SLIK}.pokvarjen-`));
+    assert.equal(kopija.length, 1, kopija.join(","));
+    assert.deepEqual(JSON.parse(await readFile(path.join(dir, kopija[0]!), "utf8")), { slike: "x", drugo: 1 });
   });
 
   it("prevajalnik Google in zacetni odgovor videa ne bereta 120 MB odgovora v celoti", async () => {

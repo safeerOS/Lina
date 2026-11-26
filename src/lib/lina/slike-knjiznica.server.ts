@@ -3,6 +3,7 @@
  * ne sme biti dosegljiv s poti telefona (prek mediji-opis vleče live/ = pot klica; zaklep v kanal-claude.test.ts 4.4).
  * Preverbo lastnika ali naprave naredi klicatelj. Komentarji brez sumnikov.
  */
+import { randomBytes } from "node:crypto";
 import { lstat, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { readJsonFile, writeJson } from "./store.server.ts";
@@ -19,10 +20,33 @@ const ID = /^[a-z0-9]{12}$/;
 export type ZapisSlike = { id: string; serija: string; cas: string; opis: string; poziv: string; prevedeno: boolean; model: string; datoteka: string; bajtov: number };
 export type Knjiznica = { slike: ZapisSlike[] };
 
+/**
+ * Naloga 21 (N9): pokvarjena knjiznica gre v slike.json.pokvarjen-<cas>-<nakljucno> - vsaka pokvarjenost svojo kopijo, prejsnja se ne prepise
+ * (skupni readJsonFile bi pisal vedno v isto .pokvarjen).
+ */
+async function odloziPokvarjeno(root: string): Promise<void> {
+  await rename(path.join(root, DATOTEKA_SLIK), path.join(root, `${DATOTEKA_SLIK}.pokvarjen-${Date.now()}-${randomBytes(3).toString("hex")}`));
+}
+
+/** Branje slike.json: JSON, ki ni objekt, ali neveljaven JSON = pokvarjen (ob premakni se odlozi); napaka branja gre klicatelju. */
+async function beriKnjiznico(root: string, premakni: boolean): Promise<{ slike?: unknown } | null> {
+  let k: unknown;
+  try {
+    k = await readJsonFile<unknown>(root, DATOTEKA_SLIK);
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) throw e;
+    k = "pokvarjeno";
+  }
+  if (k === null) return null;
+  if (typeof k === "object" && !Array.isArray(k) && Array.isArray((k as { slike?: unknown }).slike)) return k as { slike?: unknown };
+  if (premakni) await odloziPokvarjeno(root); // neuspel premik = napaka (zapis ne prepise edine kopije)
+  return null;
+}
+
 /** Branje knjiznice BREZ preverbe lastnika: samo za klicatelje, ki so lastnika ali napravo ze preverili. Pokvarjena = prazna. */
 export async function preberiKnjiznico(root: string, { premakniPokvarjen = true } = {}): Promise<Knjiznica> {
   try {
-    const k = await readJsonFile<Knjiznica>(root, DATOTEKA_SLIK, { premakniPokvarjen });
+    const k = (await beriKnjiznico(root, premakniPokvarjen)) as Knjiznica | null;
     return { slike: Array.isArray(k?.slike) ? k.slike.filter((s) => s && typeof s.id === "string" && ID.test(s.id)) : [] };
   } catch {
     return { slike: [] };
@@ -44,8 +68,7 @@ export function dodajVKnjiznico(root: string, novi: unknown[], signal?: AbortSig
   const prej = vrste.get(root) ?? Promise.resolve();
   const zdaj = prej.catch(() => undefined).then(async () => {
     // Napaka branja (EACCES, EIO, EMFILE) gre klicatelju: prazna knjiznica bi ob zapisu tiho izbrisala stare zapise.
-    const k = await readJsonFile<{ slike?: unknown }>(root, DATOTEKA_SLIK, { premakniPokvarjen: true });
-    if (k && !Array.isArray(k.slike)) await rename(path.join(root, DATOTEKA_SLIK), path.join(root, `${DATOTEKA_SLIK}.pokvarjen`));
+    const k = await beriKnjiznico(root, true);
     const stari = Array.isArray(k?.slike) ? k.slike : [];
     // ustavljena naloga ne objavi (tudi ce je prekinitev prisla med cakanjem v vrsti)
     signal?.throwIfAborted();
