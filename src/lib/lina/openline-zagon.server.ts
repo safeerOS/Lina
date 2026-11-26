@@ -237,7 +237,7 @@ function pocakajPripravljenost(
   vzrokStderr: () => string | null = () => null,
 ): Promise<void> {
   if (!otrok.stdout || otrok.exitCode !== null || otrok.signalCode !== null) {
-    return Promise.reject(new Error(otrok.exitCode !== null || otrok.signalCode !== null ? vzrokIzhoda(otrok.exitCode, otrok.signalCode, vzrokStderr()) : "OpenLine se ni pripravil"));
+    return Promise.reject(new Error(otrok.exitCode !== null || otrok.signalCode !== null ? vzrokIzhoda(otrok.exitCode, otrok.signalCode, vzrokStderr()) : "zagon"));
   }
   const stdout = otrok.stdout;
   return new Promise((resolve, reject) => {
@@ -425,7 +425,7 @@ export async function zagotoviOpenLine(
             windowsHide: true,
           });
         } catch {
-          throw new Error("OpenLine se ni pripravil");
+          throw new Error("zagon"); // naloga 33 (slepi pregled): sinhrona napaka spawn ni prekinitev
         }
 
         let otrokKoncan = otrok.exitCode !== null || otrok.signalCode !== null;
@@ -483,11 +483,14 @@ export async function zagotoviOpenLine(
         }
 
         // 9. Zapis nastavitev OpenLine v Lino (ob napaki ustavi otroka in vrzi naprej).
+        // naloga 33 (slepi pregled): napaka zapisa (poln disk, mapa ni mapa) dobi vzrok namesto obcega »se ni zagnal«
         await zapisiOpenLineNotranje(root, {
           vrata,
           odtis: najdenOdtis,
           kljuc,
           naslov,
+        }).catch((e: unknown) => {
+          throw new Error((e as NodeJS.ErrnoException)?.code === "ENOSPC" ? "disk poln" : "zapis");
         });
 
         // Dogodek 'exit' pride sele v naslednjih krogih zanke dogodkov: otrok, ki umre med zapisom, je lahko se »ziv«

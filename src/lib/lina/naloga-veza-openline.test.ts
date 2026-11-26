@@ -106,6 +106,8 @@ describe("openline-veza.server: slovenska sporocila in vezava zagona", () => {
       "manjka modul": "v namestitvi OpenLine manjka knjižnica; namestite Lino znova",
       ustavljen: "OpenLine je ustavil sistem ali drug program, preden je bil pripravljen",
       izhod: "OpenLine se je ustavil takoj ob zagonu",
+      zapis: "Lina ni mogla zapisati nastavitev OpenLine v svojo mapo podatkov",
+      "disk poln": "disk računalnika je poln; sprostite prostor, nato Lina poskusi znova",
       "glas telefona": "glas telefona se ni zagnal",
       odvisnost: "notranja napaka priprave",
     };

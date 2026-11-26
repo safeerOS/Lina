@@ -726,7 +726,7 @@ describe("openline-zagon.server in openline-start.mjs", () => {
           dataDir: () => dataMapa,
           zazeni: sled.zazeni,
         }),
-        Error,
+        /^Error: zapis$/, // naloga 33: vzrok, ne surova napaka
       );
       assert.equal(sled.pidi.length, 1);
       assert.equal(await pocakajPogoj(() => !aliProcesZivi(sled.pidi[0]), 2000), true, "otrok mora biti ustavljen");

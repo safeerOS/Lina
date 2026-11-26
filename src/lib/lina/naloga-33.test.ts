@@ -106,7 +106,7 @@ test("naloga 33: vzrokIzhoda in vzrokIzStderr dajo samo kratke kode; vsaka koda 
   assert.equal(vzrokIzStderr("Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express'"), "manjka modul");
   assert.equal(vzrokIzStderr("listen EACCES"), "dovoljenje");
   assert.equal(vzrokIzStderr("nekaj drugega TAJNO"), null);
-  for (const k of ["rok", "zagon", "zaganjalnik", "uvoz", "vrata zasedena", "dovoljenje", "manjka modul", "ustavljen", "izhod", "OpenLine ni v paketu"]) {
+  for (const k of ["zapis", "disk poln", "rok", "zagon", "zaganjalnik", "uvoz", "vrata zasedena", "dovoljenje", "manjka modul", "ustavljen", "izhod", "OpenLine ni v paketu"]) {
     const m = slovenskoSporociloOpenLine(new Error(k));
     assert.notEqual(m, "OpenLine se ni zagnal", k);
     assert.doesNotMatch(m, /pravočasno/, k);
@@ -123,6 +123,16 @@ function paket(vsebina: string): { root: string; koren: string } {
 }
 const lina = async () => ({ naslov: "127.0.0.1", vrata: 8447, odtis: "AB".repeat(32), zeton: "z".repeat(40) });
 
+test("naloga 33 (slepi pregled): sinhrona napaka spawn je »zagon«, ne »prekinitev«", async () => {
+  const p = paket("setInterval(() => {}, 1000);\n");
+  try {
+    await assert.rejects(
+      zagotoviOpenLine(p.root, "127.0.0.1", { korenOpenLine: () => p.koren, pripraviLino: lina, zazeni: () => { throw new Error("EAGAIN TAJNO"); } }),
+      /^Error: zagon$/,
+    );
+  } finally { await rm(p.root, { recursive: true, force: true }); }
+});
+
 test("naloga 33: pravi zaganjalnik - napaka uvoza OpenLine je »uvoz«, zasedena vrata »vrata zasedena«, molk »rok«", async () => {
   const zaseden = net.createServer();
   await new Promise<void>((ok) => zaseden.listen(0, "127.0.0.1", () => ok()));
@@ -131,6 +141,7 @@ test("naloga 33: pravi zaganjalnik - napaka uvoza OpenLine je »uvoz«, zasedena
     ["throw new Error('pokvarjeno TAJNO');\n", "uvoz", 10_000],
     [`import net from "node:net"; net.createServer().listen(${vrataZasedena}, "127.0.0.1");\nsetInterval(() => {}, 1000);\n`, "vrata zasedena", 10_000],
     ["setInterval(() => {}, 1000);\n", "rok", 400],
+    ["process.exit(1);\n", "izhod", 10_000],
   ];
   try {
     for (const [vsebina, vzrok, rok] of primeri) {
