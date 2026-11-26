@@ -45,6 +45,9 @@ export const MAPA_PRENOSA = "posodobitev";
 const NAJVEC_PAKETA = 400_000_000;
 const ROK_PAKETA_MS = 30 * 60_000;
 const NAJVEC_API = 1_000_000;
+/** SHA256SUMS izdaje (nekaj vrstic) in surov podpis Ed25519 (64 B): vecje datoteke so napad na disk in pomnilnik. */
+const NAJVEC_VSOT = 64 * 1024;
+const VELIKOST_PODPISA = 64;
 const PREDPOMNILNIK_MS = 10 * 60_000;
 /** Stroga oblika razlicice (stevke in pike): poenostavi primerjavo v bashu in JSON izida ostane varen. */
 const RAZLICICA = /^[0-9]{1,6}(\.[0-9]{1,6}){0,3}$/;
@@ -85,7 +88,8 @@ export type Odvisnosti = {
   /** execFile z absolutno potjo programa; vrne stdout ali vrze napako. */
   izvedi?: (program: string, argumenti: string[]) => Promise<string>;
   fetchFn?: typeof fetch;
-  prenesi?: (url: string, cilj: string) => Promise<string>;
+  /** najvec: meja bajtov (privzeto paket 400 MB); SHA256SUMS in podpis dobita majhno mejo (slepi pregled 28, S3). */
+  prenesi?: (url: string, cilj: string, najvec?: number) => Promise<string>;
   vsotaDatoteke?: (pot: string) => Promise<string>;
   beriMapo?: (mapa: string) => Promise<string[]>;
   zazeni?: (program: string, argumenti: string[], env: Record<string, string>) => Otrok;
@@ -235,7 +239,7 @@ export function odv(o: Odvisnosti) {
     obstaja: o.obstaja ?? existsSync,
     izvedi: o.izvedi ?? privzetoIzvedi,
     fetchFn,
-    prenesi: o.prenesi ?? ((u: string, c: string) => prenesiPreverjeno(u, c, fetchFn, { najvecBajtov: NAJVEC_PAKETA, rokMs: ROK_PAKETA_MS })),
+    prenesi: o.prenesi ?? ((u: string, c: string, n?: number) => prenesiPreverjeno(u, c, fetchFn, { najvecBajtov: n ?? NAJVEC_PAKETA, rokMs: ROK_PAKETA_MS })),
     vsotaDatoteke: o.vsotaDatoteke ?? privzetaVsota,
     beriMapo: o.beriMapo ?? ((m: string) => readdir(m)),
     zazeni: o.zazeni ?? privzetoZazeni,
@@ -291,7 +295,8 @@ export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = I
     headers: glave,
     signal: AbortSignal.timeout(15_000),
   });
-  if (odgovor.status === 304 && shranjen) {
+  // 304 velja samo kot odgovor na nas If-None-Match (slepi pregled 28)
+  if (odgovor.status === 304 && shranjen?.etag) {
     await odgovor.body?.cancel().catch(() => undefined);
     predpomnilnik.set(paket, { ...shranjen, cas: o.zdaj() });
     return shranjen.kandidat;
@@ -387,41 +392,57 @@ export async function stanjePosodobitve(token: string | null, dir?: string, odvi
  * Prenese in preveri paket z GitHuba v <podatki>/posodobitev (0700); vrne pot in vsoto preverjene datoteke.
  * Vrstni red (A7): SHA256SUMS in SHA256SUMS.sig -> preverba podpisa -> sele nato prenos paketa in primerjava vsote.
  */
-async function pripraviGithub(o: Odv, root: string, k: Kandidat): Promise<{ pot: string; vsota: string } | RazlogZavrnitve> {
+/**
+ * SHA256SUMS izdaje, ki je podpisan s kljucem Safeer (oba z majhno mejo velikosti). Uporabita ga Posodobi (pripraviGithub) in
+ * samodejna preverba (naloga 28: obvestilo samo za podpisano izdajo - slepi pregled S2). Zacasni datoteki se vedno pobriseta.
+ */
+export async function podpisanSeznam(o: Odv, root: string, k: Kandidat): Promise<Buffer | "podpis" | "prenos"> {
+  if (k.vir !== "github" || !k.urlVsot) return "prenos";
+  if (!k.urlPodpisa) return "podpis";
   const mapa = path.join(root, MAPA_PRENOSA);
   await mkdir(mapa, { recursive: true, mode: 0o700 });
   await chmod(mapa, 0o700);
-  const zacasnaDeb = path.join(mapa, `.prenos-${process.pid}.deb`);
   const zacasneVsote = path.join(mapa, `.vsote-${process.pid}.txt`);
   const zacasniPodpis = path.join(mapa, `.vsote-${process.pid}.sig`);
-  if (!k.urlPodpisa) return "podpis";
   try {
     let vsote: Buffer;
     let podpis: Buffer;
     try {
-      await o.prenesi(k.urlVsot!, zacasneVsote);
-      await o.prenesi(k.urlPodpisa, zacasniPodpis);
+      await o.prenesi(k.urlVsot, zacasneVsote, NAJVEC_VSOT);
+      await o.prenesi(k.urlPodpisa, zacasniPodpis, VELIKOST_PODPISA);
       vsote = await readFile(zacasneVsote);
       podpis = await readFile(zacasniPodpis);
     } catch {
       return "prenos";
     }
-    if (!podpisVeljaven(vsote, podpis, o.javniKljuc)) return "podpis";
+    return podpisVeljaven(vsote, podpis, o.javniKljuc) ? vsote : "podpis";
+  } finally {
+    await rm(zacasneVsote, { force: true });
+    await rm(zacasniPodpis, { force: true });
+  }
+}
+
+async function pripraviGithub(o: Odv, root: string, k: Kandidat): Promise<{ pot: string; vsota: string } | RazlogZavrnitve> {
+  const mapa = path.join(root, MAPA_PRENOSA);
+  const zacasnaDeb = path.join(mapa, `.prenos-${process.pid}.deb`);
+  // vrstni red (A7): podpisan seznam vsot -> sele nato prenos paketa
+  const vsote = await podpisanSeznam(o, root, k);
+  if (typeof vsote === "string") return vsote;
+  const pricakovana = vsotaIzSeznama(vsote.toString("utf8"), k.ime);
+  if (!pricakovana) return "vsota";
+  try {
     let vsota: string;
     try {
       vsota = await o.prenesi(k.url!, zacasnaDeb);
     } catch {
       return "prenos";
     }
-    const pricakovana = vsotaIzSeznama(vsote.toString("utf8"), k.ime);
-    if (!pricakovana || !vsotaEnaka(vsota, pricakovana)) return "vsota";
+    if (!vsotaEnaka(vsota, pricakovana)) return "vsota";
     const koncna = path.join(mapa, k.ime);
     await rename(zacasnaDeb, koncna);
     return { pot: koncna, vsota: pricakovana };
   } finally {
     await rm(zacasnaDeb, { force: true });
-    await rm(zacasneVsote, { force: true });
-    await rm(zacasniPodpis, { force: true });
   }
 }
 

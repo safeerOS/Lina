@@ -7,7 +7,7 @@
  * zacniPosodobitev (podpis -> vsota -> pkexec); ta modul nicesar ne namesti.
  */
 import { requireOwner } from "./auth.server.ts";
-import { kandidat, odv, predpogoj, primerjajRazlicici, type Odvisnosti } from "./posodobitev.server.ts";
+import { kandidat, odv, podpisanSeznam, predpogoj, primerjajRazlicici, vsotaIzSeznama, type Odvisnosti } from "./posodobitev.server.ts";
 import { izvedljivaLupine } from "./samodejni-zagon.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
@@ -89,8 +89,8 @@ export async function nastaviSamodejno(token: string | null, vklop: unknown, dir
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
   if (typeof vklop !== "boolean") throw new Error("Neveljavna vrednost.");
+  // najdena izdaja ostane v pomnilniku: izklop jo samo skrije (obvestiloPosodobitve), ponovni vklop jo takoj spet pokaze
   await writeJson(root, DATOTEKA_SAMODEJNO, { vklop });
-  if (!vklop) stanjeZa(root).najdeno = null;
   return { samodejno: vklop };
 }
 
@@ -98,10 +98,7 @@ export async function nastaviSamodejno(token: string | null, vklop: unknown, dir
 export async function preveriEnkrat(dir: string | undefined, odvisnosti: Odvisnosti = {}): Promise<"ok" | "napaka" | "preskoceno"> {
   const root = resolveDataDir(dir);
   const s = stanjeZa(root);
-  if (!(await samodejnoVklopljeno(root))) {
-    s.najdeno = null;
-    return "preskoceno";
-  }
+  if (!(await samodejnoVklopljeno(root))) return "preskoceno";
   const o = odv(odvisnosti);
   const p = await predpogoj(o);
   if (typeof p === "string") {
@@ -110,8 +107,16 @@ export async function preveriEnkrat(dir: string | undefined, odvisnosti: Odvisno
   }
   try {
     const k = await kandidat(o, root, true);
+    let najdeno = k && primerjajRazlicici(k.razlicica, p.namescena) > 0 ? { razlicica: k.razlicica, opombe: ocistiOpombe(k.opombe) } : null;
+    // slepi pregled S2: obvestilo (razlicica in besedilo opomb) samo za izdajo, katere SHA256SUMS je podpisan s kljucem Safeer in
+    // nasteje ta paket; JSON izdaje sam ni podpisan. Vir »mapa« (razvojni racunalnik) nima podpisa (kot pri Posodobi).
+    if (k && najdeno && k.vir === "github") {
+      const vsote = await podpisanSeznam(o, root, k);
+      if (vsote === "prenos") throw new Error("Prenos seznama vsot ni uspel.");
+      if (vsote === "podpis" || !vsotaIzSeznama(vsote.toString("utf8"), k.ime)) najdeno = null;
+    }
     s.napakZapored = 0;
-    s.najdeno = k && primerjajRazlicici(k.razlicica, p.namescena) > 0 ? { razlicica: k.razlicica, opombe: ocistiOpombe(k.opombe) } : null;
+    s.najdeno = najdeno;
     return "ok";
   } catch {
     s.napakZapored++;

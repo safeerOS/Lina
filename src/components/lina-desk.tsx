@@ -3844,7 +3844,7 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
   // naloga 28: stikalo samodejne preverbe (privzeto vklopljeno); dokler stanje ni prebrano, je onemogoceno
   const [samodejno, setSamodejno] = useState<boolean | null>(null);
   useEffect(() => {
-    obvestiloPosodobitveFn().then((o) => setSamodejno(o.samodejno)).catch(() => {});
+    obvestiloPosodobitveFn().then((o) => setSamodejno(o.samodejno)).catch(() => onError(t("posNapaka")));
   }, []);
   const preklopiSamodejno = (vklop: boolean) => {
     nastaviSamodejnoPosodobitevFn({ data: { vklop } })

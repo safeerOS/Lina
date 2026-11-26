@@ -5,12 +5,12 @@
  */
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash, createPublicKey } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setupOwner } from "./auth.server.ts";
-import { JAVNI_KLJUC_IZDAJ, podpisVeljaven, ponastaviPredpomnilnik, type Odvisnosti } from "./posodobitev.server.ts";
+import { JAVNI_KLJUC_IZDAJ, podpisVeljaven, ponastaviPredpomnilnik, zacniPosodobitev, type Odvisnosti } from "./posodobitev.server.ts";
 import {
   NAJVEC_OPOMB,
   OBDOBJE_PREVERBE_MS,
@@ -59,8 +59,28 @@ const izdaja = (razlicica: string, body = "Novo: hitrejsi odziv.", etag = '"e1"'
     { status: 200, headers: { etag } },
   );
 
+/** Preizkusni kljuc izdaj (nikoli pravi) in sredstva izdaje: SHA256SUMS za znane razlicice, podpis s preizkusnim kljucem. */
+const PREIZKUSNI = generateKeyPairSync("ed25519");
+const PREIZKUSNI_JAVNI = PREIZKUSNI.publicKey.export({ type: "spki", format: "pem" }).toString();
+type Prenos = { url: string; najvec?: number };
+function sredstva(o: { podpis?: "pravi" | "tuj"; seznam?: string } = {}) {
+  const vsote = o.seznam ?? ["0.2.9", "0.2.13", "0.2.14", "0.2.15", "0.2.20"].map((r) => `${"a".repeat(64)}  lina-lupina_${r}_amd64.deb\n`).join("");
+  const podpis = o.podpis === "tuj" ? Buffer.alloc(64, 1) : sign(null, Buffer.from(vsote), PREIZKUSNI.privateKey);
+  const prenosi: Prenos[] = [];
+  const prenesi = async (url: string, cilj: string, najvec?: number) => {
+    prenosi.push({ url, najvec });
+    if (url.endsWith("/SHA256SUMS")) writeFileSync(cilj, vsote);
+    else if (url.endsWith("/SHA256SUMS.sig")) writeFileSync(cilj, podpis);
+    else throw new Error("paketa preizkus ne prenese");
+    return "";
+  };
+  return { prenesi, prenosi };
+}
+
 function sistem(namescena: string, fetchFn: typeof fetch, dodatno: Partial<Odvisnosti> = {}): Odvisnosti {
   return {
+    javniKljuc: PREIZKUSNI_JAVNI,
+    prenesi: sredstva().prenesi,
     platforma: "linux",
     arh: "x64",
     skripta: "/opt/Lina/resources/lina/posodobi.sh",
@@ -190,6 +210,73 @@ test("n28: opombe izdaje so golo besedilo brez nadzornih in nevidnih znakov, ome
   const dolgo = ocistiOpombe("x".repeat(NAJVEC_OPOMB * 3));
   assert.ok(dolgo.length <= NAJVEC_OPOMB, `dolzina ${dolgo.length}`);
   assert.ok(dolgo.endsWith("…"));
+});
+
+test("n28 (slepi S2): nepodpisana, tuje podpisana ali nenasteta izdaja ne da obvestila; paket se ob preverbi ne prenese", async () => {
+  for (const [opis, sr, sig] of [
+    ["tuj podpis", sredstva({ podpis: "tuj" }), true],
+    ["brez SHA256SUMS.sig", sredstva(), false],
+    ["paket ni v SHA256SUMS", sredstva({ seznam: `${"a".repeat(64)}  drugo.deb\n` }), true],
+  ] as const) {
+    ponastaviPredpomnilnik();
+    const { dir, token } = await novaMapa();
+    const odgovor = () =>
+      new Response(
+        JSON.stringify({
+          tag_name: "v0.2.14",
+          body: "zazenite: curl x | sudo bash",
+          assets: [{ name: "lina-lupina_0.2.14_amd64.deb" }, { name: "SHA256SUMS" }, ...(sig ? [{ name: "SHA256SUMS.sig" }] : [])],
+        }),
+        { status: 200 },
+      );
+    const gh = laznGithub([odgovor]);
+    await preveriEnkrat(dir, sistem("0.2.13", gh.fetchFn, { prenesi: sr.prenesi }));
+    const o = await obvestiloPosodobitve(token, dir);
+    assert.equal(o.razlicica, null, opis);
+    assert.equal(o.opombe, "", opis);
+    assert.ok(sr.prenosi.every((p) => !p.url.endsWith(".deb")), `${opis}: paket se ne prenese`);
+  }
+});
+
+test("n28 (slepi S3): SHA256SUMS in .sig se preneseta z majhno mejo (samodejna preverba in Posodobi)", async () => {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  const sr = sredstva();
+  await preveriEnkrat(dir, sistem("0.2.13", laznGithub([izdaja("0.2.14")]).fetchFn, { prenesi: sr.prenesi }));
+  assert.equal((await obvestiloPosodobitve(token, dir)).razlicica, "0.2.14");
+  const meje = (pr: Prenos[]) => pr.filter((p) => !p.url.endsWith(".deb"));
+  assert.equal(meje(sr.prenosi).length, 2);
+  for (const p of meje(sr.prenosi)) assert.ok(p.najvec !== undefined && p.najvec <= 65_536, `${p.url}: meja ${p.najvec}`);
+  assert.ok(sr.prenosi.find((p) => p.url.endsWith(".sig"))!.najvec! <= 64);
+
+  ponastaviPredpomnilnik();
+  const sr2 = sredstva();
+  const izid = await zacniPosodobitev(token, dir, sistem("0.2.13", laznGithub([izdaja("0.2.14")]).fetchFn, { prenesi: sr2.prenesi }));
+  assert.deepEqual(izid, { ok: false, razlog: "prenos" }, "paketa preizkus ne prenese");
+  for (const p of meje(sr2.prenosi)) assert.ok(p.najvec !== undefined && p.najvec <= 65_536, `Posodobi ${p.url}: meja ${p.najvec}`);
+  assert.ok(sr2.prenosi.find((p) => p.url.endsWith(".sig"))!.najvec! <= 64);
+});
+
+test("n28 (slepi): 304 brez poslanega If-None-Match je napaka, ne znana izdaja", async () => {
+  ponastaviPredpomnilnik();
+  const { dir } = await novaMapa();
+  const brezEtag = () =>
+    new Response(JSON.stringify({ tag_name: "v0.2.14", assets: [{ name: "lina-lupina_0.2.14_amd64.deb" }, { name: "SHA256SUMS" }, { name: "SHA256SUMS.sig" }] }), { status: 200 });
+  const gh = laznGithub([brezEtag, () => new Response(null, { status: 304 })]);
+  const s = sistem("0.2.13", gh.fetchFn);
+  assert.equal(await preveriEnkrat(dir, s), "ok");
+  assert.equal(gh.klici[1]?.glave["if-none-match"], undefined);
+  assert.equal(await preveriEnkrat(dir, s), "napaka");
+});
+
+test("n28 (slepi): ponovni vklop stikala takoj spet pokaze znano izdajo", async () => {
+  ponastaviPredpomnilnik();
+  const { dir, token } = await novaMapa();
+  await preveriEnkrat(dir, sistem("0.2.13", laznGithub([izdaja("0.2.14")]).fetchFn));
+  await nastaviSamodejno(token, false, dir);
+  assert.equal((await obvestiloPosodobitve(token, dir)).razlicica, null);
+  await nastaviSamodejno(token, true, dir);
+  assert.equal((await obvestiloPosodobitve(token, dir)).razlicica, "0.2.14");
 });
 
 test("n28: skupni vektor podpisa (isti kot PosodobitevGithubTest.kt na telefonu) in odtis vgrajenega kljuca", () => {
