@@ -44,14 +44,20 @@ object NoviceTelefon {
         return Namera(izvirno.takeLast(tema.length).trim().ifEmpty { tema })
     }
 
-    private fun koreni(tema: String): List<String> =
-        normaliziraj(tema).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 }
-            .map { if (it.length > 5) it.dropLast(2) else it.take(maxOf(3, it.length - 1)) }
+    /** Kratke besede teme (do 3 znake: EU, AI, ZDA) samo kot cela beseda, daljse kot koren na zacetku besede (enako kot racunalnik). */
+    private fun besedeTeme(tema: String): List<Pair<String, Boolean>> =
+        normaliziraj(tema).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 2 && it !in STOP }
+            .map { if (it.length <= 3) it to true else (if (it.length > 5) it.dropLast(2) else it.dropLast(1)) to false }
+    private val STOP = setOf("the", "and", "ter", "pri", "kaj", "in", "na", "za", "od", "do", "ali")
 
+    /** Tema brez uporabne besede nima zadetkov (ne »vse novice«). */
     fun poTemi(novice: List<Novica>, tema: String): List<Novica> {
-        val k = koreni(tema)
-        if (k.isEmpty()) return novice
-        return novice.filter { n -> val b = normaliziraj(n.naslov); k.any { b.contains(it) } }
+        val k = besedeTeme(tema)
+        if (k.isEmpty()) return emptyList()
+        return novice.filter { n ->
+            val besede = normaliziraj(n.naslov).split(Regex("[^\\p{L}\\p{N}]+"))
+            k.any { (koren, cela) -> besede.any { if (cela) it == koren else it.startsWith(koren) } }
+        }
     }
 
     fun izmenicno(novice: List<Novica>, najvec: Int = NOVIC_V_ODGOVORU): List<Novica> {

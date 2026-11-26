@@ -141,4 +141,18 @@ class NoviceTelefonTest {
             mapa.deleteRecursively()
         }
     }
+
+    @Test
+    fun `tema - kratke besede cele, daljse koren na zacetku besede, brez uporabne besede nic`() {
+        val n = listOf(
+            NoviceTelefon.Novica("EU sprejela pravilo", "https://a/1", "A"),
+            NoviceTelefon.Novica("Zdaj je prepozno za izdaja knjige", "https://a/2", "A"),
+            NoviceTelefon.Novica("Volitve v ZDA so mimo", "https://a/3", "A"),
+            NoviceTelefon.Novica("Neuspeh ekipe", "https://a/5", "A"),
+        )
+        assertEquals(listOf("https://a/1"), NoviceTelefon.poTemi(n, "EU").map { it.povezava })
+        assertEquals(listOf("https://a/3"), NoviceTelefon.poTemi(n, "ZDA").map { it.povezava })
+        assertEquals(listOf("https://a/3"), NoviceTelefon.poTemi(n, "volitvah").map { it.povezava })
+        assertTrue(NoviceTelefon.poTemi(n, "a").isEmpty())
+    }
 }
