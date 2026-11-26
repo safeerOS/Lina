@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { lstat } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 import { MEJA_SPOROCIL, vVrstiPogovora, type SporociloAsistenta } from "./asistent-pogovor.server.ts";
 import { nastaviNavodilaIzTelefona } from "./pravila.server.ts";
@@ -12,6 +12,7 @@ import { preberi as preberiImenik } from "./imenik.server.ts";
 import { imeVImeniku, klicIzTelefona, potekelKlicTelefona, type IzmenjavaSinhron, type KlicSinhron } from "./klici-telefon.ts";
 import { loadPravila } from "./pravila.server.ts";
 import type { CallSession } from "./types.ts";
+import { vsebinaZapiska } from "./zapiski.ts";
 import { ZAPISEK_V_MAPI, izbrisiMapoKlica, mapaKlicaZaPosnetek, mapaZaPisanje, zapisiZapisekKlica } from "./zapiski.server.ts";
 
 /**
@@ -147,7 +148,10 @@ export function preveriKlic(v: unknown): KlicSinhron {
   if (!ID_KLICA.test(id)) throw new NapakaSinhron("Neveljaven id klica.");
   const cas = o.casZacetka;
   const trajanje = o.trajanjeS;
-  if (!Number.isSafeInteger(cas) || (cas as number) < 0 || !Number.isSafeInteger(trajanje) || (trajanje as number) < 0) throw new NapakaSinhron("Neveljaven cas ali trajanje klica.");
+  // trajanje je na telefonu Int (ZapisKlicaSinhronizacija.trajanjeS): vecje bi telefon zavrnil skupaj s celim odgovorom (slepi pregled 17r2 N2)
+  if (!Number.isSafeInteger(cas) || (cas as number) < 0 || !Number.isSafeInteger(trajanje) || (trajanje as number) < 0 || (trajanje as number) > 2 ** 31 - 1) {
+    throw new NapakaSinhron("Neveljaven cas ali trajanje klica.");
+  }
   const stevilka = besedilo(o.stevilka, 60, "stevilka");
   if (!stevilka.trim()) throw new NapakaSinhron("Stevilka klica je prazna.");
   return sPrepisom({
@@ -310,18 +314,23 @@ async function izbrisiMapeKlicev(root: string, izbrisani: Iterable<string>): Pro
  * Znan klic je dobil prepis (telefon 0.2.14 ga poslje znova po posodobitvi racunalnika): obstojeci zapisek v mapi klica se prepise s
  * prepisom. Mapa, ki je uporabnik izbrisal, se ne vrne; klic brez mape dobi mapo s prepisom v zapisiMapeKlicev.
  */
-async function dopolniMape(root: string, klici: KlicSinhron[]): Promise<void> {
+async function dopolniMape(root: string, klici: Array<{ prej: KlicSinhron; k: KlicSinhron }>): Promise<void> {
   if (klici.length === 0) return;
   const mape = await preberiMape(root);
   if (!mape) return;
   const stiki = await preberiImenik(root).catch(() => []);
-  for (const k of klici) {
+  for (const { prej, k } of klici) {
     const zapisek = mape[k.id];
     if (!zapisek) continue;
     try {
       const mapa = await mapaKlicaZaPosnetek({ zapisek } as CallSession, root);
-      if (!mapa || !(await lstat(path.join(mapa, ZAPISEK_V_MAPI))).isFile()) continue;
-      const c = klicIzTelefona(k, imeVImeniku(stiki, k.stevilka), zapisek);
+      const pot = mapa && path.join(mapa, ZAPISEK_V_MAPI);
+      if (!pot || !(await lstat(pot)).isFile()) continue;
+      const ime = imeVImeniku(stiki, k.stevilka);
+      // zapisek, ki ga je uporabnik spremenil (ali je drugacen od zapiska brez prepisa), ostane (slepi pregled 17r2 N6)
+      const star = klicIzTelefona(prej, ime, zapisek);
+      if (!star || (await readFile(pot, "utf8")) !== vsebinaZapiska(star)) continue;
+      const c = klicIzTelefona(k, ime, zapisek);
       if (c) await zapisiZapisekKlica(c, root);
     } catch {
       // zapisek ostane brez prepisa (prepis je v stanju in na zaslonu Klici); ponovnega poskusa ni
@@ -366,7 +375,7 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
     };
     for (const id of zahteva.izbrisani ?? []) dodajIzbrisan(id);
     const znaniKlici = new Map(st.klici.map((x) => [x.k.id, x]));
-    const dopolnjeni: KlicSinhron[] = [];
+    const dopolnjeni: Array<{ prej: KlicSinhron; k: KlicSinhron }> = [];
     for (const k of zahteva.klici) {
       if (izbrisani.has(k.id)) continue;
       const znan = znaniKlici.get(k.id);
@@ -374,9 +383,10 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
         // Racunalnik 0.2.13 je klic shranil brez prepisa (17r2, N1): prepis se dopolni, ostala polja ostanejo, kot jih je prvic poslal telefon.
         if (!imaPrepis(znan.k) && imaPrepis(k)) {
           const { prepisPogovora: _p, prepisOkrnjen: _o, ...brez } = znan.k;
+          const prej = znan.k;
           try {
             znan.k = sPrepisom(brez, k as unknown as Record<string, unknown>);
-            dopolnjeni.push(znan.k);
+            dopolnjeni.push({ prej, k: znan.k });
             sprememba = true;
           } catch {
             // obstojeci zapis je ze sam prevelik: ostane brez prepisa

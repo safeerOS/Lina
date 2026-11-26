@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -123,6 +123,31 @@ describe("17r2 N3: izbris klica na telefonu izbrise zapis, prepis in mapo na rac
     assert.throws(() => zTelefona({ izbrisani: Array.from({ length: 301 }, (_, i) => `k${i}`) }));
   });
 
+  it("mapa klica je simbolna povezava: nic se ne izbrise, izbris-v1 ni javljen, oznaka ostane tudi ob novi mapi; ob pravi mapi ponovni poskus uspe", async () => {
+    const dir = await novaMapa();
+    await izmenjajSinhron(zTelefona({ klici: [klic("klic-1")] }), dir);
+    const [mapa] = await mapeKlicev(dir);
+    const zapiski = path.join(dir, "zapiski");
+    const drugje = path.join(dir, "drugje");
+    await rename(path.join(zapiski, mapa), drugje);
+    await symlink(drugje, path.join(zapiski, mapa));
+    const o = await izmenjajSinhron(zTelefona({ rev: 1, izbrisani: ["klic-1"] }), dir);
+    assert.equal((o as { zmoznosti?: string[] }).zmoznosti?.includes("izbris-v1"), false);
+    assert.deepEqual(await readdir(drugje), ["zapisek.md"], "cilj povezave nedotaknjen");
+    // nov klic dobi mapo (datoteka oznak se prepise): oznaka izbrisanega ostane za ponovni poskus
+    await izmenjajSinhron(zTelefona({ rev: 1, klici: [klic("klic-2", { casZacetka: CAS + 60_000 })] }), dir);
+    const oznake = JSON.parse(await readFile(path.join(dir, "sinhron-telefon-mape.json"), "utf8")) as Record<string, string>;
+    assert.ok("klic-1" in oznake && "klic-2" in oznake, JSON.stringify(oznake));
+    // prava mapa nazaj: naslednji krog jo izbrise, telefon (ki izbris poslje znova) dobi izbris-v1
+    await unlink(path.join(zapiski, mapa));
+    await rename(drugje, path.join(zapiski, mapa));
+    const o2 = await izmenjajSinhron(zTelefona({ rev: 2, izbrisani: ["klic-1"] }), dir);
+    assert.ok((o2 as { zmoznosti?: string[] }).zmoznosti?.includes("izbris-v1"));
+    assert.equal((await mapeKlicev(dir)).length, 1);
+    const oznake2 = JSON.parse(await readFile(path.join(dir, "sinhron-telefon-mape.json"), "utf8")) as Record<string, string>;
+    assert.deepEqual(Object.keys(oznake2), ["klic-2"]);
+  });
+
   it("izbris-v1 se ne javi, ce mape klica ni bilo mogoce izbrisati (telefon izbris poslje znova)", async () => {
     const dir = await novaMapa();
     await izmenjajSinhron(zTelefona({ klici: [klic("klic-1")] }), dir);
@@ -178,5 +203,26 @@ describe("17r2 N2: prevelik vnos ne ustavi sinhronizacije", () => {
     assert.deepEqual(o.klici.map((k) => k.id), ["klic-2"]);
     assert.equal(o.rev, 2);
     assert.equal(o.ostane, false);
+  });
+});
+
+describe("17r2 slepi pregled", () => {
+  it("N2: trajanje nad Int telefona (2^31-1) se zavrne, sicer bi telefon zavrnil cel odgovor in sinhronizacija bi obstala", async () => {
+    const { preveriKlic } = await import("./sinhron-telefon.server.ts");
+    assert.throws(() => preveriKlic(klic("klic-d", { trajanjeS: 2 ** 31 })));
+    assert.equal(preveriKlic(klic("klic-d", { trajanjeS: 2 ** 31 - 1 })).trajanjeS, 2 ** 31 - 1);
+  });
+
+  it("N6: dopolnitev s prepisom ne prepise zapiska, ki ga je uporabnik spremenil (prepis je v stanju in na zaslonu)", async () => {
+    const dir = await novaMapa();
+    await izmenjajSinhron(zTelefona({ klici: [klic("klic-1")] }), dir);
+    const [mapa] = await mapeKlicev(dir);
+    const pot = path.join(dir, "zapiski", mapa, "zapisek.md");
+    const urejen = (await readFile(pot, "utf8")) + "\nMOJA OPOMBA: poklical nazaj ob 10h.\n";
+    await writeFile(pot, urejen);
+    await izmenjajSinhron(zTelefona({ rev: 1, klici: [klic("klic-1", { prepisPogovora: [...prepis] })] }), dir);
+    assert.equal(await readFile(pot, "utf8"), urejen);
+    assert.deepEqual((await stanje(dir)).klici[0].k.prepisPogovora, prepis);
+    assert.deepEqual(await mapeKlicev(dir), [mapa], "brez nove mape");
   });
 });
