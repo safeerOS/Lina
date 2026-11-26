@@ -1860,3 +1860,11 @@ Lastnik: »pa imejmo mi tudi za ta del kode licenco AGPL«. Lina se iz lastnikov
   narekovanja, posodobitev LearnHarness (B9). Stikalo v Nastavitvah (UcenjeLHStikalo), privzeto vklopljeno, seznam enot s koraki, izbris.
 - Preizkusi: ucenje-lh.test.ts (logika, licenca, brez omrezja, edini vhod, zastavica), naloga-ucenje-lh.test.ts (merilo z nadomestnim modelom).
   NEPREVERJENO: prava gradnja vite/nitro z LINA_BREZ_UCENJA_LH=1 (paket ni bil zgrajen), kakovost preverb s pravim modelom.
+
+## Vec racunalnikov in razdelitev dela (lastnik 26. 11. 2026 18:48, NALOGA-34)
+»Uporabnik ima lahko vec racunalnikov in Lina se more znati povezati v vec racunalnikov, tudi zato, da zna enakomerno razporediti delo med vec racunalniki.«
+- Telefon hrani SEZNAM seznanjenih racunalnikov (samostojna/Racunalniki.kt, AsistentShramba): nova seznanitev ne prepise stare (isti odtis = isti racunalnik); prehod: stara ena seznanitev postane prvi clan. Vsak racunalnik je seznanjen loceno (QR/koda + Dodaj na TISTEM racunalniku), s svojim pripetim odtisom in relejem; zaupanje enega ne velja za drugega.
+- Racunalnik v podpisanem /stanje vrne `racunalnik: {ime, jedra?, obremenitev5?, prostMb?}` (obremenitev.server.ts); neznano se IZPUSTI, nikoli 0 (Windows loadavg = 0).
+- Nova naloga s telefona gre na najmanj obremenjen dosegljiv racunalnik (load5/jedro, prag 1,25, prost RAM >= 1500 MB; RazdelitevDela.cilj); uporabnik lahko izbere rocno (»Uporabi samo tega«) ali racunalnik izkljuci. Vse poti naloge (poizvedbe, odgovori, nadaljevanje, ustavitev) gredo racunalniku ob oddaji (Racunalniki.zaNalogo), izbira v zavihku ali nova seznanitev ga ne zamenjata; dolgovan /ustavi gre vsem racunalnikom. Telefon dela eno nalogo naenkrat (hkratni nalogi na dveh racunalnikih: v kodi se ni).
+- Zapisi klicev in pogovor se sinhronizirajo samo z GLAVNIM racunalnikom (prvi seznanjeni); sinhronizacija z vec racunalniki (vrsta po racunalniku) in podpis, ki veze ciljni racunalnik (ponovitev podpisane zahteve z enega racunalnika na drugega v oknu 2 min): v kodi se ni.
+- Racunalnik z racunalnikom (predaja naloge, »Moji racunalniki« na racunalniku): v kodi se ni - odlocitev vodje (0.2.14 ali naslednji sklop).
