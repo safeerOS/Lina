@@ -222,4 +222,67 @@ class NajdbeA0214Test {
             files.deleteRecursively(); zunaj.deleteRecursively()
         }
     }
+
+    // Slepi pregled popravkov 21t (slepi-21t/NAJDBE.md).
+    @Test
+    fun `S4 - sprejmiIzRacunalnika vrne stevilo zares shranjenih (polni dnevnik lastnih)`() {
+        val d = DnevnikKlicev(PomnilniskaShramba(), ura = { zdaj })
+        for (i in 1..MEJA_ZAPISOV_TELEFON) assertTrue(d.dodaj(ZapisKlica(id = "klic-moj-$i", casZacetka = zdaj - i, stevilka = "+99955501010", trajanjeS = 1, povzetek = "p")))
+        assertEquals(0, d.sprejmiIzRacunalnika(tuji(1) { zdaj }), "klic, ki je bil takoj izrinjen, se ne sme steti kot dodan")
+        assertTrue(d.seznam().none { it.id == "klic-tuj-1" })
+    }
+
+    @Test
+    fun `S7 - rok z racunalnika, ki ni celo stevilo, ne ustavi sinhronizacije`() {
+        for (rok in listOf(""","rokHrambeDni":30.5""", ""","rokHrambeDni":"30"""", ""","rokHrambeDni":{}""", ""","rokHrambeDni":null""", ""","rokHrambeDni":1e30""")) {
+            val shramba = PomnilniskaShramba()
+            assertTrue(DnevnikKlicev(shramba, ura = { zdaj }).dodaj(star("a", dni = 50)))
+            assertTrue(izmenjajZRokom(shramba, rok), "sinhronizacija se je ustavila pri '$rok'")
+            assertEquals(listOf("a"), DnevnikKlicev(shramba, ura = { zdaj }).seznam().map { it.id }, "rok '$rok'")
+        }
+    }
+
+    @Test
+    fun `S7 - meja roka 3650 dni velja, 3651 ne`() {
+        val shramba = PomnilniskaShramba()
+        val prej = zdaj - 3600 * DAN // zapisa sta ob dodajanju stara 49 in 51 dni
+        assertTrue(DnevnikKlicev(shramba, ura = { prej }).dodaj(star("a", dni = 3651)))
+        assertTrue(DnevnikKlicev(shramba, ura = { prej }).dodaj(star("b", dni = 3649)))
+        assertTrue(izmenjajZRokom(shramba, ""","rokHrambeDni":3650""", ura = prej))
+        assertTrue(izmenjajZRokom(shramba, ""","rokHrambeDni":3651""", ura = prej))
+        assertEquals(listOf("b"), DnevnikKlicev(shramba, ura = { zdaj }).seznam().map { it.id }, "3650 mora veljati, 3651 ne")
+    }
+
+    private class ShrambaZNapako(var vsebina: String?) : Shramba {
+        var napaka = false
+        override fun preberi(): String? = vsebina
+        override fun shrani(vsebina: String) { if (napaka) throw java.io.IOException("disk"); this.vsebina = vsebina }
+    }
+
+    @Test
+    fun `S7 - neuspel zapis ob nalaganju ne zaklene dnevnika, neuspel zapis roka ne spremeni roka`() {
+        val shramba = ShrambaZNapako(null)
+        assertTrue(DnevnikKlicev(shramba, ura = { zdaj - 80 * DAN }).dodaj(star(dni = 100)))
+        shramba.napaka = true
+        val d = DnevnikKlicev(shramba, ura = { zdaj })
+        assertTrue(d.seznam().isEmpty(), "rok ob nalaganju ni veljal")
+        assertFalse(SinhronLine.izmenjaj(d, PomnilniskaShramba(), poslji = { """{"epoha":"00112233aabbccdd","rev":1,"zmoznosti":["prepis-v1"],"rokHrambeDni":30}""" }))
+        shramba.napaka = false
+        assertTrue(d.dodaj(star("b", dni = 40)), "dnevnik je po neuspelem zapisu ob nalaganju zaklenjen")
+        assertEquals(1, d.seznam().count { it.id == "b" }, "rok 30 dni je veljal, ceprav zapis ni uspel")
+    }
+
+    @Test
+    fun `S6 - povezava namesto mape lina_zvok ne izbrise cilja`() {
+        val files = Files.createTempDirectory("lina-s6").toFile()
+        val zunaj = Files.createTempDirectory("lina-s6z").toFile()
+        try {
+            File(zunaj, "zajem").mkdirs(); File(zunaj, "zajem/tuje.pcm").writeText("ostane")
+            Files.createSymbolicLink(File(files, "lina_zvok").toPath(), zunaj.toPath())
+            assertFalse(izbrisiStarePosnetkeZvoka(files))
+            assertTrue(File(zunaj, "zajem/tuje.pcm").exists(), "izbris je sledil povezavi lina_zvok")
+        } finally {
+            Files.deleteIfExists(File(files, "lina_zvok").toPath()); files.deleteRecursively(); zunaj.deleteRecursively()
+        }
+    }
 }

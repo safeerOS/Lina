@@ -3,7 +3,10 @@ package si.safeer.lina.samostojna
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
 
 /**
  * Sinhronizacija telefona z racunalnikom (lastnik 20. 11. 2026): zapisi klicev, pogovor in navodila lastnika. Racunalnik steje
@@ -39,8 +42,11 @@ data class OdgovorSinhron(
      * Brez tega polja (racunalnik 0.2.13) telefon zapisa s prepisom ne steje za sprejetega: zadrzi ga in ga poslje znova po posodobitvi.
      */
     val zmoznosti: List<String> = emptyList(),
-    /** Rok hrambe podjetniskih klicev v dneh (zapiskiHrambaDni na racunalniku, 0214 A7); null = racunalnik ga ne poslje, velja zadnji znani. */
-    val rokHrambeDni: Long? = null,
+    /**
+     * Rok hrambe podjetniskih klicev v dneh (zapiskiHrambaDni na racunalniku, 0214 A7); null = racunalnik ga ne poslje, velja zadnji znani.
+     * Bere se strpno (slepi pregled 21t, #7): necelo stevilo, niz ali objekt ne zavrne celega odgovora, samo rok se ne uposteva.
+     */
+    val rokHrambeDni: JsonElement? = null,
 )
 
 const val ZMOZNOST_PREPIS = "prepis-v1"
@@ -102,7 +108,7 @@ object SinhronLine {
             val odg = odgovor(poslji(telo) ?: return false) ?: return false
             val prepisSprejet = ZMOZNOST_PREPIS in odg.zmoznosti
             // Rok pred sprejemom klicev: podjetniski klic po roku racunalnika se ne sprejme.
-            odg.rokHrambeDni?.let { try { dnevnik.nastaviRokHrambe(it) } catch (_: Exception) { return false } }
+            (odg.rokHrambeDni as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.let { try { dnevnik.nastaviRokHrambe(it) } catch (_: Exception) { return false } }
             dnevnik.potrdiPoslane(cakajoci, prepisSprejet)
             // Racunalnik zdaj zna prepis: zapisi, ki jih je star racunalnik dobil brez prepisa, gredo v vrsto (naslednji krog).
             if (prepisSprejet) dnevnik.vrniZadrzanePrepise()

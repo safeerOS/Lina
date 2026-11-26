@@ -195,9 +195,8 @@ const val MEJA_IZBRISANIH = 1000
 /** Najvec zapisov klicev na telefonu (N4): kot racunalnik (MEJA_KLICEV v sinhron-telefon.server.ts). */
 const val MEJA_ZAPISOV_TELEFON = 1000
 
-/** Rok hrambe podjetniskega klica (lastnik 22. 11. 2026: podjetniski zapis 90 dni); osebni ostane do izbrisa. */
-const val ROK_PREPISA_PODJETJE_MS = 90L * 24 * 60 * 60 * 1000
-/** Meje roka z racunalnika (zapiskiHrambaDni, pravila.server.ts: privzeto 90, najvec 3650 dni). */
+/** Rok hrambe podjetniskega klica (lastnik 22. 11. 2026: podjetniski zapis 90 dni, osebni do izbrisa); meje roka z racunalnika
+ *  (zapiskiHrambaDni, pravila.server.ts: privzeto 90, najvec 3650 dni). */
 const val ROK_HRAMBE_PRIVZETO_DNI = 90
 const val ROK_HRAMBE_NAJVEC_DNI = 3650
 private const val DAN_MS = 24L * 60 * 60 * 1000
@@ -626,7 +625,7 @@ class DnevnikKlicev(
     fun sprejmiIzRacunalnika(prejeti: List<ZapisKlicaSinhronizacija>): Int {
         if (branjeSpodletelo) return 0
         val predlagani = zapisi.toMutableMap()
-        var dodanih = 0
+        val dodani = ArrayList<String>()
         val zdaj = ura()
         for (p in prejeti) {
             if (predlagani.containsKey(p.id) || p.id in izbrisani) continue
@@ -642,11 +641,11 @@ class DnevnikKlicev(
             )
             if (!jeVeljavenZapisKlica(zapis)) continue
             predlagani[zapis.id] = zapis
-            dodanih++
+            dodani.add(zapis.id)
         }
         val predlaganiCakajoci = vrstaSinhronizacije.toMutableMap()
         val predlaganiZadrzani = LinkedHashSet(zadrzaniPrepisi)
-        if (uveljaviHrambo(predlagani, predlaganiCakajoci, predlaganiZadrzani) || dodanih > 0) {
+        if (uveljaviHrambo(predlagani, predlaganiCakajoci, predlaganiZadrzani) || dodani.isNotEmpty()) {
             shraniVShrambo(predlagani.values, predlaganiCakajoci.values, predlaganiZadrzani)
             zapisi.clear()
             zapisi.putAll(predlagani)
@@ -655,7 +654,8 @@ class DnevnikKlicev(
             zadrzaniPrepisi.clear()
             zadrzaniPrepisi.addAll(predlaganiZadrzani)
         }
-        return dodanih
+        // Steje samo zapise, ki so po meji 1000 res ostali (slepi pregled 21t, #4).
+        return dodani.count { it in zapisi }
     }
 
     /**

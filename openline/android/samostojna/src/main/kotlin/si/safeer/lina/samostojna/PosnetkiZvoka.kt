@@ -14,6 +14,8 @@ import java.nio.file.attribute.BasicFileAttributes
  * true = mapa je obstajala in je izbrisana.
  */
 fun izbrisiStarePosnetkeZvoka(files: File): Boolean {
+    // Povezavi se ne sledi niti na ravni lina_zvok (slepi pregled 21t, #6).
+    if (Files.isSymbolicLink(File(files, "lina_zvok").toPath())) return false
     val mapa = File(files, "lina_zvok/zajem").toPath()
     if (!Files.exists(mapa, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return false
     if (!Files.isDirectory(mapa, java.nio.file.LinkOption.NOFOLLOW_LINKS)) { Files.delete(mapa); return true }
