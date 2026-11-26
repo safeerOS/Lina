@@ -215,7 +215,10 @@ test("streznik: telesa iz vektorja (naloga, odobritev, ustavitev, seznanitev QR,
     // stanje seje: podpisana poizvedba kot GET z iskalnimi parametri
     const q = new URLSearchParams({ posiljatelj: A.stanje_poizvedba.posiljatelj, cas: String(A.stanje_poizvedba.cas), enkratni: A.stanje_poizvedba.enkratni, podpis: A.stanje_poizvedba.podpis });
     const st = await sv.z("GET", `/stanje?${q}`);
-    assert.deepEqual([st.status, st.telo], [A.seja[0].status, A.seja[0].telo]);
+    // naloga 34: /stanje nosi se obremenitev racunalnika (oblika: naloga-34.test.ts, Naloga34Test); vektor seje je brez nje
+    const { racunalnik: r0, ...seja0 } = st.telo;
+    assert.deepEqual([st.status, seja0], [A.seja[0].status, A.seja[0].telo]);
+    assert.equal(typeof r0.ime, "string");
     // seznanitev QR: telo iz vektorja, nato stanje (naprava se v seznam kanala vpise sele z lastnikovim »Dodaj«, T1-N10: vpisana dobi 409)
     const sz409 = await sv.z("POST", "/seznani", A.seznanitev_telo);
     assert.equal(sz409.status, 409, "naprava, ki je ze na seznamu, se ne seznani znova");
@@ -253,7 +256,10 @@ test("streznik: seja Claude Code zaprta - 503 in stanje z zapisom iz vektorja", 
     assert.deepEqual(r.telo.stanje, A.seja[2].telo.stanje);
     const q = new URLSearchParams({ posiljatelj: A.stanje_poizvedba.posiljatelj, cas: String(A.stanje_poizvedba.cas), enkratni: A.stanje_poizvedba.enkratni, podpis: A.stanje_poizvedba.podpis });
     const st = await sv.z("GET", `/stanje?${q}`);
-    assert.deepEqual([st.status, st.telo], [A.seja[1].status, A.seja[1].telo]);
+    // naloga 34: /stanje nosi se obremenitev racunalnika (oblika: naloga-34.test.ts, Naloga34Test); vektor seje je brez nje
+    const { racunalnik: r1, ...seja1 } = st.telo;
+    assert.deepEqual([st.status, seja1], [A.seja[1].status, A.seja[1].telo]);
+    assert.equal(typeof r1.ime, "string");
   } finally {
     await sv.pospravi();
   }
