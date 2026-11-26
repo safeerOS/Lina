@@ -11,3 +11,20 @@ object CakajocaNaloga {
     fun smePoslati(shranjenOdtis: String?, zdajOdtis: String?, shranjenoMs: Long, zdajMs: Long): Boolean =
         shranjenOdtis != null && shranjenOdtis == zdajOdtis && zdajMs >= shranjenoMs && zdajMs - shranjenoMs <= ROK_MS
 }
+
+/**
+ * Naloga 23t: potrjena naloga, ki caka, da Lina na racunalniku odpre Claude Code (lastna mesta v shrambi, loceno od »shrani za
+ * pozneje«). Po zasuku zaslona ali ponovnem zagonu aplikacije se cakanje nadaljuje samo za isti racunalnik in v roku cakanja.
+ */
+object NalogaCakaSejo {
+    /** NEZNAN: ponovna oddaja je bila morda ze na poti (oznaka [oddano]), rok pa je potekel - lastnik preveri, ne poslje znova. */
+    enum class Ob { OBNOVI, ROK, NEZNAN, NIC }
+
+    fun obZagonu(caka: Boolean, id: String?, shranjenOdtis: String?, zdajOdtis: String?, zacetekMs: Long, zdajMs: Long, rokMs: Long,
+                 oddano: Boolean = false): Ob = when {
+        !caka || id == null -> Ob.NIC
+        !CakajocaNaloga.smePoslati(shranjenOdtis, zdajOdtis, zacetekMs, zdajMs) -> Ob.NIC
+        zdajMs - zacetekMs > rokMs -> if (oddano) Ob.NEZNAN else Ob.ROK
+        else -> Ob.OBNOVI
+    }
+}

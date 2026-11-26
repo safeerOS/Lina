@@ -89,6 +89,16 @@ object AsistentProtokol {
     }
 
     /**
+     * Naloga 23t: razlog zagona seje iz 503 {"napaka":"claude-code-ni","stanje":{"zagon":...}} (asistent-streznik.server.ts naloga,
+     * RazlogSeje v seja-claude.server.ts). Samo znane vrednosti; drugo ali brez polja = null (telefon ravna kot prej).
+     */
+    fun razberiZagon(besedilo: String): String? {
+        val k = koren(besedilo) ?: return null
+        val o = (k["stanje"] as? JsonObject) ?: k
+        return niz(o, "zagon", 16)?.takeIf { it in CakanjeSeje.RAZLOGI }
+    }
+
+    /**
      * Global Link (naloga 22): id Line na releju iz podpisanega odgovora /stanje (dobljen prek pripete povezave). Samo veljaven
      * id releja (n- + 16 hex), sicer null - telefon iz odgovora nikoli ne vzame naslova ali gostitelja.
      */

@@ -3,8 +3,8 @@ package si.safeer.lina.podpis
 /** Izid ene zahteve na Lino na racunalniku. */
 sealed class OdgovorLine {
     data class Ok(val telo: String) : OdgovorLine()
-    /** HTTP napaka s kodo iz telesa {"napaka":...} (ali null). */
-    data class Napaka(val status: Int, val koda: String?) : OdgovorLine()
+    /** HTTP napaka s kodo iz telesa {"napaka":...} (ali null); [zagon] = stanje.zagon iz 503 claude-code-ni (naloga 23t, AsistentProtokol.razberiZagon). */
+    data class Napaka(val status: Int, val koda: String?, val zagon: String? = null) : OdgovorLine()
     /** Ni povezave, napacen odtis, preusmeritev ali prekinitev. */
     object Nedosegljiva : OdgovorLine()
 }

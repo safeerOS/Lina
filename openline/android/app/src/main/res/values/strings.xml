@@ -261,6 +261,16 @@
     <string name="local_task_sprejeta">The computer accepted task no. %2$s: %1$s\nProgress and result are in the Computer tab.</string>
     <string name="local_task_nedosegljiv">I could not send the task because the computer is not reachable (neither on the home network nor via Global Link). I can save it and send it when it is reachable.</string>
     <string name="local_task_claude_code_ni">I could not hand over the task: Claude Code is not running or not installed on the computer.</string>
+    <string name="local_task_odpira">Lina on the computer is opening Claude Code … I saved the task; once the session is open (within 3 minutes at most), the phone hands it over by itself, no need to confirm it again.</string>
+    <string name="local_task_zagon_ni_terminala">I could not hand over the task: Lina on the computer cannot find a terminal, so she cannot open Claude Code (install e.g. xterm or GNOME Terminal). The task stays saved.</string>
+    <string name="local_task_zagon_ni_claude">I could not hand over the task: Lina on the computer cannot find the claude program (Claude Code). Install Claude Code. The task stays saved.</string>
+    <string name="local_task_zagon_izklopljeno">I could not hand over the task: automatic start of Claude Code is off on the computer (Connect phone). Open Claude Code yourself or turn the switch on. The task stays saved.</string>
+    <string name="local_task_zagon_opozorilo">I could not hand over the task: Lina does not open Claude Code until you confirm the agent warning on the computer (Computer tab). The task stays saved.</string>
+    <string name="local_task_zagon_omejitev">I could not hand over the task: the Claude Code session did not open after several attempts (at most 3 per hour). Open it on the computer yourself or try later. The task stays saved.</string>
+    <string name="local_task_zagon_napaka">I could not hand over the task: Lina could not open the Claude Code session (the terminal exited with an error or the session folder is not available). The task stays saved.</string>
+    <string name="local_task_zagon_rok">Claude Code did not open on the computer within 3 minutes, so I did not hand over the task. The task stays saved; check the terminal on the computer and send it again.</string>
+    <string name="local_task_odpiranje_preklicano">Waiting for Claude Code was cancelled; this task will not be handed over.</string>
+    <string name="local_task_preklic_prepozno">The task had already been handed over when the cancellation came; I asked the computer to stop it.</string>
     <string name="local_task_zavrnjena">The computer rejected the task (this phone is not allowed). Check the connection in Settings > Computer.</string>
     <string name="local_task_prevec">The computer rejected the task because of too many requests in a short time. Try again in a few minutes.</string>
     <string name="local_task_zasedeno">I did not hand over the task because another task is already running on the computer. Wait for it to finish.</string>

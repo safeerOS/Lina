@@ -58,7 +58,8 @@ class HttpPovezavaZLino(
                     o.isRedirect -> OdgovorLine.Nedosegljiva
                     else -> {
                         val telo = src?.buffer?.readUtf8().orEmpty()
-                        if (o.isSuccessful) OdgovorLine.Ok(telo) else OdgovorLine.Napaka(o.code, kodaNapake(telo))
+                        // naloga 23t: razlog zagona seje iz 503 (ista pot za LAN in Global Link, rele uporablja ta razred)
+                        if (o.isSuccessful) OdgovorLine.Ok(telo) else OdgovorLine.Napaka(o.code, kodaNapake(telo), AsistentProtokol.razberiZagon(telo))
                     }
                 }
             }

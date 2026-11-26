@@ -837,7 +837,18 @@ class LinaPogovorPogled(
             si.safeer.lina.samostojna.IzidPredaje.ZASEDENO -> R.string.local_task_zasedeno
             si.safeer.lina.samostojna.IzidPredaje.NAPAKA -> R.string.local_task_napaka
             si.safeer.lina.samostojna.IzidPredaje.NEZNAN -> R.string.local_task_neznan
+            // naloga 23t: Lina odpira Claude Code (vmesno; koncni izid pride za njim) in razlogi zagona seje
+            si.safeer.lina.samostojna.IzidPredaje.ODPIRA -> R.string.local_task_odpira
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_NI_TERMINALA -> R.string.local_task_zagon_ni_terminala
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_NI_CLAUDE -> R.string.local_task_zagon_ni_claude
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_IZKLOPLJENO -> R.string.local_task_zagon_izklopljeno
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_OPOZORILO -> R.string.local_task_zagon_opozorilo
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_OMEJITEV -> R.string.local_task_zagon_omejitev
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_NAPAKA -> R.string.local_task_zagon_napaka
+            si.safeer.lina.samostojna.IzidPredaje.ZAGON_ROK -> R.string.local_task_zagon_rok
         }
+        // naloga 23t (slepi pregled N5): vmesni izid samo pokaze; v zgodovino modela gre sele koncni (sicer model misli, da ni predana)
+        if (izid == si.safeer.lina.samostojna.IzidPredaje.ODPIRA) { obvestilo(a.getString(kljuc)); return }
         val sprejeta = izid == si.safeer.lina.samostojna.IzidPredaje.SPREJETA
         val sporocilo = if (sprejeta) a.getString(kljuc, besedilo, si.safeer.lina.samostojna.PredajaNaloge.stevilka(id ?: "")) else a.getString(kljuc)
         nit.execute { if (sprejeta) asist.nalogaPredana(besedilo) else asist.nalogaNiPredana(besedilo, sporocilo) }

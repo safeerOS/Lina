@@ -261,6 +261,17 @@
     <string name="local_task_sprejeta">Il computer ha accettato l\'attività n. %2$s: %1$s\nAvanzamento ed esito sono nella scheda Computer.</string>
     <string name="local_task_nedosegljiv">Non ho potuto inviare l\'attività perché il computer non è raggiungibile (né sulla rete di casa né tramite Global Link). Posso salvarla e inviarla quando sarà raggiungibile.</string>
     <string name="local_task_claude_code_ni">Non ho potuto consegnare l\'attività: Claude Code non è avviato o non è installato sul computer.</string>
+    <string name="local_task_odpira">Lina sul computer sta aprendo Claude Code … Ho salvato l\'attività; quando la sessione sarà aperta (al massimo entro 3 minuti), il telefono la consegnerà da solo, senza nuova conferma.</string>
+    <string name="local_task_zagon_ni_terminala">Non ho potuto consegnare l\'attività: Lina sul computer non trova un terminale e non può aprire Claude Code (installa ad es. xterm o GNOME Terminal). L\'attività resta salvata.</string>
+    <string name="local_task_zagon_ni_claude">Non ho potuto consegnare l\'attività: Lina sul computer non trova il programma claude (Claude Code). Installa Claude Code. L\'attività resta salvata.</string>
+    <string name="local_task_zagon_izklopljeno">Non ho potuto consegnare l\'attività: l\'avvio automatico di Claude Code è disattivato sul computer (Collega telefono). Apri Claude Code tu stesso o attiva l\'interruttore. L\'attività resta salvata.</string>
+    <string name="local_task_zagon_opozorilo">Non ho potuto consegnare l\'attività: Lina non apre Claude Code finché non confermi l\'avviso sugli agenti sul computer (scheda Computer). L\'attività resta salvata.</string>
+    <string name="local_task_zagon_omejitev">Non ho potuto consegnare l\'attività: la sessione di Claude Code non si è aperta dopo diversi tentativi (al massimo 3 all\'ora). Aprila tu stesso sul computer o riprova più tardi. L\'attività resta salvata.</string>
+    <string name="local_task_zagon_napaka">Non ho potuto consegnare l\'attività: Lina non è riuscita ad aprire la sessione di Claude Code (il terminale è terminato con un errore o la cartella della sessione non è disponibile). L\'attività resta salvata.</string>
+    <string name="local_task_zagon_rok">Claude Code non si è aperto sul computer entro 3 minuti, quindi non ho consegnato l\'attività. L\'attività resta salvata; controlla il terminale del computer e inviala di nuovo.</string>
+    <string name="local_task_odpiranje_preklicano">L\'attesa di Claude Code è stata annullata; questa attività non verrà consegnata.</string>
+    <string name="local_task_preklic_prepozno">L\'attività era già stata consegnata quando è arrivato l\'annullamento; ho chiesto al computer di fermarla.</string>
+    <string name="local_event_cancel">Annulla</string>
     <string name="local_task_zavrnjena">Il computer ha rifiutato l\'attività (questo telefono non è autorizzato). Controlla la connessione in Impostazioni > Computer.</string>
     <string name="local_task_prevec">Il computer ha rifiutato l\'attività per troppe richieste in poco tempo. Riprova tra qualche minuto.</string>
     <string name="local_task_zasedeno">Non ho consegnato l\'attività perché sul computer ne è già in corso un\'altra. Attendi che finisca.</string>

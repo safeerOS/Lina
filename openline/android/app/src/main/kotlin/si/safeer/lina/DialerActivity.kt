@@ -769,6 +769,8 @@ class DialerActivity : Activity() {
         assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
         assistantTaskInput.visibility = if (p.vnos) View.VISIBLE else View.GONE
         assistantSendButton.visibility = if (p.poslji) View.VISIBLE else View.GONE
+        // naloga 23t: naloga, ki je racunalnik zaradi zagona Claude Code ni sprejel, je v vnosu za rocno ponovitev (en dotik Poslji)
+        if (p.vnos && !p.odgovor && assistantTaskInput.text.isNullOrEmpty()) asistent.vzemiZaPonovitev()?.let { assistantTaskInput.setText(it) }
         assistantStopButton.visibility = if (p.ustavi) View.VISIBLE else View.GONE
         val zaOdgovor = asistent.nalogaZaOdgovor()
         findViewById<Button>(R.id.assistantAutoStopButton).visibility =

@@ -261,6 +261,17 @@
     <string name="local_task_sprejeta">El ordenador aceptó la tarea n.º %2$s: %1$s\nEl progreso y el resultado están en la pestaña Ordenador.</string>
     <string name="local_task_nedosegljiv">No pude enviar la tarea porque el ordenador no está accesible (ni en la red de casa ni a través de Global Link). Puedo guardarla y enviarla cuando esté accesible.</string>
     <string name="local_task_claude_code_ni">No pude entregar la tarea: Claude Code no está en ejecución o no está instalado en el ordenador.</string>
+    <string name="local_task_odpira">Lina en el ordenador está abriendo Claude Code … He guardado la tarea; cuando la sesión esté abierta (como mucho en 3 minutos), el teléfono la entregará solo, sin volver a confirmarla.</string>
+    <string name="local_task_zagon_ni_terminala">No pude entregar la tarea: Lina en el ordenador no encuentra un terminal y no puede abrir Claude Code (instala p. ej. xterm o GNOME Terminal). La tarea sigue guardada.</string>
+    <string name="local_task_zagon_ni_claude">No pude entregar la tarea: Lina en el ordenador no encuentra el programa claude (Claude Code). Instala Claude Code. La tarea sigue guardada.</string>
+    <string name="local_task_zagon_izklopljeno">No pude entregar la tarea: el inicio automático de Claude Code está desactivado en el ordenador (Conectar teléfono). Abre Claude Code tú mismo o activa el interruptor. La tarea sigue guardada.</string>
+    <string name="local_task_zagon_opozorilo">No pude entregar la tarea: Lina no abre Claude Code hasta que confirmes el aviso sobre agentes en el ordenador (pestaña Ordenador). La tarea sigue guardada.</string>
+    <string name="local_task_zagon_omejitev">No pude entregar la tarea: la sesión de Claude Code no se abrió tras varios intentos (máximo 3 por hora). Ábrela tú mismo en el ordenador o inténtalo más tarde. La tarea sigue guardada.</string>
+    <string name="local_task_zagon_napaka">No pude entregar la tarea: Lina no pudo abrir la sesión de Claude Code (el terminal terminó con un error o la carpeta de la sesión no está disponible). La tarea sigue guardada.</string>
+    <string name="local_task_zagon_rok">Claude Code no se abrió en el ordenador en 3 minutos, así que no entregué la tarea. La tarea sigue guardada; revisa el terminal del ordenador y envíala de nuevo.</string>
+    <string name="local_task_odpiranje_preklicano">Se canceló la espera de Claude Code; esta tarea no se entregará.</string>
+    <string name="local_task_preklic_prepozno">La tarea ya se había entregado cuando llegó la cancelación; he pedido al ordenador que la detenga.</string>
+    <string name="local_event_cancel">Cancelar</string>
     <string name="local_task_zavrnjena">El ordenador rechazó la tarea (este teléfono no tiene permiso). Revisa la conexión en Ajustes > Ordenador.</string>
     <string name="local_task_prevec">El ordenador rechazó la tarea por demasiadas solicitudes en poco tiempo. Inténtalo dentro de unos minutos.</string>
     <string name="local_task_zasedeno">No entregué la tarea porque ya hay otra en curso en el ordenador. Espera a que termine.</string>

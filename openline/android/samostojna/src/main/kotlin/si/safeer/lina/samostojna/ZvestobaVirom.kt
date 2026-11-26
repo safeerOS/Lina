@@ -52,7 +52,13 @@ object OSebi {
 }
 
 /** Izid predaje naloge računalniku: besedilo uporabniku izbere aplikacija po tem izidu (strings.xml), nikoli pred njim. */
-enum class IzidPredaje { SPREJETA, NEDOSEGLJIV, CLAUDE_CODE_NI, ZAVRNJENA, PREVEC, ZASEDENO, NAPAKA, NEZNAN }
+enum class IzidPredaje {
+    SPREJETA, NEDOSEGLJIV, CLAUDE_CODE_NI, ZAVRNJENA, PREVEC, ZASEDENO, NAPAKA, NEZNAN,
+    /** Naloga 23t: vmesni izid - Lina na racunalniku odpira Claude Code, telefon caka in nalogo poslje sam (koncni izid pride za njim). */
+    ODPIRA,
+    /** Razlogi zagona seje (stanje.zagon v 503) in rok cakanja; naloga ostane shranjena za rocno ponovitev. */
+    ZAGON_NI_TERMINALA, ZAGON_NI_CLAUDE, ZAGON_IZKLOPLJENO, ZAGON_OPOZORILO, ZAGON_OMEJITEV, ZAGON_NAPAKA, ZAGON_ROK,
+}
 
 object PredajaNaloge {
     /** Enako kot NapakaLine.sporocilo (podpis): 503 claude-code-ni, 403 zavrnjeno, 429 prevec; drugo je napaka, ne »ni dosegljiv«. */
@@ -66,6 +72,28 @@ object PredajaNaloge {
         status == 0 -> IzidPredaje.NEZNAN
         else -> IzidPredaje.NAPAKA
     }
+
+    private fun izZagona(zagon: String?): IzidPredaje = when (zagon) {
+        "odpira" -> IzidPredaje.ODPIRA
+        "ni-terminala" -> IzidPredaje.ZAGON_NI_TERMINALA
+        "ni-claude" -> IzidPredaje.ZAGON_NI_CLAUDE
+        "izklopljeno" -> IzidPredaje.ZAGON_IZKLOPLJENO
+        "opozorilo" -> IzidPredaje.ZAGON_OPOZORILO
+        "omejitev" -> IzidPredaje.ZAGON_OMEJITEV
+        "napaka" -> IzidPredaje.ZAGON_NAPAKA
+        else -> IzidPredaje.CLAUDE_CODE_NI // starejsa Lina brez razloga: kot prej
+    }
+
+    /** Naloga 23t: prva oddaja; 503 z razlogom zagona da razlog (ODPIRA = telefon caka na sejo). */
+    fun izidPrve(ok: Boolean, nedosegljiva: Boolean, status: Int?, zagon: String?): IzidPredaje =
+        izid(ok, nedosegljiva, status).let { if (it == IzidPredaje.CLAUDE_CODE_NI) izZagona(zagon) else it }
+
+    /** Ponovna oddaja po odprti seji: nikoli ODPIRA (drugega kroga cakanja ni) - spet »odpira« pomeni, da se seja ni odprla. */
+    fun izidPonovne(ok: Boolean, nedosegljiva: Boolean, status: Int?, zagon: String?): IzidPredaje =
+        izidPrve(ok, nedosegljiva, status, zagon).let { if (it == IzidPredaje.ODPIRA) IzidPredaje.ZAGON_ROK else it }
+
+    /** Rok cakanja: razlog, ce ga je racunalnik poslal, sicer ZAGON_ROK. */
+    fun izidRoka(razlog: String?): IzidPredaje = izZagona(razlog).let { if (it == IzidPredaje.ODPIRA || it == IzidPredaje.CLAUDE_CODE_NI) IzidPredaje.ZAGON_ROK else it }
 
     /** Ime niza v res/values-xx/strings.xml za izid. */
     fun kljuc(izid: IzidPredaje): String = "local_task_" + izid.name.lowercase()

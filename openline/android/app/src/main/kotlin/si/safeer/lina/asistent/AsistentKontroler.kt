@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import si.safeer.lina.podpis.AsistentProtokol
+import si.safeer.lina.podpis.CakanjeSeje
 import si.safeer.lina.samostojna.IzidPredaje
 import si.safeer.lina.samostojna.PredajaNaloge
 import si.safeer.lina.podpis.DogodekLine
@@ -32,6 +33,13 @@ import si.safeer.lina.podpis.TokKode
  * naprave (NapravaKljuc, Podpisnik). Stanje se spreminja samo na glavni niti; omrezje in KeyStore samo v ozadju.
  */
 private const val VELJAVNOST_DOSEGLJIVOSTI_MS = 30_000L
+// naloga 23t: mesta naloge, ki caka na sejo Claude Code (AsistentShramba.CAKAJOCA, loceno od »shrani za pozneje«)
+private const val Z_ID = "z_id"
+private const val Z_BESEDILO = "z_besedilo"
+private const val Z_ODTIS = "z_odtis"
+private const val Z_CAS = "z_cas"
+private const val Z_ODDANO = "z_oddano"
+private const val Z_ROCNO = "z_rocno"
 
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
@@ -74,9 +82,14 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private val noveKode = java.util.concurrent.LinkedBlockingQueue<String>()
     @Volatile private var poizvedovalec: Thread? = null
     @Volatile private var ustavljen = false
+    /** Naloga 23t: id potrjene naloge, ki caka, da Lina na racunalniku odpre Claude Code (null = ne caka). Samo glavna nit. */
+    var cakaSejo: String? = null; private set
+    /** Vsak preklic ali nova naloga poveca stevec: nit cakanja s starim stevcem ne poslje in ne prijavi nicesar. */
+    private val generacija = java.util.concurrent.atomic.AtomicInteger()
 
     fun stanje() = StanjeAsistenta(
         AsistentShramba.beri(context) != null, nalogaId != null, odprta, posiljam, cakaPotrditev != null || korakKode != null, cakaOdgovor,
+        cakaSejo = cakaSejo != null,
     )
 
     /** Id naloge, ki ji telefon lahko odgovori (tekoca ali spremljana koncana). */
@@ -327,11 +340,14 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     /** Glavna nit: shranjeno nalogo poslje, ko je racunalnik dosegljiv in telefon ne dela druge; izid gre v dnevnik zavihka Racunalnik. */
     private fun posljiShranjeno() {
+        if (cakaSejo != null) return // naloga 23t: med cakanjem na sejo nic ne odide samo (nova naloga bi preklicala cakajoco)
+        if (obnoviCakanje()) return
         val b = shrambaCakajoce.getString("besedilo", null) ?: return
         if (posiljam || nalogaId != null) return
         val odtis = shrambaCakajoce.getString("odtis", null)
         val cas = shrambaCakajoce.getLong("cas", 0L)
-        shrambaCakajoce.edit().clear().apply()
+        // samo mesta »shrani za pozneje«; cakajoca na sejo (Z_*) ostane
+        shrambaCakajoce.edit().remove("besedilo").remove("odtis").remove("cas").apply()
         // T3 (pregled 0213): drug (ali pozabljen) racunalnik ali potekel rok - ne poslje se sama, lastnik jo poslje znova
         if (!si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, AsistentShramba.beri(context)?.odtis, cas, System.currentTimeMillis())) {
             dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_potekla, b.take(120)))
@@ -339,9 +355,12 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         }
         // nazaj v shrambo samo ob nedosegljivem (403/429/napaka bi se sicer ponavljali v nedogled); izid gre v dnevnik zavihka Racunalnik
         poslji(b) { izid, id ->
-            if (izid != IzidPredaje.NEDOSEGLJIV) obIzidShranjene?.also { obIzidShranjene = null }?.invoke(izid, id)
+            if (izid != IzidPredaje.NEDOSEGLJIV && izid != IzidPredaje.ODPIRA) obIzidShranjene?.also { obIzidShranjene = null }?.invoke(izid, id)
             when (izid) {
                 IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
+                // naloga 23t: cakanje na sejo in razlogi zagona imajo svoj zapis (cakajNaSejo, besediloZagona); naloga ostane za rocno ponovitev
+                IzidPredaje.ODPIRA, IzidPredaje.ZAGON_NI_TERMINALA, IzidPredaje.ZAGON_NI_CLAUDE, IzidPredaje.ZAGON_IZKLOPLJENO,
+                IzidPredaje.ZAGON_OPOZORILO, IzidPredaje.ZAGON_OMEJITEV, IzidPredaje.ZAGON_NAPAKA, IzidPredaje.ZAGON_ROK -> Unit
                 IzidPredaje.NEDOSEGLJIV -> shrambaCakajoce.edit().putString("besedilo", b).putString("odtis", odtis).putLong("cas", cas).apply()
                 // T1: izid neznan - ne shrani znova (bi se lahko izvedla dvakrat), lastnik preveri v zavihku Racunalnik
                 IzidPredaje.NEZNAN -> dodaj(context.getString(si.safeer.lina.R.string.local_task_neznan))
@@ -370,8 +389,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         // izid vedno asinhrono (glavna nit), da pride za klicateljevim »Preverjam …«
         if (posiljam || nalogaId != null) { obIzidu?.let { glavna.post { it(IzidPredaje.ZASEDENO, null) } }; return false }
         if (NalogaLine.besedilo(vnos) == null) { obIzidu?.let { glavna.post { it(IzidPredaje.NAPAKA, null) } }; return false }
+        prekliciCakanje() // naloga 23t: nova naloga zamenja tisto, ki caka na sejo - stara se ne poslje
         posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
         obSpremembi()
+        // T3 / slepi pregled 23t N9: racunalnik, kateremu je lastnik nalogo potrdil, se zapomni ob potrditvi (ne sele po odgovoru)
+        val odtisOb = AsistentShramba.beri(context)?.odtis
         Thread {
             val pov = povezava()
             val naloga = runCatching {
@@ -381,22 +403,195 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             pov?.zapri()
             zadnjaDosegljivost = (odg !is OdgovorLine.Nedosegljiva) to System.currentTimeMillis()
             naGlavni {
+                // naloga 23t: 503 claude-code-ni z zagon == "odpira" - Lina odpira sejo, telefon pocaka in poslje sam (vmesni izid ODPIRA)
+                val caka = naloga != null && CakanjeSeje.cakaj(odg)
                 // napaka podpisa (KeyStore) ni nedosegljiv racunalnik
-                obIzidu?.invoke(if (pov != null && naloga == null) IzidPredaje.NAPAKA
-                    else PredajaNaloge.izid(odg is OdgovorLine.Ok, odg is OdgovorLine.Nedosegljiva, (odg as? OdgovorLine.Napaka)?.status), naloga?.id)
+                val izidOddaje = if (pov != null && naloga == null) IzidPredaje.NAPAKA
+                    else PredajaNaloge.izidPrve(odg is OdgovorLine.Ok, odg is OdgovorLine.Nedosegljiva, (odg as? OdgovorLine.Napaka)?.status,
+                        (odg as? OdgovorLine.Napaka)?.zagon).let { if (it == IzidPredaje.ODPIRA && !caka) IzidPredaje.CLAUDE_CODE_NI else it }
+                obIzidu?.invoke(izidOddaje, naloga?.id)
                 posiljam = false
                 if (odg is OdgovorLine.Ok && naloga != null) {
                     nalogaId = naloga.id
                     nalogaBesedilo = naloga.besedilo
                     seja = true
                     poizveduj(naloga.id)
+                } else if (caka && naloga != null) {
+                    seja = false
+                    cakajNaSejo(naloga.id, naloga.besedilo, odtisOb, System.currentTimeMillis(), obIzidu)
                 } else {
                     napaka = NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
                     if (napaka == SporociloNapake.CLAUDE_CODE_NI) seja = false
+                    // razlog zagona (izklopljeno, opozorilo ...): takoj besedilo, naloga ostane za rocno ponovitev (vnos v zavihku Racunalnik)
+                    besediloZagona(izidOddaje)?.let { r -> zaPonovitev = naloga?.besedilo; dodaj(context.getString(r)) }
                 }
             }
         }.start()
         return true
+    }
+
+    /**
+     * Naloga 23t: besedilo naloge, ki je racunalnik zaradi zagona seje ni sprejel - trajno (Z_ROCNO), da »naloga ostane shranjena« drzi
+     * tudi po zasuku ali ponovnem zagonu; zavihek Racunalnik ga enkrat vpise v vnos (edina pot rocne ponovitve, en dotik Poslji).
+     */
+    private var zaPonovitev: String?
+        get() = shrambaCakajoce.getString(Z_ROCNO, null)
+        set(v) { val e = shrambaCakajoce.edit(); if (v == null) e.remove(Z_ROCNO) else e.putString(Z_ROCNO, v); e.commit() }
+    fun vzemiZaPonovitev(): String? = zaPonovitev?.also { zaPonovitev = null }
+
+    /**
+     * Naloga 23t: cakajoca na sejo ima svoja mesta v shrambi (Z_*), loceno od »shrani za pozneje« (slepi pregled N3, N4); obstanejo
+     * cez zasuk zaslona in ponovni zagon (obnoviCakanje), »Pozabi racunalnik« jih zbrise skupaj z ostalim (AsistentShramba.pozabi).
+     * commit, ne apply: smrt procesa takoj po zapisu ne sme izgubiti cakanja ali oznake oddaje (krog 2 N13).
+     */
+    private fun shraniCakanje(id: String, besedilo: String, odtis: String?, zacetek: Long) {
+        shrambaCakajoce.edit().putString(Z_ID, id).putString(Z_BESEDILO, besedilo).putString(Z_ODTIS, odtis).putLong(Z_CAS, zacetek).commit()
+    }
+
+    private fun pocistiCakanje() {
+        shrambaCakajoce.edit().remove(Z_ID).remove(Z_BESEDILO).remove(Z_ODTIS).remove(Z_CAS).remove(Z_ODDANO).commit()
+    }
+
+    /** Ob prvem dosegljivem racunalniku po zasuku ali ponovnem zagonu: cakanje na sejo se nadaljuje (true) ali se konca. */
+    private fun obnoviCakanje(): Boolean {
+        val s = shrambaCakajoce
+        val b = s.getString(Z_BESEDILO, null) ?: return false
+        val id = s.getString(Z_ID, null)
+        val odtis = s.getString(Z_ODTIS, null)
+        val zacetek = s.getLong(Z_CAS, 0L)
+        return when (si.safeer.lina.samostojna.NalogaCakaSejo.obZagonu(true, id, odtis, AsistentShramba.beri(context)?.odtis, zacetek,
+            System.currentTimeMillis(), CakanjeSeje.ROK_MS, oddano = s.getBoolean(Z_ODDANO, false))) {
+            si.safeer.lina.samostojna.NalogaCakaSejo.Ob.OBNOVI -> {
+                // isti id: ce jo racunalnik ze ima (zasuk med oddajo), vrne 409 obstaja in telefon jo spremlja; klic klepeta je bil od starega zaslona
+                if (!posiljam && nalogaId == null && id != null) cakajNaSejo(id, b, odtis, zacetek, null)
+                true
+            }
+            si.safeer.lina.samostojna.NalogaCakaSejo.Ob.ROK -> {
+                pocistiCakanje(); zaPonovitev = b
+                dodaj(context.getString(si.safeer.lina.R.string.local_task_zagon_rok)); false
+            }
+            // krog 2 N1: oddaja je bila morda na poti - ne ponudi ponovitve (bi se izvedla dvakrat), lastnik preveri na racunalniku
+            si.safeer.lina.samostojna.NalogaCakaSejo.Ob.NEZNAN -> {
+                pocistiCakanje(); dodaj(context.getString(si.safeer.lina.R.string.local_task_neznan)); false
+            }
+            // drug ali pozabljen racunalnik: ne odide; lastnik jo poslje znova sam
+            si.safeer.lina.samostojna.NalogaCakaSejo.Ob.NIC -> {
+                pocistiCakanje(); dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_potekla, b.take(120))); false
+            }
+        }
+    }
+
+    /**
+     * Naloga 23t: lastnik je preklical (Ustavi) ali dal drugo nalogo. Nit cakanja vidi nov stevec pred vsako poizvedbo in tik pred
+     * oddajo, zato stara naloga ne odide; ce je bila oddaja ze na poti, jo koncajCakanje ustavi (slepi pregled N1). Ce je oddajo
+     * zacela nit PREJSNJEGA zaslona (zasuk), te niti ni vec - ustavitev poslje preklic sam (krog 2 N2).
+     */
+    private fun prekliciCakanje() {
+        zaPonovitev = null
+        val zapisanId = shrambaCakajoce.getString(Z_ID, null)
+        val oddana = shrambaCakajoce.getBoolean(Z_ODDANO, false)
+        pocistiCakanje()
+        if (cakaSejo == null && zapisanId == null) return
+        val nasaNit = cakaSejo != null
+        generacija.incrementAndGet()
+        cakaSejo = null
+        if (!nasaNit && oddana && zapisanId != null) {
+            posljiUstavitev(zapisanId)
+            dodaj(context.getString(si.safeer.lina.R.string.local_task_preklic_prepozno))
+        } else dodaj(context.getString(si.safeer.lina.R.string.local_task_odpiranje_preklicano))
+        obSpremembi()
+    }
+
+    init {
+        // krog 2 N5: po zasuku ali ponovnem zagonu se cakanje nadaljuje takoj, ne sele ob odprtju zavihka (preveriSejo -> posljiShranjeno)
+        if (shrambaCakajoce.contains(Z_BESEDILO)) glavna.post { if (!ustavljen) preveriSejo() }
+    }
+
+    private fun besediloZagona(i: IzidPredaje): Int? = when (i) {
+        IzidPredaje.ZAGON_NI_TERMINALA -> si.safeer.lina.R.string.local_task_zagon_ni_terminala
+        IzidPredaje.ZAGON_NI_CLAUDE -> si.safeer.lina.R.string.local_task_zagon_ni_claude
+        IzidPredaje.ZAGON_IZKLOPLJENO -> si.safeer.lina.R.string.local_task_zagon_izklopljeno
+        IzidPredaje.ZAGON_OPOZORILO -> si.safeer.lina.R.string.local_task_zagon_opozorilo
+        IzidPredaje.ZAGON_OMEJITEV -> si.safeer.lina.R.string.local_task_zagon_omejitev
+        IzidPredaje.ZAGON_NAPAKA -> si.safeer.lina.R.string.local_task_zagon_napaka
+        IzidPredaje.ZAGON_ROK -> si.safeer.lina.R.string.local_task_zagon_rok
+        else -> null
+    }
+
+    /** Glavna nit. Poizvedovanje in ena ponovna oddaja v ozadju (CakanjeSeje, preizkusi v modulu podpis); izid na glavni niti. */
+    private fun cakajNaSejo(id: String, besedilo: String, odtis: String?, shranjeno: Long, obIzidu: ((IzidPredaje, String?) -> Unit)?) {
+        val gen = generacija.incrementAndGet()
+        cakaSejo = id
+        shraniCakanje(id, besedilo, odtis, shranjeno)
+        dodaj(context.getString(si.safeer.lina.R.string.local_task_odpira))
+        Thread {
+            val pov = povezava()
+            val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()
+            val izid = try {
+                // ni seznanitve (pozabljen racunalnik) = preklic; ni kljuca naprave = brez podpisa (ne »3 minute«, slepi pregled N8)
+                if (pov == null) CakanjeSeje.Izid.Preklicano else if (posiljatelj == null) CakanjeSeje.Izid.BrezPodpisa
+                else CakanjeSeje.pocakajInOddaj(CakanjeSeje.Odvisnosti(
+                    pov = pov, posiljatelj = posiljatelj,
+                    podpisiStanje = { c, e -> runCatching { NapravaKljuc.podpisiStanje(c, e) }.getOrNull() },
+                    // isti id: ce je racunalnik nalogo ze sprejel (npr. zasuk med oddajo), vrne 409 obstaja in je ne izvede dvakrat
+                    podpisiNalogo = { c, e -> runCatching { NapravaKljuc.podpisiNalogo(id, besedilo, c, e) }.getOrNull() },
+                    nakljucno = { NalogaLine.nakljucno(32) },
+                    zdaj = { System.currentTimeMillis() },
+                    spi = { Thread.sleep(it) },
+                    zacetek = shranjeno,
+                    predOddajo = { shrambaCakajoce.edit().putBoolean(Z_ODDANO, true).commit() },
+                    // T3: samo ta racunalnik in v roku shranjene naloge; »Pozabi racunalnik« jo ustavi
+                    preklicano = { ustavljen || generacija.get() != gen ||
+                        !si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, AsistentShramba.beri(context)?.odtis, shranjeno, System.currentTimeMillis()) },
+                ))
+            } catch (_: InterruptedException) { CakanjeSeje.Izid.Preklicano } finally { pov?.zapri() }
+            // zaprt zaslon (zapri): naGlavni ne tece, mesta Z_* ostanejo in novi zaslon cakanje nadaljuje (obnoviCakanje)
+            naGlavni { koncajCakanje(gen, besedilo, izid, obIzidu) }
+        }.start()
+    }
+
+    private fun koncajCakanje(gen: Int, besedilo: String, izid: CakanjeSeje.Izid, obIzidu: ((IzidPredaje, String?) -> Unit)?) {
+        if (generacija.get() != gen) {
+            // preklic ali nova naloga je prisla, ko je bila oddaja ze na poti in jo je racunalnik sprejel: ustavi jo (slepi pregled N1)
+            CakanjeSeje.ustaviPoPreklicu(izid)?.let { posljiUstavitev(it); dodaj(context.getString(si.safeer.lina.R.string.local_task_preklic_prepozno)) }
+            return
+        }
+        cakaSejo = null
+        when (izid) {
+            is CakanjeSeje.Izid.Oddana -> {
+                val odg = izid.odgovor
+                val ima = CakanjeSeje.sprejeta(odg)
+                zadnjaDosegljivost = (odg !is OdgovorLine.Nedosegljiva) to System.currentTimeMillis()
+                val koncni = PredajaNaloge.izidPonovne(ima, odg is OdgovorLine.Nedosegljiva, if (ima) null else (odg as? OdgovorLine.Napaka)?.status,
+                    (odg as? OdgovorLine.Napaka)?.zagon)
+                obIzidu?.invoke(koncni, izid.naloga.id)
+                pocistiCakanje()
+                if (ima) {
+                    napaka = null
+                    nalogaId = izid.naloga.id
+                    nalogaBesedilo = izid.naloga.besedilo
+                    seja = true
+                    poizveduj(izid.naloga.id)
+                } else {
+                    napaka = NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
+                    // T1: izid neznan - racunalnik jo je morda sprejel, zato je ne ponujamo znova
+                    // samo razlogi zagona: nedosegljiv ponudi »shrani za pozneje« (klepet), neznan se ne ponovi (krog 2 N3)
+                    besediloZagona(koncni)?.let { zaPonovitev = besedilo; dodaj(context.getString(it)) }
+                }
+            }
+            is CakanjeSeje.Izid.Rok -> {
+                val koncni = PredajaNaloge.izidRoka(izid.razlog)
+                obIzidu?.invoke(koncni, null)
+                pocistiCakanje(); zaPonovitev = besedilo
+                napaka = SporociloNapake.CLAUDE_CODE_NI
+                besediloZagona(koncni)?.let { dodaj(context.getString(it)) }
+            }
+            CakanjeSeje.Izid.BrezPodpisa -> {
+                obIzidu?.invoke(IzidPredaje.NAPAKA, null); pocistiCakanje(); zaPonovitev = besedilo; napaka = SporociloNapake.NAPAKA
+            }
+            // drug ali pozabljen racunalnik ali potekel rok shranjene: ne odide
+            CakanjeSeje.Izid.Preklicano -> { pocistiCakanje(); dodaj(context.getString(si.safeer.lina.R.string.local_task_odpiranje_preklicano)) }
+        }
     }
 
     private fun poizveduj(id: String) {
@@ -534,9 +729,14 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     }
 
     fun ustavi() {
-        val id = nalogaId ?: return
+        val id = nalogaId ?: run { prekliciCakanje(); return }
         // lastnik je nalogo ustavil: Lina je ne pregleduje in ne nadaljuje sama
         samodejni.ustavi(id)
+        posljiUstavitev(id)
+    }
+
+    /** Podpisan POST /ustavi za nalogo [id] (tudi naloga, ki je bila oddana tik pred preklicem cakanja - slepi pregled 23t N1). */
+    private fun posljiUstavitev(id: String) {
         Thread {
             val pov = povezava()
             val cas = System.currentTimeMillis()

@@ -261,6 +261,17 @@
     <string name="local_task_sprejeta">Der Computer hat Aufgabe Nr. %2$s angenommen: %1$s\nVerlauf und Ergebnis im Tab Computer.</string>
     <string name="local_task_nedosegljiv">Ich konnte die Aufgabe nicht senden, weil der Computer nicht erreichbar ist (weder im Heimnetz noch über Global Link). Ich kann sie speichern und senden, sobald er erreichbar ist.</string>
     <string name="local_task_claude_code_ni">Ich konnte die Aufgabe nicht übergeben: Claude Code läuft nicht oder ist auf dem Computer nicht installiert.</string>
+    <string name="local_task_odpira">Lina auf dem Computer öffnet Claude Code … Ich habe die Aufgabe gespeichert; sobald die Sitzung offen ist (spätestens in 3 Minuten), übergibt das Telefon sie selbst, ohne erneute Bestätigung.</string>
+    <string name="local_task_zagon_ni_terminala">Ich konnte die Aufgabe nicht übergeben: Lina auf dem Computer findet kein Terminal und kann Claude Code nicht öffnen (installiere z. B. xterm oder GNOME Terminal). Die Aufgabe bleibt gespeichert.</string>
+    <string name="local_task_zagon_ni_claude">Ich konnte die Aufgabe nicht übergeben: Lina auf dem Computer findet das Programm claude (Claude Code) nicht. Installiere Claude Code. Die Aufgabe bleibt gespeichert.</string>
+    <string name="local_task_zagon_izklopljeno">Ich konnte die Aufgabe nicht übergeben: Der automatische Start von Claude Code ist auf dem Computer ausgeschaltet (Telefon verbinden). Öffne Claude Code selbst oder schalte den Schalter ein. Die Aufgabe bleibt gespeichert.</string>
+    <string name="local_task_zagon_opozorilo">Ich konnte die Aufgabe nicht übergeben: Lina öffnet Claude Code erst, wenn du die Agenten-Warnung auf dem Computer bestätigst (Reiter Computer). Die Aufgabe bleibt gespeichert.</string>
+    <string name="local_task_zagon_omejitev">Ich konnte die Aufgabe nicht übergeben: Die Claude-Code-Sitzung hat sich nach mehreren Versuchen nicht geöffnet (höchstens 3 pro Stunde). Öffne sie selbst am Computer oder versuche es später. Die Aufgabe bleibt gespeichert.</string>
+    <string name="local_task_zagon_napaka">Ich konnte die Aufgabe nicht übergeben: Lina konnte die Claude-Code-Sitzung nicht öffnen (das Terminal endete mit einem Fehler oder der Sitzungsordner ist nicht verfügbar). Die Aufgabe bleibt gespeichert.</string>
+    <string name="local_task_zagon_rok">Claude Code hat sich auf dem Computer nicht innerhalb von 3 Minuten geöffnet, daher habe ich die Aufgabe nicht übergeben. Die Aufgabe bleibt gespeichert; prüfe das Terminal am Computer und sende sie erneut.</string>
+    <string name="local_task_odpiranje_preklicano">Das Warten auf Claude Code wurde abgebrochen; diese Aufgabe wird nicht übergeben.</string>
+    <string name="local_task_preklic_prepozno">Die Aufgabe war bereits übergeben, als der Abbruch kam; ich habe den Computer gebeten, sie zu stoppen.</string>
+    <string name="local_event_cancel">Abbrechen</string>
     <string name="local_task_zavrnjena">Der Computer hat die Aufgabe abgelehnt (dieses Telefon ist nicht berechtigt). Prüfe die Verbindung unter Einstellungen > Computer.</string>
     <string name="local_task_prevec">Der Computer hat die Aufgabe wegen zu vieler Anfragen abgelehnt. Versuche es in ein paar Minuten erneut.</string>
     <string name="local_task_zasedeno">Ich habe die Aufgabe nicht übergeben, weil auf dem Computer bereits eine Aufgabe läuft. Warte, bis sie fertig ist.</string>

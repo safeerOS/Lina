@@ -14,6 +14,8 @@ data class StanjeAsistenta(
     val cakaPotrditev: Boolean = false,
     /** Claude Code je vprasal in caka odgovor (reply vrsta=vprasanje); lastnik lahko odgovori v isto nalogo (23. 11. 2026). */
     val cakaOdgovor: Boolean = false,
+    /** Naloga 23t: potrjena naloga caka, da Lina na racunalniku odpre Claude Code (Ustavi jo preklice, nova naloga jo zamenja). */
+    val cakaSejo: Boolean = false,
 )
 
 data class PrikazAsistenta(
@@ -36,7 +38,7 @@ object AsistentPrikaz {
             pozabi = s.seznanjen && !s.nalogaTece,
             vnos = prosto || odgovor,
             poslji = prosto || odgovor,
-            ustavi = s.seznanjen && s.nalogaTece,
+            ustavi = s.seznanjen && (s.nalogaTece || s.cakaSejo),
             odobritev = s.seznanjen && s.nalogaTece && s.odprtaOdobritev != null,
             odgovor = odgovor,
         )
