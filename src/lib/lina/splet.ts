@@ -400,15 +400,13 @@ function znak(n: number): string {
   return Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "\uFFFD";
 }
 
+const IMENOVANE: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"' };
+
+/** En prehod (slepi pregled 19b #9: zaporedne zamenjave so &amp;lt; dekodirale dvakrat v <). */
 function entitete(s: string): string {
-  return s
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#(\d+);/g, (_, n: string) => znak(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => znak(parseInt(n, 16)));
+  return s.replace(/&(?:(nbsp|amp|lt|gt|quot)|#(\d+)|#x([0-9a-f]+));/gi, (_, ime: string | undefined, d: string | undefined, x: string | undefined) =>
+    ime ? IMENOVANE[ime.toLowerCase()]! : znak(d !== undefined ? Number(d) : parseInt(x!, 16)),
+  );
 }
 
 const cistoBesedilo = (s: string) => entitete(s).replace(/\s+/g, " ").trim();
@@ -416,6 +414,29 @@ const cistoBesedilo = (s: string) => entitete(s).replace(/\s+/g, " ").trim();
 /** Elementi, katerih vsebina ni besedilo strani (preskok do zapiralne oznake; brez nje do konca). */
 const SUROVI = new Set(["script", "style", "noscript", "template"]);
 const ZAJETI = new Set(["title", "p", "li", "td", "th", "h1", "h2", "h3"]);
+/** Najvec povezav na isti gostitelj iz ene strani (slepi pregled 19b #1: includes nad 90 000 povezavami je bil 76 s). */
+const NAJVEC_POVEZAV = 500;
+
+/**
+ * Konec oznake (indeks >, -1 = ga ni): > v narekovajih vrednosti atributa ne zapre oznake (slepi pregled 19b #2: href="/x?a>b").
+ * Narekovaj steje samo za =; nezaprt narekovaj -> -1 (klicatelj preostanek pusti kot besedilo in konca: linearno).
+ */
+function konecZnacke(html: string, od: number): number {
+  let narekovaj = "";
+  let poEnacaju = false;
+  for (let j = od; j < html.length; j++) {
+    const c = html[j]!;
+    if (narekovaj) {
+      if (c === narekovaj) narekovaj = "";
+      continue;
+    }
+    if (c === ">") return j;
+    if ((c === '"' || c === "'") && poEnacaju) narekovaj = c;
+    else if (c === "=") poEnacaju = true;
+    else if (c !== " " && c !== "\t" && c !== "\n" && c !== "\r" && c !== "\f") poEnacaju = false;
+  }
+  return -1;
+}
 
 /**
  * Naloga 19b N1: en linearen prehod namesto lenih regexov (`[\s\S]*?` in `[^>]*` sta pri nezaprtih oznakah napadalceve strani
@@ -429,7 +450,6 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
   const zajeto: { ime: string; od: number; besedilo: string }[] = [];
   const hrefi: string[] = [];
   let i = 0;
-  let gt = -1;
   while (i < html.length) {
     const lt = html.indexOf("<", i);
     if (lt < 0) {
@@ -443,18 +463,20 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
       i = k < 0 ? html.length : k + 3;
       continue;
     }
-    if (gt <= lt) gt = html.indexOf(">", lt + 1);
+    const zacetek = html[lt + 1] ?? "";
+    if (!/[a-z!?/]/i.test(zacetek)) {
+      deli.push("<"); // osamljen < je besedilo
+      i = lt + 1;
+      continue;
+    }
+    // vsaka oznaka se pregleda do svojega konca in preskoci; brez konca se branje ustavi (vsak znak najvec dvakrat)
+    const gt = konecZnacke(html, lt + 1);
     if (gt < 0) {
       deli.push(html.slice(lt));
       break;
     }
     const t = html.slice(lt + 1, gt);
     const m = /^(\/?)([a-z][a-z0-9]*)/i.exec(t);
-    if (!m && !/^[!?/]/.test(t)) {
-      deli.push("<"); // osamljen < je besedilo
-      i = lt + 1;
-      continue;
-    }
     deli.push(" ");
     i = gt + 1;
     if (!m) continue;
@@ -494,9 +516,10 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
   const naslovi: IzHtml["naslovi"] = zajeto.filter((z) => /^h[1-3]$/.test(z.ime) && z.besedilo).map((z) => ({ nivo: Number(z.ime[1]), besedilo: z.besedilo }));
   const odstavki = zajeto.filter((z) => z.ime === "p").map((z) => z.besedilo);
   const seznami = [...zajeto.filter((z) => z.ime === "li"), ...zajeto.filter((z) => z.ime === "td" || z.ime === "th")].map((z) => z.besedilo);
-  const povezave: string[] = [];
+  const povezave = new Set<string>();
   const eposte: string[] = [];
   for (const h of hrefi) {
+    if (povezave.size >= NAJVEC_POVEZAV && eposte.length >= 20) break;
     const href = h.trim();
     if (/^mailto:/i.test(href) && eposte.length < 20) {
       let naslov = entitete(href.slice(7)).split("?")[0];
@@ -507,7 +530,7 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
       }
       eposte.push(naslov.trim().toLowerCase());
     }
-    if (!href || /^(?:mailto:|tel:|javascript:|data:)/i.test(href)) continue;
+    if (!href || povezave.size >= NAJVEC_POVEZAV || /^(?:mailto:|tel:|javascript:|data:)/i.test(href)) continue;
     let cilj: URL;
     try {
       cilj = new URL(href, baza);
@@ -518,9 +541,9 @@ function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
     if (!istiGostitelj(cilj.hostname, izvirni)) continue;
     const pot = `${cilj.pathname.replace(/\/+$/, "") || "/"}${cilj.search}`;
     const kljuc = `${cilj.hostname.toLowerCase()}${pot}`;
-    if (!povezave.includes(kljuc)) povezave.push(kljuc);
+    povezave.add(kljuc);
   }
-  return { naslov, odstavki, seznami, naslovi, jsonld, povezave, eposte };
+  return { naslov, odstavki, seznami, naslovi, jsonld, povezave: [...povezave], eposte };
 }
 
 /**

@@ -99,6 +99,8 @@ describe("naloga 19b N1: branje strani v linearnem casu (napadalceva stran z nez
     ["<title>", ponovi("<title>")],
     ["<p> + < + </p>", "<p>" + "<".repeat(MB - 10) + "</p>"],
     ["JSON-LD brez >", ponovi('<script type="application/ld+json" ')],
+    ["nezaprt narekovaj", ponovi('<a href="')],
+    ["!-oznake brez >", ponovi("<!x")],
   ];
   for (const [ime, html] of oblike) {
     it(`1 MB ${ime}: pod 1 s`, { timeout: 30_000 }, async () => {
@@ -110,6 +112,23 @@ describe("naloga 19b N1: branje strani v linearnem casu (napadalceva stran z nez
       assert.ok(r && typeof r === "object", "izid je objekt");
     });
   }
+
+  it("1 MB razlicnih povezav (slepi pregled #1): pod 1 s", { timeout: 120_000 }, async () => {
+    const { root } = await okolje();
+    let html = "";
+    for (let n = 0; html.length < MB - 30; n++) html += `<a href=/${n}>`;
+    const t0 = performance.now();
+    await orodje(root, "preberi_stran", { splet: lazniSplet(() => html), tinyfish: async () => null }).izvedi({ naslov: "https://napadalec.primer.si/" }, ctx());
+    assert.ok(performance.now() - t0 < 1000, `${Math.round(performance.now() - t0)} ms`);
+  });
+
+  it("> v narekovajih atributa ne zapre oznake; &amp;lt; se dekodira enkrat (slepi pregled #2, #9)", async () => {
+    const { root } = await okolje();
+    const html = '<p title="a>b">Prvi &amp;lt;ne&amp;gt; odstavek</p><p data-x=\'c>d\'>Drugi</p>';
+    const t = izid(await orodje(root, "preberi_stran", { splet: lazniSplet(() => html) }).izvedi({ naslov: "https://mizar.primer.si/" }, ctx()));
+    assert.ok(t.includes("Prvi &lt;ne&gt; odstavek"), t);
+    assert.ok(t.includes("Drugi") && !t.includes("b\">") && !t.includes("d'>"), t);
+  });
 
   it("obicajna stran: naslov, odstavki, seznami, tabela, naslovi, entitete; skripta in komentar nista besedilo", async () => {
     const { root } = await okolje();
@@ -245,7 +264,7 @@ describe("naloga 19b N5: prepis datoteke, ki ni bila prebrana dobesedno", () => 
     ["nevidni znak", Buffer.from(`a${ZWSP}b`)],
     ["neveljaven UTF-8 (windows-1250)", Buffer.from([0x6b, 0x72, 0x9a, 0x6b, 0x61])],
     ["BOM", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("abc")])],
-    ["skrivnost", Buffer.from("token=abcdefgh12345678\n")],
+    ["skrivnost", Buffer.from(`kljuc ${"sk-" + "B".repeat(30)}\n`)],
   ];
   for (const [ime, vsebina] of primeri) {
     it(`${ime}: branje oznaceno NI DOBESEDNO; prepis samo s celotna: true`, async () => {
@@ -260,6 +279,21 @@ describe("naloga 19b N5: prepis datoteke, ki ni bila prebrana dobesedno", () => 
       assert.equal(await readFile(pot, "utf8"), "novo");
     });
   }
+  it("koda z imeni pass/token (slepi pregled #3) se prebere dobesedno", async () => {
+    const { root, proj } = await okolje();
+    const pot = path.join(proj, "koda.ts");
+    const koda = "const passed = true;\nif (bypass == 1) token_count = 2;\nToken authentication is used.\n";
+    await writeFile(pot, koda);
+    const t = izid(await orodje(root, "preberi_datoteko").izvedi({ pot }, ctx()));
+    assert.doesNotMatch(t, /NI DOBESEDNO/);
+    assert.ok(t.includes(koda), t);
+  });
+  it("prepis datoteke nad mejo branja (2 MB) brez celotna: zavrnjen (slepi pregled #8)", async () => {
+    const { root, proj } = await okolje();
+    const pot = path.join(proj, "velika.txt");
+    await writeFile(pot, "x".repeat(2_100_000));
+    assert.match(napakaIz(await orodje(root, "zapisi_datoteko").izvedi({ pot, vsebina: "novo", prepisi: true }, ctx())), /vecja od/);
+  });
   it("dobesedno prebrana kratka datoteka: brez oznake, prepis s prepisi: true", async () => {
     const { root, proj } = await okolje();
     const pot = path.join(proj, "beri.txt");
@@ -303,7 +337,7 @@ describe("naloga 19b N11: datoteke s skrivnostmi in skrivnosti v izidu", () => {
   it("id_rsa, *.pem, *.key, credentials*.json, secrets.*, *.tfstate se ne berejo (tudi prek povezave)", async () => {
     const { root, proj } = await okolje();
     const beri = orodje(root, "preberi_datoteko");
-    for (const ime of ["id_rsa", "id_ed25519", "streznik.pem", "tls.key", "credentials.json", "credentials-gcp.json", "secrets.yaml", "terraform.tfstate", "terraform.tfstate.backup"]) {
+    for (const ime of ["id_rsa", "id_ed25519", "streznik.pem", "tls.key", "credentials.json", "credentials-gcp.json", "secrets.yaml", "terraform.tfstate", "terraform.tfstate.backup", "prod.tfvars", "id_rsa.old", "app.jks"]) {
       await writeFile(path.join(proj, ime), "SKRIVNO");
       assert.match(napakaIz(await beri.izvedi({ pot: path.join(proj, ime) }, ctx())), /skrivnost/i, ime);
     }

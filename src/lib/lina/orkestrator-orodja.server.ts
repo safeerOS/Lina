@@ -18,7 +18,7 @@ import type { Vir } from "./brave.server.ts";
 import { KAKOVOSTI_SLIK, RAZMERJA_SLIK, izberiGeneratorSlik, type KakovostSlike, type MoznostiGeneriranja } from "./slike-generator.server.ts";
 import { resolveDataDir } from "./store.server.ts";
 import { vidniZnaki } from "./claude-naloge.ts";
-import { zakrijSkrivnosti } from "./cilj-naloge.ts";
+import { zakrijZnaneSkrivnosti } from "./cilj-naloge.ts";
 
 export type OdvisnostiOrodij = {
   /** DNS in povezava HTTPS (preizkus: lazni splet); privzeto splet.server.ts. */
@@ -50,7 +50,7 @@ const znotraj = (koren: string, p: string) => {
 };
 
 /** Naloga 19b N11: imena datotek s skrivnostmi (zasebni kljuci, poverilnice, stanje terraform, okolje) orodje ne bere. */
-const SKRIVNOSTNO_IME = /^(?:id_(?:rsa|dsa|ecdsa|ed25519)|.+\.(?:pem|key|p12|pfx|kdbx|tfstate(?:\.backup)?)|credentials.*\.json|secrets?\..+|\.env.*|\.netrc|\.pgpass)$/i;
+const SKRIVNOSTNO_IME = /^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\..+)?|.+\.(?:pem|key|p12|pfx|jks|keystore|gpg|kdbx|tfvars|tfstate(?:\.backup)?)|credentials.*\.json|secrets?\..+|\.env.*|\.netrc|\.pgpass)$/i;
 
 /**
  * Pot za orodje: absolutna, brez .. in kontrolnih znakov; v dovoljeni mapi lastnika, brez skritega dela, ne v mapi podatkov Line ali nad
@@ -105,7 +105,7 @@ function nezvestoBranje(buf: Buffer): string | null {
   }
   if (besedilo.length > KOS_DATOTEKE) return `daljsa od ${KOS_DATOTEKE} znakov, model vidi kos`;
   if (vidniZnaki(besedilo) !== besedilo || /\[\[|<<<|>>>/.test(besedilo)) return "nevidni znaki ali oznake, ki jih ovojnica spremeni";
-  if (zakrijSkrivnosti(besedilo, { poti: false }) !== besedilo) return "skrivnosti v izidu so zakrite";
+  if (zakrijZnaneSkrivnosti(besedilo) !== besedilo) return "skrivnosti v izidu so zakrite";
   return null;
 }
 
@@ -267,7 +267,8 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
         }
         if (a.prepisi !== true) return napaka("Datoteka obstaja. Prepis samo z izrecnim prepisi: true (lastnik ga vidi v potrditvi).");
         // N5: datoteke, ki je model ni mogel videti dobesedno, ne prepise brez celotna: true (sicer bi zapisal odrezano ali spremenjeno vsebino)
-        const nezvesto = nezvestoBranje(await readFile(p.pot));
+        // slepi pregled 19b #8: vecje od meje branja se ne bere (model je ni mogel videti cele)
+        const nezvesto = st.size > NAJVEC_BAJTOV_DATOTEKE ? `vecja od ${NAJVEC_BAJTOV_DATOTEKE} B` : nezvestoBranje(await readFile(p.pot));
         if (nezvesto && a.celotna !== true) {
           return napaka(`Datoteke ni mogoce prebrati dobesedno (${nezvesto}); prepis samo z celotna: true, ko je vsebina v celoti nova.`);
         }

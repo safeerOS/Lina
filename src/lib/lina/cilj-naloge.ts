@@ -69,14 +69,23 @@ export function odlociNadaljevanje(stanje: StanjeCilja, ocena: Ocena, izid: stri
  * C:\..., C:\\... v JSON) se mape zakrijejo, ime datoteke ostane kot dokaz (»…/a.ts«). Spletni naslovi niso poti in ostanejo.
  * shortcut: seznam vzorcev ni popoln (lasten format zetona ostane viden); ce lastnik zeli vec, naj izklopi oceno izida.
  */
-export function zakrijSkrivnosti(besedilo: string, { poti = true }: { poti?: boolean } = {}): string {
-  // naloga 19b N11: izid orodja orkestratorja brez zakrivanja poti (model potrebuje absolutno pot za naslednji klic)
-  const brez = besedilo
+export function zakrijSkrivnosti(besedilo: string): string {
+  return zakrijZnaneSkrivnosti(besedilo)
+    // Pred pravilom ime=vrednost: sicer bi se pri »Authorization: Bearer x« zakrila samo beseda sheme (B2).
+    .replace(/\b(Bearer|Basic|Token)(\s+)[A-Za-z0-9._~+/=-]{8,}/gi, "$1$2[zakrito]")
+    .replace(/\b([A-Za-z0-9_]*(?:pass(?:word)?|passwd|geslo|token|zeton|secret|skrivnost|api[_-]?key|kljuc|auth)[A-Za-z0-9_]*)(\\?["']?\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s,;]+)/gi, "$1$2[zakrito]")
+    .replace(/(^|[\s(\[{=:,;"'`<])(?:file:\/\/)?(?:[A-Za-z]:[\\/]+|\/|~[\\/])(?:[^\s\\/"'`<>|]+[\\/]+)+/g, "$1…/");
+}
+
+/**
+ * Naloga 19b N11 (slepi pregled #3): samo vzorci, ki so skoraj gotovo skrivnost (PEM, zetoni ponudnikov, JWT, glava Authorization z
+ * vrednostjo) - za izid orodij orkestratorja (datoteke, strani), kjer pravilo ime=vrednost kvari kodo (const passed = true) in poti
+ * model potrebuje za naslednji klic.
+ */
+export function zakrijZnaneSkrivnosti(besedilo: string): string {
+  return besedilo
     .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g, "[zakrit zasebni kljuc]")
     .replace(/\b(?:sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{4,}|AIza[0-9A-Za-z_-]{20,})/g, "[zakrito]")
     .replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g, "[zakrito]")
-    // Pred pravilom ime=vrednost: sicer bi se pri »Authorization: Bearer x« zakrila samo beseda sheme (B2).
-    .replace(/\b(Bearer|Basic|Token)(\s+)[A-Za-z0-9._~+/=-]{8,}/gi, "$1$2[zakrito]")
-    .replace(/\b([A-Za-z0-9_]*(?:pass(?:word)?|passwd|geslo|token|zeton|secret|skrivnost|api[_-]?key|kljuc|auth)[A-Za-z0-9_]*)(\\?["']?\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s,;]+)/gi, "$1$2[zakrito]");
-  return !poti ? brez : brez.replace(/(^|[\s(\[{=:,;"'`<])(?:file:\/\/)?(?:[A-Za-z]:[\\/]+|\/|~[\\/])(?:[^\s\\/"'`<>|]+[\\/]+)+/g, "$1…/");
+    .replace(/\b(Authorization\s*[:=]\s*["']?(?:Bearer|Basic|Token)\s+)[A-Za-z0-9._~+/=-]{8,}/gi, "$1[zakrito]");
 }

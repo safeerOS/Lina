@@ -12,7 +12,7 @@
 import { access, appendFile, chmod, lstat, mkdir, readdir, rename, unlink } from "node:fs/promises";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
-import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
+import { odlociNadaljevanje, zacetnoStanje, zakrijSkrivnosti, zakrijZnaneSkrivnosti, type Ocena, type StanjeCilja } from "./cilj-naloge.ts";
 import { NAJVEC_ZNAKOV_NALOGE_LINE } from "./claude-naloge.ts";
 import { oceniZModelom, type Oceni } from "./cilj-naloge.server.ts";
 import {
@@ -528,7 +528,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   /** Izid klica gre v zgodovino kot podatek; vbrizg okuzi nalogo. */
   const dodajIzid = async (s: StanjeNaloge, k: KlicOrodja, izid: { ok: boolean; besedilo: string; odLastnika?: boolean }) => {
     // besedilo lastnika (odgovor na vprasanje) ni nezaupan podatek: brez ovojnice in brez zaznave (lastnik ne okuzi svoje naloge)
-    const ovito = izid.odLastnika ? { besedilo: izid.besedilo, vbrizg: [] as string[] } : ovijPodatek(k.ime, izid.besedilo, (x) => zakrijSkrivnosti(x, { poti: false }));
+    const ovito = izid.odLastnika ? { besedilo: izid.besedilo, vbrizg: [] as string[] } : ovijPodatek(k.ime, izid.besedilo, zakrijZnaneSkrivnosti);
     if (ovito.vbrizg.length && !s.okuzeno) {
       s.okuzeno = true;
       dogodek(s, "napaka", `V izidu orodja je zaznano vrinjeno navodilo (${ovito.vbrizg.join(", ")}); od zdaj vsa tvegana orodja cakajo potrditev.`, { orodje: k.ime, klicId: k.id });

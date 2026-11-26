@@ -77,7 +77,7 @@ const ZNANA_DRUGA = new Set(["TodoWrite", "Task", "ExitPlanMode", "ustvari_opomn
 // naloga 19b N6: orodja orkestratorja F2 (Linin koledar je znan in varen; splet nese podatke ven; zapis je omejen na dovoljene mape lastnika,
 // delovna mapa teka orkestratorja je prazna, zato zunaj-mape tu ne velja - oznaci se zapis nastavitev in izvrsljivih datotek)
 const ORKESTRATOR_SPLET = new Set(["isci_splet", "preberi_stran"]);
-const IZVRSLJIVO = /\.(?:sh|bash|zsh|fish|ps1|psm1|bat|cmd|exe|com|py|js|mjs|cjs|ts|rb|pl)$|(?:^|[\\/])(?:Makefile|Dockerfile|Justfile)$/i;
+const IZVRSLJIVO = /\.(?:sh|bash|zsh|fish|ps1|psm1|bat|cmd|exe|com|py|js|mjs|cjs|ts|tsx|jsx|rb|pl|php|jar|desktop|service)$|(?:^|[\\/])(?:Makefile|Dockerfile|Justfile)$/i;
 /** Pisanje sem spremeni, kako se agent ali git obnasata pozneje (kljuke, pravila, MCP), zato je vedno nevarno. */
 const NASTAVITVENE = /(^|\/)(\.claude|\.git|\.vscode|\.husky)(\/|$)|(^|\/)(\.mcp\.json|CLAUDE\.md|AGENTS\.md|\.envrc|package\.json)$/;
 
