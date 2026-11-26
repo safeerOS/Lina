@@ -189,6 +189,8 @@ function vgrajenaOrodja(d: { predlagajPomocniku: NonNullable<OdvisnostiOrkestrat
       potrditev: false,
       // ko je model ze bral podatke (izid orodja), lahko vrinjeno navodilo obide zaznavo vzorcev - takrat potrdi tudi orkestrator
       potrditevPoPodatkih: true,
+      // naloga 19b N3: porocilo pomocnika (dostop do projekta) je zasebni podatek - splet potem caka lastnika
+      zasebniIzid: true,
       definicija: {
         ime: "dodeli_pomocniku",
         opis: "Za obsezno nalogo (vec delov, > 8 datotek ali > 45 min) dodeli del zunanjemu agentu na racunalniku. Lastnik predlog potrdi; izid pride nazaj.",
@@ -526,7 +528,7 @@ export function ustvariOrkestrator(dir?: string, o: OdvisnostiOrkestratorja = {}
   /** Izid klica gre v zgodovino kot podatek; vbrizg okuzi nalogo. */
   const dodajIzid = async (s: StanjeNaloge, k: KlicOrodja, izid: { ok: boolean; besedilo: string; odLastnika?: boolean }) => {
     // besedilo lastnika (odgovor na vprasanje) ni nezaupan podatek: brez ovojnice in brez zaznave (lastnik ne okuzi svoje naloge)
-    const ovito = izid.odLastnika ? { besedilo: izid.besedilo, vbrizg: [] as string[] } : ovijPodatek(k.ime, izid.besedilo);
+    const ovito = izid.odLastnika ? { besedilo: izid.besedilo, vbrizg: [] as string[] } : ovijPodatek(k.ime, izid.besedilo, (x) => zakrijSkrivnosti(x, { poti: false }));
     if (ovito.vbrizg.length && !s.okuzeno) {
       s.okuzeno = true;
       dogodek(s, "napaka", `V izidu orodja je zaznano vrinjeno navodilo (${ovito.vbrizg.join(", ")}); od zdaj vsa tvegana orodja cakajo potrditev.`, { orodje: k.ime, klicId: k.id });

@@ -185,11 +185,15 @@ export const NAJVEC_ZNAKOV_IZIDA_ORODJA = 8000;
  * Izid orodja je PODATEK: nevidni znaki postanejo vidni, oznake Line ([[...]]) in koncnice ovojnice se nevtralizirajo, dolzina je omejena.
  * Vrne tudi, ali je v izidu zaznan vbrizg navodil (naloga postane okuzena: vsa tvegana orodja potem cakajo lastnika).
  */
-export function ovijPodatek(ime: string, besedilo: string): { besedilo: string; vbrizg: string[] } {
-  const odrezano = besedilo.length > NAJVEC_ZNAKOV_IZIDA_ORODJA;
-  const cisto = vidniZnaki(besedilo.slice(0, NAJVEC_ZNAKOV_IZIDA_ORODJA))
+export function ovijPodatek(ime: string, besedilo: string, zakrij: (s: string) => string = (s) => s): { besedilo: string; vbrizg: string[] } {
+  // naloga 19b N4: meja velja za KONCNO dolzino (vidniZnaki razsiri nevidni znak v <U+XXXX>, 8000 x U+200B je bilo 64 000 znakov);
+  // predrez na surovem besedilu samo omeji delo (vidniZnaki nikoli ne skrajsa)
+  // naloga 19b N11: zakrivanje skrivnosti na omejenem kosu (vzorci imajo pri dolgem nizu brez presledkov nelinearen cas)
+  const celo = vidniZnaki(zakrij(besedilo.slice(0, NAJVEC_ZNAKOV_IZIDA_ORODJA)))
     .replace(/\[\[/g, "[ [")
     .replace(/<<<|>>>/g, (m) => m.split("").join(" "));
+  const odrezano = besedilo.length > NAJVEC_ZNAKOV_IZIDA_ORODJA || celo.length > NAJVEC_ZNAKOV_IZIDA_ORODJA;
+  const cisto = celo.slice(0, NAJVEC_ZNAKOV_IZIDA_ORODJA);
   // zaznava na surovem besedilu: skriti znaki so sami znak vbrizga, po vidniZnaki jih ne bi vec videla
   const v = zaznajVbrizg(besedilo.slice(0, NAJVEC_ZNAKOV_IZIDA_ORODJA));
   return {

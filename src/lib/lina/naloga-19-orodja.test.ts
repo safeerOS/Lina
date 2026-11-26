@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readFile, realpath, stat, symlink, writeFile } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { podpisSeznama } from "./claude-naloge.server.ts";
 import { koledarBeri } from "./koledar.server.ts";
 import { zahtevaPotrditev, type OrodjeOrkestratorja } from "./orkestrator.ts";
 import { besediloIzkusnje, ucenjeLHOrkestratorja, type Izkusnja, type UcenjeVmesnik } from "./orkestrator-ucenje.ts";
@@ -30,7 +31,10 @@ async function okolje() {
   const proj = path.join(baza, "projekt");
   const zunaj = path.join(baza, "zunaj");
   for (const m of [root, proj, zunaj, path.join(proj, "skrivno"), path.join(proj, ".git")]) await mkdir(m, { recursive: true });
-  await writeFile(path.join(root, "claude-naloge.json"), JSON.stringify({ v: 1, mape: [proj], naloge: [], prepovedane: [path.join(proj, "skrivno")] }));
+  // naloga 19b N2: seznama map veljata samo s podpisom (kot ga zapise ukaz lastnika z geslom)
+  const prepovedane = [path.join(proj, "skrivno")];
+  const podpisi = { podpisMap: await podpisSeznama(root, "mape", [proj]), podpisPrepovedanih: await podpisSeznama(root, "prepovedane", prepovedane) };
+  await writeFile(path.join(root, "claude-naloge.json"), JSON.stringify({ v: 1, mape: [proj], naloge: [], prepovedane, ...podpisi }));
   await writeFile(path.join(proj, "beri.txt"), "prva vrstica\ndruga vrstica\n");
   await writeFile(path.join(proj, ".env"), "GESLO=x");
   await writeFile(path.join(proj, ".git", "config"), "[core]");

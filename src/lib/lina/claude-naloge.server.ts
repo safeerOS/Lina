@@ -11,7 +11,7 @@
  * preveri) z razporejevalnikom, ocena trajanja iz zgodovine, lasten opomnik in dogodek »naloga koncana« (agenti-naloge.test.ts).
  */
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { constants, accessSync, existsSync, realpathSync } from "node:fs";
 import { lstat, mkdir, open, readdir, readFile, readlink, realpath, rename, writeFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
@@ -139,6 +139,12 @@ type Stanje = {
   pregledovalec?: AgentId;
   preizkusi?: Record<string, string[][]>;
   zdruzitve?: Record<string, Zdruzitev>;
+  /**
+   * Naloga 19b N2: HMAC dovoljenih in prepovedanih map (kljucCelovitosti), vsak seznam svoj podpis. Podpise samo ukaz lastnika z geslom
+   * (mape, prepovedane); ostali zapisi stanja podpis prenesejo nespremenjen, zato podtaknjen seznam ostane nepodpisan.
+   */
+  podpisMap?: string;
+  podpisPrepovedanih?: string;
 };
 
 /** Zagon terminala; vrne PID, ce proces terminala po zagonu se zivi (za stetje hkratnih, N5). */
@@ -393,6 +399,8 @@ async function preberi(root: string): Promise<Stanje> {
         ),
       ),
       zdruzitve: Object.fromEntries(Object.entries(s.zdruzitve && typeof s.zdruzitve === "object" ? s.zdruzitve : {}).filter(([k, v]) => jeZdruzitev(v, root) && v.projekt === k)),
+      ...(typeof s.podpisMap === "string" ? { podpisMap: s.podpisMap } : {}),
+      ...(typeof s.podpisPrepovedanih === "string" ? { podpisPrepovedanih: s.podpisPrepovedanih } : {}),
     };
   } catch {
     return { v: 1, mape: [], naloge: [], agenti: {}, prepovedane: [] };
@@ -405,6 +413,18 @@ async function zapisi(root: string, s: Stanje): Promise<void> {
   const zacasna = `${cilj}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(zacasna, JSON.stringify(s, null, 2), { mode: 0o600, flag: "wx" });
   await rename(zacasna, cilj);
+}
+
+/** Naloga 19b N2: podpis enega seznama map (namen loci dovoljene od prepovedanih: podpisa ni mogoce prenesti med seznamoma). */
+export async function podpisSeznama(root: string, namen: "mape" | "prepovedane", seznam: readonly string[]): Promise<string> {
+  const { kljucCelovitosti } = await import("./keys.server.ts");
+  return createHmac("sha256", await kljucCelovitosti(`claude-naloge-${namen}`, root)).update(JSON.stringify(seznam)).digest("hex");
+}
+
+async function seznamVelja(root: string, namen: "mape" | "prepovedane", seznam: readonly string[], podpis: string | undefined): Promise<boolean> {
+  const pricakovan = Buffer.from(await podpisSeznama(root, namen, seznam));
+  const dobljen = Buffer.from(podpis ?? "");
+  return dobljen.length === pricakovan.length && timingSafeEqual(dobljen, pricakovan);
 }
 
 function meje(root: string, s: Stanje, o: Odvisnosti) {
@@ -443,15 +463,21 @@ async function resnicnaMapa(mapa: string, root: string, s: Stanje, o: Odvisnosti
  * (ne ves dom kot pri predlogih nalog: model, ki bere splet, ne dobi domace mape), kanonicne in veljavne po razlogDovoljeneMape; podatki
  * Line po realpath; prepovedane mape dobesedno in po realpath za vse (mozgani Line so lahko Gemini - pravilo lastnika o Googlu).
  */
-export async function mejeOrodijOrkestratorja(dir?: string, o: Odvisnosti = {}): Promise<{ dovoljene: string[]; podatki: string; prepovedane: string[] }> {
+export async function mejeOrodijOrkestratorja(dir?: string, o: Odvisnosti = {}): Promise<{ dovoljene: string[]; podatki: string; prepovedane: string[]; razlog?: string }> {
   const root = resolveDataDir(dir);
   const s = await preberi(root);
   const dom = (await kanonicna(o.dom ?? homedir())) ?? (o.dom ?? homedir());
   const podatki = (await kanonicna(root)) ?? root;
+  // naloga 19b N2: datoteka je nepodpisana in jo lahko zapise vsak lokalni proces brez gesla - seznama veljata samo s podpisom ukaza
+  // lastnika; nepodpisan, spremenjen ali pokvarjen seznam (tudi prepovedanih) = nobena mapa (fail-closed)
+  if (!(await seznamVelja(root, "mape", s.mape, s.podpisMap)) || !(await seznamVelja(root, "prepovedane", s.prepovedane ?? [], s.podpisPrepovedanih))) {
+    return { dovoljene: [], podatki, prepovedane: [], razlog: "Dovoljene ali prepovedane mape niso potrjene z geslom lastnika (spremenjena datoteka ali starejsa razlicica): lastnik jih znova shrani v zavihku Racunalnik." };
+  }
   const dovoljene: string[] = [];
   for (const d of s.mape) {
     const k = await kanonicna(d);
-    if (k && !razlogDovoljeneMape(k, dom, podatki)) dovoljene.push(k);
+    // koren s skritim delom poti (npr. ~/.ssh) nikoli ni dovoljen (preverja se sicer le pot od korena naprej)
+    if (k && !razlogDovoljeneMape(k, dom, podatki) && !k.split(/[\\/]+/).some((x) => x.startsWith("."))) dovoljene.push(k);
   }
   const prepovedane = [...(s.prepovedane ?? [])];
   for (const p of s.prepovedane ?? []) {
@@ -1609,6 +1635,7 @@ export async function ukazClaudeNalog(token: string | null, ukaz: unknown, dir?:
       await vVrsti(root, async () => {
         const s = await preberi(root);
         s.prepovedane = mape;
+        s.podpisPrepovedanih = await podpisSeznama(root, "prepovedane", mape);
         await zapisi(root, s);
       });
       break;
@@ -1758,6 +1785,9 @@ export async function ukazClaudeNalog(token: string | null, ukaz: unknown, dir?:
       await vVrsti(root, async () => {
         const s = await preberi(root);
         s.mape = [...new Set(mape)];
+        s.podpisMap = await podpisSeznama(root, "mape", s.mape);
+        // prazen, se nikoli podpisan seznam prepovedanih (privzeto) podpise lastnik z istim ukazom; obstojecega ne (podtaknjen bi postal veljaven)
+        if (!s.podpisPrepovedanih && !s.prepovedane?.length) s.podpisPrepovedanih = await podpisSeznama(root, "prepovedane", []);
         await zapisi(root, s);
       });
       break;

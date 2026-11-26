@@ -395,61 +395,109 @@ function dovoliRobots(telo: string, pot: string): boolean {
   return dovoli;
 }
 
+/** Naloga 19b N17: neveljaven kodni znak (nad U+10FFFF, Infinity) ne zrusi branja strani: postane U+FFFD. */
+function znak(n: number): string {
+  return Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "\uFFFD";
+}
+
 function entitete(s: string): string {
   return s
     .replace(/&nbsp;/gi, " ")
-    .replace(/&/gi, "&")
-    .replace(/</gi, "<")
-    .replace(/>/gi, ">")
-    .replace(/"/gi, '"')
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)));
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(\d+);/g, (_, n: string) => znak(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => znak(parseInt(n, 16)));
 }
 
-function besediloZnack(s: string): string {
-  return entitete(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-}
+const cistoBesedilo = (s: string) => entitete(s).replace(/\s+/g, " ").trim();
 
+/** Elementi, katerih vsebina ni besedilo strani (preskok do zapiralne oznake; brez nje do konca). */
+const SUROVI = new Set(["script", "style", "noscript", "template"]);
+const ZAJETI = new Set(["title", "p", "li", "td", "th", "h1", "h2", "h3"]);
+
+/**
+ * Naloga 19b N1: en linearen prehod namesto lenih regexov (`[\s\S]*?` in `[^>]*` sta pri nezaprtih oznakah napadalceve strani
+ * kvadratna: 1 MB `<p>` je bil okoli 65 s sinhronega dela). Vsak znak se pregleda najvec nekajkrat; zajeti element (p, li, h1 ...)
+ * traja od prve odprte do prve zapiralne oznake istega imena (kot prejsnji leni regex), vgnezdene oznake so presledek.
+ */
 function izHtml(html: string, baza: URL, izvirni: string): IzHtml {
   const jsonld: unknown[] = [];
-  for (const m of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    try {
-      jsonld.push(JSON.parse(m[1]));
-    } catch {
-      /* Pokvarjen JSON-LD preskocimo. */
+  const deli: string[] = [];
+  const odprti = new Map<string, number>();
+  const zajeto: { ime: string; od: number; besedilo: string }[] = [];
+  const hrefi: string[] = [];
+  let i = 0;
+  let gt = -1;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) {
+      deli.push(html.slice(i));
+      break;
     }
+    if (lt > i) deli.push(html.slice(i, lt));
+    if (html.startsWith("<!--", lt)) {
+      const k = html.indexOf("-->", lt + 4);
+      deli.push(" ");
+      i = k < 0 ? html.length : k + 3;
+      continue;
+    }
+    if (gt <= lt) gt = html.indexOf(">", lt + 1);
+    if (gt < 0) {
+      deli.push(html.slice(lt));
+      break;
+    }
+    const t = html.slice(lt + 1, gt);
+    const m = /^(\/?)([a-z][a-z0-9]*)/i.exec(t);
+    if (!m && !/^[!?/]/.test(t)) {
+      deli.push("<"); // osamljen < je besedilo
+      i = lt + 1;
+      continue;
+    }
+    deli.push(" ");
+    i = gt + 1;
+    if (!m) continue;
+    const ime = m[2]!.toLowerCase();
+    const zapiralna = m[1] === "/";
+    if (!zapiralna && SUROVI.has(ime)) {
+      const z = new RegExp(`</${ime}\\s*>`, "gi");
+      z.lastIndex = i;
+      const k = z.exec(html);
+      if (k && ime === "script" && /\btype\s*=\s*["']application\/ld\+json["']/i.test(t)) {
+        try {
+          jsonld.push(JSON.parse(html.slice(i, k.index)));
+        } catch {
+          /* Pokvarjen JSON-LD preskocimo. */
+        }
+      }
+      i = k ? z.lastIndex : html.length;
+      continue;
+    }
+    if (!zapiralna && ime === "a") {
+      const h = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(t);
+      if (h) hrefi.push(h[1] || h[2] || h[3] || "");
+    }
+    if (!ZAJETI.has(ime)) continue;
+    if (!zapiralna) {
+      if (!odprti.has(ime)) odprti.set(ime, deli.length);
+      continue;
+    }
+    const od = odprti.get(ime);
+    if (od === undefined) continue;
+    odprti.delete(ime);
+    const besedilo = cistoBesedilo(deli.slice(od).join(""));
+    if (besedilo || ime === "title") zajeto.push({ ime, od, besedilo });
   }
-  const brez = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<template[\s\S]*?<\/template>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
-  const naslovM = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const naslov = naslovM ? besediloZnack(naslovM[1]) : "";
-  const naslovi: IzHtml["naslovi"] = [];
-  for (const m of brez.matchAll(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi)) {
-    const besedilo = besediloZnack(m[2]);
-    if (besedilo) naslovi.push({ nivo: Number(m[1]), besedilo });
-  }
-  const odstavki: string[] = [];
-  for (const m of brez.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
-    const besedilo = besediloZnack(m[1]);
-    if (besedilo) odstavki.push(besedilo);
-  }
-  const seznami: string[] = [];
-  for (const m of brez.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
-    const besedilo = besediloZnack(m[1]);
-    if (besedilo) seznami.push(besedilo);
-  }
-  for (const m of brez.matchAll(/<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
-    const besedilo = besediloZnack(m[2]);
-    if (besedilo) seznami.push(besedilo);
-  }
+  zajeto.sort((x, y) => x.od - y.od);
+  const naslov = zajeto.find((z) => z.ime === "title")?.besedilo ?? "";
+  const naslovi: IzHtml["naslovi"] = zajeto.filter((z) => /^h[1-3]$/.test(z.ime) && z.besedilo).map((z) => ({ nivo: Number(z.ime[1]), besedilo: z.besedilo }));
+  const odstavki = zajeto.filter((z) => z.ime === "p").map((z) => z.besedilo);
+  const seznami = [...zajeto.filter((z) => z.ime === "li"), ...zajeto.filter((z) => z.ime === "td" || z.ime === "th")].map((z) => z.besedilo);
   const povezave: string[] = [];
   const eposte: string[] = [];
-  for (const m of brez.matchAll(/<a\b[^>]*href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
-    const href = (m[1] || m[2] || m[3] || "").trim();
+  for (const h of hrefi) {
+    const href = h.trim();
     if (/^mailto:/i.test(href) && eposte.length < 20) {
       let naslov = entitete(href.slice(7)).split("?")[0];
       try {

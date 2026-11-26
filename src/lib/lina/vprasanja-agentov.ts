@@ -73,7 +73,11 @@ const SESTAVLJEN = /[|;&`<>]|\$\(|\b(bash|sh|zsh|dash|fish|eval|exec|xargs|tee|e
 const ORODJA_PISANJA = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const ORODJA_OMREZJA = new Set(["WebFetch", "WebSearch"]);
 const ORODJA_BRANJA = new Set(["Read", "Glob", "Grep", "LS"]);
-const ZNANA_DRUGA = new Set(["TodoWrite", "Task", "ExitPlanMode"]);
+const ZNANA_DRUGA = new Set(["TodoWrite", "Task", "ExitPlanMode", "ustvari_opomnik"]);
+// naloga 19b N6: orodja orkestratorja F2 (Linin koledar je znan in varen; splet nese podatke ven; zapis je omejen na dovoljene mape lastnika,
+// delovna mapa teka orkestratorja je prazna, zato zunaj-mape tu ne velja - oznaci se zapis nastavitev in izvrsljivih datotek)
+const ORKESTRATOR_SPLET = new Set(["isci_splet", "preberi_stran"]);
+const IZVRSLJIVO = /\.(?:sh|bash|zsh|fish|ps1|psm1|bat|cmd|exe|com|py|js|mjs|cjs|ts|rb|pl)$|(?:^|[\\/])(?:Makefile|Dockerfile|Justfile)$/i;
 /** Pisanje sem spremeni, kako se agent ali git obnasata pozneje (kljuke, pravila, MCP), zato je vedno nevarno. */
 const NASTAVITVENE = /(^|\/)(\.claude|\.git|\.vscode|\.husky)(\/|$)|(^|\/)(\.mcp\.json|CLAUDE\.md|AGENTS\.md|\.envrc|package\.json)$/;
 
@@ -109,7 +113,11 @@ export function razvrstiDejanje(orodje: string, vnos: Record<string, unknown>, d
     // branje zunaj mape (~/.ssh, mapa podatkov Line ...) lastnik vidi oznaceno; brez poti = delovna mapa
     const p = typeof vnos.file_path === "string" ? vnos.file_path : typeof vnos.path === "string" ? vnos.path : delovna;
     if (!vMapi(p, delovna)) r.add("zunaj-mape");
-  } else if (ORODJA_OMREZJA.has(orodje)) {
+  } else if (orodje === "zapisi_datoteko") {
+    const p = typeof vnos.pot === "string" ? vnos.pot : "";
+    if (!p) r.add("neznano");
+    if (NASTAVITVENE.test(path.normalize(p)) || IZVRSLJIVO.test(p)) r.add("nastavitve");
+  } else if (ORODJA_OMREZJA.has(orodje) || ORKESTRATOR_SPLET.has(orodje)) {
     r.add("omrezje");
   } else if (!ZNANA_DRUGA.has(orodje)) {
     r.add("neznano");
