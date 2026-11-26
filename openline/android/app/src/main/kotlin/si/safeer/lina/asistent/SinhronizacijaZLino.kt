@@ -23,10 +23,21 @@ object SinhronizacijaZLino {
     private val teka = AtomicBoolean(false)
     @Volatile private var zadnjiZagon = 0L
 
-    private class PrefsShramba(private val context: Context) : Shramba {
-        private val prefs get() = context.getSharedPreferences("lina_sinhron", Context.MODE_PRIVATE)
-        override fun preberi(): String? = prefs.getString("rev", null)
-        override fun shrani(vsebina: String) { prefs.edit().putString("rev", vsebina).apply() }
+    /** Naloga 34: revizija izmenjave je PO RACUNALNIKU (vsak racunalnik ima svoje stanje; skupna bi drugemu izpustila zapise). */
+    private class PrefsShramba(private val context: Context, odtis: String) : Shramba {
+        private val kljuc = "rev_$odtis"
+        private val prefs get() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+        override fun preberi(): String? = prefs.getString(kljuc, null)
+        override fun shrani(vsebina: String) { prefs.edit().putString(kljuc, vsebina).apply() }
+    }
+
+    private const val SHRAMBA = "lina_sinhron"
+
+    /** Prehod (naloga 34): revizija edinega racunalnika pred seznamom postane revizija prvega clana (izmenjava se ne ponovi od zacetka). */
+    fun prenesiRevizijo(context: Context, odtis: String) {
+        val p = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
+        val star = p.getString("rev", null) ?: return
+        if (p.getString("rev_$odtis", null) == null) p.edit().putString("rev_$odtis", star).commit()
     }
 
     /** Zazene izmenjavo v ozadju; [takoj] preskoci premor med zagoni (npr. po koncu klica). */
@@ -44,8 +55,18 @@ object SinhronizacijaZLino {
     private fun medKlicem(context: Context): Boolean =
         runCatching { context.getSystemService(TelecomManager::class.java)?.isInCall == true }.getOrDefault(false)
 
+    /**
+     * Naloga 34 (slepi pregled 34): zapisi klicev in pogovor se izmenjajo z ENIM racunalnikom - glavnim (prvi seznanjeni, pri prehodu
+     * dosedanji). Vrsta neposlanih zapisov in izbrisov je skupna (DnevnikKlicev.potrdiPoslane): ce bi jo izpraznil prvi racunalnik,
+     * drugi zapisov ne bi dobil nikoli, pogovor z enega pa bi sel na drugega. Izmenjava z vec racunalniki: v kodi se ni (vrsta po racunalniku).
+     */
     internal fun izvedi(context: Context): Boolean {
-        val naslov = AsistentShramba.beri(context) ?: return false
+        val r = AsistentShramba.seznam(context).racunalniki.firstOrNull() ?: return false
+        val naslov = si.safeer.lina.seznanitev.AsistentQr.naslov(r.naslov, r.vrata, r.odtis) ?: return false
+        return izvediZ(context, naslov)
+    }
+
+    private fun izvediZ(context: Context, naslov: si.safeer.lina.seznanitev.AsistentNaslov): Boolean {
         if (!smemSinhroniziratiDnevnik(medKlicem = medKlicem(context))) return false
         val id = runCatching { NapravaKljuc.id() }.getOrNull() ?: return false
         val pov = HttpPovezavaZLino(naslov)
@@ -53,7 +74,7 @@ object SinhronizacijaZLino {
         try {
             return SinhronLine.izmenjaj(
                 dnevnik = DnevnikKlicevSkupni.dobi(context),
-                reviziji = PrefsShramba(context),
+                reviziji = PrefsShramba(context, naslov.odtis),
                 pogovor = pogovor.vsa(),
                 prejetPogovor = { prejeta ->
                     // Nova sporocila z racunalnika gredo tudi v spomin telefona (brez podvajanja; lastna so ze zapisana).

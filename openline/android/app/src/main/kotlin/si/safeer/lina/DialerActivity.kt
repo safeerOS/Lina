@@ -164,6 +164,7 @@ class DialerActivity : Activity() {
     private lateinit var assistantCodeButton: Button
     private lateinit var assistantCircleButton: Button
     private lateinit var assistantForgetButton: Button
+    private lateinit var racunalnikiPogled: si.safeer.lina.asistent.RacunalnikiPogled
     private lateinit var assistantStopButton: Button
     private lateinit var assistantLog: TextView
     private lateinit var samostojniPogled: si.safeer.lina.asistent.LinaPogovorPogled
@@ -611,6 +612,9 @@ class DialerActivity : Activity() {
         assistantOpenSetupButton.setOnClickListener { showTab(Zavihek.TELEFON) }
         findViewById<Button>(R.id.setupCodeButton).setOnClickListener { izberiNacinKode() }
         assistantForgetButton.setOnClickListener { AsistentShramba.pozabi(this); renderAssistant() }
+        // naloga 34: »Moji racunalniki« pod gumbom Pozabi (seznam, stanje, preimenuj, izkljuci, odstrani)
+        racunalnikiPogled = si.safeer.lina.asistent.RacunalnikiPogled(this, { if (::asistent.isInitialized) asistent else null }) { renderAssistant() }
+        (assistantForgetButton.parent as android.widget.LinearLayout).addView(racunalnikiPogled.koren)
         assistantStopButton.setOnClickListener { asistent.ustavi(); toast(getString(R.string.assistant_stop_sent)) }
         // Lina sama odgovori Claude Code (lastnik 23. 11. 2026); lastnik jo za nalogo ustavi s tem gumbom.
         findViewById<Button>(R.id.assistantAutoStopButton).setOnClickListener { asistent.ustaviSamodejne(); renderAssistant() }
@@ -725,6 +729,7 @@ class DialerActivity : Activity() {
         // Domov kaze stanje povezave (vrstica stanja je zdaj na Domovu).
         if (z == Zavihek.DOMOV) renderAssistant()
         if (z == Zavihek.LINA || z == Zavihek.RACUNALNIK) asistent.preveriSejo()
+        if (z == Zavihek.RACUNALNIK) asistent.osveziObremenitve()
         if (z == Zavihek.RACUNALNIK) { dodatkiRacunalnika.osvezi(); gradnje.osvezi(); agentiNaloge.osvezi() }
         osveziNavRacunalnik()
     }
@@ -780,6 +785,7 @@ class DialerActivity : Activity() {
         // Razdelek klicev iz /koda/potrdi: ista potrditev kot pri QR (gostitelj in odtis na zaslonu).
         asistent.vzemiKlice()?.let { confirmAndPair(GatewayPairing.Invite(it.serverUrl, it.code, it.certSha256)) }
         assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
+        racunalnikiPogled.osvezi()
         assistantTaskInput.visibility = if (p.vnos) View.VISIBLE else View.GONE
         assistantSendButton.visibility = if (p.poslji) View.VISIBLE else View.GONE
         // naloga 23t: naloga, ki je racunalnik zaradi zagona Claude Code ni sprejel, je v vnosu za rocno ponovitev (en dotik Poslji)
