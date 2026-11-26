@@ -209,7 +209,11 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
       const id = nov();
       const datoteka = `${id}${s.mime === "image/png" ? ".png" : ".jpg"}`;
       const pot = path.join(mapa, datoteka);
-      await writeFile(pot, s.bajti, { mode: 0o600, flag: "wx" });
+      await writeFile(pot, s.bajti, { mode: 0o600, flag: "wx" }).catch(async (e: unknown) => {
+        // delno zapisana LASTNA datoteka (ENOSPC, EIO) ne ostane; EEXIST = datoteka ni od tega klica
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") await unlink(pot).catch(() => undefined);
+        throw e;
+      });
       zapisi.push({ id, serija, cas, opis: besedilo, poziv, prevedeno, model, datoteka, bajtov: s.bajti.length });
       await chmod(pot, 0o600);
     }

@@ -15,6 +15,7 @@ import { request } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import { setupOwner } from "./auth.server.ts";
@@ -757,5 +758,49 @@ describe("naloga 20: drugi krog", () => {
     assert.equal(prevodi.length, 2, prevodi.join("\n"));
     assert.match(prevodi[0]!, /translation-llm/);
     assert.doesNotMatch(prevodi[1]!, /translation-llm/);
+  });
+
+  // Napaka diska med pisanjem (ENOSPC): datoteka je ze ustvarjena (wx) in delno zapisana, nato writeFile vrze.
+  const fsp = createRequire(import.meta.url)("node:fs/promises") as typeof import("node:fs/promises");
+  async function zPolnimDiskom(f: () => Promise<unknown>) {
+    const pravi = fsp.writeFile;
+    let zadetkov = 0;
+    (fsp as { writeFile: unknown }).writeFile = async (p: string, data: Buffer, o: unknown) => {
+      if (String(p).includes(`${path.sep}${MAPA_SLIK}${path.sep}`)) {
+        zadetkov++;
+        await pravi(p, Buffer.from(data).subarray(0, 5), o as never);
+        throw Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+      }
+      return pravi(p, data, o as never);
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(f(), /ENOSPC/);
+    } finally {
+      (fsp as { writeFile: unknown }).writeFile = pravi;
+      syncBuiltinESMExports();
+    }
+    assert.equal(zadetkov, 1, "lazni disk je dosegel generator");
+  }
+
+  it("generator: napaka diska med pisanjem slike ali videa ne pusti delne datoteke v slike/", async () => {
+    const { dir, token } = await lastnik();
+    await zPolnimDiskom(() => ustvariSliko(dir, "pes", { projekt: "moj-projekt", fetch: lazni([{ status: 200, telo: odgovorFlash() }]).f, zeton: async () => ZETON, prevedi: PREVOD, nakljucno: ids }));
+    assert.deepEqual(await readdir(path.join(dir, MAPA_SLIK)), []);
+    const OP = "projects/moj-projekt/locations/us-central1/publishers/google/models/veo-3.1-fast-generate-001/operations/abc-123";
+    const MP4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypmp42", "latin1"), Buffer.alloc(200, 1)]);
+    const fv = (async (u: string | URL | Request) => new Response(JSON.stringify(String(u).endsWith(":predictLongRunning") ? { name: OP } : { name: OP, done: true, response: { videos: [{ bytesBase64Encoded: MP4.toString("base64"), mimeType: "video/mp4" }] } }), { status: 200 })) as typeof fetch;
+    await zPolnimDiskom(() => generirajVideo("pes tece", token, dir, { projekt: "moj-projekt", fetch: fv, zeton: async () => ZETON, prevedi: PREVOD, nakljucno: ids, cakaj: async () => undefined }));
+    assert.deepEqual(await readdir(path.join(dir, MAPA_SLIK)), []);
+  });
+
+  it("video: ne-JSON odgovor na zacetno zahtevo = neveljavna operacija, brez vsebine odgovora v sporocilu", async () => {
+    const { dir, token } = await lastnik();
+    const f = (async () => new Response("ODGOVOR-POSREDNIKA-zasebno <html>", { status: 200 })) as typeof fetch;
+    await assert.rejects(generirajVideo("pes tece", token, dir, { projekt: "moj-projekt", fetch: f, zeton: async () => ZETON, prevedi: PREVOD, cakaj: async () => undefined }), (e: Error) => {
+      assert.doesNotMatch(e.message, /ODGOVOR-POSREDNIKA/);
+      assert.match(e.message, /neveljavno operacijo/);
+      return true;
+    });
   });
 });
