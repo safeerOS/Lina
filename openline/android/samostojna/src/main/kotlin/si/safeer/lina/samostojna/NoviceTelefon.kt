@@ -171,14 +171,12 @@ class BralnikNovic(
     private val zaklep = Any()
     private var predpomnilnik: Pair<Long, Pair<List<NoviceTelefon.Novica>, List<String>>>? = null
 
-    private fun preberiVir(ime: String, url: String): Pair<String, List<NoviceTelefon.Novica>>? {
-        val odg = try {
-            prenos.get(url, mapOf("Accept" to "application/rss+xml, application/atom+xml, application/xml;q=0.9", "User-Agent" to "Lina/1.0 (bralnik novic)"), 8_000L)
-        } catch (e: Exception) {
-            return null
-        }
-        if (odg.koda != 200) return null
-        return NoviceTelefon.razberi(odg.telo, ime).takeIf { it.isNotEmpty() }?.let { ime to it }
+    // K2-6 (slepi pregled): nit vira ne sme pasti z izjemo (prenos ali razbiranje) - sesula bi aplikacijo
+    private fun preberiVir(ime: String, url: String): Pair<String, List<NoviceTelefon.Novica>>? = try {
+        val odg = prenos.get(url, mapOf("Accept" to "application/rss+xml, application/atom+xml, application/xml;q=0.9", "User-Agent" to "Lina/1.0 (bralnik novic)"), 8_000L)
+        if (odg.koda != 200) null else NoviceTelefon.razberi(odg.telo, ime).takeIf { it.isNotEmpty() }?.let { ime to it }
+    } catch (e: Exception) {
+        null
     }
 
     private fun preberi(): Pair<List<NoviceTelefon.Novica>, List<String>> {

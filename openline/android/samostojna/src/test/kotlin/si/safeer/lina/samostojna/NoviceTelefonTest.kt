@@ -14,7 +14,7 @@ class NoviceTelefonTest {
             clanki.joinToString("") { (n, l) -> "<item><title><![CDATA[$n]]></title><link>$l</link></item>" } + "</channel></rss>"
 
     class LazniViri(private val odgovori: Map<String, OdgovorHttp>) : Prenos {
-        val get = mutableListOf<String>()
+        val get: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         var post = 0
         override fun get(url: String, glave: Map<String, String>, casMs: Long): OdgovorHttp {
             get.add(url)
