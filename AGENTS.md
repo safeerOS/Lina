@@ -1091,6 +1091,13 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   kanal-claude.test 4.4), izvor "telefon", id s-telefona-<id>, samo branje:
   recordCaller ga zavrne); vsak dobi mapo klica (zapisiZapisekKlica, do 10 na krog, oznake v sinhron-telefon-mape.json; izbrisana mapa se ne vrne);
   podjetniski zapis po zapiskiHrambaDni tudi iz sinhronizacije. Preizkusi: naloga-17-klici-telefon.test.ts, naloga-17-klici-telefon-ui.spec.ts.
+  Naloga 17r2 (pogodba s telefonom 0.2.14, slepi pregled 17t): odgovor nosi zmoznosti ["prepis-v1", "izbris-v1"]. prepis-v1: znan id brez prepisa
+  (racunalnik 0.2.13) se dopolni s prepisom, ostala polja ostanejo, obstojeci zapisek mape se prepise (izbrisana mapa se ne vrne). Zahteva
+  izbrisani[] (do 300 id): zapis s prepisom gre iz stanja, mapa klica gre (samo zapisek.md in posnetek.wav, prazna mapa; izbrisiMapoKlica, nikoli
+  rekurzivno), id ostane v stanju.izbrisani (do 1000) in se ne sprejme vec; isto za podjetniski klic po roku hrambe. izbris-v1 se javi samo, ce
+  so vse mape izbrisov te zahteve res izbrisane (telefon na izbris-v1 izprazni svojo vrsto). Vnos nad 46 KiB v stanju gre telefonu brez prepisa
+  (prepisOkrnjen), prevelik tudi tako se preskoci z napredkom revizije. Osebni klic ostane do izbrisa (razen meje MEJA_KLICEV 1000, odlocitev lastnika).
+  Preizkusi: naloga-17r2-sinhron.test.ts.
 - Vsebina QR (ena vrstica, shema kot QR konzole OpenLine; razdelek url/code/fp od T1-S1 NI vec v QR):
   httpgateway://pair?v=1[&url=<https://zasebni-naslov:vrata OpenLine>&code=<koda OpenLine, 8 znakov>&fp=<SHA-256 lista OpenLine,
   64 hex>]&lina=<https://zasebni-naslov:vrata/api/asistent/v1>&linafp=<SHA-256 lista asistentke, 64 hex>&linakoda=<enkratna koda,

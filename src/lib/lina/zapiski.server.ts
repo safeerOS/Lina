@@ -257,6 +257,33 @@ export async function mapaKlicaZaPosnetek(call: CallSession, root: string): Prom
   return pot;
 }
 
+/**
+ * Izbris mape klica (izbris klica na telefonu, rok hrambe podjetniskega klica; naloga 17r2): samo zapisek.md in posnetek.wav, ki ju je
+ * napisal ta program, nato mapa, ce je prazna. Nikoli rekurzivno: uporabnikove datoteke v mapi ostanejo. "" = mapa ni nastala.
+ * true = zapiska klica ni vec (izbrisan ali ga ni bilo); false = ne vemo (neveljaven ID, povezava, napaka): poskusi znova.
+ */
+export async function izbrisiMapoKlica(zapisek: string, root: string): Promise<boolean> {
+  if (zapisek === "") return true;
+  if (!jeIdZapiska(zapisek) || !zapisek.includes("/")) return false;
+  try {
+    const pot = path.join(await realpath(await mapaZaPisanje(root)), zapisek.split("/")[0]);
+    try {
+      if (!(await lstat(pot)).isDirectory()) return false; // simbolna povezava ali datoteka: ne sledimo
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === "ENOENT";
+    }
+    for (const ime of [ZAPISEK_V_MAPI, POSNETEK_V_MAPI]) {
+      await unlink(path.join(pot, ime)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+    if ((await readdir(pot)).length === 0) await rmdir(pot);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function seznamZapiskov(token: string | null, dir?: string): Promise<Zapisek[]> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);

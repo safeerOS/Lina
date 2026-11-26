@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { lstat } from "node:fs/promises";
+import path from "node:path";
 import { MEJA_SPOROCIL, vVrstiPogovora, type SporociloAsistenta } from "./asistent-pogovor.server.ts";
 import { nastaviNavodilaIzTelefona } from "./pravila.server.ts";
 import { praviUnicode } from "./kanal-claude.ts";
@@ -10,7 +12,7 @@ import { preberi as preberiImenik } from "./imenik.server.ts";
 import { imeVImeniku, klicIzTelefona, potekelKlicTelefona, type IzmenjavaSinhron, type KlicSinhron } from "./klici-telefon.ts";
 import { loadPravila } from "./pravila.server.ts";
 import type { CallSession } from "./types.ts";
-import { mapaZaPisanje, zapisiZapisekKlica } from "./zapiski.server.ts";
+import { ZAPISEK_V_MAPI, izbrisiMapoKlica, mapaKlicaZaPosnetek, mapaZaPisanje, zapisiZapisekKlica } from "./zapiski.server.ts";
 
 /**
  * Sinhronizacija telefona z racunalnikom (lastnik 20. 11. 2026): zapisi klicev (ime, stevilka, podjetje, sporocilo; od 0.2.14 tudi
@@ -46,6 +48,15 @@ export const MEJA_ZAPISA_B = 46 * 1024;
  * sinhronizacije, zato vec map podaljsa odgovor telefonu (50 na krog je v preizkusu s 305 klici preseglo 5 s).
  */
 const NAJVEC_MAP_NA_KROG = 10;
+/**
+ * Kaj racunalnik zna (pogodba s telefonom 0.2.14, POROCILO-17t-popravki.md): prepis-v1 = prepisPogovora sprejme in shrani, tudi za znan
+ * id brez prepisa; izbris-v1 = klice s seznama izbrisani izbrise (zapis, prepis, mapa) in jih ne vrne vec. Telefon na izbris-v1 izbrise
+ * svojo vrsto izbrisov, zato se javi samo, ko so vsi izbrisi te zahteve res opravljeni.
+ */
+export const ZMOZNOST_PREPIS = "prepis-v1";
+export const ZMOZNOST_IZBRIS = "izbris-v1";
+/** Izbrisani klici (kot telefon MEJA_IZBRISANIH): zapis z id s tega seznama se ne sprejme vec. */
+export const MEJA_IZBRISANIH = 1000;
 
 export type { IzmenjavaSinhron, KlicSinhron };
 export type PogovorSinhron = { vloga: "lastnik" | "lina"; besedilo: string; cas: string };
@@ -58,9 +69,19 @@ type Stanje = {
   klici: Array<{ rev: number; k: KlicSinhron }>;
   pogovor: Array<{ rev: number; id: string; p: PogovorSinhron }>;
   navodila: { rev: number; n: NavodilaSinhron } | null;
+  /** Id klicev, izbrisanih na telefonu ali po roku hrambe (naloga 17r2): ne sprejmejo se vec, mapa klica se izbrise. */
+  izbrisani: string[];
 };
 
-export type ZahtevaSinhron = { rev: number; epoha?: string; klici: KlicSinhron[]; pogovor: PogovorSinhron[]; navodila: NavodilaSinhron | null };
+export type ZahtevaSinhron = {
+  rev: number;
+  epoha?: string;
+  klici: KlicSinhron[];
+  pogovor: PogovorSinhron[];
+  navodila: NavodilaSinhron | null;
+  /** Id klicev, ki jih je uporabnik izbrisal na telefonu (telefon 0.2.14). */
+  izbrisani?: string[];
+};
 export type OdgovorSinhron = {
   epoha: string;
   rev: number;
@@ -69,11 +90,13 @@ export type OdgovorSinhron = {
   navodila: NavodilaSinhron | null;
   /** true = je se novejsih vnosov od meje enega odgovora: naprava naj takoj poizve znova od vrnjene revizije. */
   ostane: boolean;
+  zmoznosti: string[];
 };
 
 export class NapakaSinhron extends Error {}
 
-const prazno = (): Stanje => ({ epoha: randomBytes(8).toString("hex"), rev: 0, klici: [], pogovor: [], navodila: null });
+const prazno = (): Stanje => ({ epoha: randomBytes(8).toString("hex"), rev: 0, klici: [], pogovor: [], navodila: null, izbrisani: [] });
+const imaPrepis = (k: KlicSinhron) => Array.isArray(k.prepisPogovora) && k.prepisPogovora.length > 0;
 
 function besedilo(v: unknown, meja: number, ime: string): string {
   if (v === undefined || v === null) return "";
@@ -176,6 +199,7 @@ export function preveriZahtevo(v: unknown): ZahtevaSinhron {
     klici: sez(o.klici, "klici").flatMap((k) => { try { return [preveriKlic(k)]; } catch { return []; } }),
     pogovor: sez(o.pogovor, "pogovor").flatMap((p) => { try { return [preveriPogovor(p)]; } catch { return []; } }),
     navodila,
+    izbrisani: sez(o.izbrisani, "izbrisani").filter((x): x is string => typeof x === "string" && ID_KLICA.test(x)),
   };
 }
 
@@ -205,7 +229,8 @@ async function preberiStanje(root: string): Promise<Stanje> {
   const vnos = (x: unknown, polje: "k" | "p") => !!x && typeof x === "object" && Number.isSafeInteger((x as { rev?: unknown }).rev) && !!(x as Record<string, unknown>)[polje] && typeof (x as Record<string, unknown>)[polje] === "object";
   const klici = s.klici.filter((x) => vnos(x, "k") && typeof x.k.id === "string");
   const pogovor = s.pogovor.filter((x) => vnos(x, "p") && typeof x.id === "string" && typeof x.p.cas === "string");
-  return { epoha: typeof s.epoha === "string" && /^[0-9a-f]{16}$/.test(s.epoha) ? s.epoha : randomBytes(8).toString("hex"), rev: s.rev, klici, pogovor, navodila: s.navodila ?? null };
+  const izbrisani = Array.isArray(s.izbrisani) ? s.izbrisani.filter((x): x is string => typeof x === "string" && ID_KLICA.test(x)).slice(-MEJA_IZBRISANIH) : [];
+  return { epoha: typeof s.epoha === "string" && /^[0-9a-f]{16}$/.test(s.epoha) ? s.epoha : randomBytes(8).toString("hex"), rev: s.rev, klici, pogovor, navodila: s.navodila ?? null, izbrisani };
 }
 
 /** Izmenja zapise: sprejme, kar je novega od naprave, vrne vse z revizijo nad `zahteva.rev`. */
@@ -247,6 +272,7 @@ async function zapisiMapeKlicev(root: string, st: Stanje): Promise<void> {
   const stiki = await preberiImenik(root).catch(() => []);
   // samo klici, ki so se v stanju (po roku hrambe ali meji odstranjeni ne ostanejo v datoteki)
   const ostali = new Set(st.klici.map((x) => x?.k?.id));
+  const izbrisani = new Set(st.izbrisani);
   for (const x of brez) {
     const c = klicIzTelefona(x.k, imeVImeniku(stiki, x.k.stevilka));
     try {
@@ -254,8 +280,52 @@ async function zapisiMapeKlicev(root: string, st: Stanje): Promise<void> {
     } catch {
       continue; // napaka enega zapisa ne ustavi ostalih; zapis ostane brez oznake in se poskusi znova
     }
-    // oznaka takoj po mapi: ce kasnejsi zapis pade, ta mapa ob naslednjem krogu ne nastane se enkrat
-    await writeJson(root, DATOTEKA_MAP, Object.fromEntries(Object.entries(mape).filter(([id]) => ostali.has(id))));
+    // oznaka takoj po mapi: ce kasnejsi zapis pade, ta mapa ob naslednjem krogu ne nastane se enkrat; oznaka izbrisanega klica, cigar
+    // mape se ni bilo mogoce izbrisati, ostane (izbrisiMapeKlicev jo poskusi znova)
+    await writeJson(root, DATOTEKA_MAP, Object.fromEntries(Object.entries(mape).filter(([id]) => ostali.has(id) || izbrisani.has(id))));
+  }
+}
+
+/**
+ * Mape izbrisanih klicev (izbris na telefonu, rok hrambe): izbrise jih in odstrani oznako. Vrne id, katerih mape ni bilo mogoce izbrisati
+ * (null = datoteka oznak ni berljiva, ne vemo nic). Oznaka neuspelega ostane za naslednji krog.
+ */
+async function izbrisiMapeKlicev(root: string, izbrisani: Iterable<string>): Promise<Set<string> | null> {
+  const mape = await preberiMape(root);
+  if (!mape) return null;
+  const neuspeli = new Set<string>();
+  let sprememba = false;
+  for (const id of izbrisani) {
+    if (!(id in mape)) continue;
+    if (await izbrisiMapoKlica(mape[id], root)) {
+      delete mape[id];
+      sprememba = true;
+    } else neuspeli.add(id);
+  }
+  if (sprememba) await writeJson(root, DATOTEKA_MAP, { ...mape });
+  return neuspeli;
+}
+
+/**
+ * Znan klic je dobil prepis (telefon 0.2.14 ga poslje znova po posodobitvi racunalnika): obstojeci zapisek v mapi klica se prepise s
+ * prepisom. Mapa, ki je uporabnik izbrisal, se ne vrne; klic brez mape dobi mapo s prepisom v zapisiMapeKlicev.
+ */
+async function dopolniMape(root: string, klici: KlicSinhron[]): Promise<void> {
+  if (klici.length === 0) return;
+  const mape = await preberiMape(root);
+  if (!mape) return;
+  const stiki = await preberiImenik(root).catch(() => []);
+  for (const k of klici) {
+    const zapisek = mape[k.id];
+    if (!zapisek) continue;
+    try {
+      const mapa = await mapaKlicaZaPosnetek({ zapisek } as CallSession, root);
+      if (!mapa || !(await lstat(path.join(mapa, ZAPISEK_V_MAPI))).isFile()) continue;
+      const c = klicIzTelefona(k, imeVImeniku(stiki, k.stevilka), zapisek);
+      if (c) await zapisiZapisekKlica(c, root);
+    } catch {
+      // zapisek ostane brez prepisa (prepis je v stanju in na zaslonu Klici); ponovnega poskusa ni
+    }
   }
 }
 
@@ -287,21 +357,48 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
     let sprememba = false;
     // Telefon pozna drugo epoho (stanje na racunalniku je bilo ponastavljeno): vse novejse od 0, telefon si zapomni novo epoho.
     const revTelefona = zahteva.epoha !== undefined && zahteva.epoha !== st.epoha ? 0 : zahteva.rev;
-    const znaniKlici = new Set(st.klici.map((x) => x.k.id));
+    // Izbris na telefonu (17r2, N3): id gre na seznam izbrisanih (zadnji na konec), zapis s prepisom iz stanja, mapa klica spodaj.
+    const izbrisani = new Set(st.izbrisani);
+    const dodajIzbrisan = (id: string) => {
+      izbrisani.delete(id);
+      izbrisani.add(id);
+      sprememba = true;
+    };
+    for (const id of zahteva.izbrisani ?? []) dodajIzbrisan(id);
+    const znaniKlici = new Map(st.klici.map((x) => [x.k.id, x]));
+    const dopolnjeni: KlicSinhron[] = [];
     for (const k of zahteva.klici) {
-      if (znaniKlici.has(k.id)) continue;
+      if (izbrisani.has(k.id)) continue;
+      const znan = znaniKlici.get(k.id);
+      if (znan) {
+        // Racunalnik 0.2.13 je klic shranil brez prepisa (17r2, N1): prepis se dopolni, ostala polja ostanejo, kot jih je prvic poslal telefon.
+        if (!imaPrepis(znan.k) && imaPrepis(k)) {
+          const { prepisPogovora: _p, prepisOkrnjen: _o, ...brez } = znan.k;
+          try {
+            znan.k = sPrepisom(brez, k as unknown as Record<string, unknown>);
+            dopolnjeni.push(znan.k);
+            sprememba = true;
+          } catch {
+            // obstojeci zapis je ze sam prevelik: ostane brez prepisa
+          }
+        }
+        continue;
+      }
       st.rev += 1;
-      st.klici.push({ rev: st.rev, k });
-      znaniKlici.add(k.id);
+      const vnos = { rev: st.rev, k };
+      st.klici.push(vnos);
+      znaniKlici.set(k.id, vnos);
       sprememba = true;
     }
     if (st.klici.length > MEJA_KLICEV) st.klici = st.klici.slice(-MEJA_KLICEV);
-    // Rok hrambe podjetniskih zapisov (lastnik 22. 11. 2026, privzeto 90 dni): zapis s prepisom gre iz sinhronizacije kot mapa klica.
+    // Rok hrambe podjetniskih zapisov (lastnik 22. 11. 2026, privzeto 90 dni): zapis s prepisom gre iz sinhronizacije, mapa klica z njim (N4).
     const rok = await rokZapiskov(root);
     const zdaj = (odv.zdaj ?? Date.now)();
+    for (const x of st.klici) if (x && typeof x === "object" && potekelKlicTelefona(x.k, rok, zdaj)) dodajIzbrisan(x.k.id);
     const pred = st.klici.length;
-    st.klici = st.klici.filter((x) => !(x && typeof x === "object" && potekelKlicTelefona(x.k, rok, zdaj)));
+    st.klici = st.klici.filter((x) => !izbrisani.has(x.k.id));
     if (st.klici.length !== pred) sprememba = true;
+    st.izbrisani = [...izbrisani].slice(-MEJA_IZBRISANIH);
 
     const znaniPogovor = new Set(st.pogovor.map((x) => x.id));
     const dodajPogovor = (p: PogovorSinhron): boolean => {
@@ -347,6 +444,10 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
       const zeljen = st.pogovor.map((x) => x.p);
       if (sprememba || JSON.stringify(Array.isArray(lokalni) ? lokalni : []) !== JSON.stringify(zeljen)) await writeJson(root, "asistent.json", zeljen);
     });
+    // Mape izbrisanih klicev (po zapisu stanja: zapisa ni vec, tudi ce mapa ne uspe; oznaka ostane za ponovni poskus).
+    const neuspeliIzbrisi = await izbrisiMapeKlicev(root, st.izbrisani).catch(() => null);
+    const izbrisOpravljen = neuspeliIzbrisi !== null && !(zahteva.izbrisani ?? []).some((id) => neuspeliIzbrisi.has(id));
+    await dopolniMape(root, dopolnjeni).catch(() => undefined);
     // Mapa klica za nove in stare klice (po zapisu stanja: klic je ze sprejet, ce mapa ne uspe).
     await zapisiMapeKlicev(root, st).catch(() => undefined);
     for (const p of noviIzTelefona) {
@@ -366,9 +467,17 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
     const vzeti: Vnos[] = [];
     let bajti = 512;
     for (const v of vnosi) {
-      const velikost = Buffer.byteLength(JSON.stringify(v.k ?? v.p ?? v.n), "utf8") + 2;
+      let vnos = v;
+      // Vnos nad mejo zapisa (star ali podtaknjen v stanju; 17r2, N2) bi presegel 64 KiB telefona in za vedno ustavil sinhronizacijo:
+      // gre brez prepisa z oznako okrnjenosti; ce je prevelik tudi tako, se preskoci, revizija pa gre naprej.
+      if (v.k && bajtov(v.k) > MEJA_ZAPISA_B) {
+        const brez = { ...v.k, prepisPogovora: [], prepisOkrnjen: true };
+        vnos = bajtov(brez) > MEJA_ZAPISA_B ? { rev: v.rev } : { rev: v.rev, k: brez };
+      }
+      const vsebina = vnos.k ?? vnos.p ?? vnos.n;
+      const velikost = vsebina ? bajtov(vsebina) + 2 : 0;
       if (vzeti.length >= MEJA_ODGOVORA || (vzeti.length > 0 && bajti + velikost > MEJA_ODGOVORA_B)) break;
-      vzeti.push(v);
+      vzeti.push(vnos);
       bajti += velikost;
     }
     const ostane = vnosi.length > vzeti.length;
@@ -379,6 +488,7 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
       pogovor: vzeti.flatMap((x) => (x.p ? [x.p] : [])),
       navodila: vzeti.find((x) => x.n)?.n ?? null,
       ostane,
+      zmoznosti: izbrisOpravljen ? [ZMOZNOST_PREPIS, ZMOZNOST_IZBRIS] : [ZMOZNOST_PREPIS],
     };
   });
 }
