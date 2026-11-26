@@ -1020,3 +1020,29 @@ test("naloga 26r CRR3-3: ponavljanje se konca, preden podpis telefona zastara (k
     await s.pospravi();
   }
 });
+
+test("naloga 26r krog 3 K3-3: ura gre nazaj za vec kot okno podpisa - ponavljanje se opusti (okno v obe smeri, kot kanal)", async () => {
+  const prej = ponovitevUstavitve.ms;
+  ponovitevUstavitve.ms = 20;
+  const ura = { t: Date.now() };
+  const z = ustavitevPoZacni(Number.MAX_SAFE_INTEGER);
+  const dnevnik: string[] = [];
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz, ura, dnevnik: (v) => dnevnik.push(v) });
+  try {
+    const id = idNaloge();
+    const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum", ura.t));
+    await caka(() => z.klici.some((k) => k.kaj === "zacni"));
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id, ura.t))).status, 202);
+    z.odpri();
+    await p;
+    await caka(() => z.ustavitve.length >= 2, 3000);
+    ura.t -= OKNO_PODPISA_MS + 1000;
+    await caka(() => dnevnik.some((v) => v.includes("opuscena")), 3000);
+    const n = z.ustavitve.length;
+    await premor(150);
+    assert.equal(z.ustavitve.length, n);
+  } finally {
+    ponovitevUstavitve.ms = prej;
+    await s.pospravi();
+  }
+});

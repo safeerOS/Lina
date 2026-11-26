@@ -401,7 +401,10 @@ export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
   const zdaj = Date.now();
   // naloga 21 (N3): rezerva »vrata« ni trajna - najvec vsakih nadzorVrat.ms poskus na zelenih vratih; ponovni zagon SAMO, ce so res prosta
   // (abs: ura, ki gre nazaj, preverbe ne odlozi za dni - slepi pregled 21, najdba 11)
+  // slepi pregled 26r krog 3 (K3-1): samo v odobrenem omrezju - v tujem poskusna vticnica ne poslusa na LAN in prosta vrata ne
+  // sprozijo ponovnega zagona (nov zagon bi tam spet koncal v rezervi)
   const vrata = !!t && t.rezerva === "vrata" && Math.abs(zdaj - t.vrataPreverjena) >= nadzorVrat.ms
+    && odobritev(n, t.zeleniNaslov, v, p) === "da"
     && (t.vrataPreverjena = zdaj, await prostaVrata(t.zeleniNaslov, t.zelenaVrata));
   // naloga 21 (N1): tekoci streznik doma se ustavi, ce omrezje NI odobreno (npr. isti naslov za drugim prehodom) v dveh zaporednih
   // preverbah; »ne-vem« ga ne ustavi

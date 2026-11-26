@@ -797,13 +797,15 @@ export class AsistentStreznik {
       await this.m.izvajalec.ustavi(id, dokaz);
     } catch (e) {
       if (prvic) this.dnevnik(`ustavitev po zacetku ni uspela: ${(e as Error).message.slice(0, 300)}`);
-      if (!this.streznik || !this.naloge.has(id)) return;
-      // naslednji poskus mora priti v kanal, preden podpis zastara
-      if (this.zdaj() + ponovitevUstavitve.ms - dokaz.cas >= OKNO_PODPISA_MS) {
-        this.dnevnik("ustavitev po zacetku opuscena: podpis telefona je za kanal prestar");
-        return;
-      }
-      setTimeout(() => { if (this.streznik && this.naloge.has(id)) void this.ustaviPozneje(id, dokaz, false); }, ponovitevUstavitve.ms).unref?.();
+      setTimeout(() => {
+        if (!this.streznik || !this.naloge.has(id)) return;
+        // okno se preveri ob poskusu (tudi po spanju racunalnika) in v obe smeri ure, kot kanal (slepi pregled 26r krog 3, K3-3)
+        if (Math.abs(this.zdaj() - dokaz.cas) >= OKNO_PODPISA_MS) {
+          this.dnevnik("ustavitev po zacetku opuscena: podpis telefona je za kanal prestar");
+          return;
+        }
+        void this.ustaviPozneje(id, dokaz, false);
+      }, ponovitevUstavitve.ms).unref?.();
     }
   }
 

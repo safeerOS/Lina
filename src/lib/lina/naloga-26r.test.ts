@@ -12,7 +12,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { setupOwner } from "./auth.server.ts";
 import {
-  NASTAVITVE_ASISTENTA, nastaviOmrezjeNaslovov, ponastaviAsistenta, preveriNaslovAsistenta, registrirajRele, registrirajVezoKlicev,
+  NASTAVITVE_ASISTENTA, nadzorVrat, nastaviOmrezjeNaslovov, ponastaviAsistenta, preveriNaslovAsistenta, registrirajRele, registrirajVezoKlicev,
   stanjeAsistenta, uskladiAsistenta,
 } from "./asistent-telefon.server.ts";
 import { izmenjajSinhron, preveriZahtevo } from "./sinhron-telefon.server.ts";
@@ -34,7 +34,7 @@ async function prostaVrata(): Promise<number> {
  * Rezerva »vrata«: shranjeni naslov 127.0.0.5 v odobrenem omrezju (prehod MAC_DOMA), vrata zasedena. [vm] in [mac] preizkus spremeni.
  * Vrne stevec ustavitev poti klicev (= ponovni zagon streznika).
  */
-async function rezervaVrata(t: (o: { dir: string; token: string; okolje: { vm: NodeJS.Dict<NetworkInterfaceInfo[]>; mac: string | null }; ustavitve: () => number }) => Promise<void>) {
+async function rezervaVrata(t: (o: { dir: string; token: string; okolje: { vm: NodeJS.Dict<NetworkInterfaceInfo[]>; mac: string | null }; ustavitve: () => number; sprosti: () => Promise<void> }) => Promise<void>) {
   const dir = await mkdtemp(path.join(tmpdir(), "lina-n26r-"));
   const token = await setupOwner("geslo-test-1234", dir, { address: "127.0.0.1" });
   const vrata = await prostaVrata();
@@ -54,7 +54,7 @@ async function rezervaVrata(t: (o: { dir: string; token: string; okolje: { vm: N
     registrirajVezoKlicev({ zagotovi: async () => undefined, ustavi: async () => { ustavitev += 1; } });
     await uskladiAsistenta(dir);
     assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "vrata", "izhodisce: rezerva vrata");
-    await t({ dir, token, okolje, ustavitve: () => ustavitev });
+    await t({ dir, token, okolje, ustavitve: () => ustavitev, sprosti: () => new Promise<void>((ok) => zaseden.close(() => ok())) });
   } finally {
     await new Promise<void>((ok) => zaseden.close(() => ok()));
     nastaviOmrezjeNaslovov(null);
@@ -122,6 +122,28 @@ test("CRR3-2 (ohrani): rezerva »vrata«, omrezje nespremenjeno ali neprepoznano
     assert.equal(s.napakaKoda, "vrata");
     assert.equal(ustavitve(), 0, "streznik in rele se nista ustavila");
   });
+});
+
+test("slepi pregled 26r krog 3 K3-1: rezerva »vrata« v tujem omrezju ne preverja vrat (vticnica ne poslusa na LAN, prosta vrata ne sprozijo zagona)", async () => {
+  const prej = nadzorVrat.ms;
+  try {
+    await rezervaVrata(async ({ dir, token, okolje, ustavitve, sprosti }) => {
+      okolje.mac = MAC_TUJ;
+      assert.equal(await preveriNaslovAsistenta(dir), true);
+      assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "omrezje");
+      await sprosti();                                                                           // vrata so v tujem omrezju prosta
+      nadzorVrat.ms = 0;
+      assert.equal(await preveriNaslovAsistenta(dir), false, "v tujem omrezju ni preverbe vrat in ne uskladitve");
+      assert.equal(ustavitve(), 0);
+      assert.equal((await stanjeAsistenta(token, dir)).tece, false, "doma (LAN) se v tujem omrezju ne poslusa");
+      // domov (odobreno), vrata prosta: rezerva se zamenja s streznikom doma (en zagon, pricakovan)
+      okolje.mac = MAC_DOMA;
+      assert.equal(await preveriNaslovAsistenta(dir), true);
+      const s = await stanjeAsistenta(token, dir);
+      assert.equal(s.tece, true, s.napaka);
+      assert.equal(s.samoGlobalLink, false);
+    });
+  } finally { nadzorVrat.ms = prej; }
 });
 
 // ------------------------------------------------------------------ CRR3-4
