@@ -87,12 +87,12 @@ export function ovijCilj(notr: Izvajalec, oceni: Oceni, rokMs = ROK_OCENE_MS): I
     odobri: (...a) => notr.odobri(...a),
     ustavi: (...a) => notr.ustavi(...a),
     ...(nadaljuj ? { nadaljuj: async (...a: Parameters<typeof nadaljuj>) => { await vrste.get(a[0]); return nadaljuj(...a); } } : {}),
-    zacni: (naloga: Naloga, naDogodek: (d: Dogodek) => void) =>
+    zacni: (naloga: Naloga, naDogodek: (d: Dogodek) => void, preklicana?: () => boolean) =>
       notr.zacni(naloga, (d) => {
         if (d.vrsta === "izid" && d.ok) return vVrsto(naloga.id, () => izOcene(naloga, d, naDogodek));
         // brez ocene v teku takoj (sinhrono), sicer za njo
         if (!vrste.has(naloga.id)) return naDogodek(d);
         vVrsto(naloga.id, () => naDogodek(d));
-      }),
+      }, preklicana),
   };
 }

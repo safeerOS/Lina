@@ -384,3 +384,51 @@ test("od telefona do Claude Code: naloga v sejo, zahteva za odobritev na telefon
   }
 });
 
+
+test("naloga 25 (slepi pregled 1): /ustavi med zacni (izvajalec bere programe) - naloga ne pride v sejo Claude Code, POST 409", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "lk-"));
+  await pripraviKanal([ANA], dir);
+  const p: ChildProcess = zagonKanala(dir);
+  const izhod: Array<Record<string, any>> = [];
+  let ost = "";
+  p.stdout!.setEncoding("utf8");
+  p.stdout!.on("data", (k: string) => { ost += k; let i; while ((i = ost.indexOf("\n")) >= 0) { izhod.push(JSON.parse(ost.slice(0, i))); ost = ost.slice(i + 1); } });
+  const poslji = (x: unknown) => p.stdin!.write(JSON.stringify(x) + "\n");
+  let odpri!: () => void;
+  const vrata = new Promise<void>((r) => { odpri = r; });
+  let beri = 0;
+  const izv = new IzvajalecClaudeCode({ pot: potVticnice(dir), zeton: async () => (await preberiKanal(dir)).zeton, ozjiKrog: () => new Set([ANA.id]),
+    programi: async () => { if (++beri === 1) await vrata; return []; } });
+  const s = new AsistentStreznik({ root: dir, izvajalec: izv, dnevnik: () => {} });
+  let r: Promise<{ status: number }> | undefined;
+  try {
+    poslji({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "lazni-claude", version: "0" } } });
+    await caka(() => izhod.some((x) => x.id === 1), 15000);
+    poslji({ jsonrpc: "2.0", method: "notifications/initialized" });
+    await caka(() => existsSync(potVticnice(dir)));
+    const { vrata: v, odtis } = await s.zazeni();
+    const { cert } = await potrdiloAsistenta(dir);
+    const z = (m: string, pot: string, t?: unknown) => zahteva(v, cert, odtis, m, pot, t);
+    const n = telefonNaloga(ANA, idNaloge(), "izpisi git status");
+    r = z("POST", `${POT}/naloga`, n);
+    await caka(() => beri >= 1);
+    const u = await z("POST", `${POT}/ustavi`, { id: n.id, posiljatelj: ANA.id, ...podpisi(ANA, (c, e) => nizUstavitve(n.id, ANA.id, c, e)) });
+    odpri();
+    const rn = await r;
+    // kontrola: naslednja naloga pride v sejo; ce bi prva sla v vticnico, bi bila pred njo
+    const n2 = telefonNaloga(ANA, idNaloge(), "pokazi datum");
+    assert.equal((await z("POST", `${POT}/naloga`, n2)).status, 202);
+    await caka(() => izhod.some((x) => x.method === "notifications/claude/channel" && x.params.meta.chat_id === n2.id));
+    assert.equal(u.status, 202);
+    assert.equal(rn.status, 409);
+    assert.equal(izhod.filter((x) => x.method === "notifications/claude/channel" && x.params.meta.chat_id === n.id).length, 0, "preklicana naloga ni v seji");
+  } finally {
+    odpri();
+    await r?.catch(() => undefined);
+    await s.ustavi();
+    izv.zapri();
+    p.stdin!.end();
+    await new Promise((x) => (p.exitCode !== null ? x(null) : p.on("exit", x)));
+    await rm(dir, { recursive: true, force: true });
+  }
+});

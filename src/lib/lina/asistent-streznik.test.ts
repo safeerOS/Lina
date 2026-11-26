@@ -72,11 +72,11 @@ function lazni() {
   return { iz, klici, dogodek: (id: string, d: Dogodek) => poslusalci.get(id)!(d) };
 }
 
-async function streznik(o: { krog: Array<{ id: string; kljuc: string }>; ura?: { t: number }; izvajalec?: Izvajalec; preberi?: typeof preberiKanal; rokRokovanja?: number; dnevnik?: (s: string) => void }) {
+async function streznik(o: { krog: Array<{ id: string; kljuc: string }>; ura?: { t: number }; izvajalec?: Izvajalec; preberi?: typeof preberiKanal; rokRokovanja?: number; dnevnik?: (s: string) => void; odpriSejoClaude?: () => Promise<{ ok: true } | { ok: false; razlog: "napaka" }> }) {
   const dir = await mkdtemp(path.join(tmpdir(), "lk-as-"));
   await pripraviKanal(o.krog, dir);
   const l = lazni();
-  const s = new AsistentStreznik({ root: dir, izvajalec: o.izvajalec ?? l.iz, zdaj: o.ura ? () => o.ura!.t : undefined, dnevnik: o.dnevnik ?? (() => {}), preberiKanal: o.preberi, rokRokovanja: o.rokRokovanja });
+  const s = new AsistentStreznik({ root: dir, izvajalec: o.izvajalec ?? l.iz, zdaj: o.ura ? () => o.ura!.t : undefined, dnevnik: o.dnevnik ?? (() => {}), preberiKanal: o.preberi, rokRokovanja: o.rokRokovanja, odpriSejoClaude: o.odpriSejoClaude });
   const { vrata, odtis } = await s.zazeni();
   const { cert } = await potrdiloAsistenta(dir);
   const z = (metoda: string, pot: string, telo?: unknown, tip?: string) => zahteva(vrata, cert, odtis, metoda, pot, telo, tip);
@@ -726,12 +726,12 @@ test("kontrola tiska: podpisana fotografija s telefona se samo shrani v prejeto;
 // --- naloga 25: /naloga atomarna (N4), grob preklicanih id (N3b, N6c/d). Stevilke so dogovorjene (10 min, 50 na napravo), ne iz kode.
 const ustaviNiz = (d: Naprava, id: string, cas?: number) => ({ id, posiljatelj: d.id, ...podpisi(d, (c, e) => nizUstavitve(id, d.id, c, e), cas) });
 /** Izvajalec, katerega razpolozljiv() caka na vrata (zadrzan POST med preverbo in zacetkom). */
-function zadrzan() {
+function zadrzan(seja = true) {
   const l = lazni();
   let odpri!: () => void;
   const vrata = new Promise<void>((r) => { odpri = r; });
   let razp = 0;
-  const iz: Izvajalec = { ...l.iz, razpolozljiv: async () => { razp++; await vrata; return true; } };
+  const iz: Izvajalec = { ...l.iz, razpolozljiv: async () => { razp++; await vrata; return seja; } };
   return { iz, klici: l.klici, odpri, razp: () => razp };
 }
 
@@ -744,8 +744,8 @@ test("naloga 25 N4: dve socasni oddaji istega id - ena izvedba, druga 409 obstaj
     const p1 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { izidi.push(r.status); return r; });
     await caka(() => z.razp() >= 1);
     const p2 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { izidi.push(r.status); return r; });
-    // brez rezervacije obe oddaji cakata na razpolozljiv; z njo druga takoj dobi 409
-    await caka(() => z.razp() >= 2 || izidi.length >= 1);
+    // brez rezervacije obe oddaji cakata na razpolozljiv; z njo druga caka na izid prve (in nato dobi 409)
+    await caka(() => z.razp() >= 2 || izidi.length >= 1, 300).catch(() => undefined);
     z.odpri();
     const [r1, r2] = await Promise.all([p1, p2]);
     assert.deepEqual([r1.status, r2.status].sort(), [202, 409]);
@@ -850,6 +850,49 @@ test("naloga 25: /ustavi brez veljavnega podpisa, z naprave izven seznama ali dr
     assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(BOR, id))).status, 403);
     assert.equal(s.l.klici.filter((k) => k.kaj === "ustavi").length, 0);
   } finally {
+    await s.pospravi();
+  }
+});
+
+test("naloga 25 (slepi pregled 1b): socasna oddaja istega id ob zaprti seji dobi 503 kot prva, ne 409 - telefon odda znova", async () => {
+  const z = zadrzan(false);
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  try {
+    const id = idNaloge();
+    const p1 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    await caka(() => z.razp() >= 1);
+    let drugi = 0;
+    const p2 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { drugi = r.status; return r; });
+    await caka(() => z.razp() >= 2 || drugi !== 0 || s.l.klici.length > 0, 300).catch(() => undefined);
+    z.odpri();
+    const [r1, r2] = await Promise.all([p1, p2]);
+    assert.equal(r1.status, 503);
+    assert.equal(r2.status, 503, "druga oddaja ne sme reci obstaja za nalogo, ki je racunalnik ni sprejel");
+    assert.equal(z.klici.filter((k) => k.kaj === "zacni").length, 0);
+  } finally {
+    z.odpri();
+    await s.pospravi();
+  }
+});
+
+test("naloga 25 (slepi pregled 2): /ustavi med cakanjem na zaprto sejo - seja Claude Code se za preklicano nalogo ne odpira", async () => {
+  const z = zadrzan(false);
+  let odprta = 0;
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz, odpriSejoClaude: async () => { odprta++; return { ok: true }; } });
+  let p: Promise<Odgovor> | undefined;
+  try {
+    const id = idNaloge();
+    p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    await caka(() => z.razp() >= 1);
+    const u = await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id));
+    z.odpri();
+    const r = await p;
+    assert.equal(u.status, 202);
+    assert.equal(r.status, 409);
+    assert.equal(odprta, 0);
+  } finally {
+    z.odpri();
+    await p?.catch(() => undefined);
     await s.pospravi();
   }
 });

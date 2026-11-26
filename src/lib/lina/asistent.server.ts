@@ -51,7 +51,8 @@ export type Dogodek =
 export interface Izvajalec {
   readonly ime: string;
   razpolozljiv(): Promise<boolean>;
-  zacni(naloga: Naloga, naDogodek: (d: Dogodek) => void): Promise<void>;
+  /** `preklicana`: izvajalec jo preveri tik pred oddajo v sejo; true = naloga se ne odda in zacni vrze napako (naloga 25). */
+  zacni(naloga: Naloga, naDogodek: (d: Dogodek) => void, preklicana?: () => boolean): Promise<void>;
   /**
    * `posiljatelj` je naprava, ki je odobrila, `dokaz` njen podpis (kanal-claude.ts nizOdobritve). Odobritev s tuje naprave ali
    * brez podpisa nima ucinka.
@@ -619,7 +620,7 @@ export class IzvajalecClaudeCode implements Izvajalec {
     }
   }
 
-  async zacni(naloga: Naloga, naDogodek: (d: Dogodek) => void): Promise<void> {
+  async zacni(naloga: Naloga, naDogodek: (d: Dogodek) => void, preklicana?: () => boolean): Promise<void> {
     // varovalo tudi na strani Line: tujec ali pot tajnice ne pride niti do vticnice
     if (!dovoljenaNaloga(naloga, this.m.ozjiKrog())) throw new Error("Naloga ni dovoljena.");
     if (this.aktivne.has(naloga.id)) throw new Error("Naloga s tem ID ze tece.");
@@ -627,6 +628,11 @@ export class IzvajalecClaudeCode implements Izvajalec {
     const zacel = Date.now();
     this.aktivne.set(naloga.id, { naDogodek, posiljatelj: naloga.posiljatelj, rok: this.nastaviRok(naloga.id, zacel), povezana: true, zacel });
     const programi = await this.m.programi?.().catch(() => [] as string[]) ?? [];
+    if (preklicana?.()) {
+      clearTimeout(this.aktivne.get(naloga.id)?.rok);
+      this.aktivne.delete(naloga.id);
+      throw new Error("Naloga je bila preklicana pred oddajo.");
+    }
     this.poslji(s, {
       vrsta: "naloga",
       naloga: { id: naloga.id, besedilo: besediloZPrograni(naloga.besedilo, programi), posiljatelj: naloga.posiljatelj, izvor: naloga.izvor, dokaz: naloga.dokaz },
