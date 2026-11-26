@@ -56,8 +56,18 @@ test("CRR1: rezerva »vrata«, shranjeni naslov izgine, drug naslov v odobrenem 
     let vm: NodeJS.Dict<NetworkInterfaceInfo[]> = { enp1s0: [v4("127.0.0.5")] };
     nastaviOmrezjeNaslovov({ vmesniki: () => vm, izvor: async () => vm.enp1s0![0].address, prehodi: async () => ({ enp1s0: MAC_DOMA }) });
     registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
+    let ustavitev = 0;
+    registrirajVezoKlicev({ zagotovi: async () => undefined, ustavi: async () => { ustavitev += 1; } });
     await uskladiAsistenta(o.dir);
     assert.equal((await stanjeAsistenta(o.token, o.dir)).napakaKoda, "vrata");
+    // odtis se spremeni (nov vmesnik), shranjeni naslov ostane in vrata so zasedena: uskladitev tece, rezerva ostane, brez ponovnega zagona (N3)
+    vm = { enp1s0: [v4("127.0.0.5")], wlp2s0: [v4("127.0.0.7")] };
+    assert.equal(await preveriNaslovAsistenta(o.dir), true, "sprememba odtisa sprozi uskladitev");
+    const r = await stanjeAsistenta(o.token, o.dir);
+    assert.equal(r.samoGlobalLink, true);
+    assert.equal(r.napakaKoda, "vrata");
+    assert.equal(ustavitev, 0, "streznik in rele se nista ustavila");
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "nespremenjen odtis: brez uskladitve vsakih 30 s");
     // vrata ostanejo zasedena na starem naslovu; vmesnik dobi nov naslov v istem (odobrenem) omrezju
     vm = { enp1s0: [v4("127.0.0.6")] };
     assert.equal(await preveriNaslovAsistenta(o.dir), true, "izginotje naslova sprozi uskladitev tudi v rezervi »vrata«");
@@ -65,8 +75,7 @@ test("CRR1: rezerva »vrata«, shranjeni naslov izgine, drug naslov v odobrenem 
     const s = await stanjeAsistenta(o.token, o.dir);
     assert.equal(s.tece, true, s.napaka);
     assert.equal(s.samoGlobalLink, false);
-    // naslov ostane, vrata ostanejo zasedena: rezerva se ohrani, brez ponovnega zagona vsakih 30 s (N3)
-    assert.equal(await preveriNaslovAsistenta(o.dir), false);
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "nov streznik doma, nespremenjeno omrezje: brez uskladitve");
   } finally {
     await new Promise<void>((ok) => zaseden.close(() => ok()));
     await pospravi(o);
@@ -83,7 +92,7 @@ function stanjeQr(naslov: string, vrata: number, koda: string): Promise<number> 
   });
 }
 
-test("CRR2: zaslon, ki odide, preklice samo SVOJ QR - QR drugega zaslona ostane veljaven; cakajoce prijave ostanejo", async () => {
+test("CRR2: zaslon, ki odide, preklice samo SVOJ QR - QR drugega zaslona ostane veljaven", async () => {
   const o = await pripravi("127.0.0.5", [`127.0.0.0/24|${MAC_DOMA}`], false);
   try {
     nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5", prehodi: async () => ({ enp1s0: MAC_DOMA }) });
