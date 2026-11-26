@@ -50,7 +50,7 @@ object Racunalniki {
         ime?.filter {
             val t = Character.getType(it)
             !Character.isISOControl(it) && t != Character.FORMAT.toInt() && t != Character.LINE_SEPARATOR.toInt() && t != Character.PARAGRAPH_SEPARATOR.toInt()
-        }?.trim()?.take(60)?.ifEmpty { null }
+        }?.trim()?.take(60)?.let { if (it.isNotEmpty() && it.last().isHighSurrogate()) it.dropLast(1) else it }?.ifEmpty { null }
 
     /**
      * Nova seznanitev: isti odtis posodobi naslov in vrata (ime, rele, prepoved ostanejo); drug odtis se doda na konec. Nikoli ne
@@ -101,10 +101,11 @@ object Racunalniki {
      * zrcalo ne ujema z izbranim, ga je spremenila ona: brez zrcala = izbrani je bil pozabljen; drug odtis = nova seznanitev (doda se).
      */
     fun uskladi(s: SeznamRacunalnikov, naslov: String?, vrata: Int, odtis: String?, veljaven: (Racunalnik) -> Boolean): SeznamRacunalnikov {
-        val i = s.izbrani() ?: return s
-        if (odtis == null || naslov == null) return odstrani(s, i.odtis)
+        val i = s.izbrani()
+        if (odtis == null || naslov == null) return if (i == null) s else odstrani(s, i.odtis)
         val o = odtis.lowercase()
-        if (o == i.odtis) return s
+        // isti racunalnik z istim naslovom: nic; prazen seznam ali nov naslov istega (krog 3 N1, N2) se uskladita kot seznanitev
+        if (i != null && o == i.odtis && i.naslov == naslov && i.vrata == vrata) return s
         val r = Racunalnik(o, naslov, vrata)
         return if (veljaven(r)) dodaj(s.copy(samodejno = true), o, naslov, vrata)?.copy(samodejno = s.samodejno) ?: s else s
     }

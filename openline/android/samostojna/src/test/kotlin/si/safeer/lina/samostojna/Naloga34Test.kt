@@ -262,6 +262,20 @@ class Naloga34Test {
         assertEquals(oC, u.izbran)
         assertEquals(s, Racunalniki.uskladi(s, "8.8.8.8", 8446, oC, veljaven), "neveljavno zrcalo se ne doda")
         val r = s.copy(samodejno = false)
-        assertFalse(Racunalniki.uskladi(r, "192.168.1.30", 8446, oC, veljaven).samodejno)
+        val ur = Racunalniki.uskladi(r, "192.168.1.30", 8446, oC, veljaven)
+        assertFalse(ur.samodejno)
+        assertEquals(oC, ur.izbran, "seznanitev v starejsi razlicici je bila izrecna izbira")
+        // krog 3 N1: prazen seznam (vse pozabljeno), starejsa seznani C -> C je na seznamu
+        assertEquals(listOf(oC), Racunalniki.uskladi(SeznamRacunalnikov(), "192.168.1.30", 8446, oC, veljaven).racunalniki.map { it.odtis })
+        assertEquals(SeznamRacunalnikov(), Racunalniki.uskladi(SeznamRacunalnikov(), null, 0, null, veljaven))
+        // krog 3 N2: isti racunalnik z novim naslovom (DHCP) -> nov naslov ostane
+        val a = Racunalniki.uskladi(s, "192.168.1.99", 8447, oA, veljaven).po(oA)!!
+        assertEquals("192.168.1.99" to 8447, a.naslov to a.vrata)
+    }
+
+    @Test fun `K3 - ime se ne konca z osamljenim nadomestnim znakom`() {
+        val c = Racunalniki.cistoIme("a" + "\uD83D\uDE00".repeat(59))!!
+        assertFalse(c.last().isHighSurrogate())
+        assertEquals(59, c.length)
     }
 }

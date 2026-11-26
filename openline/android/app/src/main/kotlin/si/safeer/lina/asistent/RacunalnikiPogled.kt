@@ -60,13 +60,19 @@ class RacunalnikiPogled(private val a: Activity, private val kontroler: () -> As
     }
 
     private var zadnjiPrikaz: String? = null
+    private val vrsticeStanja = HashMap<String, TextView>()
 
     fun osvezi() {
         val s = AsistentShramba.seznam(a)
-        // dostopnost (slepi pregled 34 krog 2 N7): seznam se zgradi znova samo ob spremembi, sicer TalkBack/tipkovnica izgubita fokus
-        val prikaz = Racunalniki.vJson(s) + s.racunalniki.joinToString { stanje(it, it.odtis == s.izbrani()?.odtis) }
-        if (prikaz == zadnjiPrikaz) return
+        // dostopnost (slepi pregled 34 krog 2 N7, krog 3): ob enakem seznamu se samo posodobi besedilo stanja (meritve vsakih 15 s),
+        // gradi se znova samo ob spremembi seznama - sicer TalkBack/tipkovnica izgubita fokus na gumbih
+        val prikaz = Racunalniki.vJson(s)
+        if (prikaz == zadnjiPrikaz) {
+            for (r in s.racunalniki) vrsticeStanja[r.odtis]?.let { v -> stanje(r, r.odtis == s.izbrani()?.odtis).let { if (v.text != it) v.text = it } }
+            return
+        }
         zadnjiPrikaz = prikaz
+        vrsticeStanja.clear()
         koren.visibility = if (s.racunalniki.isEmpty()) View.GONE else View.VISIBLE
         samodejno.setText(if (s.samodejno) R.string.computers_auto_on else R.string.computers_auto_off)
         samodejno.visibility = if (s.racunalniki.size > 1) View.VISIBLE else View.GONE
@@ -74,7 +80,7 @@ class RacunalnikiPogled(private val a: Activity, private val kontroler: () -> As
         val izbran = s.izbrani()?.odtis
         for (r in s.racunalniki) {
             dodaj(TextView(a).apply { setTextAppearance(R.style.Gw_Body); text = r.ime }, 12, seznam)
-            dodaj(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); text = stanje(r, r.odtis == izbran) }, 2, seznam)
+            dodaj(TextView(a).apply { setTextAppearance(R.style.Gw_Muted); text = stanje(r, r.odtis == izbran) }.also { vrsticeStanja[r.odtis] = it }, 2, seznam)
             val gumbi = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             fun gumb(besedilo: Int, delo: () -> Unit) = gumbi.addView(Button(a, null, 0, R.style.Gw_Button).apply {
                 setText(besedilo); contentDescription = a.getString(besedilo) + ": " + r.ime; setOnClickListener { delo() }
