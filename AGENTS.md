@@ -1865,3 +1865,13 @@ Lastnik: »pa imejmo mi tudi za ta del kode licenco AGPL«. Lina se iz lastnikov
   narekovanja, posodobitev LearnHarness (B9). Stikalo v Nastavitvah (UcenjeLHStikalo), privzeto vklopljeno, seznam enot s koraki, izbris.
 - Preizkusi: ucenje-lh.test.ts (logika, licenca, brez omrezja, edini vhod, zastavica), naloga-ucenje-lh.test.ts (merilo z nadomestnim modelom).
   NEPREVERJENO: prava gradnja vite/nitro z LINA_BREZ_UCENJA_LH=1 (paket ni bil zgrajen), kakovost preverb s pravim modelom.
+
+## Novice v pogovoru (lastnik 26. 11. 2026, naloga 32: »Zakaj ne zna novice dneva«)
+- Lina NIKOLI ne odgovori »nimam dostopa do novic«: »novice dneva«, »kaj je novega«, »novice o X« prebere KODA (novice-pogovor.ts,
+  noviceZaPogovor v novice.server.ts) iz virov zaslona Novice ali, brez virov, iz privzetih javnih RSS (RTV SLO, STA; brez kljuca,
+  brez strganja strani). Odgovor (naslov, vir, https povezava) sestavi koda brez modela; deluje tudi brez mozganov. Telefon enako
+  (NoviceTelefon.kt). Orkestrator ima orodje preberi_novice (razred zunanje, kot isci_splet).
+- Vsebina virov je PODATEK: odgovor z novicami je v vhodu modela oznacen (izVirov ali po glavi jeOdgovorNovic, ker sinhronizacija
+  zastavic ne nese), v spomin gre samo zapis brez naslovov; z nezaupano vsebino v oknu modela predlog naloge ali gradnje caka
+  lastnika (brez dovoljenja za podobne). Tema samo z »o« (»pri nalogi«, »glede ponudbe« niso novice). B9: ven gre samo tema (Brave).
+- NEPREVERJENO z omrezjem: naslova privzetih virov (scripts/preveri-privzete-novice.mts na testnem PC).
