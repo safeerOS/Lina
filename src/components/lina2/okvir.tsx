@@ -1,7 +1,9 @@
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LinaDesk } from "@/components/lina-desk.tsx";
-import { izberiModelFn, logoutFn, stanjeVprasanjAgentovFn, telefonZaLinijoFn } from "@/lib/lina/functions.ts";
+import { izberiModelFn, logoutFn, obvestiloPosodobitveFn, stanjeVprasanjAgentovFn, telefonZaLinijoFn } from "@/lib/lina/functions.ts";
+import type { ObvestiloPosodobitve } from "@/lib/lina/posodobitev-samodejno.server.ts";
+import { PasPosodobitve } from "./pas-posodobitve.tsx";
 import { t } from "@/lib/lina/besedila.ts";
 import { oznakaLinije, type TelefonLinije } from "@/lib/lina/oznaka-linije.ts";
 import { IME_PONUDNIKA } from "@/lib/lina/types.ts";
@@ -28,6 +30,7 @@ type Props = Parameters<typeof LinaDesk>[0];
 const LASTNI: ReadonlyArray<Stran> = ["domov", "pogovor", "koledar", "imenik", "novice", "mediji", "kontrola", "racunalnik"];
 const KLJUC_MENIJA = "lina2-menu-zmanjsan";
 const KLJUC_OGLED = "lina-klici-ogled";
+const KLJUC_OBVESTILA_POSODOBITVE = "lina-obvestilo-posodobitve";
 
 export function Lina2Okvir(props: Props) {
   const router = useRouter();
@@ -142,10 +145,48 @@ export function Lina2Okvir(props: Props) {
     };
   }, []);
 
+  // Naloga 28: streznik sam preverja GitHub (6 h); tu samo beremo njegovo stanje. Obvestilo namizja enkrat na razlicico (ce je
+  // dovoljeno); klik nanj odpre Domov s pasom in gumbom Posodobi (obvestilo brskalnika na Linuxu gumba ne nosi).
+  const [posodobitev, setPosodobitev] = useState<ObvestiloPosodobitve | null>(null);
+  const pojdiRef = useRef<(s: Stran) => void>(() => undefined);
+  useEffect(() => {
+    let ziv = true;
+    // brez preskoka skritega okna: Lina v pladnju mora obvestiti (branje je iz pomnilnika streznika, brez omrezja)
+    const osvezi = () => {
+      void obvestiloPosodobitveFn().then((o) => {
+        if (!ziv) return;
+        setPosodobitev(o);
+        if (!o.razlicica || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+        try {
+          if (localStorage.getItem(KLJUC_OBVESTILA_POSODOBITVE) === o.razlicica) return;
+          localStorage.setItem(KLJUC_OBVESTILA_POSODOBITVE, o.razlicica);
+        } catch {
+          return;
+        }
+        const r = o.razlicica;
+        const obv = new Notification(t2("posObvestiloNaslov").replace("{r}", () => r), { body: t2("posObvestiloTelo") });
+        obv.onclick = () => {
+          window.focus();
+          pojdiRef.current("domov");
+        };
+      }).catch(() => undefined);
+    };
+    osvezi();
+    const c = setInterval(osvezi, 10 * 60_000);
+    document.addEventListener("visibilitychange", osvezi);
+    return () => {
+      ziv = false;
+      clearInterval(c);
+      document.removeEventListener("visibilitychange", osvezi);
+    };
+  }, []);
+
   function pojdi(cilj: Stran) {
     setStran(veljavnaStran(cilj, nacin));
     window.scrollTo({ top: 0 });
   }
+
+  pojdiRef.current = pojdi;
 
   /** Zaslon je prevzel ukaz ali glasovno zahtevo: pozabi ju, da se ob vrnitvi na zaslon ne ponovita. */
   function prevzeto() {
@@ -254,6 +295,7 @@ export function Lina2Okvir(props: Props) {
             {aktivnaStran === "domov" && nacin === "osebna" && !(props.pravila.imeLastnika ?? "").trim() ? (
               <ImeKartica onShranjeno={() => router.invalidate()} />
             ) : null}
+            {aktivnaStran === "domov" && posodobitev?.razlicica ? <PasPosodobitve razlicica={posodobitev.razlicica} opombe={posodobitev.opombe} /> : null}
             {aktivnaStran === "domov" ? (
               <DomovPanel
                 calls={props.calls}

@@ -54,7 +54,8 @@ const NADZORNI = /[\u0000-\u001f\u007f-\u009f]/;
 
 export type Vir = "github" | "mapa";
 /** urlPodpisa samo, ce izdaja ima SHA256SUMS.sig (brez njega zagon vrne razlog »podpis«). */
-export type Kandidat = { razlicica: string; vir: Vir; ime: string; url?: string; urlVsot?: string; urlPodpisa?: string; pot?: string };
+/** opombe: besedilo izdaje (body) z GitHuba, NEZAUPANO in neobdelano; prikaze se samo po ocistiOpombe (posodobitev-samodejno). */
+export type Kandidat = { razlicica: string; vir: Vir; ime: string; url?: string; urlVsot?: string; urlPodpisa?: string; pot?: string; opombe?: string };
 export type KodaIzida = "namesceno" | "preklicano" | "napaka" | "ni_novejsa" | "napacen_paket" | "vsota";
 export type IzidPosodobitve = { cas: string; razlicica: string; ok: boolean; koda: KodaIzida };
 export type RazlogNiNaVoljo = "platforma" | "ni_skripte" | "ni_namescena";
@@ -225,7 +226,7 @@ function privzetoZazeni(program: string, argumenti: string[], env: Record<string
   return spawn(program, argumenti, { detached: true, stdio: "ignore", env });
 }
 
-function odv(o: Odvisnosti) {
+export function odv(o: Odvisnosti) {
   const fetchFn = o.fetchFn ?? fetch;
   return {
     platforma: o.platforma,
@@ -243,7 +244,7 @@ function odv(o: Odvisnosti) {
     javniKljuc: o.javniKljuc ?? JAVNI_KLJUC_IZDAJ,
   };
 }
-type Odv = ReturnType<typeof odv>;
+export type Odv = ReturnType<typeof odv>;
 
 export async function namescenaRazlicica(o: Odv, paket: ImePaketa = IME_PAKETA): Promise<string | null> {
   try {
@@ -273,7 +274,8 @@ async function mapaVira(root: string): Promise<string | null | "neveljavno"> {
   return varnaPot(vsebina.mapa) ? path.resolve(vsebina.mapa) : "neveljavno";
 }
 
-const predpomnilnik = new Map<ImePaketa, { cas: number; kandidat: Kandidat | null }>();
+/** etag: zadnji ETag odgovora 200 (naloga 28): naslednja zahteva poslje If-None-Match, 304 obdrzi ta kandidat. */
+const predpomnilnik = new Map<ImePaketa, { cas: number; kandidat: Kandidat | null; etag?: string }>();
 export function ponastaviPredpomnilnik(): void {
   predpomnilnik.clear();
 }
@@ -282,19 +284,33 @@ export function ponastaviPredpomnilnik(): void {
 export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
   const shranjen = predpomnilnik.get(paket);
   if (!sveze && shranjen && o.zdaj() - shranjen.cas < PREDPOMNILNIK_MS) return shranjen.kandidat;
+  const glave: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "Lina" };
+  if (shranjen?.etag) glave["if-none-match"] = shranjen.etag;
   const odgovor = await o.fetchFn(`https://api.github.com/repos/${PAKETI[paket]}/releases/latest`, {
     redirect: "error",
-    headers: { accept: "application/vnd.github+json", "user-agent": "Lina" },
+    headers: glave,
     signal: AbortSignal.timeout(15_000),
   });
+  if (odgovor.status === 304 && shranjen) {
+    await odgovor.body?.cancel().catch(() => undefined);
+    predpomnilnik.set(paket, { ...shranjen, cas: o.zdaj() });
+    return shranjen.kandidat;
+  }
   let kandidat: Kandidat | null = null;
+  let etag: string | undefined;
   if (odgovor.status === 404) {
     await odgovor.body?.cancel().catch(() => undefined);
   } else {
-    if (!odgovor.ok) throw new Error("GitHub ni odgovoril.");
+    // 304 brez znane izdaje, 403/429 (omejitev GitHuba) in 5xx so napake: klicatelj (samodejna preverba) jih steje v odmik
+    if (odgovor.status !== 200) {
+      await odgovor.body?.cancel().catch(() => undefined);
+      throw new Error("GitHub ni odgovoril.");
+    }
     const besedilo = await odgovor.text();
     if (besedilo.length > NAJVEC_API) throw new Error("Odgovor je prevelik.");
-    const izdaja = JSON.parse(besedilo) as { tag_name?: unknown; assets?: Array<{ name?: unknown }> };
+    const e = odgovor.headers.get("etag");
+    if (e && e.length <= 200 && !NADZORNI.test(e)) etag = e;
+    const izdaja = JSON.parse(besedilo) as { tag_name?: unknown; body?: unknown; assets?: Array<{ name?: unknown }> };
     const oznaka = izdaja.tag_name;
     const imena = Array.isArray(izdaja.assets) ? izdaja.assets.map((a) => (typeof a?.name === "string" ? a.name : "")) : [];
     const deb = najnovejsiPaket(imena, paket);
@@ -302,9 +318,10 @@ export async function kandidatGithub(o: Odv, sveze = false, paket: ImePaketa = I
       const osnova = `https://github.com/${PAKETI[paket]}/releases/download/${oznaka}/`;
       kandidat = { razlicica: deb.razlicica, vir: "github", ime: deb.ime, url: osnova + deb.ime, urlVsot: osnova + "SHA256SUMS" };
       if (imena.includes(IME_PODPISA)) kandidat.urlPodpisa = osnova + IME_PODPISA;
+      if (typeof izdaja.body === "string") kandidat.opombe = izdaja.body.slice(0, NAJVEC_API);
     }
   }
-  predpomnilnik.set(paket, { cas: o.zdaj(), kandidat });
+  predpomnilnik.set(paket, { cas: o.zdaj(), kandidat, etag });
   return kandidat;
 }
 
@@ -314,7 +331,7 @@ async function kandidatMapa(o: Odv, mapa: string, paket: ImePaketa = IME_PAKETA)
 }
 
 /** Mapa iz posodobitev.json (razvojni racunalnik) velja za vse pakete s seznama: v njej se isce <paket>_*_amd64.deb. */
-async function kandidat(o: Odv, root: string, sveze: boolean, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
+export async function kandidat(o: Odv, root: string, sveze: boolean, paket: ImePaketa = IME_PAKETA): Promise<Kandidat | null> {
   const mapa = await mapaVira(root);
   if (mapa === "neveljavno") return null;
   return mapa ? kandidatMapa(o, mapa, paket) : kandidatGithub(o, sveze, paket);
@@ -333,7 +350,7 @@ export function posodobitevTece(): boolean {
   return tece;
 }
 
-async function predpogoj(o: Odv, paket: ImePaketa = IME_PAKETA): Promise<RazlogNiNaVoljo | { namescena: string }> {
+export async function predpogoj(o: Odv, paket: ImePaketa = IME_PAKETA): Promise<RazlogNiNaVoljo | { namescena: string }> {
   if (!jeLinuxAmd64(o.platforma, o.arh)) return "platforma";
   if (!o.obstaja(o.skripta)) return "ni_skripte";
   const namescena = await namescenaRazlicica(o, paket);

@@ -13,6 +13,7 @@ import { zazeniRazporejevalnik } from "./claude-naloge.server.ts";
 import { uskladiGlasTelefona } from "./glas-telefon.server.ts";
 import { registrirajPrikljucekTelefona } from "./live/telefon-zagon.server.ts";
 import { ustvariVezoKlicev } from "./openline-veza.server.ts";
+import { zazeniSamodejnoPreverbo } from "./posodobitev-samodejno.server.ts";
 import { loadPravila } from "./pravila.server.ts";
 import { uskladiRsdo } from "./rsdo-streznik.server.ts";
 import { pripraviGlasObZagonu, type StanjeZagona } from "./service.server.ts";
@@ -72,6 +73,8 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
     .catch(() => undefined);
   // urnik samostojnih opravil (pravila avtonomije): sam nic ne vklopi; brez vklopljenih pravil obhod ne naredi nicesar
   zazeniAvtonomijo(resolveDataDir(dir));
+  // naloga 28: samodejna preverba posodobitev (2 min po zagonu, nato 6 h); samo namescena lupina, stikalo privzeto vklopljeno
+  zazeniSamodejnoPreverbo(dir);
   // zagon ob prijavi (naloga 21): privzeto vklopljen; vnos XDG zapise samo streznik, ki ga je zagnala lupina; napaka ne podre zagona
   await uskladiSamodejniZagon(dir).catch(() => undefined);
   return new Response(stanje, { status: 200, headers: glave });

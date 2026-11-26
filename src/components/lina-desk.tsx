@@ -28,7 +28,7 @@ import { Avtonomija } from "@/components/avtonomija.tsx";
 import { ModelAsistentke } from "@/components/model-asistentke.tsx";
 import { tM } from "@/lib/lina/besedila-mozgani.ts";
 import { SonioxNastavitve } from "@/components/soniox-nastavitve.tsx";
-import { posodobiLinoFn, posodobiPaketFn, stanjeDodatkovFn, stanjeDrugihPaketovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
+import { nastaviSamodejnoPosodobitevFn, obvestiloPosodobitveFn, posodobiLinoFn, posodobiPaketFn, stanjeDodatkovFn, stanjeDrugihPaketovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
 import { StraniNastavitve } from "@/components/strani-nastavitve.tsx";
 import { DovoljenjaNastavitve } from "@/components/dovoljenja-nastavitve.tsx";
 import { NarocilaNastavitve } from "@/components/narocila-nastavitve.tsx";
@@ -3841,8 +3841,25 @@ function PosodobitevPanel({ onError }: { onError: (sporocilo: string) => void })
       .finally(() => setDelam(false));
   };
   const naVoljo = stanje?.naVoljo === true ? stanje : null;
+  // naloga 28: stikalo samodejne preverbe (privzeto vklopljeno); dokler stanje ni prebrano, je onemogoceno
+  const [samodejno, setSamodejno] = useState<boolean | null>(null);
+  useEffect(() => {
+    obvestiloPosodobitveFn().then((o) => setSamodejno(o.samodejno)).catch(() => {});
+  }, []);
+  const preklopiSamodejno = (vklop: boolean) => {
+    nastaviSamodejnoPosodobitevFn({ data: { vklop } })
+      .then((o) => setSamodejno(o.samodejno))
+      .catch(() => onError(t("posNapaka")));
+  };
   return (
     <Razdelek id="nast-posodobitev" naslov={t("posNaslov")} opis={t("posUvod")}>
+      <label className="mb-3 flex max-w-prose items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={samodejno ?? true} disabled={samodejno === null} onChange={(e) => preklopiSamodejno(e.target.checked)} />
+        <span>
+          <span className="font-medium">{t("posSamodejno")}</span>
+          <span className="block text-xs text-[var(--color-moss)]">{t("posSamodejnoOpis")}</span>
+        </span>
+      </label>
       {!stanje ? (
         <p className="text-sm text-[var(--color-moss)]" role="status">{t("posNalagam")}</p>
       ) : !naVoljo ? (

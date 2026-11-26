@@ -1575,6 +1575,24 @@ export const posodobiLinoFn = createServerFn({ method: "POST" }).handler(async (
   return zacniPosodobitev(await sessionToken());
 });
 
+// --- Naloga 28 (26. 11. 2026): samodejna preverba posodobitev. Branje vrne samo stanje v pomnilniku (brez zahteve na GitHub).
+export const obvestiloPosodobitveFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { obvestiloPosodobitve } = await import("./posodobitev-samodejno.server.ts");
+  return obvestiloPosodobitve(await sessionToken());
+});
+
+export const nastaviSamodejnoPosodobitevFn = createServerFn({ method: "POST" })
+  .validator((data: { vklop?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    const { nastaviSamodejno } = await import("./posodobitev-samodejno.server.ts");
+    // vrednost gre naprej nespremenjena: tip (boolean) preveri nastaviSamodejno
+    return nastaviSamodejno(await sessionToken(), data?.vklop);
+  });
+
 // --- 25. 11. 2026: drugi Safeer programi (samo namesceni, samo s seznama PAKETI). Brskalnik da samo ime; streznik ga preveri.
 export const stanjeDrugihPaketovFn = createServerFn({ method: "GET" }).handler(async () => {
   noStore();
