@@ -45,6 +45,8 @@ class Asistent(
     private val racunalnikSeznanjen: () -> Boolean = { false },
     // Nameščena različica (BuildConfig.VERSION_NAME); prazno = Lina različice ne pozna in je ne ugiba.
     private val razlicica: String = "",
+    // Naloga 32: novice iz javnih virov RSS brez kljuca (odgovor sestavi koda, ne model).
+    private val novice: BralnikNovic? = null,
 ) {
     /** Ali je zadnji obrat bral nezaupano besedilo (rezultati orodij, priponke): takrat aplikacija dejanje vedno potrdi pri uporabniku. */
     // N2 (pregled 1750): ko je nezaupana vsebina v seji, ostane true do konca seje (tudi po obnovi zgodovine) - samo vklop, nikoli izklop.
@@ -147,6 +149,20 @@ class Asistent(
             zgodovina.add(Sporocilo("user", vnos)); zgodovina.add(Sporocilo("model", o)); obrezi()
             zapomni(vnos, o)
             return Odgovor.Besedilo(o)
+        }
+        // Naloga 32: »novice dneva« prebere koda iz javnih virov (deluje brez kljuca). Naslovi so nezaupani: v zgodovino gre samo zapis,
+        // seja ostane nezaupana (dejanja potrdi uporabnik).
+        val bralnik = novice
+        if (bralnik != null && priponke.isEmpty() && !jeNezaupano(vnos)) {
+            val n = NoviceTelefon.namera(vnos)
+            val o = n?.let { runCatching { bralnik.odgovori(it.tema, orodja?.iskanjeNaVoljo == true) }.getOrNull() }
+            if (n != null && o != null) {
+                zadnjiObratPoOrodjih = true
+                val zapis = "[program: uporabniku so bili prikazani naslovi novic${n.tema?.let { " o temi »${NoviceTelefon.cistNaslov(it)}«" } ?: " dneva"} iz javnih virov]"
+                zgodovina.add(Sporocilo("user", vnos)); zgodovina.add(Sporocilo("model", zapis)); obrezi()
+                zapomni(vnos, zapis)
+                return Odgovor.Besedilo(o)
+            }
         }
         // T4 (pregled 0213): dosegljivost (omrezna zahteva, do nekaj sekund) se meri samo, ko vprasanje ali odgovor zadeva racunalnik,
         // povezavo ali nalogo; neizmerjen obrat ni nikoli DOSEGLJIV.

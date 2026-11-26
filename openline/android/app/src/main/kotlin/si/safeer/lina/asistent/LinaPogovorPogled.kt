@@ -16,6 +16,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import si.safeer.lina.samostojna.Asistent
+import si.safeer.lina.samostojna.BralnikNovic
 import si.safeer.lina.samostojna.KoledarIzvajalec
 import si.safeer.lina.samostojna.GoogleZetonOsvezevalnik
 import si.safeer.lina.samostojna.PrijavaGoogle
@@ -72,6 +73,8 @@ class LinaPogovorPogled(
     private val zapiski = ZapiskiShramba(a)
     private val googleShramba = GoogleShramba(a)
     private val prenos = AndroidPrenos()
+    // Naloga 32: en bralnik (predpomnilnik 10 min) za vse asistentke tega zaslona
+    private val bralnikNovic = BralnikNovic(prenos)
     private val google = GoogleZetonOsvezevalnik(SkupniKljuci.shrambaZaPonudnika(a, Ponudnik.VERTEX), prenos)
     /** Sistemski nadzor telefona in skupni modul soglasij (24. 11. 2026). */
     private val sistem = SistemskiNadzorAndroid(a)
@@ -449,7 +452,8 @@ class LinaPogovorPogled(
         return Asistent(odjemalec, navodilo, orodja = orodja, spomin = SpominPogovorovPogled.spomin(a), racunalnikPovezan = racunalnikPovezan,
             racunalnikSeznanjen = racunalnikSeznanjen, razlicica = si.safeer.lina.BuildConfig.VERSION_NAME,
             koledar = KoledarIzvajalec(KoledarAndroid(a)), seja = SpominPogovorovPogled.seja(a),
-            zapiski = { vidniZapiski(zapiski.beri()).map { it.besedilo } }, tockeNaloge = { TockeNalog.vklopljeno(a) }, sistem = sistem).also { asistent = it; asistentDan = danes }
+            zapiski = { vidniZapiski(zapiski.beri()).map { it.besedilo } }, tockeNaloge = { TockeNalog.vklopljeno(a) }, sistem = sistem,
+            novice = bralnikNovic).also { asistent = it; asistentDan = danes }
     }
 
     /** Enkrat (ob prvem pogovoru) vpraša za dovoljenje branja koledarja; zavrnitev se ne ponavlja (orodje takrat pove, da dovoljenja ni). */
