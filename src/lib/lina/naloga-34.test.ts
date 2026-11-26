@@ -95,6 +95,10 @@ test("obremenitevRacunalnika: srednja vrednost je 5-min load, zaokrozena; ime br
   assert.equal(o.obremenitev5, 2.35);
   assert.equal(o.ime, ("pc" + "x".repeat(100)).slice(0, 60));
   assert.equal(o.prostMb, Math.floor(1e9 / 1048576));
+  // rez po znakih: 70 emoji -> 60 celih znakov, brez osamljenega nadomestnega znaka
+  const e = obremenitevRacunalnika({ loadavg: () => [1, 1, 1], jedra: () => 2, prostB: () => 1, ime: () => "\u{1F600}".repeat(70) });
+  assert.equal([...e.ime].length, 60);
+  assert.equal(e.ime, "\u{1F600}".repeat(60));
 });
 
 test("obremenitevRacunalnika: neveljavne vrednosti (NaN, negativno, prazno ime) se izpustijo ali dobijo varno privzeto", () => {

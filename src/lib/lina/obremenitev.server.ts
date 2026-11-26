@@ -12,7 +12,8 @@ const PRAVI: Viri = { loadavg: () => os.loadavg(), jedra: () => os.availablePara
 export function obremenitevRacunalnika(v: Viri = PRAVI): ObremenitevRacunalnika {
   let surovo = "";
   try { surovo = v.ime(); } catch { /* ime gostitelja ni berljivo: privzeto ime */ }
-  const ime = [...surovo].filter((c) => !/[\p{Cc}\p{Cf}]/u.test(c)).join("").trim().slice(0, 60) || "Racunalnik";
+  // po znakih (ne enotah UTF-16): rez ne pusti osamljenega nadomestnega znaka
+  const ime = [...[...surovo].filter((c) => !/[\p{Cc}\p{Cf}]/u.test(c)).join("").trim()].slice(0, 60).join("") || "Racunalnik";
   const o: ObremenitevRacunalnika = { ime };
   const jedra = v.jedra();
   if (Number.isInteger(jedra) && jedra > 0 && jedra <= 1024) o.jedra = jedra;
