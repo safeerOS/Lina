@@ -221,6 +221,14 @@ export const NAJVEC_TELO_SINHRON = 768 * 1024;
 export const NAJVEC_TELO_SLIKA = 16 * 1024 * 1024;
 export const POT_SLIKA_KONTROLE = "/api/asistent/v1/kontrola-tiska/slika";
 export const NAJVEC_NALOG = 200;
+/**
+ * Naloga 25 (N3b, N6c/d): podpisan /ustavi za id, ki ga racunalnik se nima, zapise id v grob te naprave; poznejsi POST /naloga s tem
+ * id dobi 409 »obstaja« (telefon: sprejeta, ne odda znova) in se ne izvede. Rok mora biti daljsi od okna podpisa (OKNO_PODPISA_MS):
+ * zadrzan POST je star najvec toliko, potem ga zavrne ze preverba casa.
+ */
+export const ROK_GROBA_MS = 10 * 60_000;
+export const NAJVEC_GROB_NA_NAPRAVO = 50;
+export const NAJVEC_GROB = 1000;
 export const NAJVEC_DOGODKOV = 200;
 /** SR-8: telefon zavrne odgovor nad 64 KiB, zato Lina dogodke razdeli (z rezervo za ovojnico). */
 export const NAJVEC_ODGOVOR_DOGODKOV_B = 48 * 1024;
@@ -406,6 +414,10 @@ export function imeNaprave(ime: unknown): ime is string {
 export class AsistentStreznik {
   private streznik: Server | null = null;
   private readonly naloge = new Map<string, NalogaTelefona>();
+  /** Naloga 25 N4: id, ki ga /naloga ze obdeluje (od preverjenega podpisa do konca zacni); ustavi = podpisan /ustavi med tem. */
+  private readonly zacenja = new Map<string, { posiljatelj: string; ustavi: Dokaz | null }>();
+  /** Naloga 25 N3b: posiljatelj + "\n" + id -> cas zapisa (vrstni red vstavljanja = od najstarejsega). */
+  private readonly grob = new Map<string, number>();
   private readonly videni = new Map<string, number>();
   private readonly neznani = new Map<string, number[]>();
   private readonly zahteve = new Map<string, number[]>();
@@ -722,31 +734,61 @@ export class AsistentStreznik {
       throw new Napaka(400, "oblika", "Besedilo je prazno, predolgo ali ni veljaven Unicode.");
     }
     const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizNaloge(id, posiljatelj as string, besedilo, c, e));
-    if (this.naloge.has(id)) throw new Napaka(409, "obstaja", "Naloga s tem id ze obstaja.");
+    // naloga 25 N4: od tu do rezervacije brez await - dve socasni oddaji istega id: ena izvedba, druga 409 »obstaja«
+    const obstaja = () => new Napaka(409, "obstaja", "Naloga s tem id ze obstaja.");
+    if (this.vGrobu(posiljatelj as string, id) || this.naloge.has(id) || this.zacenja.has(id)) throw obstaja();
     this.pocisti();
-    if (this.naloge.size >= NAJVEC_NALOG) throw new Napaka(429, "prevec", "Prevec nalog hkrati.");
-    if (!(await this.m.izvajalec.razpolozljiv().catch(() => false))) {
-      // naloga 18: podpis naprave s seznama kanala (vsak dodan telefon, tudi prek releja) je ze preverjen (preveri zgoraj) - samo ta pot
-      // sme odpreti sejo; to NI clanstvo ozjega kroga Safeer Linka. Naloga se ne zadrzi (glej odpriSejoClaude)
-      const z = this.m.odpriSejoClaude ? await this.m.odpriSejoClaude().catch(() => ({ ok: false as const, razlog: "napaka" as const })) : null;
-      throw new Napaka(503, "claude-code-ni", "Seja Claude Code na racunalniku ni odprta ali ni dosegljiva.", {
-        stanje: { claudeCode: "zaprta", ...(z ? { zagon: z.ok ? "odpira" : z.razlog } : {}) },
-      });
-    }
-    const n: NalogaTelefona = { posiljatelj: posiljatelj as string, dogodki: [], koncano: false, cas: this.zdaj(), odprte: new Map(), cakajo: new Set() };
-    this.naloge.set(id, n);
-    // izvor je vedno »asistent«: ta streznik je samo pot asistentke, iz poti klica do njega ni poti
-    const naloga: Naloga = { id, besedilo, posiljatelj: posiljatelj as string, izvor: "asistent", dokaz };
-
+    if (this.naloge.size + this.zacenja.size >= NAJVEC_NALOG) throw new Napaka(429, "prevec", "Prevec nalog hkrati.");
+    const rez = { posiljatelj: posiljatelj as string, ustavi: null as Dokaz | null };
+    this.zacenja.set(id, rez);
     try {
-      await this.m.izvajalec.zacni(naloga, (d) => this.dogodek(id, d));
-    } catch (e) {
-      this.naloge.delete(id);
-      // besedilo napake izvajalca (npr. pot vticnice v domaci mapi) gre samo v dnevnik; telefon dobi stalno besedilo (pregled 0225 A-17)
-      this.dnevnik(`naloga ni zacela: ${(e as Error).message.slice(0, 300)}`);
-      throw new Napaka(503, "claude-code-ni", "Seja Claude Code naloge ni sprejela ali ni dosegljiva.");
+      if (!(await this.m.izvajalec.razpolozljiv().catch(() => false))) {
+        // naloga 18: podpis naprave s seznama kanala (vsak dodan telefon, tudi prek releja) je ze preverjen (preveri zgoraj) - samo ta pot
+        // sme odpreti sejo; to NI clanstvo ozjega kroga Safeer Linka. Naloga se ne zadrzi (glej odpriSejoClaude)
+        const z = this.m.odpriSejoClaude ? await this.m.odpriSejoClaude().catch(() => ({ ok: false as const, razlog: "napaka" as const })) : null;
+        throw new Napaka(503, "claude-code-ni", "Seja Claude Code na racunalniku ni odprta ali ni dosegljiva.", {
+          stanje: { claudeCode: "zaprta", ...(z ? { zagon: z.ok ? "odpira" : z.razlog } : {}) },
+        });
+      }
+      // N6c/d: /ustavi je prisel med cakanjem na sejo - naloga se ne zacne
+      if (rez.ustavi) throw obstaja();
+      const n: NalogaTelefona = { posiljatelj: posiljatelj as string, dogodki: [], koncano: false, cas: this.zdaj(), odprte: new Map(), cakajo: new Set() };
+      this.naloge.set(id, n);
+      // izvor je vedno »asistent«: ta streznik je samo pot asistentke, iz poti klica do njega ni poti
+      const naloga: Naloga = { id, besedilo, posiljatelj: posiljatelj as string, izvor: "asistent", dokaz };
+      try {
+        await this.m.izvajalec.zacni(naloga, (d) => this.dogodek(id, d));
+      } catch (e) {
+        this.naloge.delete(id);
+        // besedilo napake izvajalca (npr. pot vticnice v domaci mapi) gre samo v dnevnik; telefon dobi stalno besedilo (pregled 0225 A-17)
+        this.dnevnik(`naloga ni zacela: ${(e as Error).message.slice(0, 300)}`);
+        throw new Napaka(503, "claude-code-ni", "Seja Claude Code naloge ni sprejela ali ni dosegljiva.");
+      }
+    } finally {
+      this.zacenja.delete(id);
     }
+    // shortcut: /ustavi med zacni (ms) ustavi nalogo takoj po zacetku, ne pred njim - izvajalec nima preklica sredi zacni
+    if (rez.ustavi) await this.m.izvajalec.ustavi(id, rez.ustavi).catch((e) => this.dnevnik(`ustavitev po zacetku ni uspela: ${(e as Error).message.slice(0, 300)}`));
     return { status: 202, telo: { id } };
+  }
+
+  /** Naloga 25 N3b: grob preklicanih id (samo ta naprava, rok ROK_GROBA_MS, omejeno na napravo in skupaj). */
+  private vGrobu(posiljatelj: string, id: string): boolean {
+    const t = this.zdaj();
+    for (const [k, v] of this.grob) if (t - v > ROK_GROBA_MS) this.grob.delete(k);
+    return this.grob.has(`${posiljatelj}\n${id}`);
+  }
+
+  private vGrob(posiljatelj: string, id: string): void {
+    const kljuc = `${posiljatelj}\n${id}`;
+    this.vGrobu(posiljatelj, id);
+    this.grob.delete(kljuc);
+    const predpona = `${posiljatelj}\n`;
+    const svoji = [...this.grob.keys()].filter((k) => k.startsWith(predpona));
+    // najprej izrine najstarejse iste naprave, tako da ena naprava ne izrine groba druge
+    for (const k of svoji.slice(0, Math.max(0, svoji.length - NAJVEC_GROB_NA_NAPRAVO + 1))) this.grob.delete(k);
+    while (this.grob.size >= NAJVEC_GROB) this.grob.delete(this.grob.keys().next().value as string);
+    this.grob.set(kljuc, this.zdaj());
   }
 
   private dogodek(id: string, d: Dogodek): void {
@@ -799,10 +841,27 @@ export class AsistentStreznik {
 
   private async ustavitev(t: Record<string, unknown>) {
     const { id, posiljatelj } = t;
-    const n = typeof id === "string" ? this.naloge.get(id) : undefined;
-    if (!n || n.posiljatelj !== posiljatelj) throw zavrnjeno();
-    const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizUstavitve(id as string, posiljatelj as string, c, e));
-    await this.m.izvajalec.ustavi(id as string, dokaz);
+    if (typeof id !== "string" || !ID_NALOGE_TELEFONA.test(id)) throw zavrnjeno();
+    const tuja = () => {
+      const lastnik = this.zacenja.get(id)?.posiljatelj ?? this.naloge.get(id)?.posiljatelj;
+      return lastnik !== undefined && lastnik !== posiljatelj;
+    };
+    // naloga druge naprave: 403 brez groba (kot prej, poceni pred podpisom)
+    if (tuja()) throw zavrnjeno();
+    const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizUstavitve(id, posiljatelj as string, c, e));
+    if (tuja()) throw zavrnjeno();
+    const z = this.zacenja.get(id);
+    const n = this.naloge.get(id);
+    if (z) {
+      // N6c/d: /naloga se obdeluje - ne zacne se (ali se ustavi takoj po zacni); grob za ponovljen POST
+      z.ustavi = dokaz;
+      this.vGrob(posiljatelj as string, id);
+    } else if (n) await this.m.izvajalec.ustavi(id, dokaz);
+    else {
+      // N3b: naloga se ni prisla (zadrzan POST) - podpisan preklic se zapomni; ni zavrnitev (N5), zato 202 in ne 403
+      this.vGrob(posiljatelj as string, id);
+      this.dnevnik("ustavitev pred nalogo: id v grobu preklicanih");
+    }
     return { status: 202, telo: { id } };
   }
 

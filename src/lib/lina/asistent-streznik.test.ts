@@ -722,3 +722,134 @@ test("kontrola tiska: podpisana fotografija s telefona se samo shrani v prejeto;
     await s.pospravi();
   }
 });
+
+// --- naloga 25: /naloga atomarna (N4), grob preklicanih id (N3b, N6c/d). Stevilke so dogovorjene (10 min, 50 na napravo), ne iz kode.
+const ustaviNiz = (d: Naprava, id: string, cas?: number) => ({ id, posiljatelj: d.id, ...podpisi(d, (c, e) => nizUstavitve(id, d.id, c, e), cas) });
+/** Izvajalec, katerega razpolozljiv() caka na vrata (zadrzan POST med preverbo in zacetkom). */
+function zadrzan() {
+  const l = lazni();
+  let odpri!: () => void;
+  const vrata = new Promise<void>((r) => { odpri = r; });
+  let razp = 0;
+  const iz: Izvajalec = { ...l.iz, razpolozljiv: async () => { razp++; await vrata; return true; } };
+  return { iz, klici: l.klici, odpri, razp: () => razp };
+}
+
+test("naloga 25 N4: dve socasni oddaji istega id - ena izvedba, druga 409 obstaja", async () => {
+  const z = zadrzan();
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  try {
+    const id = idNaloge();
+    const izidi: number[] = [];
+    const p1 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { izidi.push(r.status); return r; });
+    await caka(() => z.razp() >= 1);
+    const p2 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { izidi.push(r.status); return r; });
+    // brez rezervacije obe oddaji cakata na razpolozljiv; z njo druga takoj dobi 409
+    await caka(() => z.razp() >= 2 || izidi.length >= 1);
+    z.odpri();
+    const [r1, r2] = await Promise.all([p1, p2]);
+    assert.deepEqual([r1.status, r2.status].sort(), [202, 409]);
+    assert.equal((r1.status === 409 ? r1 : r2).telo.napaka, "obstaja");
+    assert.equal(z.klici.filter((k) => k.kaj === "zacni").length, 1);
+  } finally {
+    z.odpri();
+    await s.pospravi();
+  }
+});
+
+test("naloga 25 N3b: podpisan /ustavi pred POST - 202, POST nato 409 obstaja, nic ne tece; /ustavi ne steje med zavrnitve", async () => {
+  const s = await streznik({ krog: [ANA] });
+  try {
+    const id = idNaloge();
+    const u = await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id));
+    assert.equal(u.status, 202, JSON.stringify(u.telo));
+    const r = await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    assert.equal(r.status, 409);
+    assert.equal(r.telo.napaka, "obstaja");
+    assert.equal(s.l.klici.length, 0, "ne zacni ne ustavi izvajalca");
+    // vec kot meja zavrnitev takih /ustavi: naslov ni omejen (429), ker to niso zavrnitve
+    for (let i = 0; i < NAJVEC_ZAVRNITEV_NA_MINUTO + 1; i++) assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, idNaloge()))).status, 202);
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, idNaloge(), "pokazi datum"))).status, 202);
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("naloga 25 N6c/d: /ustavi med cakanjem POST na sejo - naloga se ne zacne", async () => {
+  const z = zadrzan();
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  let p: Promise<Odgovor> | undefined;
+  try {
+    const id = idNaloge();
+    p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    await caka(() => z.razp() >= 1);
+    const u = await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id));
+    z.odpri();
+    const r = await p;
+    assert.equal(u.status, 202);
+    assert.equal(r.status, 409);
+    assert.equal(z.klici.filter((k) => k.kaj === "zacni").length, 0);
+    // ponovljen POST istega id (telefon po zasuku) se vedno ne tece
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"))).status, 409);
+    assert.equal(z.klici.filter((k) => k.kaj === "zacni").length, 0);
+  } finally {
+    z.odpri();
+    await p?.catch(() => undefined);
+    await s.pospravi();
+  }
+});
+
+test("naloga 25: grob velja 10 min, nato je id spet sprejet", async () => {
+  const ura = { t: Date.now() };
+  const s = await streznik({ krog: [ANA], ura });
+  try {
+    const id = idNaloge();
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id, ura.t))).status, 202);
+    ura.t += 10 * 60_000 - 1000;
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum", ura.t))).status, 409, "pred rokom");
+    ura.t += 2000;
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum", ura.t))).status, 202, "po roku");
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("naloga 25: grob ne raste neomejeno - 50 na napravo, najstarejsi izpade, druga naprava ostane", async () => {
+  const ura = { t: Date.now() };
+  const s = await streznik({ krog: [ANA, BOR], ura });
+  try {
+    const borov = idNaloge();
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(BOR, borov, ura.t))).status, 202);
+    const ani: string[] = [];
+    for (let i = 0; i < 51; i++) {
+      if (i && i % 50 === 0) ura.t += 61_000;                                                    // okno 120 zahtev/min
+      ani.push(idNaloge());
+      assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, ani[i], ura.t))).status, 202);
+    }
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, ani[50], "x", ura.t))).status, 409, "najnovejsi ostane");
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, ani[1], "x", ura.t))).status, 409, "drugi najstarejsi ostane");
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(BOR, borov, "x", ura.t))).status, 409, "Anin grob ne izrine Borovega");
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, ani[0], "x", ura.t))).status, 202, "najstarejsi izpade");
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("naloga 25: /ustavi brez veljavnega podpisa, z naprave izven seznama ali druge naprave ne zapise groba za Ano", async () => {
+  const CENE = naprava();
+  const s = await streznik({ krog: [ANA, BOR] });
+  try {
+    const id = idNaloge();
+    assert.equal((await s.z("POST", `${POT}/ustavi`, { ...ustaviNiz(ANA, id), podpis: ustaviNiz(BOR, id).podpis })).status, 403, "podpis drugega kljuca");
+    assert.equal((await s.z("POST", `${POT}/ustavi`, { id, posiljatelj: ANA.id, cas: Date.now(), enkratni: enkratni() })).status, 400, "brez podpisa");
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(CENE, id))).status, 403, "naprava izven seznama");
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(BOR, id))).status, 202, "Borov grob velja samo za Bora");
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"))).status, 202);
+    assert.equal(s.l.klici.filter((k) => k.kaj === "zacni").length, 1);
+    // Bor tudi zdaj ne more ustaviti Anine naloge (403, kot prej)
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(BOR, id))).status, 403);
+    assert.equal(s.l.klici.filter((k) => k.kaj === "ustavi").length, 0);
+  } finally {
+    await s.pospravi();
+  }
+});
