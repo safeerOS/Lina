@@ -13,7 +13,7 @@ import {
   NASTAVITVE_ASISTENTA, nastaviOmrezjeNaslovov, ponastaviAsistenta, preveriNaslovAsistenta, registrirajRele, stanjeAsistenta, uskladiAsistenta,
   zacniSeznanitev,
 } from "./asistent-telefon.server.ts";
-import { izberiLanNaslov } from "./zasebno-omrezje.server.ts";
+import { izberiLanNaslov, omrezjeNaslova } from "./zasebno-omrezje.server.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4", internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null }) as NetworkInterfaceInfo;
 // naloga 21 (N1): vsak lazni vmesnik ima privzeti prehod z znanim MAC (brez njega omrezja ni mogoce odobriti)
@@ -47,6 +47,13 @@ async function pospravi(o: Okolje): Promise<void> {
   await rm(o.dir, { recursive: true, force: true });
 }
 const shranjen = async (o: Okolje) => JSON.parse(await readFile(path.join(o.dir, NASTAVITVE_ASISTENTA), "utf8")) as { naslov: string; vrata: number };
+
+// CRR4: Proxy brez lastnih kljucev je za omrezjeNaslova prava mapa prehodov (bere samo prehodi[ime]); sicer bi preizkusi spodaj tiho
+// preverjali »brez-prehoda« ali zavrnitev namesto odobrenega omrezja
+test("CRR4: lazni PREHODI da odobreno omrezje 127.0.0.0/24|MAC_PREHODA (ne brez-prehoda, ne null)", () => {
+  assert.equal(omrezjeNaslova("127.0.0.5", { enp1s0: [v4("127.0.0.5")] }, PREHODI), `127.0.0.0/24|${MAC_PREHODA}`);
+  assert.equal(omrezjeNaslova("192.168.77.7", { wlp2s0: [v4("192.168.77.7")] }, PREHODI), `192.168.77.0/24|${MAC_PREHODA}`);
+});
 
 test("izberiLanNaslov: vmesnik privzete poti, nikoli docker/br-/veth/lo/notranji, IPv4 pred ULA, javni nikoli", () => {
   const vmesniki = {

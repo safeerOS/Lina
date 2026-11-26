@@ -408,7 +408,8 @@ export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
   // stevec ponastavi samo »da«: izmenicna »ne« in »ne-vem« v tujem omrezju streznika ne pustita teci (slepi pregled 21b, 2)
   if (t && t.rezerva === null) { const o = odobritev(n, t.naslov, v, p); t.neodobreno = o === "da" ? 0 : o === "ne" ? t.neodobreno + 1 : t.neodobreno; }
   const treba = !t || vrata
-    || ((t.rezerva === "naslov" || t.rezerva === "omrezje") && odtisOmrezja(v, p, t.zeleniNaslov) !== t.omrezje)
+    // CRR1: tudi rezerva »vrata« - izginotje shranjenega naslova spremeni odtis (#0), preverba vrat na odsotnem naslovu tega ne vidi
+    || (t.rezerva !== null && odtisOmrezja(v, p, t.zeleniNaslov) !== t.omrezje)
     || (t.rezerva === null && (!naslovNaVmesniku(t.naslov, v) || t.neodobreno >= 2));
   if (treba) await uskladiAsistenta(root, { zamenjajRezervoVrat: vrata });
   return treba;
@@ -734,7 +735,8 @@ async function potKlicev(root: string, t: Tekoci, openline: typeof povabiloOpenL
 /** Naloga 15: v rezervi (samo Global Link) QR in koda ne izdata naslova 127.0.0.1, ki ga telefon ne doseze. */
 const NI_LAN_SEZNANITEV = "Racunalnik nima naslova v domacem omrezju; seznanjanje doma ni mogoce (Global Link tece).";
 
-export type Povabilo = { vsebina: string; svg: string; velja: number; klici: boolean; opozorilo: string };
+/** koda = enkratna koda tega QR (linakoda); zaslon z njo ob odhodu preklice samo svoj QR (CRR2). */
+export type Povabilo = { vsebina: string; koda: string; svg: string; velja: number; klici: boolean; opozorilo: string };
 
 /**
  * Nova enkratna koda in QR; samo ko streznik asistentke tece. QR nosi SAMO asistentko (T1-S1): koda OpenLine se izda sele ob
@@ -754,7 +756,7 @@ export async function zacniSeznanitev(token: string | null, dir?: string): Promi
   const zdaj = Date.now();
   stanje().prijave.set(koda, { stanje: "odprta", cas: zdaj });
   const vsebina = vsebinaQr({ naslov: t.naslov, vrata: t.vrata, odtis: t.odtis, koda }, null, zdaj + ROK_KODE_MS);
-  return { vsebina, svg: svgQr(kodaQr(vsebina)), velja: ROK_KODE_MS, klici: (await stanjeOpenLine(root)).povezan, opozorilo: "" };
+  return { vsebina, koda, svg: svgQr(kodaQr(vsebina)), velja: ROK_KODE_MS, klici: (await stanjeOpenLine(root)).povezan, opozorilo: "" };
 }
 
 /**
@@ -782,10 +784,13 @@ export async function vnesiKodoTelefona(token: string | null, pairId: unknown, k
   return stanjeAsistenta(token, root);
 }
 
-/** Naloga 21 (N2): lastnik zapusti zaslon »Poveži telefon« - neporabljeni QR ne velja vec (cakajoce prijave ostanejo). */
-export async function prekliciSeznanitev(token: string | null, dir?: string): Promise<void> {
+/**
+ * Naloga 21 (N2): lastnik zapusti zaslon »Poveži telefon« - neporabljeni QR ne velja vec (cakajoce prijave ostanejo).
+ * CRR2: samo QR tega zaslona (koda iz Povabilo): zaslon, ki odide za drugim, ne preklice QR, ki ga drugi zaslon se kaze.
+ */
+export async function prekliciSeznanitev(token: string | null, koda: unknown, dir?: string): Promise<void> {
   await requireOwner(token, resolveDataDir(dir));
-  prekliciOdprte();
+  if (typeof koda === "string" && stanje().prijave.get(koda)?.stanje === "odprta") stanje().prijave.delete(koda);
 }
 
 /** Lastnik zapre okno s kodo (koda ne velja vec). */

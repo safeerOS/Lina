@@ -46,7 +46,9 @@ async function beriKnjiznico(root: string, premakni: boolean): Promise<{ slike?:
 /** Branje knjiznice BREZ preverbe lastnika: samo za klicatelje, ki so lastnika ali napravo ze preverili. Pokvarjena = prazna. */
 export async function preberiKnjiznico(root: string, { premakniPokvarjen = true } = {}): Promise<Knjiznica> {
   try {
-    const k = (await beriKnjiznico(root, premakniPokvarjen)) as Knjiznica | null;
+    // CRR8: branje s premikom v isti vrsti kot zapis - sicer bralec premakne knjiznico, ki jo je pisec medtem ze nadomestil
+    const beri = () => beriKnjiznico(root, premakniPokvarjen);
+    const k = (await (premakniPokvarjen ? vVrsti(root, beri) : beri())) as Knjiznica | null;
     return { slike: Array.isArray(k?.slike) ? k.slike.filter((s) => s && typeof s.id === "string" && ID.test(s.id)) : [] };
   } catch {
     return { slike: [] };
@@ -64,9 +66,15 @@ export async function mapaKnjiznice(root: string): Promise<string> {
 
 /** Pisanje v slike.json po vrsti za vsak koren: socasna generiranja (lastnik in naloga) ne izgubita zapisa. */
 const vrste = new Map<string, Promise<unknown>>();
-export function dodajVKnjiznico(root: string, novi: unknown[], signal?: AbortSignal): Promise<void> {
+function vVrsti<T>(root: string, delo: () => Promise<T>): Promise<T> {
   const prej = vrste.get(root) ?? Promise.resolve();
-  const zdaj = prej.catch(() => undefined).then(async () => {
+  const zdaj = prej.catch(() => undefined).then(delo);
+  vrste.set(root, zdaj);
+  void zdaj.finally(() => vrste.get(root) === zdaj && vrste.delete(root)).catch(() => undefined);
+  return zdaj;
+}
+export function dodajVKnjiznico(root: string, novi: unknown[], signal?: AbortSignal): Promise<void> {
+  return vVrsti(root, async () => {
     // Napaka branja (EACCES, EIO, EMFILE) gre klicatelju: prazna knjiznica bi ob zapisu tiho izbrisala stare zapise.
     const k = await beriKnjiznico(root, true);
     const stari = Array.isArray(k?.slike) ? k.slike : [];
@@ -75,7 +83,4 @@ export function dodajVKnjiznico(root: string, novi: unknown[], signal?: AbortSig
     // Najnovejse na vrhu; knjiznica ima mejo (stare datoteke ostanejo na disku - brisanje samo po ukazu lastnika).
     await writeJson(root, DATOTEKA_SLIK, { slike: [...novi, ...stari].slice(0, NAJVEC_V_KNJIZNICI) });
   });
-  vrste.set(root, zdaj);
-  void zdaj.finally(() => vrste.get(root) === zdaj && vrste.delete(root)).catch(() => undefined);
-  return zdaj;
 }

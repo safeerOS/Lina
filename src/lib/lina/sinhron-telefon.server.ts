@@ -275,6 +275,12 @@ async function rokZapiskov(root: string): Promise<number> {
 /** null = pravil ni mogoce prebrati (pokvarjen pravila.json): zasilnih 90 dni ne posljemo telefonu, da po njih ne brise (slepi pregled 21r #1). */
 async function rokIzPravil(root: string): Promise<number | null> {
   try {
+    // CRR6: veljaven JSON, ki ni objekt (null, [], stevilo), loadPravila tiho zamenja s privzetimi - to ni znan rok (manjkajoca datoteka je)
+    const surovo = await readFile(path.join(root, "pravila.json"), "utf8").catch((e: NodeJS.ErrnoException) => { if (e.code === "ENOENT") return null; throw e; });
+    if (surovo !== null) {
+      const j: unknown = JSON.parse(surovo);
+      if (!j || typeof j !== "object" || Array.isArray(j)) return null;
+    }
     return (await loadPravila(root)).zapiskiHrambaDni;
   } catch {
     return null;

@@ -198,6 +198,8 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
   const vTeku = useRef({ qr: false, koda: false, zagon: false });
   // pregled 16 (1): odgovor, ki pride po zapustitvi zaslona, ne sme pustiti odprtega okna s kodo ali pisati v stanje
   const ziv = useRef(true);
+  // CRR2: koda QR, ki ga kaze TA zaslon; ob odhodu se preklice samo ta (QR drugega zaslona ostane veljaven)
+  const mojQr = useRef("");
   const neuspehov = useRef({ qr: 0, koda: 0 });
 
   function prevzemi(x: Stanje) {
@@ -245,9 +247,9 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     zacniSeznanitevFn()
       .then((p) => {
         neuspehov.current.qr = 0;
-        if (ziv.current) setPovabilo({ ...p, do: Date.now() + p.velja, kljuc: kljucStreznika });
+        if (ziv.current) { mojQr.current = p.koda; setPovabilo({ ...p, do: Date.now() + p.velja, kljuc: kljucStreznika }); }
         // naloga 21 (N2): QR, ki je prisel po zapustitvi zaslona (zacniSeznanitev caka do 25 s na pot klicev), ne ostane veljaven
-        else void prekliciSeznanitevFn().catch(() => undefined);
+        else void prekliciSeznanitevFn({ data: { koda: p.koda } }).catch(() => undefined);
       })
       .catch((e: unknown) => {
         premorDo.current.qr = Date.now() + PREMOR_PO_NAPAKI_MS;
@@ -283,7 +285,7 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
     return () => {
       ziv.current = false;
       void zapriSeznanitevSKodoFn().catch(() => undefined);
-      void prekliciSeznanitevFn().catch(() => undefined);
+      void prekliciSeznanitevFn({ data: { koda: mojQr.current } }).catch(() => undefined);
     };
   }, []);
 

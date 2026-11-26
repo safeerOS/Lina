@@ -41,11 +41,12 @@ describe("naloga 21: Poveži telefon na neodobrenem omrezju", () => {
     expect(ui).toMatch(/shraniAsistentaFn\(\{ data: \{ naslov: s\.predlogNaslova, odobriOmrezje: true \} \}\)/);
     // »Shrani« odobri samo NOV naslov (slepi pregled 21, najdba 8)
     expect(ui).toMatch(/naslov, vrata: Number\(vrata\), odobriOmrezje: naslov !== s\.naslov/);
-    expect(ui).toMatch(/void prekliciSeznanitevFn\(\)\.catch\(\(\) => undefined\);/);
+    // CRR2: zaslon preklice samo svoj QR (koda), ne QR drugega zaslona
+    expect(ui).toMatch(/void prekliciSeznanitevFn\(\{ data: \{ koda: mojQr\.current \} \}\)\.catch\(\(\) => undefined\);/);
     // QR, ki pride po zapustitvi zaslona, se takoj preklice (zacniSeznanitev lahko caka do 25 s)
-    expect(ui).toMatch(/if \(ziv\.current\) setPovabilo\(\{ \.\.\.p, do: Date\.now\(\) \+ p\.velja, kljuc: kljucStreznika \}\);\s*\/\/[^\n]*\n\s*else void prekliciSeznanitevFn\(\)/);
+    expect(ui).toMatch(/if \(ziv\.current\) \{ mojQr\.current = p\.koda; setPovabilo\(\{ \.\.\.p, do: Date\.now\(\) \+ p\.velja, kljuc: kljucStreznika \}\); \}\s*\/\/[^\n]*\n\s*else void prekliciSeznanitevFn\(\{ data: \{ koda: p\.koda \} \}\)/);
     const fn = readFileSync(new URL("./functions.ts", import.meta.url), "utf8");
     expect(fn).toMatch(/odobriOmrezje: data\?\.odobriOmrezje/);
-    expect(fn).toMatch(/await prekliciSeznanitev\(await sessionToken\(\)\)/);
+    expect(fn).toMatch(/await prekliciSeznanitev\(await sessionToken\(\), data\?\.koda\)/);
   });
 });

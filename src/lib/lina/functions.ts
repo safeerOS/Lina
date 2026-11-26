@@ -906,13 +906,15 @@ export const vnesiKodoTelefonaFn = createServerFn({ method: "POST" })
     return vnesiKodoTelefona(await sessionToken(), data?.pairId, data?.koda);
   });
 
-/** Naloga 21 (N2): ob zapustitvi zaslona »Poveži telefon« neporabljeni QR ne velja vec. */
-export const prekliciSeznanitevFn = createServerFn({ method: "POST" }).handler(async () => {
-  noStore();
-  clearLegacyCookie();
-  await prekliciSeznanitev(await sessionToken());
-  return { ok: true };
-});
+/** Naloga 21 (N2): ob zapustitvi zaslona »Poveži telefon« neporabljeni QR ne velja vec; CRR2: samo QR tega zaslona (koda). */
+export const prekliciSeznanitevFn = createServerFn({ method: "POST" })
+  .validator((data: { koda?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    await prekliciSeznanitev(await sessionToken(), data?.koda);
+    return { ok: true };
+  });
 
 export const zapriSeznanitevSKodoFn = createServerFn({ method: "POST" }).handler(async () => {
   noStore();

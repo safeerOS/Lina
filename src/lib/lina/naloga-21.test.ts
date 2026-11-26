@@ -3,6 +3,7 @@
 // N10 odtis omrezja. Lazno omrezje: vmesnik »enp1s0« z naslovi 127.0.0.x (na Linuxu jih je mogoce vezati brez pravega omrezja).
 // Komentarji brez sumnikov.
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { request } from "node:https";
 import net from "node:net";
@@ -295,9 +296,9 @@ test("N2: nov QR preklice prejsnjega; zapustitev zaslona (prekliciSeznanitev) pr
     const drugi = kodaIzQr((await zacniSeznanitev(o.token, o.dir)).vsebina);
     assert.equal(await stanjeQr("127.0.0.5", o.vrata, prvi), 404, "prejsnji QR ne velja vec");
     assert.equal(await stanjeQr("127.0.0.5", o.vrata, drugi), 200);
-    await prekliciSeznanitev(o.token, o.dir);
+    await prekliciSeznanitev(o.token, drugi, o.dir);
     assert.equal(await stanjeQr("127.0.0.5", o.vrata, drugi), 404, "po zapustitvi zaslona QR ne velja");
-    await assert.rejects(prekliciSeznanitev("napacen", o.dir));
+    await assert.rejects(prekliciSeznanitev("napacen", drugi, o.dir));
   } finally { await pospravi(o); }
 });
 
@@ -354,16 +355,31 @@ test("N2: »Dodaj« za cakajoci telefon je izrecen klik - ime in id sta vidna, g
   assert.match(blok, /<IdTelefona id=\{c\.id\} \/>/);
   assert.match(blok, /<button type="button"[^>]*onClick=\{\(\) => onDodaj\(c\)\}/);
   assert.doesNotMatch(blok, /<form|autoFocus|autofocus/);
-  assert.match(ui, /void prekliciSeznanitevFn\(\)\.catch/, "zapustitev zaslona preklice QR");
+  assert.match(ui, /void prekliciSeznanitevFn\(\{ data: \{ koda: mojQr\.current \} \}\)\.catch/, "zapustitev zaslona preklice svoj QR (CRR2)");
 });
 
 // ------------------------------------------------------------------ N4
 
-test("N4: PID tujega procesa (EPERM) po roku odpiranja ne blokira nove seje; isti zivi proces (cas zagona) jo blokira", { skip: process.getuid?.() === 0 ? "root nima EPERM" : casZagonaProcesa(process.pid) === null ? "brez /proc" : false }, async () => {
+/**
+ * CRR3: tuj PID izbran s preverbo, da signal res vrne EPERM (PID 1 je v vsebniku brez root lahko proces istega uporabnika); brez takega
+ * procesa (root, en sam uporabnik v imenskem prostoru) del s tujim PID odpade, nadzor z lastnim procesom tece vedno.
+ */
+function tujPid(): number | null {
+  for (const x of readdirSync("/proc")) {
+    const pid = Number(x);
+    if (!Number.isSafeInteger(pid) || pid <= 0) continue;
+    try { process.kill(pid, 0); } catch (e) { if ((e as NodeJS.ErrnoException).code === "EPERM") return pid; }
+  }
+  return null;
+}
+
+test("N4: PID tujega procesa (EPERM) po roku odpiranja ne blokira nove seje; isti zivi proces (cas zagona) jo blokira", { skip: casZagonaProcesa(process.pid) === null ? "brez /proc" : false }, async (tc) => {
   const root = await mkdtemp(path.join(tmpdir(), "lina-n21-seja-"));
   const dom = await mkdtemp(path.join(tmpdir(), "lina-n21-dom-"));
+  const tuj = tujPid();
+  if (tuj === null) tc.diagnostic("ni procesa z EPERM: preverjen samo lastni proces");
   try {
-    for (const [pid, pricakovano] of [[1, 2], [process.pid, 1]] as const) {
+    for (const [pid, pricakovano] of [...(tuj === null ? [] : [[tuj, 2] as const]), [process.pid, 1] as const]) {
       ponastaviSejo(root);
       let t = 1_000_000;
       let zagonov = 0;

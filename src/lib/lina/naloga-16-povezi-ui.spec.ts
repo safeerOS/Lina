@@ -23,7 +23,7 @@ function stanje(delno: Partial<S> = {}): S {
 }
 
 const nic = () => undefined;
-const POVABILO = { vsebina: "lina://x", svg: '<svg data-lazni-qr="1"></svg>', velja: 600_000, klici: false, opozorilo: "", do: 0 };
+const POVABILO = { vsebina: "lina://x", koda: "k", svg: '<svg data-lazni-qr="1"></svg>', velja: 600_000, klici: false, opozorilo: "", do: 0 };
 
 function izris(s: S | null, povabilo: PovezavaPloscaLastnosti["povabilo"] = null, kodaTel: Record<string, string> = {}) {
   return renderToStaticMarkup(createElement(PovezavaPlosca, {
