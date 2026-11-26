@@ -170,7 +170,8 @@ object SinhronKljucev {
             if (st.zapisi.count { !it.izbrisan } >= KljuciMozganov.NAJVEC_ZIVIH) return@dejanje null
             val z = ZapisKljuca(KljuciMozganov.novId(), ponudnik, o, zdaj, jaz, false, "", k)
             // v uporabo samo na praznem mestu (obstojec kljuc v Keystore ostane, tudi ce se ni v naboru)
-            val prazen = st.aktivni[ponudnik] == null && zdajSloti[ponudnik].isNullOrEmpty()
+            // prazno mesto tudi po odstranitvi kljuca v uporabi (BREZ): izrecno dodajanje ni samodejni preklop
+            val prazen = (st.aktivni[ponudnik] == null || st.aktivni[ponudnik] == KljuciMozganov.BREZ) && zdajSloti[ponudnik].isNullOrEmpty()
             st.copy(zapisi = st.zapisi + z, neposlani = st.neposlani + z.id, aktivni = if (prazen) st.aktivni + (ponudnik to z.id) else st.aktivni) to
                 (if (prazen) mapOf(ponudnik to k) else emptyMap())
         }

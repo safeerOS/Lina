@@ -90,7 +90,9 @@ class KljuciMozganovTest {
             val o = Json.parseToJsonElement(vsebina).jsonObject
             val javni = KljuciMozganov.javniKljuc((o["javni"] as JsonPrimitive).content)!!
             val k = KljuciMozganov.kljucPara(par.zasebni, javni, idTel)
-            korak((o["zapisi"] as JsonArray).mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_TR) })
+            // isto pravilo kot odTelefona v kljuci-mozganov.ts: tuja naprava samo za id, ki ga racunalnik se nima
+            val znani = zapisi.map { it.id }.toSet()
+            korak((o["zapisi"] as JsonArray).mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_TR) }.filter { it.naprava == idTel || it.id !in znani })
             val odg = buildJsonObject {
                 put("v", 1); put("naprava", jaz); put("javni", par.javni)
                 put("zapisi", JsonArray(zapisi.map { KljuciMozganov.zaZico(it, k, KljuciMozganov.SMER_RT) }))
@@ -323,5 +325,28 @@ class KljuciMozganovTest {
         r.zdaj = 3000; b.sinhroniziraj(r, 3000) // B: novejsa sprememba istega zapisa
         r.zdaj = 3100; a.sinhroniziraj(r, 2000) // A: starejsa (2000), poslana s starim kljucem
         assertTrue(r.zapisi.any { it.oznaka.endsWith("(spor)") && it.vrednost == K2 }, "sprememba A ni izgubljena")
+    }
+
+    // ---- svetovalec ----
+
+    @Test
+    fun neveljavenKljucVSlotuSeNePrepise() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sloti.m["gemini"] = K1
+        a.sinhroniziraj(r)
+        a.sloti.m["gemini"] = "AIza s presledkom-1111"
+        r.zdaj = 2000; a.sinhroniziraj(r, 2000)
+        assertEquals("AIza s presledkom-1111", a.sloti.m["gemini"])
+    }
+
+    @Test
+    fun dodajPoOdstranitviGreVUporabo() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sloti.m["gemini"] = K1
+        a.sinhroniziraj(r)
+        val v = SinhronKljucev.seznam(a.shramba, a.id).single()
+        assertNull(SinhronKljucev.odstrani(a.shramba, a.sloti, a.id, 2000, v.id))
+        assertNull(SinhronKljucev.dodaj(a.shramba, a.sloti, a.id, 2100, "gemini", "Nov", K2))
+        assertEquals(K2, a.sloti.m["gemini"])
     }
 }

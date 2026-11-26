@@ -193,6 +193,8 @@ object KljuciMozganov {
             if (p in neznani) continue
             val a = akt[p]?.let { m[it] }
             val v = sloti[p].orEmpty()
+            // lastnikov vnos, ki ga uskladitev ne sprejme, ostane - ne prepise se s staro vrednostjo
+            if (v.isNotEmpty() && !veljavnaVrednost(v)) continue
             if (a != null && a.izbrisan) {
                 akt[p] = BREZ
                 if (v.isNotEmpty()) { izhod[p] = null; odstranjeni.add(p) }
