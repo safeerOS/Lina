@@ -1,6 +1,7 @@
 package si.safeer.lina.asistent
 
 import android.content.Context
+import android.telecom.TelecomManager
 import org.json.JSONObject
 import si.safeer.lina.podpis.NalogaLine
 import si.safeer.lina.podpis.NapravaKljuc
@@ -65,6 +66,8 @@ object UskladitevKljucev {
 
     internal fun izvedi(context: Context): Boolean {
         if (AsistentShramba.beri(context) == null) return false
+        // kot SinhronizacijaZLino: nikoli med klicem (oddaljen izbris ne izprazni slota sredi klica)
+        if (runCatching { context.getSystemService(TelecomManager::class.java)?.isInCall == true }.getOrDefault(false)) return false
         val id = runCatching { NapravaKljuc.id() }.getOrNull() ?: return false
         val pov = PovezavaLine.ustvari(context, PrenosPoPoti()) ?: return false
         try {
