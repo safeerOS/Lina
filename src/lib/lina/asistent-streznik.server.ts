@@ -795,8 +795,6 @@ export class AsistentStreznik {
    * Lina pa bi jo stela za ustavljeno). Napaka gre v dnevnik enkrat, opustitev tudi.
    */
   private async ustaviPozneje(id: string, dokaz: Dokaz, prvic = true): Promise<void> {
-    const n = this.naloge.get(id);
-    if (n) n.ustavljena = true;
     try {
       await this.m.izvajalec.ustavi(id, dokaz);
     } catch (e) {

@@ -1119,3 +1119,19 @@ test("naloga 27r slepi S2: neposredna /ustavi tekoce naloge (202) - /nadaljuj na
     await s.pospravi();
   }
 });
+
+test("naloga 27r slepi krog 2: neposredna /ustavi pade (ni 202) - naloga tece, /nadaljuj ni blokiran", async () => {
+  const s = await streznik({ krog: [ANA] });
+  try {
+    const n = telefonNaloga(ANA, idNaloge(), "uredi nacrt");
+    assert.equal((await s.z("POST", `${POT}/naloga`, n)).status, 202);
+    const nadaljevanja: string[] = [];
+    s.l.iz.nadaljuj = async (_id, b) => { nadaljevanja.push(b); };
+    s.l.iz.ustavi = async () => { throw new Error("Ustavitve ni bilo mogoce poslati: seja Claude Code ni dosegljiva."); };
+    assert.notEqual((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, n.id))).status, 202);
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "korak 2"))).status, 202);
+    assert.deepEqual(nadaljevanja, ["korak 2"]);
+  } finally {
+    await s.pospravi();
+  }
+});
