@@ -1,6 +1,5 @@
 package si.safeer.lina.samostojna
 
-import java.io.IOException
 import java.net.URI
 import java.text.Normalizer
 
@@ -25,12 +24,13 @@ object NoviceTelefon {
     private fun normaliziraj(s: String): String =
         Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("\\s+"), " ").trim()
 
+    // slepi pregled S4 (enako kot racunalnik): tema samo z »o«, »o temi«, »na temo«
     private const val UVOD = "(?:(?:lina|prosim|hej|zivjo)[,!]? )?(?:(?:kaj|katere|kaksne) so (?:danes )?|povej(?: mi)? |preberi(?: mi)? |pokazi(?: mi)? |daj(?: mi)? |imas |zanimajo me |kje so )?"
     private const val PRIDEVNIK = "(?:(?:danasnje|dnevne|zadnje|najnovejse|glavne|sveze|aktualne|jutranje|vecerne|pomembne) )?"
     private const val OKVIR = "(?: (?:dneva|danes|za danes|iz slovenije|v sloveniji|iz sveta|po svetu|doma))?"
-    private const val TEMA = "(?: (?:o temi|na temo|v zvezi z|glede|o) (.{2,80}))?"
+    private const val TEMA = "(?: (?:o temi|na temo|o) (.{2,80}))?"
     private val RE_NOVICE = Regex("^$UVOD$PRIDEVNIK(?:novice|novic|novica|novosti)$OKVIR$TEMA$")
-    private val RE_NOVEGA = Regex("^${UVOD}kaj je (?:danes )?novega(?: (?:v svetu|po svetu|doma|v sloveniji|danes))?(?: (?:o|pri|glede|v zvezi z) (.{2,80}))?$")
+    private val RE_NOVEGA = Regex("^${UVOD}kaj je (?:danes )?novega(?: (?:v svetu|po svetu|doma|v sloveniji|danes))?(?: o (.{2,80}))?$")
     private val KONEC = Regex("[?!.…]+$")
 
     /** Ali uporabnik sprasuje po novicah (celo sporocilo, brez povezave); tema iz »novice o X«. */
@@ -74,32 +74,71 @@ object NoviceTelefon {
 
     fun cistaPovezava(s: String): String? = try {
         val u = URI(s.trim())
-        if (u.scheme != "https" || u.host.isNullOrEmpty() || u.rawUserInfo != null || s.length > 500) null else u.toString()
+        if (u.scheme != "https" || u.host.isNullOrEmpty() || u.rawUserInfo != null || s.length > 500) null
+        else u.toString().replace("[", "%5B").replace("]", "%5D")
     } catch (e: Exception) {
         null
     }
+
+    /** Odgovor z novicami po glavi (enako kot racunalnik jeOdgovorNovic): sinhronizacija nese samo besedilo, ne oznake. */
+    fun jeOdgovorNovic(besedilo: String): Boolean = Regex("^(?:Novice dneva \\(|Novice o temi »|O temi »[^\\n]{1,200}« v virih \\()").containsMatchIn(besedilo)
+
+    /** Zapis namesto naslovov (spomin, uvoz s racunalnika): naslovi so podatek tretjih, ne Linina beseda. */
+    const val ZAPIS_NOVIC = "[program: uporabniku so bili prikazani naslovi novic iz javnih virov]"
 
     private fun entitete(s: String): String =
         s.replace(Regex("&#x([0-9a-fA-F]{1,6});")) { m -> m.groupValues[1].toInt(16).let { if (it in 1..0x10FFFF) String(Character.toChars(it)) else "" } }
             .replace(Regex("&#(\\d{1,7});")) { m -> m.groupValues[1].toInt().let { if (it in 1..0x10FFFF) String(Character.toChars(it)) else "" } }
             .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&nbsp;", " ").replace("&amp;", "&")
 
+    /** Zacetek znacke <ime (za njo presledek, > ali /); vsako iskanje je linearno (slepi pregled S2: lenivi regex je bil kvadraten). */
+    private fun zacetekZnacke(s: String, ime: String, od: Int): Int {
+        var i = od
+        while (true) {
+            val z = s.indexOf("<$ime", i, ignoreCase = true)
+            if (z < 0) return -1
+            val c = s.getOrNull(z + ime.length + 1)
+            if (c == null || c == '>' || c == '/' || c.isWhitespace()) return z
+            i = z + 1
+        }
+    }
+
     private fun besediloZnacke(blok: String, ime: String): String? {
-        val m = Regex("<$ime(?:\\s[^>]*)?>([\\s\\S]*?)</$ime>", RegexOption.IGNORE_CASE).find(blok) ?: return null
-        val v = m.groupValues[1].trim().removePrefix("<![CDATA[").removeSuffix("]]>")
-        return entitete(v.replace(Regex("<[^>]*>"), " ")).trim()
+        val z = zacetekZnacke(blok, ime, 0)
+        if (z < 0) return null
+        val gt = blok.indexOf('>', z)
+        if (gt < 0 || blok[gt - 1] == '/') return null
+        val k = blok.indexOf("</$ime>", gt + 1, ignoreCase = true)
+        if (k < 0) return null
+        val v = blok.substring(gt + 1, k).take(8000).trim().removePrefix("<![CDATA[").removeSuffix("]]>")
+        return entitete(v.replace(Regex("<[^<>]*>"), " ")).trim()
+    }
+
+    /** Bloki <ime>...</ime> v linearnem casu; brez zakljucne znacke se iskanje konca. */
+    private fun bloki(xml: String, ime: String): List<String> {
+        val ven = mutableListOf<String>()
+        var i = 0
+        while (ven.size < 200) {
+            val z = zacetekZnacke(xml, ime, i)
+            if (z < 0) break
+            val k = xml.indexOf("</$ime>", z, ignoreCase = true)
+            if (k < 0) break
+            ven.add(xml.substring(z, k))
+            i = k + ime.length + 3
+        }
+        return ven
     }
 
     /** RSS (item) ali Atom (entry): naslov in povezava; neveljavne postavke izpusti. */
     fun razberi(xml: String, vir: String): List<Novica> {
-        val bloki = Regex("<(item|entry)(?:\\s[^>]*)?>([\\s\\S]*?)</\\1>", RegexOption.IGNORE_CASE).findAll(xml).map { it.groupValues[2] }
+        val bloki = bloki(xml, "item").ifEmpty { bloki(xml, "entry") }
         return bloki.mapNotNull { b ->
             val naslov = cistNaslov(besediloZnacke(b, "title") ?: return@mapNotNull null)
             val povezava = besediloZnacke(b, "link")?.takeIf { it.isNotEmpty() }
-                ?: Regex("<link[^>]*href=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(b)?.groupValues?.get(1)?.let(::entitete)
+                ?: Regex("<link[^<>]*href=\"([^\"<>]+)\"", RegexOption.IGNORE_CASE).find(b)?.groupValues?.get(1)?.let(::entitete)
             val p = povezava?.let(::cistaPovezava)
             if (naslov.isEmpty() || p == null) null else Novica(naslov, p, vir)
-        }.take(MEJA_NA_VIR).toList()
+        }.take(MEJA_NA_VIR)
     }
 
     private fun vrstice(n: List<Novica>): List<String> = n.map { "- ${cistNaslov(it.naslov)} (${cistNaslov(it.vir).take(40)}): ${it.povezava}" }
@@ -120,25 +159,40 @@ object NoviceTelefon {
     }
 }
 
-/** Bere privzete vire (predpomnilnik 10 min) in sestavi odgovor; vsak vir posebej, napaka enega ne podre odgovora. */
-class BralnikNovic(private val prenos: Prenos, private val zdaj: () -> Long = { System.currentTimeMillis() }) {
+/**
+ * Bere privzete vire (predpomnilnik 10 min) in sestavi odgovor. Slepi pregled S3: vira vzporedno s skupnim rokom (pocasen streznik ne
+ * zadrzi niti pogovora), zaklep samo za predpomnilnik, ne med omrezjem; napaka enega vira ne podre odgovora.
+ */
+class BralnikNovic(
+    private val prenos: Prenos,
+    private val zdaj: () -> Long = { System.currentTimeMillis() },
+    private val rokMs: Long = ROK_MS_SKUPAJ,
+) {
+    private val zaklep = Any()
     private var predpomnilnik: Pair<Long, Pair<List<NoviceTelefon.Novica>, List<String>>>? = null
 
-    @Synchronized
-    private fun preberi(): Pair<List<NoviceTelefon.Novica>, List<String>> {
-        predpomnilnik?.let { (cas, v) -> if (zdaj() - cas in 0 until ROK_MS) return v }
-        val uspeli = NoviceTelefon.PRIVZETI_VIRI.mapNotNull { (ime, url) ->
-            val odg = try {
-                prenos.get(url, mapOf("Accept" to "application/rss+xml, application/atom+xml, application/xml;q=0.9", "User-Agent" to "Lina/1.0 (bralnik novic)"), 8_000L)
-            } catch (e: IOException) {
-                return@mapNotNull null
-            } catch (e: RuntimeException) {
-                return@mapNotNull null
-            }
-            if (odg.koda != 200) null else NoviceTelefon.razberi(odg.telo, ime).takeIf { it.isNotEmpty() }?.let { ime to it }
+    private fun preberiVir(ime: String, url: String): Pair<String, List<NoviceTelefon.Novica>>? {
+        val odg = try {
+            prenos.get(url, mapOf("Accept" to "application/rss+xml, application/atom+xml, application/xml;q=0.9", "User-Agent" to "Lina/1.0 (bralnik novic)"), 8_000L)
+        } catch (e: Exception) {
+            return null
         }
+        if (odg.koda != 200) return null
+        return NoviceTelefon.razberi(odg.telo, ime).takeIf { it.isNotEmpty() }?.let { ime to it }
+    }
+
+    private fun preberi(): Pair<List<NoviceTelefon.Novica>, List<String>> {
+        synchronized(zaklep) { predpomnilnik?.let { (cas, v) -> if (zdaj() - cas in 0 until ROK_MS) return v } }
+        val izidi = arrayOfNulls<Pair<String, List<NoviceTelefon.Novica>>>(NoviceTelefon.PRIVZETI_VIRI.size)
+        // shortcut: nit, ki se ob roku ne konca (blokirno branje HttpURLConnection), tece do svojega roka branja v ozadju (daemon)
+        val niti = NoviceTelefon.PRIVZETI_VIRI.mapIndexed { i, (ime, url) ->
+            Thread { val r = preberiVir(ime, url); synchronized(izidi) { izidi[i] = r } }.apply { isDaemon = true; name = "lina-novice-$i"; start() }
+        }
+        val konec = System.nanoTime() + rokMs * 1_000_000
+        for (t in niti) t.join(maxOf(1L, (konec - System.nanoTime()) / 1_000_000))
+        val uspeli = synchronized(izidi) { izidi.filterNotNull() }
         val v = uspeli.flatMap { it.second } to uspeli.map { it.first }
-        if (uspeli.isNotEmpty()) predpomnilnik = zdaj() to v
+        if (uspeli.isNotEmpty()) synchronized(zaklep) { predpomnilnik = zdaj() to v }
         return v
     }
 
@@ -153,5 +207,7 @@ class BralnikNovic(private val prenos: Prenos, private val zdaj: () -> Long = { 
 
     companion object {
         const val ROK_MS = 10 * 60_000L
+        /** Skupni rok obeh virov (pogovor ne caka dlje). */
+        const val ROK_MS_SKUPAJ = 10_000L
     }
 }

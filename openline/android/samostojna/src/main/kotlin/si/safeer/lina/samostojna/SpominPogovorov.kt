@@ -120,7 +120,8 @@ class SpominPogovorov(
         val znani = vsi().map { Triple(it.cas, it.vloga, it.besedilo) }.toHashSet()
         val vrstice = obrati
             .filter { it.vloga == "uporabnik" || it.vloga == "lina" }
-            .map { it.copy(besedilo = it.besedilo.trim().take(NAJVEC_ZNAKOV_BESEDILA)) }
+            // naloga 32 (slepi pregled V1): odgovor z novicami z racunalnika je podatek tretjih - v spomin gre samo zapis
+            .map { it.copy(besedilo = if (it.vloga == "lina" && NoviceTelefon.jeOdgovorNovic(it.besedilo.trim())) NoviceTelefon.ZAPIS_NOVIC else it.besedilo.trim().take(NAJVEC_ZNAKOV_BESEDILA)) }
             .filter { it.besedilo.isNotEmpty() && !jeSkrivnost(it.besedilo) && znani.add(Triple(it.cas, it.vloga, it.besedilo)) }
             .map { "${it.cas}\t${it.vloga}\t${ubezi(it.besedilo)}\n" }
         if (vrstice.isEmpty()) return 0

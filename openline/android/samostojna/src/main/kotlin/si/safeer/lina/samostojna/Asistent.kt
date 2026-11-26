@@ -150,14 +150,13 @@ class Asistent(
             zapomni(vnos, o)
             return Odgovor.Besedilo(o)
         }
-        // Naloga 32: »novice dneva« prebere koda iz javnih virov (deluje brez kljuca). Naslovi so nezaupani: v zgodovino gre samo zapis,
-        // seja ostane nezaupana (dejanja potrdi uporabnik).
+        // Naloga 32: »novice dneva« prebere koda iz javnih virov (deluje brez kljuca). Naslovi so nezaupani: model jih ne vidi (v zgodovino
+        // in sejo gre samo zapis), zato seja ostane, kakrsna je bila (slepi pregled N2).
         val bralnik = novice
         if (bralnik != null && priponke.isEmpty() && !jeNezaupano(vnos)) {
             val n = NoviceTelefon.namera(vnos)
             val o = n?.let { runCatching { bralnik.odgovori(it.tema, orodja?.iskanjeNaVoljo == true) }.getOrNull() }
             if (n != null && o != null) {
-                zadnjiObratPoOrodjih = true
                 val zapis = "[program: uporabniku so bili prikazani naslovi novic${n.tema?.let { " o temi »${NoviceTelefon.cistNaslov(it)}«" } ?: " dneva"} iz javnih virov]"
                 zgodovina.add(Sporocilo("user", vnos)); zgodovina.add(Sporocilo("model", zapis)); obrezi()
                 zapomni(vnos, zapis)

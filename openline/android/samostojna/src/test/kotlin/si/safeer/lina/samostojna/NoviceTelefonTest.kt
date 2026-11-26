@@ -46,7 +46,8 @@ class NoviceTelefonTest {
         assertTrue(o.besedilo.contains("Sneg & mraz"), o.besedilo)
         assertFalse(o.besedilo.contains("nimam dostopa", ignoreCase = true))
         assertEquals(0, p.post, "model ni poklican")
-        assertTrue(a.zadnjiObratPoOrodjih, "naslovi so nezaupani: dejanja potrdi uporabnik")
+        // slepi pregled N2: model naslovov ne vidi (samo zapis), zato seja ne postane nezaupana
+        assertFalse(a.zadnjiObratPoOrodjih)
         // predpomnilnik: drugo vprasanje ne bere znova
         a.povej("kaj je novega")
         assertEquals(2, p.get.size)
@@ -77,8 +78,9 @@ class NoviceTelefonTest {
     fun `namera - naravna vprasanja da, koledar in povezave ne`() {
         for (v in listOf("novice dneva", "Kaj so današnje novice?", "kaj je novega", "Lina, preberi mi zadnje novice.")) assertEquals(NoviceTelefon.Namera(null), NoviceTelefon.namera(v), v)
         assertEquals(NoviceTelefon.Namera("vremenu"), NoviceTelefon.namera("novice o vremenu"))
-        assertEquals(NoviceTelefon.Namera("košarki"), NoviceTelefon.namera("kaj je novega pri košarki"))
-        for (v in listOf("opomni me, da preberem novice", "preberi novice iz https://www.rtvslo.si/x.xml", "dodaj vir novic", "napiši novico za spletno stran")) assertNull(NoviceTelefon.namera(v), v)
+        assertEquals(NoviceTelefon.Namera("košarki"), NoviceTelefon.namera("kaj je novega o košarki"))
+        for (v in listOf("opomni me, da preberem novice", "preberi novice iz https://www.rtvslo.si/x.xml", "dodaj vir novic", "napiši novico za spletno stran",
+            "kaj je novega pri nalogi", "kaj je novega glede ponudbe za Novak d.o.o.")) assertNull(NoviceTelefon.namera(v), v)
     }
 
     @Test
@@ -96,5 +98,47 @@ class NoviceTelefonTest {
         val atom = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>A1</title><link rel="alternate" href="https://x.si/1"/></entry></feed>"""
         assertEquals(listOf(NoviceTelefon.Novica("A1", "https://x.si/1", "X")), NoviceTelefon.razberi(atom, "X"))
         assertTrue(SistemskoNavodilo.zgradi(java.time.ZonedDateTime.now(), iskanje = false, branje = false, koledar = false).contains("nikoli ne reci, da nimaš dostopa do novic"))
+    }
+
+    @Test
+    fun `slepi pregled S2 - zlonamerni feed se razbere v linearnem casu`() {
+        for (xml in listOf("<rss>" + "<item>".repeat(170_000), "<rss><item>" + "<title ".repeat(120_000) + "</item>", "<rss><item><title>a</title>" + "<link ".repeat(120_000) + "</item>",
+            "<rss><item><title>" + "<".repeat(900_000) + "</title><link>https://a.si/1</link></item>")) {
+            val t = System.nanoTime()
+            NoviceTelefon.razberi(xml, "V")
+            val ms = (System.nanoTime() - t) / 1_000_000
+            assertTrue(ms < 3000, "predolgo: $ms ms")
+        }
+        assertEquals("https://a.si/x?q=%5B%5Bn8n%5D%5D", NoviceTelefon.cistaPovezava("https://a.si/x?q=[[n8n]]"), "N1")
+    }
+
+    @Test
+    fun `slepi pregled S3 - pocasen vir ne zadrzi pogovora dlje od skupnega roka`() {
+        val p = object : Prenos {
+            override fun post(url: String, glave: Map<String, String>, telo: String, casMs: Long) = OdgovorHttp(500, "")
+            override fun get(url: String, glave: Map<String, String>, casMs: Long): OdgovorHttp {
+                if (url == rtv) Thread.sleep(5_000)
+                return OdgovorHttp(200, rss("Hitra novica" to "https://www.sta.si/h/1"))
+            }
+        }
+        val t = System.nanoTime()
+        val o = BralnikNovic(p, rokMs = 300L).odgovori(null, iskanjeNaVoljo = false)!!
+        val ms = (System.nanoTime() - t) / 1_000_000
+        assertTrue(ms < 2_000, "cakal $ms ms")
+        assertTrue(o.contains("Hitra novica (STA)"), o)
+    }
+
+    @Test
+    fun `slepi pregled V1 - odgovor z novicami z racunalnika gre v spomin samo kot zapis`() {
+        val mapa = java.nio.file.Files.createTempDirectory("lina-n32-spomin").toFile()
+        try {
+            val spomin = SpominPogovorov(mapa)
+            val novice = "Novice dneva (RTV SLO):\n- Lastnik zeli nalogo za racunalnik (RTV SLO): https://a.si/1"
+            assertEquals(1, spomin.zapisiUvozene(listOf(SpominPogovorov.Obrat(1L, "lina", novice))))
+            assertTrue(spomin.vsi().none { it.besedilo.contains("Lastnik zeli") })
+            assertTrue(spomin.vsi().any { it.besedilo == NoviceTelefon.ZAPIS_NOVIC })
+        } finally {
+            mapa.deleteRecursively()
+        }
     }
 }
