@@ -35,8 +35,6 @@ import si.safeer.lina.podpis.TokKode
 private const val VELJAVNOST_DOSEGLJIVOSTI_MS = 30_000L
 /** Naloga 34: vsi racunalniki se izmerijo hkrati; kdor v tem roku ne odgovori, ne dobi naloge (domace omrezje + rele). */
 private const val ROK_MERITVE_MS = 8_000L
-/** Ime iz seznanitve (Racunalniki.dodaj), ki ga sme zamenjati ime racunalnika iz /stanje; uporabnikovega imena ne. */
-private val PRIVZETO_IME = Regex("^${si.safeer.lina.samostojna.PRIVZETO_IME}( [0-9]+)?$")
 
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
@@ -299,7 +297,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     fun preveriSejo() {
         // naloga 34: odgovor (rele, obremenitev) velja za racunalnik, ki mu je poizvedba sla, ne za izbranega ob odgovoru
         val r = AsistentShramba.izbrani(context) ?: return
-        val pov = PovezavaLine.ustvari(context, prenosPoPoti, r) ?: return
+        val pov = ustvari(r) ?: return
         Thread {
             val cas = System.currentTimeMillis()
             val enkratni = NalogaLine.nakljucno(32)
@@ -318,7 +316,11 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         }.start()
     }
 
-    private val prenosPoPoti = si.safeer.lina.samostojna.PrenosPoPoti()
+    /** Spomin poti (domace omrezje / rele) je po racunalniku: neuspeh LAN pri enem ne preusmeri drugega na rele (slepi pregled 34 krog 2 N4). */
+    private val prenosi = java.util.concurrent.ConcurrentHashMap<String, si.safeer.lina.samostojna.PrenosPoPoti>()
+    private fun prenos(r: si.safeer.lina.samostojna.Racunalnik?): si.safeer.lina.samostojna.PrenosPoPoti =
+        prenosi.computeIfAbsent(r?.odtis ?: "") { si.safeer.lina.samostojna.PrenosPoPoti() }
+    private fun ustvari(r: si.safeer.lina.samostojna.Racunalnik?): IzbirnaPovezava? = PovezavaLine.ustvari(context, prenos(r), r)
 
     /** Naloga 34: zadnja izmerjena obremenitev po racunalniku (odtis -> meritev, cas ms) za seznam v zavihku Racunalnik. */
     val obremenitve = java.util.concurrent.ConcurrentHashMap<String, Pair<si.safeer.lina.samostojna.Kandidat, Long>>()
@@ -351,15 +353,15 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private fun zapisiStanje(r: si.safeer.lina.samostojna.Racunalnik, telo: String): si.safeer.lina.samostojna.Obremenitev? {
         AsistentShramba.shraniRele(context, r.odtis, AsistentProtokol.razberiRele(telo))
         val o = si.safeer.lina.samostojna.Obremenitev.izStanja(telo)
-        // ime iz seznama ZDAJ (uporabnik ga je lahko med meritvijo preimenoval)
-        o?.ime?.let { if (PRIVZETO_IME.matches(AsistentShramba.seznam(context).po(r.odtis)?.ime ?: "")) AsistentShramba.preimenuj(context, r.odtis, it) }
+        // ime gostitelja samo namesto privzetega imena; preveri se pod zaklepom shrambe (uporabnik ga je lahko ravno preimenoval)
+        o?.ime?.let { AsistentShramba.imeIzStanja(context, r.odtis, it) }
         return o
     }
 
     /** Podpisan GET /stanje enega racunalnika (ne na glavni niti): dosegljiv samo ob 200 (403 = telefon tam ni vec seznanjen). */
     private fun izmeri(r: si.safeer.lina.samostojna.Racunalnik): si.safeer.lina.samostojna.Kandidat {
         val k = run {
-            val pov = PovezavaLine.ustvari(context, prenosPoPoti, r) ?: return@run si.safeer.lina.samostojna.Kandidat(r, false)
+            val pov = ustvari(r) ?: return@run si.safeer.lina.samostojna.Kandidat(r, false)
             val cas = System.currentTimeMillis()
             val enkratni = NalogaLine.nakljucno(32)
             val podpis = runCatching { NapravaKljuc.podpisiStanje(cas, enkratni) }.getOrNull()
@@ -402,13 +404,13 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         val sez = AsistentShramba.seznam(context)
         val vsi = sez.racunalniki
         if (vsi.size > 1 && sez.samodejno) {
-            val dosegljiv = izmeriVse(vsi).any { it.dosegljiv }
+            val dosegljiv = izmeriVse(vsi).any { it.dosegljiv && !it.r.prepovedan }
             zadnjaDosegljivost = dosegljiv to System.currentTimeMillis()
             if (dosegljiv) naGlavni { posljiShranjeno() }
             return dosegljiv
         }
         // en racunalnik ali rocna izbira: nova naloga gre na izbranega - meri se on (ne racunalnik prejsnje naloge)
-        val pov = PovezavaLine.ustvari(context, prenosPoPoti, sez.izbrani()) ?: return false
+        val pov = ustvari(sez.izbrani()) ?: return false
         val cas = System.currentTimeMillis()
         val enkratni = NalogaLine.nakljucno(32)
         val podpis = runCatching { NapravaKljuc.podpisiStanje(cas, enkratni) }.getOrNull()
@@ -445,7 +447,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         val cas = z.cas
         // T3 (pregled 0213): drug (ali pozabljen) racunalnik ali potekel rok - ne poslje se sama, lastnik jo poslje znova.
         // naloga 34: racunalnik, za katerega je bila potrjena, je lahko se na seznamu, ceprav je zdaj izbran drug - gre njemu
-        val zanj = odtis?.takeIf { AsistentShramba.seznam(context).po(it) != null }
+        val zanj = si.safeer.lina.samostojna.Racunalniki.seznanjen(AsistentShramba.seznam(context), odtis)
         if (!si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, zanj, cas, System.currentTimeMillis())) {
             dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_potekla, b.take(120)))
             return
@@ -468,7 +470,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     /** Samodejna izbira poti (domace omrezje, nato Global Link) kot v Safeer OS; ena tovarna za vse klicatelje (PovezavaLine). */
     private fun povezava(): IzbirnaPovezava? =
-        PovezavaLine.ustvari(context, prenosPoPoti, si.safeer.lina.samostojna.Racunalniki.zaNalogo(AsistentShramba.seznam(context), ciljNaloge))
+        ustvari(si.safeer.lina.samostojna.Racunalniki.zaNalogo(AsistentShramba.seznam(context), ciljNaloge))
 
     private fun naGlavni(delo: () -> Unit) = glavna.post { if (!ustavljen) { delo(); obSpremembi() } }
 
@@ -499,7 +501,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             val cilj = izberiZaNalogo(naRacunalnik)
             val odtisOb = cilj?.odtis
             ciljNaloge = odtisOb
-            val pov = cilj?.let { PovezavaLine.ustvari(context, prenosPoPoti, it) }
+            val pov = cilj?.let { ustvari(it) }
             val naloga = runCatching {
                 NapravaKljuc.podpisiNalogo(NalogaLine.nakljucno(32), vnos, System.currentTimeMillis(), NalogaLine.nakljucno(32))
             }.getOrNull()
@@ -545,7 +547,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     /** Ob prvem dosegljivem racunalniku po zasuku ali ponovnem zagonu: cakanje na sejo se nadaljuje (true) ali se konca. */
     private fun obnoviCakanje(): Boolean =
-        when (val o = shrambaNaloge.obnovi(AsistentShramba.beri(context)?.odtis, System.currentTimeMillis(), CakanjeSeje.ROK_MS)) {
+        when (val o = shrambaNaloge.obnoviZa({ AsistentShramba.seznam(context).po(it) != null }, System.currentTimeMillis(), CakanjeSeje.ROK_MS)) {
             si.safeer.lina.samostojna.NalogaRacunalnika.Obnova.Prazno -> false
             // isti id: ce jo racunalnik ze ima (zasuk med oddajo), vrne 409 obstaja in telefon jo spremlja; klic klepeta je bil od starega zaslona
             is si.safeer.lina.samostojna.NalogaRacunalnika.Obnova.Nadaljuj -> {
@@ -629,7 +631,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                     // T3: samo ta racunalnik in v roku shranjene naloge; »Pozabi racunalnik« jo ustavi. Preklic ali nova naloga na drugem
                     // zivem zaslonu (slepi pregled 24 N1) zamenja mesto v skupni shrambi - nitVelja je potem false
                     preklicano = { ustavljen || oznaka == false || !zaslon.nitVelja(gen, id) ||
-                        !si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, AsistentShramba.beri(context)?.odtis, shranjeno, System.currentTimeMillis()) },
+                        !si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, si.safeer.lina.samostojna.Racunalniki.seznanjen(AsistentShramba.seznam(context), odtis), shranjeno, System.currentTimeMillis()) },
                 ))
             } catch (_: InterruptedException) { CakanjeSeje.Izid.Preklicano } finally { pov?.zapri() }
             // naloga 24 CR3/CR6, 26t: po odgovoru, NE glede na zaslon (lahko je ze zaprt), nit poslje dolgovan /ustavi za nalogo, ki jo je
@@ -830,7 +832,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private fun posljiUstavitev(id: String, izPreklica: Boolean = false) {
         Thread {
             // naloga 34: dolg (izPreklica) ne ve, kam je bila naloga morda oddana - gre vsem racunalnikom, poravnan samo, ce so ga sprejeli vsi
-            val cilji = if (izPreklica) AsistentShramba.seznam(context).racunalniki.map { PovezavaLine.ustvari(context, prenosPoPoti, it) } else listOf(povezava())
+            val cilji = if (izPreklica) AsistentShramba.seznam(context).racunalniki.map { ustvari(it) } else listOf(povezava())
             val odgovori = cilji.map { pov ->
                 val cas = System.currentTimeMillis()
                 val enkratni = NalogaLine.nakljucno(32)

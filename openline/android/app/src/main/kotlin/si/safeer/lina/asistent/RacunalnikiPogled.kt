@@ -10,6 +10,7 @@ import android.widget.TextView
 import si.safeer.lina.R
 import si.safeer.lina.pokaziVarno
 import si.safeer.lina.samostojna.Racunalnik
+import si.safeer.lina.samostojna.Racunalniki
 
 /**
  * Naloga 34, zahteva 5: zavihek Racunalnik > »Moji racunalniki« - vsak seznanjen racunalnik s stanjem (dosegljiv, obremenitev,
@@ -58,8 +59,14 @@ class RacunalnikiPogled(private val a: Activity, private val kontroler: () -> As
         return deli.joinToString(" · ")
     }
 
+    private var zadnjiPrikaz: String? = null
+
     fun osvezi() {
         val s = AsistentShramba.seznam(a)
+        // dostopnost (slepi pregled 34 krog 2 N7): seznam se zgradi znova samo ob spremembi, sicer TalkBack/tipkovnica izgubita fokus
+        val prikaz = Racunalniki.vJson(s) + s.racunalniki.joinToString { stanje(it, it.odtis == s.izbrani()?.odtis) }
+        if (prikaz == zadnjiPrikaz) return
+        zadnjiPrikaz = prikaz
         koren.visibility = if (s.racunalniki.isEmpty()) View.GONE else View.VISIBLE
         samodejno.setText(if (s.samodejno) R.string.computers_auto_on else R.string.computers_auto_off)
         samodejno.visibility = if (s.racunalniki.size > 1) View.VISIBLE else View.GONE
@@ -81,7 +88,10 @@ class RacunalnikiPogled(private val a: Activity, private val kontroler: () -> As
     }
 
     private fun preimenuj(r: Racunalnik) {
-        val vnos = EditText(a).apply { setText(r.ime); filters = arrayOf(android.text.InputFilter.LengthFilter(60)) }
+        val vnos = EditText(a).apply {
+            setText(r.ime); hint = a.getString(R.string.computer_rename); contentDescription = a.getString(R.string.computer_rename) + ": " + r.ime
+            filters = arrayOf(android.text.InputFilter.LengthFilter(60))
+        }
         AlertDialog.Builder(a, R.style.Gw_Dialog)
             .setTitle(a.getString(R.string.computer_rename))
             .setView(vnos)

@@ -219,4 +219,49 @@ class Naloga34Test {
         s = Racunalniki.dodaj(s, "d".repeat(64), "192.168.1.1", 8446)!!
         assertEquals(listOf("Racunalnik", "Racunalnik 3", "Racunalnik 2"), s.racunalniki.map { it.ime })
     }
+
+    // ---------------------------------------------------------------- slepi pregled 34, krog 2
+
+    @Test fun `K2 N1 N2 - cakanje in obnova po zagonu za racunalnik naloge, ne za izbranega v zavihku`() {
+        val s = Racunalniki.izberi(dva(), oB) // izbran B, naloga na A
+        assertEquals(oA, Racunalniki.seznanjen(s, oA), "A je se seznanjen: cakanje se ne preklice")
+        assertTrue(CakajocaNaloga.smePoslati(oA, Racunalniki.seznanjen(s, oA), 1000L, 2000L))
+        assertNull(Racunalniki.seznanjen(Racunalniki.odstrani(s, oA), oA), "pozabljen A: preklic")
+        val rok = 3 * 60_000L
+        val t0 = 1_800_000_000_000L
+        // naloga caka na A, oznaka oddaje zapisana, proces umre, izbran je B: po zagonu NEZNAN (ne »potekla«, ki bi vodila v dvojno izvedbo)
+        val io = LaznaIoNaloge()
+        val n = NalogaRacunalnika(io)
+        assertTrue(n.zacniCakanje("id-naloge-34-abcdefghijklmn", "b", oA, t0))
+        assertTrue(n.predOddajo("id-naloge-34-abcdefghijklmn"))
+        assertEquals(NalogaRacunalnika.Obnova.Neznan, NalogaRacunalnika(io).obnoviZa({ s.po(it) != null }, t0 + rok + 1, rok))
+        // v roku: nadaljuje se na A
+        val io2 = LaznaIoNaloge()
+        assertTrue(NalogaRacunalnika(io2).zacniCakanje("id-naloge-34-bbcdefghijklmn", "b", oA, t0))
+        assertTrue(NalogaRacunalnika(io2).obnoviZa({ s.po(it) != null }, t0 + 1000, rok) is NalogaRacunalnika.Obnova.Nadaljuj)
+        // A pozabljen: nic se ne poslje
+        val io3 = LaznaIoNaloge()
+        assertTrue(NalogaRacunalnika(io3).zacniCakanje("id-naloge-34-cbcdefghijklmn", "b", oA, t0))
+        assertTrue(NalogaRacunalnika(io3).obnoviZa({ false }, t0 + 1000, rok) is NalogaRacunalnika.Obnova.Nic)
+    }
+
+    @Test fun `K2 N8 - ime gostitelja zamenja samo privzeto ime`() {
+        val s = SeznamRacunalnikov(racunalniki = listOf(Racunalnik(oA, "192.168.1.1", 8446, "Racunalnik 2"), Racunalnik(oB, "192.168.1.2", 8446, "Pisarna")))
+        assertEquals("testni-pc", Racunalniki.imeIzStanja(s, oA, "testni-pc")!!.po(oA)!!.ime)
+        assertNull(Racunalniki.imeIzStanja(s, oB, "testni-pc"), "uporabnikovo ime ostane")
+        assertNull(Racunalniki.imeIzStanja(s, oA, "\u0007"))
+        assertNull(Racunalniki.imeIzStanja(s, oC, "x"))
+    }
+
+    @Test fun `K2 N6 - vrnitev na starejso razlicico - pozabljen ostane pozabljen, nova seznanitev se doda`() {
+        val s = Racunalniki.izberi(dva(), oA)
+        assertEquals(s, Racunalniki.uskladi(s, "192.168.1.10", 8446, oA, veljaven), "zrcalo enako: nic")
+        assertEquals(listOf(oB), Racunalniki.uskladi(s, null, 0, null, veljaven).racunalniki.map { it.odtis }, "starejsa je A pozabila")
+        val u = Racunalniki.uskladi(s, "192.168.1.30", 8446, oC, veljaven)
+        assertEquals(listOf(oA, oB, oC), u.racunalniki.map { it.odtis })
+        assertEquals(oC, u.izbran)
+        assertEquals(s, Racunalniki.uskladi(s, "8.8.8.8", 8446, oC, veljaven), "neveljavno zrcalo se ne doda")
+        val r = s.copy(samodejno = false)
+        assertFalse(Racunalniki.uskladi(r, "192.168.1.30", 8446, oC, veljaven).samodejno)
+    }
 }

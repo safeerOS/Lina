@@ -27,7 +27,12 @@ object AsistentShramba {
     @Synchronized
     fun seznam(context: Context): SeznamRacunalnikov {
         val p = prefs(context)
-        Racunalniki.izJson(p.getString(SEZNAM, null), veljaven, veljavenRele)?.let { return it }
+        Racunalniki.izJson(p.getString(SEZNAM, null), veljaven, veljavenRele)?.let { s ->
+            // starejsa razlicica je medtem spremenila zrcalo (pozabila ali seznanila drug racunalnik): seznam se uskladi
+            val u = Racunalniki.uskladi(s, p.getString("naslov", null), p.getInt("vrata", 0), p.getString("odtis", null), veljaven)
+            if (u != s) zapisi(context, u)
+            return u
+        }
         val s = Racunalniki.prehod(null, p.getString("naslov", null), p.getInt("vrata", 0), p.getString("odtis", null), p.getString("rele", null), veljaven, veljavenRele)
         if (s.racunalniki.isNotEmpty() && zapisi(context, s)) SinhronizacijaZLino.prenesiRevizijo(context, s.racunalniki[0].odtis)
         return s
@@ -65,6 +70,7 @@ object AsistentShramba {
 
     fun izberi(context: Context, odtis: String): Boolean = spremeni(context) { Racunalniki.izberi(it, odtis) }
     fun preimenuj(context: Context, odtis: String, ime: String): Boolean = spremeni(context) { Racunalniki.preimenuj(it, odtis, ime) }
+    fun imeIzStanja(context: Context, odtis: String, ime: String): Boolean = spremeni(context) { Racunalniki.imeIzStanja(it, odtis, ime) }
     fun prepovej(context: Context, odtis: String, prepovedan: Boolean): Boolean = spremeni(context) { Racunalniki.prepovej(it, odtis, prepovedan) }
     fun samodejno(context: Context, da: Boolean): Boolean = spremeni(context) { it.copy(samodejno = da) }
 

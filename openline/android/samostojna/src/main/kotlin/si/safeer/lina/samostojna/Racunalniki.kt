@@ -83,6 +83,32 @@ object Racunalniki {
      */
     fun zaNalogo(s: SeznamRacunalnikov, cilj: String?): Racunalnik? = if (cilj != null) s.po(cilj) else s.izbrani()
 
+    /** Odtis naloge, ce je njen racunalnik se seznanjen (T3 za vec racunalnikov: primerja se z njim, ne z izbranim v zavihku). */
+    fun seznanjen(s: SeznamRacunalnikov, odtis: String?): String? = odtis?.takeIf { s.po(it) != null }
+
+    private val PRIVZETO = Regex("^$PRIVZETO_IME( [0-9]+)?$")
+
+    /** Ime iz /stanje (ime gostitelja) zamenja samo privzeto ime iz seznanitve, nikoli uporabnikovega (preveri se ob zapisu). */
+    fun imeIzStanja(s: SeznamRacunalnikov, odtis: String, ime: String?): SeznamRacunalnikov? {
+        val c = cistoIme(ime) ?: return null
+        val r = s.po(odtis) ?: return null
+        if (!PRIVZETO.matches(r.ime) || r.ime == c) return null
+        return preimenuj(s, odtis, c)
+    }
+
+    /**
+     * Vrnitev na starejso razlicico in nazaj (slepi pregled 34 krog 2 N6): starejsa Lina pise samo zrcalo (naslov/vrata/odtis). Ce se
+     * zrcalo ne ujema z izbranim, ga je spremenila ona: brez zrcala = izbrani je bil pozabljen; drug odtis = nova seznanitev (doda se).
+     */
+    fun uskladi(s: SeznamRacunalnikov, naslov: String?, vrata: Int, odtis: String?, veljaven: (Racunalnik) -> Boolean): SeznamRacunalnikov {
+        val i = s.izbrani() ?: return s
+        if (odtis == null || naslov == null) return odstrani(s, i.odtis)
+        val o = odtis.lowercase()
+        if (o == i.odtis) return s
+        val r = Racunalnik(o, naslov, vrata)
+        return if (veljaven(r)) dodaj(s.copy(samodejno = true), o, naslov, vrata)?.copy(samodejno = s.samodejno) ?: s else s
+    }
+
     fun preimenuj(s: SeznamRacunalnikov, odtis: String, ime: String): SeznamRacunalnikov {
         val c = cistoIme(ime) ?: return s
         return s.copy(racunalniki = s.racunalniki.map { if (it.odtis == odtis) it.copy(ime = c) else it })
