@@ -511,7 +511,7 @@ export function AsistentPanel({ brain, ukaz, glas, onPrevzeto, kompakt, onOdpriP
               </div>
             ) : (
               <div key={`${s.cas}-${i}`} className="lina-glas max-w-[90%] self-start pl-3 text-sm leading-relaxed">
-                <span className="whitespace-pre-wrap">{s.besedilo}</span>
+                <span className="whitespace-pre-wrap break-words">{s.besedilo}</span>
                 <span className="mt-1 flex gap-3 text-xs text-[var(--color-moss)]">
                   <button type="button" className="underline" onClick={() => void navigator.clipboard?.writeText(s.besedilo).then(() => setNamig(t("pogovorKopirano"))).catch(() => undefined)}>
                     {t("pogovorKopiraj")}

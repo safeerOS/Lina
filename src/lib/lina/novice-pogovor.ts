@@ -55,23 +55,26 @@ function izvirnaTema(besedilo: string, tema: string): string {
   return izvirno.slice(Math.max(0, izvirno.length - tema.length)).trim() || tema;
 }
 
-/** Korenski deli besed teme (sklanjatve: »vremenu« -> »vreme«); besede krajse od 3 znakov ne stejejo. */
-function koreni(tema: string): string[] {
-  return brezSumnikov(tema)
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((b) => b.length >= 3 && !["the", "and", "ter", "pri", "kaj"].includes(b))
-    .map((b) => (b.length > 5 ? b.slice(0, b.length - 2) : b.slice(0, Math.max(3, b.length - 1))));
-}
-
 export type NovicaOdgovora = { naslov: string; povezava: string; vir: string; odlomek?: string };
 
-/** Novice, ki omenjajo temo (naslov ali odlomek). */
+/**
+ * Besede teme za ujemanje (svetovalec): kratke (do 3 znake, npr. EU, AI, ZDA) samo kot cela beseda, daljse kot koren na zacetku besede
+ * (sklanjatve: »vremenu« -> »vreme«), nikoli kot podniz sredi besede (»ZDA« ni v »zdaj«).
+ */
+function besedeTeme(tema: string): { koren: string; cela: boolean }[] {
+  return brezSumnikov(tema)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((b) => b.length >= 2 && !["the", "and", "ter", "pri", "kaj", "in", "na", "za", "od", "do", "ali"].includes(b))
+    .map((b) => (b.length <= 3 ? { koren: b, cela: true } : { koren: b.length > 5 ? b.slice(0, b.length - 2) : b.slice(0, b.length - 1), cela: false }));
+}
+
+/** Novice, ki omenjajo temo (naslov ali odlomek); tema brez uporabne besede nima zadetkov (ne »vse novice«). */
 export function poTemi<T extends NovicaOdgovora>(postavke: readonly T[], tema: string): T[] {
-  const k = koreni(tema);
-  if (!k.length) return [...postavke];
+  const k = besedeTeme(tema);
+  if (!k.length) return [];
   return postavke.filter((p) => {
-    const besedilo = brezSumnikov(`${p.naslov} ${p.odlomek ?? ""}`);
-    return k.some((x) => besedilo.includes(x));
+    const besede = brezSumnikov(`${p.naslov} ${p.odlomek ?? ""}`).split(/[^\p{L}\p{N}]+/u);
+    return k.some((x) => besede.some((b) => (x.cela ? b === x.koren : b.startsWith(x.koren))));
   });
 }
 

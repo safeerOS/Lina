@@ -205,3 +205,18 @@ describe("vpetje: gradnje na GitHubu", { concurrency: 1 }, () => {
     assert.doesNotMatch(namesti, /Dovoljenj|dovoljenj/);
   });
 });
+
+describe("naloga 32 (slepi pregled K2-3): gradnja z nezaupano vsebino v oknu modela", { concurrency: 1 }, () => {
+  it("dovoljenje za podobne gradnje ne zazene predloga, ko je v oknu podatek (priponka, novice); brez zastavice kot prej", async () => {
+    const e = await okoljeGradenj("gradnje-n32");
+    const s = await ukazGradenj(e.token, { ukaz: "pripravi", tok: "gradnja.yml", veja: "dev" }, e.podatki, e.o);
+    const g = s.gradnje.find((x) => x.stanje === "caka")!;
+    await ukazGradenj(e.token, { ukaz: "potrdi", id: g.id, zgostitev: g.zgostitev, podobne: true }, e.podatki, e.o);
+    const prej = e.zagoni.length;
+    const zPodatkom = await predlagajGradnjo(e.podatki, "gradnja.yml", "dev", e.o, "lina", true);
+    assert.equal(zPodatkom?.stanje, "caka");
+    assert.equal(e.zagoni.length, prej, "nic se ne zazene brez lastnika");
+    await ukazGradenj(e.token, { ukaz: "odkloni", id: zPodatkom!.id }, e.podatki, e.o);
+    assert.notEqual((await predlagajGradnjo(e.podatki, "gradnja.yml", "dev", e.o))?.stanje, "caka", "brez zastavice dovoljenje velja");
+  });
+});

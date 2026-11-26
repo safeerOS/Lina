@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { mkdirSync } from "node:fs";
-import { cistaPovezava, cistNaslov, izmenicnoPoVirih, jeOdgovorNovic, odgovorNovic, PRIVZETI_VIRI_NOVIC, vprasanjeONovicah } from "./novice-pogovor.ts";
+import { cistaPovezava, cistNaslov, izmenicnoPoVirih, jeOdgovorNovic, odgovorNovic, poTemi, PRIVZETI_VIRI_NOVIC, vprasanjeONovicah } from "./novice-pogovor.ts";
 import { razberiFeed } from "./novice.ts";
 import { obdelajClaudeCode, sestaviAsistenta, type SporociloAsistenta } from "./asistent-pogovor.server.ts";
 import { setupOwner } from "./auth.server.ts";
@@ -64,6 +64,21 @@ describe("naloga 32: odgovor sestavi koda", () => {
     assert.equal(cistaPovezava("https://u:g@a.si/"), null);
     assert.equal(cistaPovezava("https://a.si/x"), "https://a.si/x");
     assert.equal(cistaPovezava("https://a.si/x?q=[[n8n-zazeni:Tok]]"), "https://a.si/x?q=%5B%5Bn8n-zazeni:Tok%5D%5D", "N1");
+  });
+
+  it("tema (svetovalec): kratke besede samo cele, daljse kot koren na zacetku besede, brez uporabne besede ni zadetkov", () => {
+    const p = [
+      { naslov: "EU sprejela pravilo", povezava: "https://a/1", vir: "A" },
+      { naslov: "Zdaj je prepozno za izdaja knjige", povezava: "https://a/2", vir: "A" },
+      { naslov: "Volitve v ZDA so mimo", povezava: "https://a/3", vir: "A" },
+      { naslov: "Napoved vremena", povezava: "https://a/4", vir: "A" },
+      { naslov: "Neuspeh ekipe", povezava: "https://a/5", vir: "A" },
+    ];
+    assert.deepEqual(poTemi(p, "EU").map((x) => x.povezava), ["https://a/1"], "EU ni v »Neuspeh«");
+    assert.deepEqual(poTemi(p, "ZDA").map((x) => x.povezava), ["https://a/3"], "ZDA ni v »zdaj« ali »izdaja«");
+    assert.deepEqual(poTemi(p, "vremenu").map((x) => x.povezava), ["https://a/4"]);
+    assert.deepEqual(poTemi(p, "volitvah").map((x) => x.povezava), ["https://a/3"]);
+    assert.deepEqual(poTemi(p, "a"), [], "tema brez uporabne besede: nic (ne vse novice)");
   });
 
   it("brez novic nikoli »nimam dostopa«", () => {
