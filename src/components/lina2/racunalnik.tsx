@@ -591,6 +591,11 @@ export function VodjaKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanje
   );
 }
 
+/** Naloga 30: »Potrdi seznam« podpise natanko prikazani seznam s streznika (ne polja za urejanje); ukaz zahteva geslo lastnika (Z_GESLOM). */
+export function ukazPotrdiPrepovedane(s: JavnoStanjeNalog): Record<string, unknown> {
+  return { ukaz: "prepovedane", mape: s.prepovedane };
+}
+
 /** Ukaz »Uveljavi« veze zgostitev, ki jo lastnik vidi (streznik jo izracuna znova in brez nje zavrne). */
 export function ukazUveljavi(z: JavnaZdruzitev): Record<string, unknown> {
   return { ukaz: "uveljavi", projekt: z.projekt, zgostitev: z.zgostitev };
@@ -812,6 +817,20 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
         </label>
         <button type="submit" disabled={zaposlen} className="lina-gumb-majhen self-start">{t("agShraniPrepovedane")}</button>
       </form>
+      {stanje.prepovedaneNepotrjene ? (
+        <div role="alert" className="flex flex-col gap-2 text-sm">
+          <p className="font-semibold text-[var(--color-signal)]">{t("agPrepovedaneNepotrjene")}</p>
+          <p>{t("agPrepovedaneNepotrjeneNamig")}</p>
+          {stanje.prepovedane.length ? (
+            <ul className="list-disc pl-5 font-mono text-xs">{stanje.prepovedane.map((m) => <li key={m}>{m}</li>)}</ul>
+          ) : (
+            <p className="text-xs">{t("agPrepovedanePrazen")}</p>
+          )}
+          <button type="button" disabled={zaposlen || !stanje.geslo} onClick={() => void onUkaz(ukazPotrdiPrepovedane(stanje))} className="lina-gumb-majhen self-start">
+            {t("agPotrdiSeznam")}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

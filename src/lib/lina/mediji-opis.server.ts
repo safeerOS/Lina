@@ -1,15 +1,14 @@
 /**
  * Priprava opisa za generator slik in videa (lastnik 22. 11. 2026: »imager pa more razumeti slovenscino, ce jo za govor preko telefona
  * razume«). Imagen in Veo slovenscine uradno ne podpirata (dokumentacija Vertex nastavi le anglescino in nekaj predogledanih jezikov),
- * zato Linini mozgani (Gemini, ki slovenscino razumejo) opis najprej prevedejo v natancen angleski poziv. Uporabnik pise slovensko,
- * v knjiznici ostaneta oba (opis in poziv). Ce prevod ne uspe, gre naprej izvirni opis (slika je bolje kot nic), z oznako.
- * Izid modela je NEZAUPANJA vreden: ena vrstica, brez oznak, dolzinska meja. Komentarji brez sumnikov.
+ * zato Google (Translation LLM in klasicni prevajalnik) v LASTNIKOVEM projektu opis najprej prevede v angleski poziv. Uporabnik pise
+ * slovensko, v knjiznici ostaneta oba (opis in poziv). B9 (lastnik 26. 11. 2026, »Se strinjam z tvojimi predlogi«): ce prevod prek
+ * Googla ne uspe, opis ne gre nobenemu drugemu ponudniku (ne mozganom asistentke) in slika/video se ne ustvari (generator vrze).
+ * Izid prevajalnika je NEZAUPANJA vreden: ena vrstica, brez oznak, dolzinska meja. Komentarji brez sumnikov.
  */
-import { pogovorBrain } from "./keys.server.ts";
-import { navodiloZNamigom } from "./live/rsdo-namig.ts";
-import { callProvider } from "./providers.ts";
 
-export const NAJVEC_ZNAKOV_POZIVA = 1800;
+/** Meja poziva: opis ima najvec 2000 znakov (NAJVEC_ZNAKOV_OPISA), prevod je lahko nekoliko daljsi - ne sme pasti zaradi meje. */
+export const NAJVEC_ZNAKOV_POZIVA = 2400;
 export const ROK_PREVODA_MS = 15_000;
 /** Odgovor prevajalnika Google: en prevod do NAJVEC_ZNAKOV_POZIVA, ovoj JSON je majhen. */
 export const NAJVEC_BAJTOV_PREVODA = 64 * 1024;
@@ -30,11 +29,6 @@ export async function teloZMejo(odg: Response, meja: number, sporocilo: string):
   return Buffer.concat(kosi).toString("utf8");
 }
 
-export const NAVODILO_PREVODA =
-  "Prevedi uporabnikov opis slike ali videa iz slovenscine (ali drugega jezika) v natancen angleski poziv za generator slik. " +
-  "Ohrani vsebino, slog, barve in razpolozenje; nicesar ne dodaj, kar uporabnik ni zahteval (brez dodatnih oseb, napisov, znamk). " +
-  "Ce opis vsebuje besedilo, ki naj bo na sliki, ga pusti v izvirnem jeziku v narekovajih. Vrni SAMO poziv v eni vrstici, brez razlage.";
-
 /**
  * namig: drugi prepis istega GOVORJENEGA opisa iz lokalnega slovenskega modela RSDO (lastnik 22. 11. 2026: »svetovalec za slovenscino
  * ... ga lahko vprasa za dodatno mnenje«). Nezaupan podatek (ocistiNamig), samo za pomoc pri razumevanju; brez njega velja opis.
@@ -51,21 +45,9 @@ export function ocistiPoziv(surovo: unknown): string | null {
   return s;
 }
 
-/** Privzeti prevajalnik: model za pogovor z asistentko (nikoli klic tajnice); brez modela ali ob napaki null. */
-export const privzetiPrevajalnik: Prevajalnik = async (opis, root, namig) => {
-  try {
-    const brain = await pogovorBrain(root);
-    if (!brain) return null;
-    const odg = await callProvider({ ...brain, text: opis, system: navodiloZNamigom(NAVODILO_PREVODA, namig), maxTokens: 600, najvecZnakov: 2400, timeoutMs: ROK_PREVODA_MS, vsebinaKlica: false });
-    return odg.ok ? ocistiPoziv(odg.text) : null;
-  } catch {
-    return null;
-  }
-};
-
 /**
  * Rezerva (lastnik 22. 11. 2026: »ima pa google tudi razvit prevajalec«): Google Cloud Translation v3 prek ISTEGA projekta in zetona
- * Vertex (brez novega racuna). Uporabi se samo, ce Linini mozgani ne prevedejo. NEPREVERJENO: ali je API v projektu omogocen.
+ * Vertex (brez novega racuna). Edini prevajalnik opisa (B9, 26. 11. 2026). NEPREVERJENO: ali je API v projektu omogocen.
  */
 /**
  * model "llm" (lastnik 22. 11. 2026): Googlov prevajalski LLM (Translation LLM, general/translation-llm, na tehnologiji Gemini) - prvi v verigi;
@@ -130,23 +112,18 @@ export function jeLazjiOpis(opis: string): boolean {
   return !VEZNIKI_ODVISNIKOV.test(zlozeno);
 }
 
-/** Privzeta veriga po zahtevnosti: lazji -> klasicni Google, nato TLLM in mozgani; tezji -> TLLM, mozgani, nato klasicni. */
+/**
+ * Veriga po zahtevnosti, SAMO Google v lastnikovem projektu (B9, lastnik 26. 11. 2026: mozgani asistentke niso vec clen - tudi ne v
+ * Medijih): lazji -> klasicni, nato TLLM; tezji -> TLLM, nato klasicni.
+ */
 export function prevajalnikPoZahtevnosti(projekt: string, moznosti: { fetch?: typeof fetch; zeton?: () => Promise<string> } = {}): Prevajalnik {
-  const nmt = googlePrevajalnik(projekt, { ...moznosti, model: "nmt" });
-  const llm = googlePrevajalnik(projekt, { ...moznosti, model: "llm" });
-  return async (opis, root, namig) =>
-    jeLazjiOpis(opis) ? verigaPrevajalnikov(nmt, llm, privzetiPrevajalnik)(opis, root, namig) : verigaPrevajalnikov(llm, privzetiPrevajalnik, nmt)(opis, root, namig);
-}
-
-/** Ista izbira po zahtevnosti, a SAMO Google v lastnikovem projektu (brez mozganov asistentke; orodje orkestratorja, B9). */
-export function googlePoZahtevnosti(projekt: string, moznosti: { fetch?: typeof fetch; zeton?: () => Promise<string> } = {}): Prevajalnik {
   const nmt = googlePrevajalnik(projekt, { ...moznosti, model: "nmt" });
   const llm = googlePrevajalnik(projekt, { ...moznosti, model: "llm" });
   return async (opis, root, namig) => (jeLazjiOpis(opis) ? verigaPrevajalnikov(nmt, llm) : verigaPrevajalnikov(llm, nmt))(opis, root, namig);
 }
 
-/** Opis -> poziv. Vrne poziv in ali je bil preveden. */
-export async function pripraviPoziv(opis: string, root: string, prevedi: Prevajalnik = privzetiPrevajalnik, namig?: string): Promise<{ poziv: string; prevedeno: boolean }> {
+/** Opis -> poziv. Vrne poziv in ali je bil preveden (neprevedenega generator ne poslje: B9, glava). */
+export async function pripraviPoziv(opis: string, root: string, prevedi: Prevajalnik, namig?: string): Promise<{ poziv: string; prevedeno: boolean }> {
   let preveden: string | null = null;
   try {
     preveden = ocistiPoziv(await prevedi(opis, root, namig));

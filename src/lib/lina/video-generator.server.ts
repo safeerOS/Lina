@@ -121,6 +121,8 @@ export async function generirajVideo(opis: unknown, token: string | null, dir?: 
   // mapa, ki ni navadna mapa, zavrne PRED placljivo zahtevo (pred zapisom se preveri se enkrat)
   await mapaKnjiznice(root);
   const { poziv, prevedeno } = await pripraviPoziv(besedilo, root, m.prevedi ?? prevajalnikPoZahtevnosti(projekt, { fetch: m.fetch, zeton: m.zeton }), m.namigRsdo);
+  // B9 (lastnik 26. 11. 2026): neuspel prevod prek Googla - opis ne gre drugam in videa ni
+  if (!prevedeno) throw new Error("Prevod opisa ni uspel, video ni ustvarjen.");
   const f = m.fetch ?? fetch;
   const zeton = await (m.zeton ?? (() => vertexAccessToken()))();
   const glave = { authorization: `Bearer ${zeton}`, "content-type": "application/json" };

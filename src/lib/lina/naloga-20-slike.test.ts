@@ -254,7 +254,7 @@ const poImenu = (o: OrodjeOrkestratorja[]) => new Map(o.map((x) => [x.definicija
 const vertex = async () => ({ provider: "vertex", project: "moj-projekt" });
 
 describe("naloga 20: orodje ustvari_sliko", () => {
-  it("definicija: zunanje, brez potrditve (tudi po branju podatkov); okuzena naloga caka lastnika", async () => {
+  it("definicija: zunanje, brez potrditve; po branju zasebnih podatkov (naloga 30) in v okuzeni nalogi caka lastnika", async () => {
     const { root } = await okolje();
     const o = poImenu(orodjaLine(root)).get("ustvari_sliko")!;
     assert.ok(o, "orodje obstaja");
@@ -262,7 +262,9 @@ describe("naloga 20: orodje ustvari_sliko", () => {
     assert.equal(o.definicija.parametri.type, "object");
     assert.deepEqual(o.definicija.parametri.required, ["opis"]);
     assert.equal(zahtevaPotrditev(o, false, false, false), false);
-    assert.equal(zahtevaPotrditev(o, false, true, true), false);
+    // naloga 30 (lastnik 26. 11. 2026): po branju zasebnih podatkov potrditev (prej: nikoli)
+    assert.equal(zahtevaPotrditev(o, false, true, false), false);
+    assert.equal(zahtevaPotrditev(o, false, true, true), true);
     assert.equal(zahtevaPotrditev(o, true, true, true), true);
     assert.ok((o.rokMs ?? 0) >= 60_000);
   });
@@ -515,7 +517,7 @@ describe("naloga 20: popravki po pregledu", () => {
     await assert.rejects(stat(path.join(dir, DATOTEKA_SLIK)));
   });
 
-  it("orodje: opis gre samo v lastnikov Google projekt - ob neuspelem prevodu NE k mozganom asistentke (OpenRouter)", async () => {
+  it("orodje: opis gre samo v lastnikov Google projekt - ob neuspelem prevodu NE k mozganom asistentke (OpenRouter) in slike ni (naloga 30)", async () => {
     const { root } = await okolje();
     const token = await setupOwner("geslo-test-1234", root);
     const { shraniKljucAsistentke, pogovorBrain } = await import("./keys.server.ts");
@@ -533,11 +535,12 @@ describe("naloga 20: popravki po pregledu", () => {
     try {
       const o = poImenu(orodjaLine(root, { slike: { mozgani: vertex, zeton: async () => ZETON, nakljucno: ids } })).get("ustvari_sliko")!;
       const izid = await o.izvedi({ opis: "pes na travniku z zasebnimi podatki" }, ctx("o-000000000prevod"));
-      assert.ok("ok" in izid && izid.ok, JSON.stringify(izid));
+      // naloga 30 (lastnik 26. 11. 2026, B9): neprevedenega opisa ne posljemo nikamor - jasno sporocilo, brez zahteve Vertexu
+      assert.ok("ok" in izid && !izid.ok && izid.napaka === "Prevod opisa ni uspel, slika ni ustvarjena.", JSON.stringify(izid));
     } finally {
       globalThis.fetch = prej;
     }
-    assert.ok(naslovi.includes("aiplatform.googleapis.com"), naslovi.join(","));
+    assert.equal(naslovi.includes("aiplatform.googleapis.com"), false, naslovi.join(","));
     assert.deepEqual(naslovi.filter((h) => !h.endsWith(".googleapis.com")), [], naslovi.join(","));
   });
 

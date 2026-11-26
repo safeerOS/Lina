@@ -204,10 +204,13 @@ describe("naloga 19b N2: dovoljene in prepovedane mape samo s podpisom ukaza las
     // starejsa razlicica z nepodpisanimi prepovedanimi: ukaz mape jih NE podpise (podtaknjen seznam bi postal veljaven)
     await ukazClaudeNalog(token, { ukaz: "mape", mape: [proj] }, root, o);
     assert.match(napakaIz(await beri()), /potrjene z geslom/, "nepodpisane prepovedane ostanejo neveljavne");
-    // nova namestitev brez prepovedanih: ukaz mape podpise tudi prazen seznam prepovedanih
+    // nova namestitev brez prepovedanih: naloga 30 (lastnik 26. 11. 2026, 19b #4) - ukaz mape prepovedanih ne podpise vec, tudi praznih ne;
+    // lastnik prazen seznam potrdi z gumbom »Potrdi seznam« (ukaz prepovedane s prikazanim seznamom)
     await writeFile(path.join(root, "claude-naloge.json"), JSON.stringify({ v: 1, mape: [], naloge: [] }));
     await ukazClaudeNalog(token, { ukaz: "mape", mape: [proj] }, root, o);
-    assert.match(izid(await beri()), /prva vrstica/, "prazne prepovedane se podpisejo z ukazom mape");
+    assert.match(napakaIz(await beri()), /potrjene z geslom/, "prazne nepotrjene prepovedane: orodja ne vidijo map");
+    await ukazClaudeNalog(token, { ukaz: "prepovedane", mape: [] }, root, o);
+    assert.match(izid(await beri()), /prva vrstica/, "po potrditvi praznega seznama orodje bere");
     await ukazClaudeNalog(token, { ukaz: "prepovedane", mape: [path.join(proj, "skrivno")] }, root, o);
     await ukazClaudeNalog(token, { ukaz: "agenti", agenti: { pi: false } }, root, o);
     assert.match(izid(await orodje(root, "preberi_datoteko").izvedi({ pot: path.join(proj, "beri.txt") }, ctx())), /prva vrstica/);

@@ -33,6 +33,8 @@ export const KAKOVOSTI_SLIK = ["hitri", "standard", "ultra"] as const;
 export type KakovostSlike = (typeof KAKOVOSTI_SLIK)[number];
 export const MODEL_PO_KAKOVOSTI: Record<KakovostSlike, ModelSlike> = { hitri: "gemini-3.1-flash-lite-image", standard: "gemini-3.1-flash-image", ultra: "gemini-3-pro-image" };
 export const NAJVEC_ZNAKOV_OPISA = 2000;
+/** B9 (lastnik 26. 11. 2026): neuspel prevod prek Googla - opis ne gre drugam in slike ni (orodje ustvari_sliko vrne ta stavek). */
+export const PREVOD_SLIKE_NI_USPEL = "Prevod opisa ni uspel, slika ni ustvarjena.";
 export const NAJVEC_SLIK_NA_ZAHTEVO = 4;
 export const ROK_ZAHTEVE_MS = 60_000;
 export const RAZMERJA_SLIK = ["1:1", "3:4", "4:3", "9:16", "16:9"] as const;
@@ -170,6 +172,7 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
   await mapaKnjiznice(root);
   m.signal?.throwIfAborted();
   const { poziv, prevedeno } = await pripraviPoziv(besedilo, root, m.prevedi ?? prevajalnikPoZahtevnosti(projekt, { fetch: m.fetch, zeton: m.zeton }), m.namigRsdo);
+  if (!prevedeno) throw new Error(PREVOD_SLIKE_NI_USPEL);
   const zeton = await (m.zeton ?? (() => vertexAccessToken()))();
   const slike: Array<{ bajti: Buffer; mime: string }> = [];
   let zavrnjenih = 0;

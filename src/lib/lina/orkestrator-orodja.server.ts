@@ -6,6 +6,8 @@
  *   robots, meje; prazna stran prek TinyFish, ce je kljuc). Zahteva na splet nese podatke VEN (naslov, poizvedba), zato caka lastnika,
  *   ko je naloga okuzena ali je ze prebrala zasebne lokalne podatke (potrditevPoZasebnih);
  * - pisanje (vedno enkratna potrditev lastnika): zapisi_datoteko (nikoli prepis brez izrecnega prepisi, brez brisanja), ustvari_opomnik.
+ * - ustvari_sliko (zunanje, brez potrditve): opis gre v lastnikov projekt Google; caka lastnika samo, ko je naloga okuzena ali je ze
+ *   prebrala zasebne podatke (potrditevPoZasebnih, lastnik 26. 11. 2026).
  * Izvedbe ukazov ni (ukazi lupine samo prek agentov s peskovnikom). Izid je nezaupan podatek: ovije in preveri ga orkestrator.
  * Komentarji brez sumnikov.
  */
@@ -31,7 +33,7 @@ export type OdvisnostiOrodij = {
   slike?: Pick<MoznostiGeneriranja, "fetch" | "zeton" | "prevedi" | "nakljucno"> & { mozgani?: () => Promise<{ provider?: unknown; project?: unknown } | null> };
 };
 
-/** Naloga 20: slik na nalogo (ustvari_sliko je brez potrditve, zato je meja edina zavora porabe kreditov). */
+/** Naloga 20: slik na nalogo (ustvari_sliko je praviloma brez potrditve, zato je meja glavna zavora porabe kreditov). */
 export const NAJVEC_SLIK_NA_NALOGO = 8;
 const ROK_SLIKE_MS = 3 * 60_000;
 
@@ -307,11 +309,12 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
       },
     },
     {
-      // Naloga 20 (lastnik 25. 11. 2026): brez potrditve (krediti brezplacni). Opis gre samo v lastnikov projekt Vertex (isti kot za
-      // mozgane), ne tretjemu in ne napadalcu, slika ostane lokalno - zato ne caka niti po branju zasebnih podatkov. Okuzena naloga
-      // (zaznan vbrizg) vseeno caka lastnika (zahtevaPotrditev); poraba je omejena z NAJVEC_SLIK_NA_NALOGO.
+      // Naloga 20 (lastnik 25. 11. 2026): brez potrditve (krediti brezplacni). Opis gre samo v lastnikov projekt Google (prevod in
+      // Vertex), ne tretjemu, slika ostane lokalno. Naloga 30 (lastnik 26. 11. 2026): po branju zasebnih podatkov (zasebniIzid) caka
+      // lastnika - opis bi jih lahko nesel ven. Okuzena naloga caka vedno (zahtevaPotrditev); poraba je omejena z NAJVEC_SLIK_NA_NALOGO.
       razred: "zunanje",
       potrditev: false,
+      potrditevPoZasebnih: true,
       rokMs: ROK_SLIKE_MS,
       definicija: {
         ime: "ustvari_sliko",
@@ -334,19 +337,24 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
         // rezervacija PRED prvim await (socasni klici iste naloge ne preberejo istega stanja); ponovni zagon stevec ponastavi,
         // a nadaljevana naloga je okuzena (vsako ne-bralno orodje caka lastnika)
         slikNaNalogo.set(k.nalogaId, porabljeno + stevilo);
+        const sprosti = () => slikNaNalogo.set(k.nalogaId, (slikNaNalogo.get(k.nalogaId) ?? stevilo) - stevilo);
         const mozgani = odv.slike?.mozgani ?? (async () => (await import("./keys.server.ts")).activeBrain(root));
         const izbira = izberiGeneratorSlik(await mozgani(), (a.kakovost as KakovostSlike | undefined) ?? "standard");
         if (!izbira.ok) {
-          slikNaNalogo.set(k.nalogaId, (slikNaNalogo.get(k.nalogaId) ?? stevilo) - stevilo);
+          sprosti();
           return napaka(izbira.sporocilo);
         }
-        const [{ ustvariSliko }, { googlePoZahtevnosti }] = await Promise.all([import("./slike-generator.server.ts"), import("./mediji-opis.server.ts")]);
-        // prevod samo prek Googla v lastnikovem projektu (tezji opis najprej TLLM, lastnik 22. 11.); brez mozganov asistentke (B9)
-        const prevedi = odv.slike?.prevedi ?? googlePoZahtevnosti(izbira.projekt, { fetch: odv.slike?.fetch, zeton: odv.slike?.zeton });
+        const { ustvariSliko, PREVOD_SLIKE_NI_USPEL } = await import("./slike-generator.server.ts");
+        // prevod samo prek Googla v lastnikovem projektu (prevajalnikPoZahtevnosti v ustvariSliko; B9)
         let izid;
         try {
-          izid = await ustvariSliko(root, a.opis, { ...odv.slike, prevedi, projekt: izbira.projekt, model: izbira.model, stevilo, razmerje: a.razmerje, signal: k.signal });
+          izid = await ustvariSliko(root, a.opis, { ...odv.slike, projekt: izbira.projekt, model: izbira.model, stevilo, razmerje: a.razmerje, signal: k.signal });
         } catch (e) {
+          // neuspel prevod: placljive zahteve ni bilo, rezervacija se vrne
+          if (e instanceof Error && e.message === PREVOD_SLIKE_NI_USPEL) {
+            sprosti();
+            return napaka(PREVOD_SLIKE_NI_USPEL);
+          }
           return napaka(`Slike ni bilo mogoce ustvariti: ${e instanceof Error ? e.message.slice(0, 200) : "napaka"}`);
         }
         if (!izid.slike.length) return napaka(`Generator ni vrnil slike (zavrnjenih ${izid.zavrnjenih}; morda filter vsebine). ${izbira.razlog}`);

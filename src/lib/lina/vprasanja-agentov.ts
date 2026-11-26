@@ -76,7 +76,8 @@ const ORODJA_BRANJA = new Set(["Read", "Glob", "Grep", "LS"]);
 const ZNANA_DRUGA = new Set(["TodoWrite", "Task", "ExitPlanMode", "ustvari_opomnik"]);
 // naloga 19b N6: orodja orkestratorja F2 (Linin koledar je znan in varen; splet nese podatke ven; zapis je omejen na dovoljene mape lastnika,
 // delovna mapa teka orkestratorja je prazna, zato zunaj-mape tu ne velja - oznaci se zapis nastavitev in izvrsljivih datotek)
-const ORKESTRATOR_SPLET = new Set(["isci_splet", "preberi_stran"]);
+// naloga 30: ustvari_sliko nese opis v lastnikov projekt Google (potrditev po branju zasebnih podatkov) - oznaka omrezje, ne neznano
+const ORKESTRATOR_SPLET = new Set(["isci_splet", "preberi_stran", "ustvari_sliko"]);
 const IZVRSLJIVO = /\.(?:sh|bash|zsh|fish|ps1|psm1|bat|cmd|exe|com|py|js|mjs|cjs|ts|tsx|jsx|rb|pl|php|jar|desktop|service)$|(?:^|[\\/])(?:Makefile|Dockerfile|Justfile)$/i;
 /** Pisanje sem spremeni, kako se agent ali git obnasata pozneje (kljuke, pravila, MCP), zato je vedno nevarno. */
 const NASTAVITVENE = /(^|\/)(\.claude|\.git|\.vscode|\.husky)(\/|$)|(^|\/)(\.mcp\.json|CLAUDE\.md|AGENTS\.md|\.envrc|package\.json)$/;

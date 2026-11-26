@@ -5,7 +5,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AgentiKartica, NalogaVrstica, VodjaKartica, ukazUveljavi } from "../../components/lina2/racunalnik.tsx";
+import { AgentiKartica, NalogaVrstica, VodjaKartica, ukazPotrdiPrepovedane, ukazUveljavi } from "../../components/lina2/racunalnik.tsx";
 import { en, sl } from "./besedila.ts";
 import type { JavnaNaloga, JavnoStanjeNalog, StanjeAgenta } from "./claude-naloge.server.ts";
 
@@ -14,7 +14,7 @@ const agent = (id: StanjeAgenta["id"], x: Partial<StanjeAgenta> = {}): StanjeAge
 });
 
 const STANJE: JavnoStanjeNalog = {
-  naVoljo: true, razlogNiNaVoljo: null, geslo: true, mape: [], prepovedane: ["/home/a/scit"], naloge: [], pregledovalec: "claude", preizkusi: {}, zdruzitve: [], omrezjeAgentov: null,
+  naVoljo: true, razlogNiNaVoljo: null, geslo: true, mape: [], prepovedane: ["/home/a/scit"], prepovedaneNepotrjene: false, naloge: [], pregledovalec: "claude", preizkusi: {}, zdruzitve: [], omrezjeAgentov: null,
   agenti: [agent("claude"), agent("agy", { vklopljen: false }), agent("opencode", { stanje: "ni-najden", pot: null }), agent("kimi"), agent("pi"), agent("grok", { stanje: "prijava" })],
 };
 
@@ -50,6 +50,30 @@ describe("AgentiKartica", () => {
     expect(html).toContain(sl.agDodeli);
     for (const k of ["agKdajZdaj", "agKdajUra", "agKdajPo", "agMapa", "agBesedilo", "agPrepovedane"] as const) expect(html).toContain(sl[k]);
     expect(html).toContain("/home/a/scit");
+  });
+
+  it("naloga 30: potrjen seznam prepovedanih - brez opozorila in brez gumba Potrdi seznam", () => {
+    expect(html).not.toContain(sl.agPrepovedaneNepotrjene);
+    expect(html).not.toContain(sl.agPotrdiSeznam);
+  });
+
+  it("naloga 30: nepotrjen seznam - opozorilo (sl in en), prikazan seznam s streznika, gumb potrdi natanko ta seznam; brez gesla onemogocen", () => {
+    const nepotrjen = { ...STANJE, prepovedaneNepotrjene: true, prepovedane: ["/home/a/scit", "/home/a/yt"] };
+    const h = renderToStaticMarkup(createElement(AgentiKartica, { stanje: nepotrjen, zaposlen: false, onUkaz: ni }));
+    const opozorilo = h.slice(h.indexOf(sl.agPrepovedaneNepotrjene));
+    expect(h).toContain('role="alert"');
+    expect(opozorilo).toContain(sl.agPrepovedaneNepotrjeneNamig);
+    expect(opozorilo).toContain("/home/a/yt");
+    expect(opozorilo).toContain(sl.agPotrdiSeznam);
+    expect(ukazPotrdiPrepovedane(nepotrjen)).toEqual({ ukaz: "prepovedane", mape: ["/home/a/scit", "/home/a/yt"] });
+    const prazen = renderToStaticMarkup(createElement(AgentiKartica, { stanje: { ...nepotrjen, prepovedane: [] }, zaposlen: false, onUkaz: ni }));
+    expect(prazen).toContain(sl.agPrepovedanePrazen);
+    const brezGesla = renderToStaticMarkup(createElement(AgentiKartica, { stanje: { ...nepotrjen, geslo: false }, zaposlen: false, onUkaz: ni }));
+    expect(brezGesla.slice(brezGesla.indexOf(sl.agPrepovedaneNepotrjene))).toMatch(new RegExp(`<button type="button" disabled=""[^>]*>${sl.agPotrdiSeznam}`));
+    for (const k of ["agPrepovedaneNepotrjene", "agPrepovedaneNepotrjeneNamig", "agPrepovedanePrazen", "agPotrdiSeznam"] as const) {
+      expect(en[k].length).toBeGreaterThan(0);
+      expect(en[k]).not.toBe(sl[k]);
+    }
   });
 });
 

@@ -116,9 +116,10 @@ describe("generirajSliko", () => {
 
   it("napaka ponudnika, neveljaven JSON ali vse zavrnjeno: nic se ne zapise", async () => {
     const { dir, token } = await nova();
-    await assert.rejects(generirajSliko("pes", token, dir, { fetch: lazni(403, "zavrnjeno").f, zeton: async () => ZETON, projekt: "moj-projekt" }), /403/);
-    await assert.rejects(generirajSliko("pes", token, dir, { fetch: lazni(200, "ni json").f, zeton: async () => ZETON, projekt: "moj-projekt" }), /neveljaven/);
-    const vse = await generirajSliko("pes", token, dir, { fetch: lazni(200, BREZ_SLIKE).f, zeton: async () => ZETON, projekt: "moj-projekt" });
+    // naloga 30 (B9): brez uspelega prevoda zahteve ponudniku slik ni - preizkus napak ponudnika zato poda prevod
+    await assert.rejects(generirajSliko("pes", token, dir, { fetch: lazni(403, "zavrnjeno").f, zeton: async () => ZETON, projekt: "moj-projekt", prevedi: PREVOD }), /403/);
+    await assert.rejects(generirajSliko("pes", token, dir, { fetch: lazni(200, "ni json").f, zeton: async () => ZETON, projekt: "moj-projekt", prevedi: PREVOD }), /neveljaven/);
+    const vse = await generirajSliko("pes", token, dir, { fetch: lazni(200, BREZ_SLIKE).f, zeton: async () => ZETON, projekt: "moj-projekt", prevedi: PREVOD });
     assert.deepEqual(vse, { slike: [], zavrnjenih: 1 });
     assert.deepEqual(await readdir(path.join(dir, MAPA_SLIK)), []);
     await assert.rejects(stat(path.join(dir, DATOTEKA_SLIK)));

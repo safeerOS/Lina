@@ -24,7 +24,9 @@ const PREVOD = async () => "A dog reading a newspaper on a sunny bench";
 describe("prevod opisa", () => {
   it("ocistiPoziv: ena vrstica, brez oznak in narekovajev; prazno ali predolgo null", () => {
     assert.equal(ocistiPoziv('```\n"Prompt: A red   apple\non a table"\n```'), "A red apple on a table");
-    for (const slab of [null, 5, "", "   ", "x".repeat(1801)]) assert.equal(ocistiPoziv(slab), null);
+    // naloga 30: meja 2400 (prej 1800) - prevod opisa z 2000 znaki ne sme pasti zaradi meje, ker neprevedenega opisa ne posljemo
+    for (const slab of [null, 5, "", "   ", "x".repeat(2401)]) assert.equal(ocistiPoziv(slab), null);
+    assert.equal(ocistiPoziv("x".repeat(2400)), "x".repeat(2400));
   });
 
   it("pripraviPoziv: prevod uspe -> angleski poziv; napaka ali prazno -> izvirni opis z oznako", async () => {
