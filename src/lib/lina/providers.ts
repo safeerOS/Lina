@@ -697,6 +697,50 @@ async function poZamenjaviModela(input: ProviderCall, model: string, secret: str
   return { ...ponovno, povratek: obvestilo };
 }
 
+/**
+ * D3 (naloga 29): besedilo iz odgovora 200. Uspeh je SAMO JSON ovojnica TEGA ponudnika z besedilom (Anthropic content[], OpenAI-
+ * zdruzljivi choices[0].message, Gemini/Vertex candidates[]); surovo telo nikoli ne gre naprej kot odgovor in besedila ponudnika ne
+ * vracamo (AGENTS.md: surovega sporocila uporabnik ne vidi). Lasten streznik (custom) ima svojo pot (callLastni).
+ * PRAZEN_ODGOVOR = prava ovojnica brez besedila (preverbe z 8 zetoni jo smejo sprejeti); vse drugo (golo besedilo, HTML, prirezan
+ * JSON, {error}, ovojnica drugega ponudnika ali tujega programa na vratih OmniRoute) = NEPRICAKOVAN_ODGOVOR.
+ */
+export function besediloOdgovora(
+  provider: BrainProvider,
+  raw: string,
+): { ok: true; text: string; predmet: Record<string, unknown> } | { ok: false; sporocilo: string; predmet: Record<string, unknown> | null } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR, predmet: null };
+  }
+  const jePredmet = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!jePredmet(parsed)) return { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR, predmet: null };
+  const p = parsed;
+  const ne = { ok: false as const, sporocilo: NEPRICAKOVAN_ODGOVOR, predmet: p };
+  if (p.error != null || p.type === "error") return ne;
+  let ovojnica = false;
+  if (provider === "claude") {
+    ovojnica = Array.isArray(p.content) && p.content.every((d) => jePredmet(d));
+  } else if (provider === "gemini" || provider === "vertex") {
+    ovojnica = Array.isArray(p.candidates) && p.candidates.length > 0 && jePredmet(p.candidates[0]);
+  } else {
+    const prva = Array.isArray(p.choices) ? (p.choices[0] as unknown) : undefined;
+    ovojnica = jePredmet(prva) && jePredmet(prva.message) && prva.error == null && prva.finish_reason !== "error";
+  }
+  if (!ovojnica) return ne;
+  let text = "";
+  try {
+    text = readText(p as Parameters<typeof readText>[0]);
+  } catch {
+    return ne;
+  }
+  if (text) return { ok: true, text, predmet: p };
+  // Prazna ovojnica Anthropic mora biti sporocilo (type message), sicer je tuj predmet z enakim imenom polja.
+  if (provider === "claude" && p.type !== "message") return ne;
+  return { ok: false, sporocilo: PRAZEN_ODGOVOR, predmet: p };
+}
+
 async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonudnika> {
   if (vhod.provider === "custom") return callLastni(vhod);
   // Model, ki ga je ponudnik ze zavrnil: takoj nadomestni (tekoci klic ima stari model v pomnilniku); samo isti racun, naslov in vloga.
@@ -727,40 +771,10 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
       }
       return { ok: false, sporocilo: hideSecret(`Ponudnik je zavrnil klic (${response.status}).`, secret), ...(vzrok ? { vzrok } : {}) };
     }
-    let text = raw.trim();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      /* Kratek odgovor je lahko golo besedilo. */
-    }
-    // D3 (naloga 29): odgovor brez besedila ni uspeh in surovo telo nikoli ne gre naprej kot odgovor. Lasten streznik (custom) ima svojo
-    // pot (callLastni) in sem ne pride. Samo prava prazna OVOJNICA (polje choices/content/candidates, brez error) je PRAZEN_ODGOVOR, ki ga
-    // preverbe z 8 zetoni smejo sprejeti; prazno telo, HTML (drug program na vratih OmniRoute), {error} s 200 in drug JSON so
-    // NEPRICAKOVAN_ODGOVOR, ki ga ne sprejme nobena preverba. Besedila ponudnika ne vracamo (AGENTS.md: surovega sporocila uporabnik ne vidi).
-    if (!text || text.startsWith("<")) return { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR };
-    if (parsed !== undefined) {
-      const predmet = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-      if (predmet) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(predmet as Parameters<typeof razberiPorabo>[0]), "pogovor");
-      let iz = "";
-      let berljiva = false;
-      try {
-        iz = predmet ? readText(predmet as Parameters<typeof readText>[0]) : "";
-        berljiva = predmet !== null;
-      } catch {
-        /* napacna oblika ovojnice */
-      }
-      if (!iz) {
-        const ovojnica =
-          berljiva &&
-          predmet !== null &&
-          !Object.hasOwn(predmet, "error") &&
-          predmet.type !== "error" &&
-          ["choices", "content", "candidates"].some((k) => Array.isArray(predmet[k]));
-        return { ok: false, sporocilo: ovojnica ? PRAZEN_ODGOVOR : NEPRICAKOVAN_ODGOVOR };
-      }
-      text = iz;
-    }
+    const izid = besediloOdgovora(input.provider, raw);
+    if (izid.predmet) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(izid.predmet), "pogovor");
+    if (!izid.ok) return { ok: false, sporocilo: izid.sporocilo };
+    const text = izid.text;
     return { ok: true, text: hideSecret(text.slice(0, input.audio ? 2000 : mejaZnakov(input.najvecZnakov)), secret) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Klic ponudnika ni uspel.";
