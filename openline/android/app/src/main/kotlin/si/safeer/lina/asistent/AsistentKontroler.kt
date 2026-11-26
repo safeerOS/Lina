@@ -395,6 +395,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         if (posiljam || nalogaId != null) { obIzidu?.let { glavna.post { it(IzidPredaje.ZASEDENO, null) } }; return false }
         if (NalogaLine.besedilo(vnos) == null) { obIzidu?.let { glavna.post { it(IzidPredaje.NAPAKA, null) } }; return false }
         prekliciCakanje() // naloga 23t: nova naloga zamenja tisto, ki caka na sejo - stara se ne poslje
+        // slepi pregled 24 krog 2 N3: isto besedilo kot naloga za ponovitev (npr. iz klepeta) jo porabi - ne ponudi se znova (dvojna izvedba)
+        if (zaPonovitev?.trim() == vnos.trim()) zaPonovitev = null
         posiljam = true; napaka = null; izid = null; dnevnik.clear(); cakaOdgovor = false; spremljana = null
         obSpremembi()
         // T3 / slepi pregled 23t N9: racunalnik, kateremu je lastnik nalogo potrdil, se zapomni ob potrditvi (ne sele po odgovoru)
@@ -497,17 +499,18 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private fun prekliciCakanje() {
         // naloga 24 CR1, slepi pregled 24 N6: naloga za rocno ponovitev (Z_ROCNO) ni cakajoca - preklic ali nova naloga je ne zbriseta
         val zapisanId = shrambaCakajoce.getString(Z_ID, null)
-        val oddana = si.safeer.lina.samostojna.NalogaCakaSejo.oddanoZa(shrambaCakajoce.getString(Z_ODDANO, null), zapisanId)
-        pocistiCakanje()
-        if (cakaSejo == null && zapisanId == null) return
-        // naloga 24 CR3/CR6: trajna oznaka preklica PRED /ustavi; nit oddaje (katerikoli zaslon) po odgovoru preklicano nalogo ustavi sama
+        if (cakaSejo == null && zapisanId == null) { pocistiCakanje(); return }
+        // naloga 24 CR3/CR6: trajna oznaka preklica in nov stevec PRED branjem oznake oddaje in ciscenjem (slepi pregled 24 krog 2 N1b, N6a):
+        // nit oddaje zapise oznako oddaje pred POST in prebere seznam preklicev po odgovoru - ena od strani vedno vidi drugo
         (zapisanId ?: cakaSejo)?.let { shrambaCakajoce.edit().putString(Z_PREKLIC, CakanjeSeje.dodajPreklic(shrambaCakajoce.getString(Z_PREKLIC, null), it)).commit() }
         generacija.incrementAndGet()
+        val oddana = si.safeer.lina.samostojna.NalogaCakaSejo.oddanoZa(shrambaCakajoce.getString(Z_ODDANO, null), zapisanId)
+        pocistiCakanje()
         cakaSejo = null
-        // oddaja je bila morda na poti (ta ali drug zaslon, prejsnji proces): /ustavi takoj; ce pride pred sprejemom (403), ga nit oddaje
-        // po odgovoru poslje znova (slepi pregled 24 N2: zaprtje zaslona vmes ne izgubi ustavitve)
+        // oddaja je bila morda na poti (ta ali drug zaslon, prejsnji proces): /ustavi takoj; ce pride pred sprejemom (403, ne pokaze se),
+        // ga nit oddaje po odgovoru poslje znova (slepi pregled 24 N2: zaprtje zaslona vmes ne izgubi ustavitve)
         if (oddana && zapisanId != null) {
-            posljiUstavitev(zapisanId)
+            posljiUstavitev(zapisanId, izPreklica = true)
             dodaj(context.getString(si.safeer.lina.R.string.local_task_preklic_prepozno))
         } else dodaj(context.getString(si.safeer.lina.R.string.local_task_odpiranje_preklicano))
         obSpremembi()
@@ -561,7 +564,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             } catch (_: InterruptedException) { CakanjeSeje.Izid.Preklicano } finally { pov?.zapri() }
             // naloga 24 CR3/CR6 (slepi pregled 24 N2): po odgovoru, NE glede na zaslon (lahko je ze zaprt in izida ne obdela), nit sama
             // ustavi nalogo, ki jo je lastnik medtem preklical (tudi z drugega zaslona; /ustavi ob preklicu je morda prisel prezgodaj)
-            CakanjeSeje.ustaviPoZaprtju(izid, shrambaCakajoce.getString(Z_PREKLIC, null))?.let { posljiUstavitev(it) }
+            CakanjeSeje.ustaviPoZaprtju(izid, shrambaCakajoce.getString(Z_PREKLIC, null))?.let { posljiUstavitev(it, izPreklica = true) }
             // zaprt zaslon (zapri): naGlavni ne tece, mesta Z_* ostanejo in novi zaslon cakanje nadaljuje (obnoviCakanje)
             naGlavni { koncajCakanje(gen, id, besedilo, izid, obIzidu) }
         }.start()
@@ -570,7 +573,9 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     private fun koncajCakanje(gen: Int, id: String, besedilo: String, izid: CakanjeSeje.Izid, obIzidu: ((IzidPredaje, String?) -> Unit)?) {
         // preklic ali nova naloga: sprejeto oddajo je ustavila nit (Z_PREKLIC, oznaka zapisana pred povecanjem stevca) ali preklic sam
         // (oznaka oddaje je bila zapisana pred POST) - tu se nic vec ne poslje (slepi pregled N1, 24 N2)
-        if (generacija.get() != gen) return
+        // slepi pregled 24 krog 2 N1: mesta Z_* zdaj pripadajo drugi nalogi (preklic ali nova naloga na drugi instanci zaslona) - ta
+        // instanca jih ne cisti in ne pise naloge za ponovitev
+        if (generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id) return
         cakaSejo = null
         // krog 3 N1b: prejsnji poskus (zaslon ali proces) je oddajo morda ze poslal - brez odgovora te niti je izid neznan, ne »ni oddana«
         val bilaOddana = si.safeer.lina.samostojna.NalogaCakaSejo.oddanoZa(shrambaCakajoce.getString(Z_ODDANO, null), id)
@@ -759,7 +764,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     }
 
     /** Podpisan POST /ustavi za nalogo [id] (tudi naloga, ki je bila oddana tik pred preklicem cakanja - slepi pregled 23t N1). */
-    private fun posljiUstavitev(id: String) {
+    private fun posljiUstavitev(id: String, izPreklica: Boolean = false) {
         Thread {
             val pov = povezava()
             val cas = System.currentTimeMillis()
@@ -769,7 +774,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             val odg = if (pov == null || podpis == null || posiljatelj == null) OdgovorLine.Nedosegljiva
                 else pov.ustavi(AsistentProtokol.teloUstavitve(id, posiljatelj, cas, enkratni, podpis))
             pov?.zapri()
-            naGlavni { napaka = NapakaLine.sporocilo(odg) }
+            // slepi pregled 24 krog 2 N5: ustavitev ob preklicu (morda pred sprejemom, 403) ne pise napake druge, nove naloge
+            if (!izPreklica) naGlavni { napaka = NapakaLine.sporocilo(odg) }
         }.start()
     }
 

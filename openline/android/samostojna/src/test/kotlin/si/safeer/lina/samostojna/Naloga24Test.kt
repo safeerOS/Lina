@@ -137,10 +137,16 @@ class Naloga24Test {
         val k = app("asistent/AsistentKontroler.kt")
         // CR1 (+ slepi pregled 24 N5, N6): Z_ROCNO brise samo lastnikov vzem; samodejna oddaja shranjene caka, dokler je mesto zasedeno
         assertTrue(Regex("""private fun posljiShranjeno\(\) \{\s+if \(cakaSejo != null\) return[^\n]*\n\s+if \(obnoviCakanje\(\)\) return\n(\s*//[^\n]*\n)*\s+if \(zaPonovitev != null\) return""").containsMatchIn(k), "CR1 posljiShranjeno")
-        assertEquals(1, Regex("""zaPonovitev = null""").findAll(k).count(), "CR1 Z_ROCNO brise se kaj drugega kot vzemiZaPonovitev")
+        // Z_ROCNO brisejo samo lastnikov vzem in oddaja ISTEGA besedila (krog 2 N3), ne preklic ali druga naloga
+        assertEquals(2, Regex("""zaPonovitev = null""").findAll(k).count(), "CR1 Z_ROCNO brise se kaj drugega")
+        assertTrue(k.contains("if (zaPonovitev?.trim() == vnos.trim()) zaPonovitev = null"), "krog 2 N3")
+        // krog 2 N1b: oznaka preklica in stevec pred branjem oznake oddaje; N1: tuja mesta Z_* se ne cistijo; N5: ustavitev ob preklicu tiho
+        assertTrue(Regex("""putString\(Z_PREKLIC[^\n]*\n\s+generacija\.incrementAndGet\(\)\n\s+val oddana = """).containsMatchIn(k), "krog 2 N1b")
+        assertTrue(k.contains("if (generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id) return"), "krog 2 N1")
+        assertEquals(2, Regex("""posljiUstavitev\([^)]*izPreklica = true\)""").findAll(k).count(), "krog 2 N5")
         // CR3/CR6: seznam preklicev pred /ustavi; nit oddaje po odgovoru (ne glede na zaslon) ustavi preklicano nalogo
-        assertTrue(Regex("""putString\(Z_PREKLIC, CakanjeSeje\.dodajPreklic\([\s\S]{0,700}if \(oddana && zapisanId != null\) \{\s+posljiUstavitev\(zapisanId\)""").containsMatchIn(k), "CR3 oznaka preklica")
-        assertTrue(Regex("""\n\s+CakanjeSeje\.ustaviPoZaprtju\(izid, shrambaCakajoce\.getString\(Z_PREKLIC, null\)\)\?\.let \{ posljiUstavitev\(it\) \}[^\n]*\n(\s*//[^\n]*\n)*\s+naGlavni \{ koncajCakanje""").containsMatchIn(k), "CR3 nit")
+        assertTrue(Regex("""putString\(Z_PREKLIC, CakanjeSeje\.dodajPreklic\([\s\S]{0,700}if \(oddana && zapisanId != null\) \{\s+posljiUstavitev\(zapisanId, izPreklica = true\)""").containsMatchIn(k), "CR3 oznaka preklica")
+        assertTrue(Regex("""\n\s+CakanjeSeje\.ustaviPoZaprtju\(izid, shrambaCakajoce\.getString\(Z_PREKLIC, null\)\)\?\.let \{ posljiUstavitev\(it, izPreklica = true\) \}[^\n]*\n(\s*//[^\n]*\n)*\s+naGlavni \{ koncajCakanje""").containsMatchIn(k), "CR3 nit")
         assertFalse(Regex("""fun pocistiCakanje\(\) \{[^\n]*\n[^\n]*Z_PREKLIC""").containsMatchIn(k), "CR3 oznako brise ciscenje")
         // slepi pregled 24 N1: preklic na drugem zaslonu (Z_ID) ustavi tudi to nit
         assertTrue(k.contains("preklicano = { ustavljen || generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id ||"), "N1")
