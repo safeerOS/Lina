@@ -239,7 +239,7 @@ function podomrezje(e: NetworkInterfaceInfo): string | null {
  * brez docker/veth in brez zacasnih IPv6, ki se menjajo, ter MAC privzetih prehodov. Sprememba odtisa = omrezje se je res spremenilo.
  */
 export function odtisLan(vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, prehodi: Readonly<Record<string, string>>): string {
-  // CRR5: IPv4 z masko - ista naslov in prehod z drugo masko sta drugo omrezje (omrezjeNaslova), rezerva »omrezje« mora to videti
+  // CRR5: IPv4 z masko - isti naslov in prehod z drugo masko sta drugo omrezje (omrezjeNaslova), rezerva »omrezje« mora to videti
   const deli = new Set(lanVnosi(vmesniki).map(({ ime, e, je4 }) => `${ime}=${je4 ? `${e.address}/${e.netmask}` : podomrezje(e)}@${prehodi[ime] ?? ""}`));
   return [...deli].sort().join(",");
 }

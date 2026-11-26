@@ -377,9 +377,10 @@ test("N4: PID tujega procesa (EPERM) po roku odpiranja ne blokira nove seje; ist
   const root = await mkdtemp(path.join(tmpdir(), "lina-n21-seja-"));
   const dom = await mkdtemp(path.join(tmpdir(), "lina-n21-dom-"));
   const tuj = tujPid();
-  if (tuj === null) tc.diagnostic("ni procesa z EPERM: preverjen samo lastni proces");
   try {
-    for (const [pid, pricakovano] of [...(tuj === null ? [] : [[tuj, 2] as const]), [process.pid, 1] as const]) {
+    // podpreizkusa: brez procesa z EPERM je tuj del viden kot preskocen (slepi pregled 24b), lastni proces tece vedno
+    for (const [ime, pid, pricakovano] of [["tuj PID (EPERM)", tuj, 2], ["lastni zivi proces", process.pid, 1]] as const) await tc.test(ime, { skip: pid === null ? "ni procesa z EPERM (root ali en uporabnik)" : false }, async () => {
+      if (pid === null) return;
       ponastaviSejo(root);
       let t = 1_000_000;
       let zagonov = 0;
@@ -389,7 +390,7 @@ test("N4: PID tujega procesa (EPERM) po roku odpiranja ne blokira nove seje; ist
       t += ROK_ODPIRANJA_MS + 1;
       await odpriSejoClaude(root, o);
       assert.equal(zagonov, pricakovano, `PID ${pid}`);
-    }
+    });
     assert.notEqual(casZagonaProcesa(process.pid), null);
   } finally {
     ponastaviSejo(root);
