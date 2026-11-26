@@ -10,8 +10,8 @@ import { zapisiObrat } from "./spomin-baza.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import { preberi as preberiImenik } from "./imenik.server.ts";
 import { imeVImeniku, klicIzTelefona, potekelKlicTelefona, type IzmenjavaSinhron, type KlicSinhron } from "./klici-telefon.ts";
-import { loadPravila } from "./pravila.server.ts";
-import type { CallSession } from "./types.ts";
+import { normalizePravila } from "./pravila.server.ts";
+import type { CallSession, Pravila } from "./types.ts";
 import { vsebinaZapiska } from "./zapiski.ts";
 import { ZAPISEK_V_MAPI, izbrisiMapoKlica, mapaKlicaZaPosnetek, mapaZaPisanje, zapisiZapisekKlica } from "./zapiski.server.ts";
 
@@ -271,12 +271,11 @@ async function preberiStanje(root: string): Promise<Stanje> {
 async function rokIzPravil(root: string): Promise<number | null> {
   try {
     // CRR6: veljaven JSON, ki ni objekt (null, [], stevilo), loadPravila tiho zamenja s privzetimi - to ni znan rok (manjkajoca datoteka je)
+    // CRR3-4: en posnetek datoteke - drugo branje (loadPravila) bi lahko videlo »null« ali izbrisano datoteko in vrnilo zasilnih 90
     const surovo = await readFile(path.join(root, "pravila.json"), "utf8").catch((e: NodeJS.ErrnoException) => { if (e.code === "ENOENT") return null; throw e; });
-    if (surovo !== null) {
-      const j: unknown = JSON.parse(surovo);
-      if (!j || typeof j !== "object" || Array.isArray(j)) return null;
-    }
-    return (await loadPravila(root)).zapiskiHrambaDni;
+    const j: unknown = surovo === null ? null : JSON.parse(surovo);
+    if (surovo !== null && (!j || typeof j !== "object" || Array.isArray(j))) return null;
+    return normalizePravila(j as Partial<Pravila> | null).zapiskiHrambaDni;
   } catch {
     return null;
   }

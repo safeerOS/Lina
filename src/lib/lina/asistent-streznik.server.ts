@@ -229,6 +229,8 @@ export const NAJVEC_NALOG = 200;
 export const ROK_GROBA_MS = 10 * 60_000;
 export const NAJVEC_GROB_NA_NAPRAVO = 50;
 export const NAJVEC_GROB = 1000;
+/** CRR3-3: odlozena ustavitev (/ustavi je ze vrnil 202) se ob napaki ponovi na toliko ms (spremenljivo samo za preizkuse). */
+export const ponovitevUstavitve = { ms: 5_000 };
 export const NAJVEC_DOGODKOV = 200;
 /** SR-8: telefon zavrne odgovor nad 64 KiB, zato Lina dogodke razdeli (z rezervo za ovojnico). */
 export const NAJVEC_ODGOVOR_DOGODKOV_B = 48 * 1024;
@@ -781,8 +783,22 @@ export class AsistentStreznik {
       this.zacenja.delete(id);
     }
     // /ustavi, ki se je razresil po oddaji v sejo (zacni ze koncan, ta nadaljevanje se ne): naloga se ustavi takoj
-    if (rez.ustavi) await this.m.izvajalec.ustavi(id, rez.ustavi).catch((e) => this.dnevnik(`ustavitev po zacetku ni uspela: ${(e as Error).message.slice(0, 300)}`));
+    if (rez.ustavi) await this.ustaviPozneje(id, rez.ustavi);
     return { status: 202, telo: { id } };
+  }
+
+  /**
+   * CRR3-3: telefon je za /ustavi ze dobil 202 in ga ne poslje vec - neuspela ustavitev (seja se znova povezuje) se ponavlja, dokler ne
+   * uspe, dokler streznik tece in naloga obstaja (pocisti jo po 1 h / 24 h). Napaka gre v dnevnik enkrat.
+   */
+  private async ustaviPozneje(id: string, dokaz: Dokaz, prvic = true): Promise<void> {
+    try {
+      await this.m.izvajalec.ustavi(id, dokaz);
+    } catch (e) {
+      if (prvic) this.dnevnik(`ustavitev po zacetku ni uspela: ${(e as Error).message.slice(0, 300)}`);
+      if (!this.streznik || !this.naloge.has(id)) return;
+      setTimeout(() => { if (this.streznik && this.naloge.has(id)) void this.ustaviPozneje(id, dokaz, false); }, ponovitevUstavitve.ms).unref?.();
+    }
   }
 
   /** Naloga 25 N3b: grob preklicanih id (samo ta naprava, rok ROK_GROBA_MS, omejeno na napravo in skupaj). */

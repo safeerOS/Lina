@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { IzvajalecClaudeCode, type Dogodek, type Izvajalec, type Naloga } from "./asistent.server.ts";
 import {
   AsistentStreznik, NAJVEC_NEZNANIH_NA_MINUTO, NAJVEC_POVEZAV_NA_NASLOV, NAJVEC_ZAHTEV_NA_MINUTO, NAJVEC_ZAVRNITEV_NA_MINUTO, POT, odtisPotrdila, potrdiloAsistenta, ustvariPotrdilo, zasebenNaslov, zasebenOdjemalec,
-  dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO, POT_SLIKA_KONTROLE,
+  dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO, POT_SLIKA_KONTROLE, ponovitevUstavitve,
 } from "./asistent-streznik.server.ts";
 import { idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizSlikeKontrole, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
@@ -734,6 +734,8 @@ function zadrzan(seja = true) {
   const iz: Izvajalec = { ...l.iz, razpolozljiv: async () => { razp++; await vrata; return seja; } };
   return { iz, klici: l.klici, odpri, razp: () => razp };
 }
+/** CRR3-1: streznik je sprejel podpis zahteve z [enkratni] (zasebni seznam videni) - zahteva je prisla mimo preverbe podpisa. */
+const sprejetPodpis = (s: AsistentStreznik, enkratni: string) => (s as unknown as { videni: Map<string, number> }).videni.has(enkratni);
 
 test("naloga 25 N4: dve socasni oddaji istega id - ena izvedba, druga 409 obstaja", async () => {
   const z = zadrzan();
@@ -743,9 +745,10 @@ test("naloga 25 N4: dve socasni oddaji istega id - ena izvedba, druga 409 obstaj
     const izidi: number[] = [];
     const p1 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { izidi.push(r.status); return r; });
     await caka(() => z.razp() >= 1);
-    const p2 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { izidi.push(r.status); return r; });
-    // brez rezervacije obe oddaji cakata na razpolozljiv; z njo druga caka na izid prve (in nato dobi 409)
-    await caka(() => z.razp() >= 2 || izidi.length >= 1, 300).catch(() => undefined);
+    const b2 = telefonNaloga(ANA, id, "pokazi datum");
+    const p2 = s.z("POST", `${POT}/naloga`, b2).then((r) => { izidi.push(r.status); return r; });
+    // brez rezervacije obe oddaji cakata na razpolozljiv; z njo druga caka na izid prve (in nato dobi 409); CRR3-1: znak namesto roka
+    await caka(() => sprejetPodpis(s.s, b2.enkratni) || izidi.length >= 1);
     z.odpri();
     const [r1, r2] = await Promise.all([p1, p2]);
     assert.deepEqual([r1.status, r2.status].sort(), [202, 409]);
@@ -863,8 +866,10 @@ test("naloga 25 (slepi pregled 1b): socasna oddaja istega id ob zaprti seji dobi
     const p1 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
     await caka(() => z.razp() >= 1);
     let drugi = 0;
-    const p2 = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum")).then((r) => { drugi = r.status; return r; });
-    await caka(() => z.razp() >= 2 || drugi !== 0 || s.l.klici.length > 0, 300).catch(() => undefined);
+    const b2 = telefonNaloga(ANA, id, "pokazi datum");
+    const p2 = s.z("POST", `${POT}/naloga`, b2).then((r) => { drugi = r.status; return r; });
+    // CRR3-1: izrecen znak, da je druga oddaja prisla do rezervacije (podpis sprejet; od tu do cakanja na prvo ni await) - ne rok 300 ms
+    await caka(() => sprejetPodpis(s.s, b2.enkratni) || drugi !== 0);
     z.odpri();
     const [r1, r2] = await Promise.all([p1, p2]);
     assert.equal(r1.status, 503);
@@ -919,4 +924,70 @@ test("naloga 25 (slepi pregled 7): Borov /ustavi, ki se preverja med Aninim spre
     await ub?.catch(() => undefined);
     await s.pospravi();
   }
+});
+
+// --- naloga 26r (CodeRabbit r3, CRR3-3): /ustavi med zacni vrne 202, odlozena ustavitev ne sme ostati enkratna
+/** Izvajalec: zacni preveri preklic (kot pravi) in nato caka na vrata; ustavi prvih [neuspehov] klicev vrze (seja se znova povezuje). */
+function ustavitevPoZacni(neuspehov: number) {
+  const l = lazni();
+  let odpri!: () => void;
+  const vrata = new Promise<void>((r) => { odpri = r; });
+  const ustavitve: Array<"napaka" | "ok"> = [];
+  const iz: Izvajalec = {
+    ...l.iz,
+    zacni: async (n, cb, preklicana) => { l.klici.push({ kaj: "zacni", args: [n] }); if (preklicana?.()) throw new Error("preklicana"); await vrata; void cb; },
+    ustavi: async () => {
+      if (ustavitve.length < neuspehov) { ustavitve.push("napaka"); throw new Error("Ustavitve ni bilo mogoce poslati: seja Claude Code ni dosegljiva."); }
+      ustavitve.push("ok");
+    },
+  };
+  return { iz, klici: l.klici, odpri, ustavitve };
+}
+
+test("naloga 26r CRR3-3: /ustavi med oddajo v sejo (202), prva ustavitev pade - streznik jo ponovi, ko se povezava vrne", async () => {
+  const prej = ponovitevUstavitve.ms;
+  ponovitevUstavitve.ms = 20;
+  const z = ustavitevPoZacni(2);
+  const dnevnik: string[] = [];
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz, dnevnik: (v) => dnevnik.push(v) });
+  try {
+    const id = idNaloge();
+    const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    await caka(() => z.klici.some((k) => k.kaj === "zacni"));
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id))).status, 202, "telefon dobi 202 in ustavitve ne poslje vec");
+    z.odpri();
+    assert.equal((await p).status, 202);
+    await caka(() => z.ustavitve.includes("ok"), 3000);
+    assert.deepEqual(z.ustavitve, ["napaka", "napaka", "ok"]);
+    await premor(100);
+    assert.equal(z.ustavitve.length, 3, "po uspeli ustavitvi ni vec poskusov");
+    assert.equal(dnevnik.filter((v) => v.includes("ustavitev po zacetku ni uspela")).length, 1, "dnevnik enkrat, ne ob vsakem poskusu");
+  } finally {
+    ponovitevUstavitve.ms = prej;
+    z.odpri();
+    await s.pospravi();
+  }
+});
+
+test("naloga 26r CRR3-3: ponavljanje odlozene ustavitve se konca, ko se streznik ustavi", async () => {
+  const prej = ponovitevUstavitve.ms;
+  ponovitevUstavitve.ms = 20;
+  const z = ustavitevPoZacni(Number.MAX_SAFE_INTEGER);
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  try {
+    const id = idNaloge();
+    const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    await caka(() => z.klici.some((k) => k.kaj === "zacni"));
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id))).status, 202);
+    z.odpri();
+    await p;
+    await caka(() => z.ustavitve.length >= 3, 3000);
+  } finally {
+    await s.pospravi();
+    ponovitevUstavitve.ms = prej;
+  }
+  // klic izvajalca se zapise ob zacetku (sinhrono), zato n ze vsebuje vsak klic, ki je tekel ob ustavitvi
+  const n = z.ustavitve.length;
+  await premor(150);
+  assert.equal(z.ustavitve.length, n, "po ustavitvi streznika ni novih poskusov (tudi casovnik, ki je ze cakal, ne poskusi)");
 });
