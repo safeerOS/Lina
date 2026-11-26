@@ -237,7 +237,8 @@ function atribut(oznaka: string, ime: string): string | null {
 
 function povezavaBloka(blok: string, osnova?: string): string | null {
   const rss = izrezi(blok, ["link"]);
-  if (rss !== null) {
+  // slepi pregled krog 3 (N3): prazna <link ...></link> (Atom) ni povezava RSS - sicer bi postavka dobila naslov osnove
+  if (rss !== null && rss.trim()) {
     const p = varnaPovezava(pocistiBesedilo(rss), osnova);
     if (p) return p;
   }

@@ -133,6 +133,8 @@ describe("naloga 32: slepi pregled", () => {
     // K2-4: samozaprta znacka pred pravo; K2-4a: nezaprt komentar v CDATA ne izbrise vira; K2-5: odlomek po dolgih oznakah
     const k4 = razberiFeed("<rss><item><title/><title>E</title><link/><link>https://a.si/4</link></item></rss>", vir, zdaj);
     assert.deepEqual(k4.map((p) => [p.naslov, p.povezava]), [["E", "https://a.si/4"]]);
+    const k3 = razberiFeed('<feed><entry><title>I</title><link rel="alternate" href="https://a.si/8"/><link rel="related" href="https://a.si/9"></link></entry></feed>', vir, zdaj, "https://vir.si/feed");
+    assert.deepEqual(k3.map((p) => p.povezava), ["https://a.si/8"], "krog 3 N3");
     const k4a = razberiFeed("<rss><item><title><![CDATA[F <!-- ni komentar]]></title><link>https://a.si/5</link></item><item><title>G</title><link>https://a.si/6</link></item></rss>", vir, zdaj);
     assert.equal(k4a.length, 2, JSON.stringify(k4a));
     const k5 = razberiFeed(`<rss><item><title>H</title><link>https://a.si/7</link><description><![CDATA[${'<span class="x">'.repeat(700)}Besedilo za oznakami]]></description></item></rss>`, vir, zdaj);
