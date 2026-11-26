@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { t } from "./besedila.ts";
 
 const vir = readFileSync(new URL("../../components/povezi-telefon.tsx", import.meta.url), "utf8");
-const KLJUCI = ["telSamodejniAgenti", "telSamodejniAgentiNamig", "telClaudeZaprtSamodejno", "telZagonClaude_ni-terminala", "telZagonClaude_ni-claude", "telZagonClaude_omejitev", "telZagonClaude_napaka"] as const;
+const KLJUCI = ["telSamodejniAgenti", "telSamodejniAgentiNamig", "telClaudeZaprtSamodejno", "telZagonClaude_ni-terminala", "telZagonClaude_ni-claude", "telZagonClaude_omejitev", "telZagonClaude_napaka", "telZagonClaude_opozorilo"] as const;
 
 describe("naloga 18: stikalo in sporocila samodejnega zagona", () => {
   it("besedila obstajajo v sl in en in se razlikujeta", () => {

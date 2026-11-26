@@ -305,20 +305,15 @@ export interface Seznanitve {
 }
 
 export type { IzidOdpiranjaSeje } from "./seja-claude.server.ts";
-/** Naloga 18: zadrzana naloga caka na sejo najvec toliko (kanal podpis naloge preveri znova z oknom OKNO_PODPISA_MS). */
-export const ROK_CAKANJA_SEJE_MS = 100_000;
-export const SPOROCILO_ODPIRA_SEJO = "Lina odpira Claude Code na racunalniku; naloga se zacne, ko je seja odprta.";
-export const SPOROCILO_SEJA_NI_ODPRTA = "Seja Claude Code se ni odprla pravocasno (morda caka potrditev v terminalu racunalnika). Naloge ni prejela; poslji jo znova, ko je seja odprta.";
 
 export type MoznostiStreznika = {
   root: string;
   /**
-   * Naloga 18: Lina sama odpre sejo Claude Code (seja-claude.server.ts; stikalo prebere klicatelj). Klice se SAMO v poti /naloga po preverbi
-   * podpisa naprave ozjega kroga; brez tega (ali ob napaki) 503 kot prej.
+   * Naloga 18: Lina sama odpre sejo Claude Code (seja-claude.server.ts; stikalo in opozorilo preveri klicatelj). Klice se SAMO v poti /naloga
+   * po preverbi podpisa naprave ozjega kroga. Naloga se NE zadrzi: kanal zavrne podpis, starejsi od svojega zagona (kanal-claude.server.ts,
+   * N-C), zato jo mora telefon po odprtju seje podpisati in poslati znova (odgovor 503 s stanje.zagon = "odpira").
    */
   odpriSejoClaude?: () => Promise<import("./seja-claude.server.ts").IzidOdpiranjaSeje>;
-  /** Za preizkuse: rok cakanja zadrzane naloge na sejo (ms). */
-  rokCakanjaSeje?: number;
   /** 127.0.0.1 (privzeto) ali zasebni naslov domacega omrezja; 0.0.0.0 in javni naslov se zavrneta. */
   naslov?: string;
   vrata?: number;
@@ -721,24 +716,18 @@ export class AsistentStreznik {
     if (this.naloge.has(id)) throw new Napaka(409, "obstaja", "Naloga s tem id ze obstaja.");
     this.pocisti();
     if (this.naloge.size >= NAJVEC_NALOG) throw new Napaka(429, "prevec", "Prevec nalog hkrati.");
-    let cakaSejo = false;
     if (!(await this.m.izvajalec.razpolozljiv().catch(() => false))) {
-      // naloga 18: podpis naprave ozjega kroga je ze preverjen (preveri zgoraj) - samo ta pot sme odpreti sejo
+      // naloga 18: podpis naprave ozjega kroga je ze preverjen (preveri zgoraj) - samo ta pot sme odpreti sejo; naloga se ne zadrzi (glej odpriSejoClaude)
       const z = this.m.odpriSejoClaude ? await this.m.odpriSejoClaude().catch(() => ({ ok: false as const, razlog: "napaka" as const })) : null;
-      if (!z?.ok) {
-        throw new Napaka(503, "claude-code-ni", "Seja Claude Code na racunalniku ni odprta ali ni dosegljiva.", { stanje: { claudeCode: "zaprta", ...(z ? { zagon: z.razlog } : {}) } });
-      }
-      cakaSejo = true;
+      throw new Napaka(503, "claude-code-ni", "Seja Claude Code na racunalniku ni odprta ali ni dosegljiva.", {
+        stanje: { claudeCode: "zaprta", ...(z ? { zagon: z.ok ? "odpira" : z.razlog } : {}) },
+      });
     }
     const n: NalogaTelefona = { posiljatelj: posiljatelj as string, dogodki: [], koncano: false, cas: this.zdaj(), odprte: new Map(), cakajo: new Set() };
     this.naloge.set(id, n);
     // izvor je vedno »asistent«: ta streznik je samo pot asistentke, iz poti klica do njega ni poti
     const naloga: Naloga = { id, besedilo, posiljatelj: posiljatelj as string, izvor: "asistent", dokaz };
-    if (cakaSejo) {
-      this.dogodek(id, { vrsta: "stanje", besedilo: SPOROCILO_ODPIRA_SEJO });
-      void this.predajObSeji(id, naloga);
-      return { status: 202, telo: { id } };
-    }
+
     try {
       await this.m.izvajalec.zacni(naloga, (d) => this.dogodek(id, d));
     } catch (e) {
@@ -748,27 +737,6 @@ export class AsistentStreznik {
       throw new Napaka(503, "claude-code-ni", "Seja Claude Code naloge ni sprejela ali ni dosegljiva.");
     }
     return { status: 202, telo: { id } };
-  }
-
-  /**
-   * Naloga 18: zadrzano nalogo preda seji, ko se kanal poveze; najvec do roka (podpis naloge velja OKNO_PODPISA_MS od podpisa na telefonu,
-   * kanal ga preveri znova). Po roku izid z razlogom - naloga se ne izvede brez veljavnega podpisa.
-   */
-  private async predajObSeji(id: string, naloga: Naloga): Promise<void> {
-    const rok = Date.now() + Math.min(this.m.rokCakanjaSeje ?? ROK_CAKANJA_SEJE_MS, Math.max(0, naloga.dokaz!.cas + OKNO_PODPISA_MS - 10_000 - this.zdaj()));
-    while (Date.now() < rok && this.naloge.has(id)) {
-      if (await this.m.izvajalec.razpolozljiv().catch(() => false)) {
-        try {
-          await this.m.izvajalec.zacni(naloga, (d) => this.dogodek(id, d));
-          return;
-        } catch (e) {
-          this.dnevnik(`zadrzana naloga ni zacela: ${(e as Error).message.slice(0, 300)}`);
-          break;
-        }
-      }
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    this.dogodek(id, { vrsta: "izid", ok: false, besedilo: SPOROCILO_SEJA_NI_ODPRTA });
   }
 
   private dogodek(id: string, d: Dogodek): void {

@@ -82,3 +82,15 @@ test("stikalo samodejniAgenti: privzeto vklopljeno (tudi brez datoteke nastavite
   assert.equal((await shraniAsistenta(token, { samodejniAgenti: true }, podatki)).samodejniAgenti, true);
   await assert.rejects(shraniAsistenta("napacen-zeton", { samodejniAgenti: false }, podatki));
 });
+
+test("stikalo samodejniAgenti: neberljiva datoteka nastavitev ali neveljavna vrednost = IZKLOPLJENO (lastnikovega izklopa ne preglasimo)", async () => {
+  const { stanjeAsistenta } = await import("./asistent-telefon.server.ts");
+  const { writeFile } = await import("node:fs/promises");
+  const { podatki, token } = await okolje();
+  await writeFile(path.join(podatki, "asistent-telefon.json"), "{pokvarjeno");
+  assert.equal((await stanjeAsistenta(token, podatki)).samodejniAgenti, false);
+  await writeFile(path.join(podatki, "asistent-telefon.json"), JSON.stringify({ samodejniAgenti: "da" }));
+  assert.equal((await stanjeAsistenta(token, podatki)).samodejniAgenti, false);
+  await writeFile(path.join(podatki, "asistent-telefon.json"), JSON.stringify({ vklop: false }));
+  assert.equal((await stanjeAsistenta(token, podatki)).samodejniAgenti, true, "brez polja = privzeto vklopljeno");
+});

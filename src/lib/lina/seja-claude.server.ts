@@ -6,6 +6,7 @@
  * --dangerously-load-development-channels server:lina <stalen poziv>. Besedilo naloge NIKOLI ni v argv, okolju ali mapi: naloga gre v sejo
  * po kanalu (podpis naprave preveri kanal znova). Mapa seje: <dom>/Lina-Claude (navadna mapa, ni povezava, ne v podatkih Line), 0700.
  * Ena seja naenkrat (rezervacija »zaganja« pred zagonom, PID), omejitev poskusov (brez zanke ob napaki), razlog ni-terminala / ni-claude.
+ * Naloga se seji NE preda od tu: kanal zavrne podpis, starejsi od svojega zagona, telefon nalogo po odprtju seje podpise in poslje znova.
  * Zastavica --dangerously-load-development-channels: kanal brez nje ne deluje (kanal-claude.mts); ob zagonu Claude Code pokaze opozorilo
  * (DevChannelsDialog), ki ga lastnik potrdi v terminalu - NEPREVERJENO s pravim Claude Code.
  */
@@ -18,7 +19,7 @@ import { KOREN_PROGRAMA, nastavitevMcp } from "./kanal-claude.server.ts";
 import { MAPA_KANALA } from "./kanal-claude.ts";
 import { platformaZdaj, ukazTerminala, type Platforma } from "./platforma.server.ts";
 
-export type RazlogSeje = "ni-terminala" | "ni-claude" | "izklopljeno" | "omejitev" | "napaka";
+export type RazlogSeje = "ni-terminala" | "ni-claude" | "izklopljeno" | "opozorilo" | "omejitev" | "napaka";
 export type IzidOdpiranjaSeje = { ok: true } | { ok: false; razlog: RazlogSeje };
 
 /** Stalen poziv seji (brez besedila naloge). */
@@ -74,6 +75,9 @@ async function mapaSeje(dom: string, root: string): Promise<string> {
   });
   const st = await lstat(mapa);
   if (!st.isDirectory() || st.isSymbolicLink()) throw new Error("mapa seje ni navadna mapa");
+  // slepi pregled 18 N4: mapa tega uporabnika, brez pisanja za skupino in druge (kot preveriKoren za podatke Line)
+  if (typeof process.getuid === "function" && st.uid !== process.getuid()) throw new Error("mapa seje ni od tega uporabnika");
+  if (st.mode & 0o022) throw new Error("v mapo seje lahko pisejo drugi");
   const prava = await realpath(mapa);
   const podatki = await realpath(root);
   if (prava === podatki || prava.startsWith(podatki + path.sep) || podatki.startsWith(prava + path.sep)) throw new Error("mapa seje v podatkih Line");

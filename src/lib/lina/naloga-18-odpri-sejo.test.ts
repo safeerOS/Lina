@@ -3,7 +3,7 @@
  * mapa seje po pravilih, ena seja naenkrat, ni-terminala / ni-claude, omejitev poskusov (brez zanke). Vrednosti izmisljene.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, symlinkSync, mkdirSync, statSync, readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, symlinkSync, mkdirSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -88,6 +88,12 @@ test("mapa seje, ki je simbolna povezava ali v podatkih Line, se ne uporabi", as
   symlinkSync(drugam, path.join(s.dom, IME_MAPE_SEJE));
   assert.deepEqual(await odpriSejoClaude(s.root, s.o), { ok: false, razlog: "napaka" });
   assert.equal(s.zagoni.length, 0);
+  // obstojeca mapa seje, v katero lahko pisejo drugi (slepi pregled 18 N4): ne uporabi se
+  const w = okolje();
+  mkdirSync(path.join(w.dom, IME_MAPE_SEJE), { mode: 0o777 });
+  chmodSync(path.join(w.dom, IME_MAPE_SEJE), 0o777);
+  assert.deepEqual(await odpriSejoClaude(w.root, w.o), { ok: false, razlog: "napaka" });
+  assert.equal(w.zagoni.length, 0);
   // dom = podatki Line (mapa seje bi bila v podatkih)
   const p = okolje();
   assert.deepEqual(await odpriSejoClaude(p.root, { ...p.o, dom: p.root }), { ok: false, razlog: "napaka" });

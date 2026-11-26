@@ -984,9 +984,11 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
 - Lina sama odpre sejo (naloga 18, lastnik 25. 11. 2026 23:25 in 23:35 »Da«; seja-claude.server.ts): SAMO pot /naloga po preverbi podpisa
   naprave ozjega kroga, ko seje ni: terminal + `claude --mcp-config <podatki>/kanal/seja-mcp.json --dangerously-load-development-channels
   server:lina <stalen poziv>` v <dom>/Lina-Claude (0700, ne povezava, ne v podatkih), okolje okoljeZaAgenta, brez besedila naloge v argv.
-  Ena seja naenkrat (rezervacija, 3 min, PID), najvec 3 poskusi na uro, razlogi ni-terminala/ni-claude/omejitev/napaka (503 stanje.zagon).
-  Naloga se zadrzi (202) in preda, ko se kanal poveze, najvec do roka podpisa (2 min); sicer izid »se ni odprla pravocasno«. Stikalo
-  samodejniAgenti (Povezi telefon, privzeto VKLOPLJENO) velja tudi za »Dodeli nalogo« agentom: izklop = naloga s telefona je predlog, ki caka
+  Ena seja naenkrat (rezervacija, 3 min, PID; mapa seje od tega uporabnika, brez pisanja za druge), najvec 3 poskusi na uro, brez potrjenega
+  opozorila agentov se ne odpre. Odgovor je vedno 503 claude-code-ni s stanje.zagon = odpira | ni-terminala | ni-claude | opozorilo |
+  omejitev | napaka (claudeCode ostane »zaprta«). Naloga se NE zadrzi: kanal zavrne podpis, starejsi od svojega zagona (preveriDokaz, N-C);
+  telefon jo mora po odprtju seje podpisati in poslati znova (pogodba za telefon, naloga 18 - se ni v Kotlinu). Stikalo
+  samodejniAgenti (Povezi telefon, privzeto VKLOPLJENO; neberljiva datoteka ali neveljavna vrednost = izklopljeno) velja tudi za »Dodeli nalogo« agentom: izklop = naloga s telefona je predlog, ki caka
   lastnika. Opozorilo Claude Code o razvojnih kanalih (DevChannelsDialog) lastnik potrdi v terminalu - NEPREVERJENO s pravim Claude Code.
   Preizkusi: naloga-18-seja-claude.test.ts, naloga-18-odpri-sejo.test.ts, naloga-18-agenti.test.ts, naloga-18-povezi-ui.spec.ts.
 

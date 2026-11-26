@@ -37,6 +37,7 @@ import { kanalSeznamN8n, kanalUstvariN8n, kanalZazeniN8n, telefonPotrdiN8n, tele
 import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gradnje-github.server.ts";
 import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
 import { odpriSejoClaude, zadnjiRazlogSeje, type RazlogSeje } from "./seja-claude.server.ts";
+import { opozoriloPotrjeno } from "./opozorilo.server.ts";
 import { telefonOdgovor, telefonVprasanja } from "./vprasanja-agentov.server.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { AgentReleja, dovoljeniIzKanala, kljucReleja, type MoznostiPovezave, type StanjeAgenta } from "./rele-lina.server.ts";
@@ -77,14 +78,16 @@ async function preberiNastavitve(root: string): Promise<Nastavitve> {
   try {
     n = await readJsonFile<unknown>(root, NASTAVITVE_ASISTENTA);
   } catch {
-    return { ...cisteNastavitve(null), ocenaIzida: false };
+    return { ...cisteNastavitve(null), ocenaIzida: false, samodejniAgenti: false };
   }
   // readJsonFile da null tudi za vsebino »null«: privzeto samo, ce datoteke res ni
-  if (n === null) return (await lstat(path.join(root, NASTAVITVE_ASISTENTA)).then(() => true, () => false)) ? { ...cisteNastavitve(null), ocenaIzida: false } : cisteNastavitve(null);
-  if (typeof n !== "object" || Array.isArray(n)) return { ...cisteNastavitve(null), ocenaIzida: false };
+  if (n === null) return (await lstat(path.join(root, NASTAVITVE_ASISTENTA)).then(() => true, () => false)) ? { ...cisteNastavitve(null), ocenaIzida: false, samodejniAgenti: false } : cisteNastavitve(null);
+  if (typeof n !== "object" || Array.isArray(n)) return { ...cisteNastavitve(null), ocenaIzida: false, samodejniAgenti: false };
   const c = cisteNastavitve(n as Partial<Nastavitve>);
   const ocena = (n as { ocenaIzida?: unknown }).ocenaIzida;
-  return ocena === undefined || typeof ocena === "boolean" ? c : { ...c, ocenaIzida: false };
+  // samodejniAgenti (naloga 18, slepi pregled N5): neveljavna vrednost ali neberljiva datoteka = izklopljeno (lastnikovega izklopa ne preglasimo)
+  const samodejni = (n as { samodejniAgenti?: unknown }).samodejniAgenti;
+  return { ...c, ...(ocena === undefined || typeof ocena === "boolean" ? {} : { ocenaIzida: false }), ...(samodejni === undefined || typeof samodejni === "boolean" ? {} : { samodejniAgenti: false }) };
 }
 
 /** Global Link (naloga 22): ali Lina poslusa na releju; privzeto DA (lastnik 25. 11. 2026), tudi ob neberljivi datoteki; NE samo ob izrecnem false. */
@@ -436,7 +439,9 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       const novStreznik = (naslov: string, vrata: number) => new AsistentStreznik({ root, naslov, vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje,
         agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null,
         // naloga 18: stikalo se prebere ob vsaki nalogi (izklop velja takoj); streznik klice samo po preverbi podpisa naprave
-        odpriSejoClaude: async () => ((await preberiNastavitve(root)).samodejniAgenti ? odpriSejoClaude(root) : { ok: false, razlog: "izklopljeno" }) });
+        // brez potrjenega opozorila ob prvem zagonu agentov (lastnik 24. 11.) Lina ne zazene nobenega agenta - tudi seje ne (slepi pregled 18 N6)
+        odpriSejoClaude: async () => !(await preberiNastavitve(root)).samodejniAgenti ? { ok: false, razlog: "izklopljeno" }
+          : !(await opozoriloPotrjeno(root)) ? { ok: false, razlog: "opozorilo" } : odpriSejoClaude(root) });
       try {
         let rezerva: Tekoci["rezerva"] = null;
         let napakaLan: unknown = null;
