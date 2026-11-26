@@ -19,6 +19,7 @@ import {
   zaZico,
   type Aktivni,
   type PonudnikKljuca,
+  type Sloti,
   type StanjeNabora,
   type ZapisKljuca,
   type ZapisNaZici,
@@ -166,7 +167,9 @@ export function izmenjajKljuce(
       .slice(0, 2 * NAJVEC_ZIVIH)
       .map((z) => zZice(z, kljuc, "telefon-racunalnik"))
       .filter((z): z is ZapisKljuca => z !== null);
-    const prejeti = odTelefona(odprti, idTelefona, new Set(s.st.zapisi.map((z) => z.id)));
+    // neberljiv zapis na disku (zamenjan glavni kljuc) je znan in ga zica ne zamenja - ostane za obnovo .kljuc
+    const neberljivi = new Set(s.neberljivi.map((z) => z.id));
+    const prejeti = odTelefona(odprti, idTelefona, new Set([...s.st.zapisi.map((z) => z.id), ...neberljivi])).filter((z) => !neberljivi.has(z.id));
     s = await korak(root, s, prejeti, zdaj, true);
     const telefoni = Object.fromEntries(Object.entries({ ...s.d.telefoni, [idTelefona]: javniTelefona as string }).filter(([id]) => dovoljene.has(id)));
     s = { ...s, d: { ...s.d, telefoni } };
@@ -209,12 +212,12 @@ type Pisanje = Partial<Record<PonudnikKljuca, string | null>>;
  * Dejanje vmesnika: najprej lastne spremembe (korak), nato [f] vrne novo stanje in kaj zapisati v slote TE naprave. Slot se zapise
  * neposredno (primerjaj in zamenjaj), ne prek drugega koraka - ta bi star slot razumel kot lastnikovo spremembo in obudil grob.
  */
-function dejanje(dir: string | undefined, f: (s: Stanje, zdaj: number) => { s: Stanje; pisi?: Pisanje }, odv: { zdaj?: () => number } = {}): Promise<PregledKljucev> {
+function dejanje(dir: string | undefined, f: (s: Stanje, zdaj: number, sloti: Sloti) => { s: Stanje; pisi?: Pisanje }, odv: { zdaj?: () => number } = {}): Promise<PregledKljucev> {
   const root = resolveDataDir(dir);
   return zaporedno(root, async () => {
     const zdaj = (odv.zdaj ?? Date.now)();
     const s0 = await korak(root, await preberi(root), [], zdaj, false);
-    const { s, pisi } = f(s0, zdaj);
+    const { s, pisi } = f(s0, zdaj, (await slotiKljucev(root)).sloti);
     if (pisi && Object.keys(pisi).length) {
       const { sloti } = await slotiKljucev(root);
       const spremembe: Partial<Record<PonudnikKljuca, { prej: string; novo: string | null }>> = {};
@@ -238,12 +241,12 @@ export function dodajKljucMozganov(vhod: { ponudnik?: unknown; oznaka?: unknown;
   if (!jePonudnikKljuca(p)) return Promise.reject(new Error("Ta ponudnik nima ključa za uskladitev."));
   if (!veljavnaVrednost(kljuc)) return Promise.reject(new Error("Ključ mora imeti med 8 in 400 znakov brez presledkov."));
   if (!veljavnaOznaka(oznaka)) return Promise.reject(new Error("Oznaka ima 1-40 znakov brez nadzornih znakov."));
-  return dejanje(dir, (s, zdaj) => {
+  return dejanje(dir, (s, zdaj, sloti) => {
     if (s.st.zapisi.some((z) => z.ponudnik === p && !z.izbrisan && z.vrednost === kljuc)) throw new Error("Ta ključ je že shranjen.");
     if (s.st.zapisi.filter((z) => !z.izbrisan).length >= NAJVEC_ZIVIH) throw new Error(`Shranjenih je že ${NAJVEC_ZIVIH} ključev.`);
     const z: ZapisKljuca = { id: novId(), ponudnik: p, oznaka, cas: zdaj, naprava: s.d.jaz, izbrisan: false, prej: "", vrednost: kljuc };
     // prazno mesto tudi po odstranitvi kljuca v uporabi (BREZ): izrecno dodajanje ni samodejni preklop
-    const prazen = s.st.aktivni[p] === undefined || s.st.aktivni[p] === BREZ;
+    const prazen = (s.st.aktivni[p] === undefined || s.st.aktivni[p] === BREZ) && !sloti[p]; // kot Kotlin: obstojec kljuc v slotu ostane
     return {
       s: { ...s, st: { ...s.st, zapisi: [...s.st.zapisi, z], aktivni: prazen ? { ...s.st.aktivni, [p]: z.id } : s.st.aktivni } },
       pisi: prazen ? { [p]: kljuc } : undefined,

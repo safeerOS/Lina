@@ -279,3 +279,28 @@ test("naloga 35: neveljaven kljuc v slotu se ne prepise s staro vrednostjo; doda
   await dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Nov", kljuc: K2 }, d2);
   assert.equal((await activeBrain(d2))?.key, K2);
 });
+
+test("naloga 35: neberljiv zapis na disku ne zamenja zapis z zice; tuj grob za neznan id se ne sprejme; dodaj ne prepise kljuca v slotu", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const g = prvi.zapisi[0];
+  // sifra zapisa v naboru se ne odpre vec (zamenjan glavni kljuc): telefon poslje svojo kopijo, disk mora ostati nespremenjen
+  const pot = path.join(dir, DATOTEKA_KLJUCEV);
+  const d = JSON.parse(await readFile(pot, "utf8"));
+  d.zapisi[0].sifra.ciphertext = Buffer.from("drugo-drugo-drugo").toString("base64");
+  await writeFile(pot, JSON.stringify(d));
+  await t.izmenjaj(dir, [{ ...g, cas: Date.now(), naprava: TEL, prej: `${g.cas}/${g.naprava}`, vrednost: K2 }], prvi.odg.javni);
+  const po = JSON.parse(await readFile(pot, "utf8"));
+  assert.equal(po.zapisi.find((z: { id: string }) => z.id === g.id)?.sifra?.ciphertext, d.zapisi[0].sifra.ciphertext, "neberljiv izvirnik ostane");
+  // tuj grob za id, ki ga racunalnik nima
+  const grob: ZapisKljuca = { id: "abababababababab", ponudnik: "grok", oznaka: "x", cas: Date.now(), naprava: "n-ffffffffffffffff", izbrisan: true, prej: "", vrednost: "" };
+  const drugi = await t.izmenjaj(dir, [grob], prvi.odg.javni);
+  assert.ok(!drugi.zapisi.some((z) => z.id === grob.id));
+  // dodaj: kljuc v slotu, ki ga uskladitev ne sprejme (presledek), ostane
+  const { dir: d2, token: t2 } = await nova();
+  await saveBrain({ provider: "openai", key: "sk-z presledkom-3333" }, t2, d2);
+  await dodajKljucMozganov({ ponudnik: "openai", oznaka: "Nov", kljuc: K3 }, d2);
+  assert.equal((await activeBrain(d2))?.key, "sk-z presledkom-3333");
+});

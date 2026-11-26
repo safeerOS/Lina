@@ -297,3 +297,16 @@ test("naloga 35 (slepi 2): nov ali obnovljen racunalnik dobi vse kljuce telefona
   assert.equal(a.st.zapisi.filter((z) => !z.izbrisan).length, 2);
   assert.equal(nabor(r2.st.zapisi), nabor(a.st.zapisi));
 });
+
+test("naloga 35: lastnikov vnos med izmenjavo ne prepise zapisa, ki ga je telefon pravkar dobil", () => {
+  const { r, a } = trije();
+  a.sinhroniziraj(r, 1000);
+  r.sloti.gemini = K1;
+  r.lokalno(2000);
+  a.sinhroniziraj(r, 2100, () => {
+    a.sloti.gemini = K2;
+  });
+  assert.equal(a.sloti.gemini, K2);
+  assert.ok(r.st.zapisi.some((z) => !z.izbrisan && z.vrednost === K1), "kljuc z racunalnika ostane");
+  assert.ok(r.st.zapisi.some((z) => !z.izbrisan && z.vrednost === K2));
+});

@@ -146,7 +146,8 @@ export const novCas = (zdaj: number, prejsnji: number): number => Math.max(zdaj,
  * novemu ali obnovljenemu racunalniku z izvirno napravo). Obstojecega zapisa telefon ne more spremeniti v imenu druge naprave.
  */
 export function odTelefona(prejeti: readonly ZapisKljuca[], idTelefona: string, znani: ReadonlySet<string>): ZapisKljuca[] {
-  return prejeti.filter((z) => z.naprava === idTelefona || !znani.has(z.id));
+  // tuj grob za neznan id nima ucinka, lahko pa bi izrinil prave grobove (meja stevila) - zato samo zivi zapisi
+  return prejeti.filter((z) => z.naprava === idTelefona || (!znani.has(z.id) && !z.izbrisan));
 }
 export const novId = (): string => randomBytes(8).toString("hex");
 
@@ -311,6 +312,9 @@ export function poOdgovoruTelefona(
     if ((slotiZdaj[p] ?? "") === (slotiPrej[p] ?? "")) continue;
     delete uporaba.sloti[p];
     uporaba.odstranjeni = uporaba.odstranjeni.filter((x) => x !== p);
+    // tudi izbira ostane prejsnja: sicer bi naslednji krog lastnikov kljuc vpisal cez tuj zapis (izguba brez kopije)
+    if (st.aktivni[p] !== undefined) uporaba.aktivni[p] = st.aktivni[p];
+    else delete uporaba.aktivni[p];
     znova = true;
   }
   if (!st.uvozeno) {
