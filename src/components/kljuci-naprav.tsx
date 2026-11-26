@@ -37,17 +37,27 @@ export function KljuciNaprav({
   const idKljuc = useId();
 
   useEffect(() => {
-    pregledKljucevFn().then(setPregled, (e) => onError(napaka(e)));
+    let konec = false;
+    pregledKljucevFn().then((p) => !konec && setPregled(p), (e) => !konec && onError(napaka(e)));
+    // kljuc, dodan ali odstranjen na telefonu, se pokaze brez gumba (zahteva: sprememba se zazna sama); napaka osvezitve je tiha
+    const t = window.setInterval(() => void pregledKljucevFn().then((p) => !konec && setPregled(p), () => undefined), 30_000);
+    return () => {
+      konec = true;
+      window.clearInterval(t);
+    };
   }, [onError]);
 
-  async function izvedi(delo: () => Promise<Pregled>) {
+  /** true = uspelo (urejanje se zapre samo takrat, sicer vnos ostane). */
+  async function izvedi(delo: () => Promise<Pregled>): Promise<boolean> {
     onBusy(true);
     onError("");
     try {
       setPregled(await delo());
       onBrain(await readBrainFn());
+      return true;
     } catch (cause) {
       onError(napaka(cause));
+      return false;
     } finally {
       onBusy(false);
     }
@@ -83,18 +93,28 @@ export function KljuciNaprav({
                 {tK("spremenil", { naprava: k.naprava === "jaz" ? tK("taRacunalnik") : k.naprava || tK("drugaNaprava") })}
               </p>
               {ureja?.id === k.id ? (
-                <div className="mt-2 flex flex-wrap items-end gap-2">
+                <form
+                  className="mt-2 flex flex-wrap items-end gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void uredi("preimenuj", k.id, ureja.oznaka).then((ok) => ok && setUreja(null));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setUreja(null);
+                  }}
+                >
                   <label className={OZNAKA_POLJA}>
                     {tK("oznaka")}
-                    <input className={POLJE} value={ureja.oznaka} maxLength={40} onChange={(e) => setUreja({ id: k.id, oznaka: e.target.value })} />
+                    {/* eslint-disable-next-line jsx-a11y/no-autofocus -- fokus gre v polje, ki ga je odprl gumb Preimenuj */}
+                    <input className={POLJE} value={ureja.oznaka} maxLength={40} autoFocus onChange={(e) => setUreja({ id: k.id, oznaka: e.target.value })} />
                   </label>
-                  <button type="button" className={GUMB} disabled={busy} onClick={() => uredi("preimenuj", k.id, ureja.oznaka).then(() => setUreja(null))}>
+                  <button type="submit" className={GUMB} disabled={busy}>
                     {tK("shraniOznako")}
                   </button>
                   <button type="button" className={GUMB_OBROBA} onClick={() => setUreja(null)}>
                     {tK("preklici")}
                   </button>
-                </div>
+                </form>
               ) : (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {!k.vUporabi ? (
@@ -127,11 +147,10 @@ export function KljuciNaprav({
           className="grid gap-3 sm:max-w-md"
           onSubmit={(e) => {
             e.preventDefault();
-            void izvedi(async () => {
-              const p = await dodajKljucMozganovFn({ data: { ponudnik, oznaka, kljuc } });
+            void izvedi(() => dodajKljucMozganovFn({ data: { ponudnik, oznaka, kljuc } })).then((ok) => {
+              if (!ok) return;
               setOznaka("");
               setKljuc("");
-              return p;
             });
           }}
         >

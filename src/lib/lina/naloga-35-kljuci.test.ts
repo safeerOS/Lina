@@ -279,3 +279,18 @@ test("naloga 35: vrstni red sporocil ne spremeni izida", () => {
   assert.equal(koncni.find((z) => z.id === baza.id)?.vrednost, K3);
   assert.ok(koncni.some((z) => z.id === idSpora(s1) && z.vrednost === K2));
 });
+
+test("naloga 35 (slepi 2): nov ali obnovljen racunalnik dobi vse kljuce telefona; telefon jih ne zavrze", () => {
+  const r1 = new Racunalnik();
+  const a = new Telefon("n-aaaaaaaaaaaaaaaa");
+  r1.telefoni.set(a.id, a.par.javni);
+  a.sloti.gemini = K1;
+  a.sinhroniziraj(r1, 1000);
+  a.sloti.openai = K3;
+  a.sinhroniziraj(r1, 2000);
+  const r2 = new Racunalnik();
+  r2.telefoni.set(a.id, a.par.javni);
+  a.sinhroniziraj(r2, 3000);
+  assert.equal(a.st.zapisi.filter((z) => !z.izbrisan).length, 2);
+  assert.equal(nabor(r2.st.zapisi), nabor(a.st.zapisi));
+});

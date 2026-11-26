@@ -54,9 +54,9 @@ export function veljavnaOznaka(o: unknown): o is string {
   return typeof o === "string" && o.trim().length > 0 && o.length <= NAJVEC_OZNAKA && !/[\x00-\x1F\x7F\u2028\u2029\u202A-\u202E\u2066-\u2069]/.test(o);
 }
 
+/** Kljuc API: samo natisljiv ASCII brez presledka (enako v Kotlinu - \\s se med JS in Androidom razlikuje). */
 export function veljavnaVrednost(v: unknown): v is string {
-  // eslint-disable-next-line no-control-regex
-  return typeof v === "string" && v.length >= 8 && v.length <= 400 && !/[\s\x00-\x1F\x7F]/.test(v);
+  return typeof v === "string" && /^[\x21-\x7E]{8,400}$/.test(v);
 }
 
 /** Zapis, ki ga ta naprava sprejme; vse drugo se prezre (nikoli ne podre uskladitve). */
@@ -288,10 +288,12 @@ export function poOdgovoruTelefona(
 ): { stanje: StanjeTelefona; uporaba: Uporaba; znova: boolean } {
   const nabor = zdruzi([], odgovor, zdaj, false).zapisi;
   const potrjeni = new Set(poslani.filter((p) => nabor.some((z) => z.id === p.id && razlicica(z) === razlicica(p) && z.izbrisan === p.izbrisan)).map((p) => p.id));
-  const svoji = st.zapisi.filter((z) => st.neposlani.includes(z.id) && !potrjeni.has(z.id));
+  const vNaboru = new Set(nabor.map((z) => z.id));
+  // zivi zapis telefona, ki ga racunalnik nima (nov ali obnovljen racunalnik, izgubljena datoteka): ne zavrzi ga, poslji ga znova
+  const svoji = st.zapisi.filter((z) => (st.neposlani.includes(z.id) && !potrjeni.has(z.id)) || (!z.izbrisan && !vNaboru.has(z.id)));
   const z = zdruzi(nabor, svoji, zdaj, false);
   // svoja sprememba, ki jo je nabor preglasil (novejsa drugje), ni vec neposlana; tista, ki je zmagala, ostane za naslednji krog
-  let neposlani = svoji.filter((s) => z.zapisi.some((x) => x.id === s.id && razlicica(x) === razlicica(s))).map((s) => s.id);
+  let neposlani = svoji.filter((s) => z.zapisi.some((x) => x.id === s.id && razlicica(x) === razlicica(s) && x.izbrisan === s.izbrisan)).map((s) => s.id);
   let zapisi = z.zapisi;
   const uporaba = zaUporabo(zapisi, st.aktivni, slotiPrej);
   let znova = neposlani.length > 0;

@@ -742,9 +742,14 @@ export async function uporabiSlote(spremembe: Partial<Record<PonudnikKljuca, { p
         preskoceni.push(p);
         continue;
       }
-      const klicSTem = zaKlice && zaKlice.provider === p && s.prej !== "" && decrypt(zaKlice, kljuc) === s.prej;
+      // klici z istim kljucem: ob praznem slotu tudi klici brez kljuca istega ponudnika (»Uporabi« po oddaljenem izbrisu vrne mozgane)
+      const klicSTem = zaKlice && zaKlice.provider === p && (s.prej !== "" ? decrypt(zaKlice, kljuc) === s.prej : !zaKlice.ciphertext);
       if (s.novo === null) {
-        delete ponudniki[p];
+        // samo sifra: model, seznam modelov in izbira asistentke ostanejo za ponovno uporabo
+        if (z) {
+          const { iv: _i, tag: _t, ciphertext: _c, ...brezSifre } = z;
+          ponudniki[p] = brezSifre;
+        }
         if (klicSTem) {
           const { iv: _i, tag: _t, ciphertext: _c, ...brez } = zaKlice;
           noviKlici = brez;

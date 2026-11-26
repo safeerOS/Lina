@@ -223,3 +223,22 @@ test("naloga 35 (slepi S4/S5): neberljiv kljuc v slotu ni izbris; pokvarjena dat
   await assert.rejects(pregledKljucev(dir));
   assert.equal(await readFile(path.join(dir, DATOTEKA_KLJUCEV), "utf8"), "{");
 });
+
+test("naloga 35 (slepi 2): oddaljen izbris ohrani model ponudnika; »Uporabi« drugega kljuca vrne mozgane za klice", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1, model: "gemini-test-model" }, token, dir);
+  const p0 = await dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Drugi", kljuc: K2 }, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const g = prvi.zapisi.find((z) => z.vrednost === K1)!;
+  await t.izmenjaj(dir, [{ ...g, cas: Date.now(), naprava: TEL, izbrisan: true, prej: `${g.cas}/${g.naprava}`, vrednost: "" }], prvi.odg.javni);
+  assert.equal(await activeBrain(dir), null);
+  const pon = JSON.parse(await readFile(path.join(dir, "ponudniki.json"), "utf8"));
+  assert.equal(pon.ponudniki.gemini.model, "gemini-test-model", "model ostane");
+  assert.equal(pon.ponudniki.gemini.ciphertext, undefined);
+  const drugi = p0.kljuci.find((k) => k.oznaka === "Drugi")!;
+  await uporabiKljucMozganov(drugi.id, dir);
+  const m = await activeBrain(dir);
+  assert.equal(m?.key, K2, "klici spet imajo mozgane");
+  assert.equal(m?.model, "gemini-test-model");
+});
