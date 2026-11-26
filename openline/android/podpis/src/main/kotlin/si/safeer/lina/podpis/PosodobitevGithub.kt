@@ -52,6 +52,8 @@ object PosodobitevGithub {
     /** Skupni rok enega prenosa (readTimeout velja samo za posamezno branje: kapljanje bi zadrzalo zaklep za vedno). */
     const val ROK_APK_MS = 30L * 60_000
     private const val ROK_MALO_MS = 60_000L
+    private const val IME_OPOMB = "OPOMBE.txt"
+    private const val NAJVEC_OPOMB_BAJTOV = 16L * 1024
 
     /** Brez sledenja preusmeritvam: vsak skok preveri prenesi() (gostitelj s seznama, https). */
     interface Http { fun get(url: String, glave: Map<String, String>): OdgovorHttp }
@@ -128,6 +130,7 @@ object PosodobitevGithub {
     /** Nadzorni (razen nove vrstice), smerni, nevidni znaki in osamljeni nadomestki: v opombah se izpustijo (enako kot racunalnik). */
     private fun nevidni(k: Int): Boolean =
         (k < 0x20 && k != 0x0a) || k in 0x7f..0x9f || k == 0xad || k == 0x34f || k == 0x61c || k == 0x180e ||
+            k == 0x115f || k == 0x1160 || k == 0x3164 || k == 0xffa0 || k in 0xfe00..0xfe0f ||
             k in 0x200b..0x200f || k in 0x202a..0x202e || k in 0x2060..0x206f || k == 0xfeff || k in 0xfff9..0xfffb ||
             k in 0xe0000..0xe0fff || k in 0xd800..0xdfff
 
@@ -172,8 +175,8 @@ object PosodobitevGithub {
             val apk = imena.mapNotNull { n -> IME_APK.matchEntire(n)?.let { m -> Triple(n, m.groupValues[1], m.groupValues[2].toLong()) } }
                 .maxByOrNull { it.third } ?: return null
             val osnova = "https://github.com/$REPO/releases/download/$tag/"
-            val body = (o["body"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            Izdaja(apk.second, apk.third, apk.first, osnova + apk.first, osnova + "SHA256SUMS", osnova + "SHA256SUMS.sig", ocistiOpombe(body))
+            // opombe: telo izdaje (body) NI podpisano (krog 2 slepega pregleda) - besedilo samo iz podpisanega OPOMBE.txt (preveri)
+            Izdaja(apk.second, apk.third, apk.first, osnova + apk.first, osnova + "SHA256SUMS", osnova + "SHA256SUMS.sig", "")
         } catch (_: Exception) {
             null
         }
@@ -199,7 +202,10 @@ object PosodobitevGithub {
                         // slepi pregled S1: samo natisljiv ASCII (ne-ASCII glava bi ob naslednji zahtevi vrgla izjemo za vedno)
                         val etag = o.glave["etag"]?.takeIf { e -> e.length in 1..200 && e.all { it in ' '..'~' } }
                         // slepi pregled S2: izdaja (razlicica in opombe v obvestilu) samo, ce je SHA256SUMS podpisan in nasteje ta APK
-                        val nova = i?.takeIf { it.versionCode > namesceniCode }?.takeIf { podpisanSeznam(http, it, javniSpki)?.let { v -> vsotaIzSeznama(String(v, Charsets.UTF_8), it.imeApk) } != null }
+                        val nova = i?.takeIf { it.versionCode > namesceniCode }?.let { iz ->
+                            val seznam = podpisanSeznam(http, iz, javniSpki)?.let { String(it, Charsets.UTF_8) }
+                            if (seznam == null || vsotaIzSeznama(seznam, iz.imeApk) == null) null else iz.copy(opombe = podpisaneOpombe(http, iz, seznam))
+                        }
                         s.copy(etag = etag, izdaja = nova, napak = 0, naslednjaMs = zdaj + OBDOBJE_MS)
                     }
                     else -> napaka(s, zdaj)
@@ -228,6 +234,17 @@ object PosodobitevGithub {
         val vsote = prenesiBajte(http, i.urlVsot, NAJVEC_VSOT)
         val podpis = prenesiBajte(http, i.urlPodpisa, 64)
         return vsote.takeIf { podpisVeljaven(it, podpis, javniSpki) }
+    }
+
+    /** OPOMBE.txt izdaje, samo ce ga nasteje podpisan seznam in se vsota ujema (najvec 16 KB); sicer "" (izdaja ostane). */
+    private fun podpisaneOpombe(http: Http, i: Izdaja, seznam: String): String {
+        val pricakovana = vsotaIzSeznama(seznam, IME_OPOMB) ?: return ""
+        return try {
+            val b = prenesiBajte(http, i.urlVsot.removeSuffix("SHA256SUMS") + IME_OPOMB, NAJVEC_OPOMB_BAJTOV)
+            if (hex(MessageDigest.getInstance("SHA-256").digest(b)) == pricakovana) ocistiOpombe(String(b, Charsets.UTF_8)) else ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun prenesiBajte(http: Http, url: String, najvec: Long): ByteArray =

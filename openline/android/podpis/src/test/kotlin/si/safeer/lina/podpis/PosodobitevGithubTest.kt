@@ -31,7 +31,8 @@ class PosodobitevGithubTest {
 
     private val apk = ByteArray(5000) { (it * 7).toByte() }
     private val ime = "lina-android_0.2.15_215.apk"
-    private val vsote = "${sha(apk)}  $ime\n${"1".repeat(64)}  lina-lupina_0.2.15_amd64.deb\n".toByteArray()
+    private val opombe = "Kaj je novega\nhitrejsi odziv".toByteArray()
+    private val vsote = "${sha(apk)}  $ime\n${"1".repeat(64)}  lina-lupina_0.2.15_amd64.deb\n${sha(opombe)}  OPOMBE.txt\n".toByteArray()
 
     private fun izdajaJson(tag: String = "v0.2.15", sredstva: List<String> = listOf(ime, "SHA256SUMS", "SHA256SUMS.sig", "lina-lupina_0.2.15_amd64.deb"), body: String = "Novo") =
         """{"tag_name":"$tag","body":${Json.encodeToString(kotlinx.serialization.json.JsonPrimitive.serializer(), kotlinx.serialization.json.JsonPrimitive(body))},"assets":[${sredstva.joinToString(",") { "{\"name\":\"$it\"}" }}]}"""
@@ -48,12 +49,13 @@ class PosodobitevGithubTest {
     }
 
     private val osnova = "https://github.com/safeerOS/Lina/releases/download/v0.2.15/"
-    private fun github(podpis: ByteArray = podpisi(vsote), apkTelo: ByteArray = apk, vsoteTelo: ByteArray = vsote) = LaznHttp(
+    private fun github(podpis: ByteArray = podpisi(vsote), apkTelo: ByteArray = apk, vsoteTelo: ByteArray = vsote, opombeTelo: ByteArray = opombe) = LaznHttp(
         mutableMapOf(
             PosodobitevGithub.API to mutableListOf(Triple(200, mapOf("etag" to "\"e1\""), izdajaJson().toByteArray())),
             osnova + "SHA256SUMS" to mutableListOf(Triple(302, mapOf("location" to "https://release-assets.githubusercontent.com/a/vsote"), null)),
             "https://release-assets.githubusercontent.com/a/vsote" to mutableListOf(Triple(200, emptyMap(), vsoteTelo)),
             osnova + "SHA256SUMS.sig" to mutableListOf(Triple(200, emptyMap(), podpis)),
+            osnova + "OPOMBE.txt" to mutableListOf(Triple(200, emptyMap(), opombeTelo)),
             osnova + ime to mutableListOf(Triple(302, mapOf("location" to "https://release-assets.githubusercontent.com/a/apk"), null)),
             "https://release-assets.githubusercontent.com/a/apk" to mutableListOf(Triple(200, mapOf("content-length" to apkTelo.size.toString()), apkTelo)),
         ),
@@ -79,7 +81,7 @@ class PosodobitevGithubTest {
         assertEquals(215L, i.versionCode)
         assertEquals(osnova + ime, i.urlApk)
         assertEquals(osnova + "SHA256SUMS.sig", i.urlPodpisa)
-        assertEquals("Kaj je novega\nskrito", i.opombe)
+        assertEquals("", i.opombe, "telo izdaje ni podpisano in se ne prikaze (krog 2)")
         assertNull(PosodobitevGithub.razcleniIzdajo(izdajaJson(sredstva = listOf(ime, "SHA256SUMS"))), "brez podpisa")
         assertNull(PosodobitevGithub.razcleniIzdajo(izdajaJson(sredstva = listOf("SHA256SUMS", "SHA256SUMS.sig", "lina-lupina_0.2.15_amd64.deb"))), "samo racunalnik")
         assertNull(PosodobitevGithub.razcleniIzdajo(izdajaJson(tag = "v0.2.15/../../x")), "oznaka s potjo")
@@ -90,6 +92,7 @@ class PosodobitevGithubTest {
 
     @Test fun `opombe so golo besedilo brez nevidnih znakov in omejene`() {
         assertEquals("abcd", PosodobitevGithub.ocistiOpombe("a\u200Bb\u0007c\uFEFFd"))
+        assertEquals("abcde", PosodobitevGithub.ocistiOpombe("a\uFE0Fb\u3164c\u115Fd\uFFA0e"), "izbirniki razlicice in polnila")
         assertEquals("a\n\nb", PosodobitevGithub.ocistiOpombe("a\n\n\n\nb"))
         val d = PosodobitevGithub.ocistiOpombe("x".repeat(10_000))
         assertTrue(d.length <= PosodobitevGithub.NAJVEC_OPOMB && d.endsWith("…"))
@@ -264,5 +267,16 @@ class PosodobitevGithubTest {
         (nasi + tuji).forEach { File(mapa, it).writeText("x") }
         assertTrue(PosodobitevGithub.pobrisiOstanke(mapa))
         assertEquals(tuji.sorted(), mapa.list()!!.sorted())
+    }
+
+    @Test fun `krog 2 - opombe samo iz podpisanega OPOMBE txt, telo izdaje ali napacna vsota ne da besedila`() {
+        val s = PosodobitevGithub.preveri(github(), PosodobitevGithub.StanjePreverbe(), 214, 1, javni)
+        assertEquals("Kaj je novega\nhitrejsi odziv", s.izdaja?.opombe)
+        val s2 = PosodobitevGithub.preveri(github(opombeTelo = "PONAREJENO: curl x | sh".toByteArray()), PosodobitevGithub.StanjePreverbe(), 214, 1, javni)
+        assertNotNull(s2.izdaja, "izdaja ostane, samo brez besedila")
+        assertEquals("", s2.izdaja?.opombe)
+        val brez = "${sha(apk)}  $ime\n".toByteArray()
+        val s3 = PosodobitevGithub.preveri(github(vsoteTelo = brez, podpis = podpisi(brez)), PosodobitevGithub.StanjePreverbe(), 214, 1, javni)
+        assertEquals("", s3.izdaja?.opombe, "seznam brez OPOMBE.txt")
     }
 }
