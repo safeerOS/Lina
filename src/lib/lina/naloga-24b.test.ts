@@ -13,7 +13,7 @@ import {
   NASTAVITVE_ASISTENTA, nastaviOmrezjeNaslovov, ponastaviAsistenta, prekliciSeznanitev, preveriNaslovAsistenta, registrirajRele,
   registrirajVezoKlicev, stanjeAsistenta, uskladiAsistenta, zacniSeznanitev,
 } from "./asistent-telefon.server.ts";
-import { izmenjajSinhron, preveriZahtevo } from "./sinhron-telefon.server.ts";
+import { izmenjajSinhron, kliciTelefona, preveriZahtevo } from "./sinhron-telefon.server.ts";
 import { DATOTEKA_SLIK, dodajVKnjiznico, preberiKnjiznico } from "./slike-knjiznica.server.ts";
 
 process.env.LINA_LLM = "0";
@@ -172,6 +172,30 @@ test("CRR6: neberljiv pravila.json (tudi JSON, ki ni objekt) - odgovor ne nosi r
     const o = await izmenjajSinhron(zahteva(), prazna, { zdaj: () => ZDAJ });
     assert.equal(o.rokHrambeDni, 90, "pravil se ni = privzeti rok");
   } finally { await rm(koren, { recursive: true, force: true }); }
+});
+
+test("CRR6 (slepi pregled 24b): neberljiv pravila.json - rok hrambe ni znan, zato izmenjava NE izbrise podjetniskega klica (ne na racunalniku ne na telefonu) in zaslon ga ne skrije", async () => {
+  const ZDAJ = Date.parse("2026-11-26T09:00:00.000Z");
+  const DAN = 86_400_000;
+  const stari = { id: "klic-star-200", casZacetka: ZDAJ - 200 * DAN, stevilka: "+38640111222", trajanjeS: 42, nujno: false, povzetek: "Povprasevanje.", nacin: "podjetje",
+    klicatelj: "Miha Primer", podjetje: "", sporocilo: "", sporociloDobesedno: "", brezSporocilaRazlog: "", prepisPogovora: [], prepisOkrnjen: false };
+  const zahteva = (klici: unknown[], rev = 0, epoha: string | null = null) =>
+    preveriZahtevo(JSON.parse(JSON.stringify({ rev, klici, pogovor: [], navodila: null, epoha, izbrisani: [] })), ZDAJ);
+  const dir = await mkdtemp(path.join(tmpdir(), "lina-n24b-rok-"));
+  try {
+    const pravila = path.join(dir, "pravila.json");
+    await writeFile(pravila, JSON.stringify({ zapiskiHrambaDni: 365 }));
+    const prvi = await izmenjajSinhron(zahteva([stari]), dir, { zdaj: () => ZDAJ });
+    assert.equal(prvi.rokHrambeDni, 365);
+    for (const pokvarjen of ["{ \"zapiskiHrambaDni\": 365, ", "null"]) {
+      await writeFile(pravila, pokvarjen);
+      await izmenjajSinhron(zahteva([], prvi.rev, prvi.epoha), dir, { zdaj: () => ZDAJ });
+      assert.deepEqual((await kliciTelefona(dir, { zdaj: () => ZDAJ })).length, 1, `${pokvarjen}: zaslon Klici ga ne skrije po zasilnih 90 dneh`);
+    }
+    await writeFile(pravila, JSON.stringify({ zapiskiHrambaDni: 365 }));
+    const znova = await izmenjajSinhron(zahteva([], 0, prvi.epoha), dir, { zdaj: () => ZDAJ });
+    assert.deepEqual(znova.klici.map((k) => k.id), ["klic-star-200"], "klic ni bil izbrisan po zasilnem roku");
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 // ------------------------------------------------------------------ CRR7, CRR8

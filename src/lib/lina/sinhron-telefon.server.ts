@@ -267,11 +267,6 @@ async function preberiStanje(root: string): Promise<Stanje> {
   return { epoha: typeof s.epoha === "string" && /^[0-9a-f]{16}$/.test(s.epoha) ? s.epoha : randomBytes(8).toString("hex"), rev: s.rev, klici, pogovor, navodila: s.navodila ?? null, izbrisani };
 }
 
-/** Izmenja zapise: sprejme, kar je novega od naprave, vrne vse z revizijo nad `zahteva.rev`. */
-async function rokZapiskov(root: string): Promise<number> {
-  return (await rokIzPravil(root)) ?? 90;
-}
-
 /** null = pravil ni mogoce prebrati (pokvarjen pravila.json): zasilnih 90 dni ne posljemo telefonu, da po njih ne brise (slepi pregled 21r #1). */
 async function rokIzPravil(root: string): Promise<number | null> {
   try {
@@ -388,12 +383,12 @@ export async function kliciTelefona(dir?: string, odv: { zdaj?: () => number } =
   } catch {
     return [];
   }
-  const rok = await rokZapiskov(root);
+  const rok = await rokIzPravil(root); // null = rok ni znan: nic ne skrijemo (slepi pregled 24b)
   const zdaj = (odv.zdaj ?? Date.now)();
   const stiki = await preberiImenik(root).catch(() => []);
   const mape = (await preberiMape(root)) ?? {};
   return st.klici.flatMap((x) => {
-    if (!x || typeof x !== "object" || potekelKlicTelefona(x.k, rok, zdaj)) return [];
+    if (!x || typeof x !== "object" || (rok !== null && potekelKlicTelefona(x.k, rok, zdaj))) return [];
     const c = klicIzTelefona(x.k, imeVImeniku(stiki, x.k?.stevilka), (typeof x.k?.id === "string" && mape[x.k.id]) || undefined);
     return c ? [c] : [];
   });
@@ -443,10 +438,10 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
     }
     if (st.klici.length > MEJA_KLICEV) st.klici = st.klici.slice(-MEJA_KLICEV);
     // Rok hrambe podjetniskih zapisov (lastnik 22. 11. 2026, privzeto 90 dni): zapis s prepisom gre iz sinhronizacije, mapa klica z njim (N4).
+    // slepi pregled 24b: neberljiva pravila = rok ni znan -> nic ne izbrisemo (zasilnih 90 dni bi trajno izbrisalo zapise 90-365 dni, tudi na telefonu)
     const rokPravil = await rokIzPravil(root);
-    const rok = rokPravil ?? 90;
     const zdaj = (odv.zdaj ?? Date.now)();
-    for (const x of st.klici) if (x && typeof x === "object" && potekelKlicTelefona(x.k, rok, zdaj)) dodajIzbrisan(x.k.id);
+    if (rokPravil !== null) for (const x of st.klici) if (x && typeof x === "object" && potekelKlicTelefona(x.k, rokPravil, zdaj)) dodajIzbrisan(x.k.id);
     const pred = st.klici.length;
     st.klici = st.klici.filter((x) => !izbrisani.has(x.k.id));
     if (st.klici.length !== pred) sprememba = true;
