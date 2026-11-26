@@ -1117,6 +1117,9 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   so vse mape izbrisov te zahteve res izbrisane (telefon na izbris-v1 izprazni svojo vrsto). Vnos nad 46 KiB v stanju gre telefonu brez prepisa
   (prepisOkrnjen), prevelik tudi tako se preskoci z napredkom revizije. Osebni klic ostane do izbrisa (razen meje MEJA_KLICEV 1000, odlocitev lastnika).
   Preizkusi: naloga-17r2-sinhron.test.ts.
+  Naloga 21r (pogodba s telefonom 21t): zapis klica s casZacetka > ura racunalnika + 1 dan (PRIHODNOST_KLICA_MS) se preskoci, ne zavrne zahteve;
+  stevilo gre v dnevnik streznika brez vsebine. Odgovor nosi rokHrambeDni (zapiskiHrambaDni, celo stevilo 1..3650); ob neberljivem pravila.json polja
+  NI (telefon obdrzi zadnji znani rok, zasilnih 90 dni ne posljemo). Preizkusi: naloga-21r-sinhron.test.ts, asistent-streznik.test.ts (21r).
 - Vsebina QR (ena vrstica, shema kot QR konzole OpenLine; razdelek url/code/fp od T1-S1 NI vec v QR):
   httpgateway://pair?v=1[&url=<https://zasebni-naslov:vrata OpenLine>&code=<koda OpenLine, 8 znakov>&fp=<SHA-256 lista OpenLine,
   64 hex>]&lina=<https://zasebni-naslov:vrata/api/asistent/v1>&linafp=<SHA-256 lista asistentke, 64 hex>&linakoda=<enkratna koda,

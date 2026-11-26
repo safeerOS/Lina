@@ -449,6 +449,23 @@ test("sinhronizacija (21r A8, A7): zapis klica vec kot dan v prihodnosti se pres
   }
 });
 
+test("sinhronizacija (21r, slepi pregled #2): meja prihodnosti in rok hrambe veljata po isti uri strežnika", async () => {
+  const DAN = 86_400_000;
+  const ura = { t: Date.now() + 200 * DAN };
+  const s = await streznik({ krog: [{ id: ANA.id, kljuc: ANA.kljuc }], ura });
+  try {
+    const klic = (id: string, casZacetka: number) => ({ id, casZacetka, stevilka: "+38640111222", trajanjeS: 5, nujno: false, povzetek: "Miha Horvat se oglasi.",
+      nacin: "podjetje", klicatelj: "Miha Horvat", podjetje: "Primer d.o.o.", sporocilo: "Pokličite nazaj.", sporociloDobesedno: "", brezSporocilaRazlog: "" });
+    // po uri strežnika 100 dni star (rok 90 = potekel), po Date.now() 100 dni v prihodnosti
+    const vsebina = JSON.stringify({ rev: 0, klici: [klic("klic-star", ura.t - 100 * DAN), klic("klic-nov", ura.t - DAN)], pogovor: [], navodila: null });
+    const r = await s.z("POST", `${POT}/sinhron`, sinhronTelo(ANA, vsebina, ura.t));
+    assert.equal(r.status, 200, JSON.stringify(r.telo));
+    assert.deepEqual(r.telo.klici.map((k: { id: string }) => k.id), ["klic-nov"]);
+  } finally {
+    await s.pospravi();
+  }
+});
+
 test("sinhronizacija: velik veljaven paket telefona (stotine kB zapisov klicev) je sprejet, ne zavrnjen kot 413", async () => {
   const s = await streznik({ krog: [{ id: ANA.id, kljuc: ANA.kljuc }] });
   try {
