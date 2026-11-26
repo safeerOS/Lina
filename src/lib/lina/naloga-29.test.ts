@@ -211,11 +211,11 @@ describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
     }
   });
 
-  it("napaka s 200 in JSON brez ovojnice -> nepricakovan odgovor (ne prazen), razlog ponudnika ohranjen", async () => {
+  it("napaka s 200 in JSON brez ovojnice -> nepricakovan odgovor (ne prazen), brez besedila ponudnika", async () => {
     await nova();
     const primeri: Array<["gemini" | "openai" | "claude", unknown, string]> = [
       ["gemini", { promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { promptTokenCount: 3 } }, NEPRICAKOVAN_ODGOVOR],
-      ["openai", { error: { message: "upstream\nerror", code: 502 } }, `${NEPRICAKOVAN_ODGOVOR}: upstream error`],
+      ["openai", { error: { message: "model: claude-x", code: 502 } }, NEPRICAKOVAN_ODGOVOR],
       ["openai", { podjetje: "X", vrstice: [] }, NEPRICAKOVAN_ODGOVOR],
       ["openai", [1, 2], NEPRICAKOVAN_ODGOVOR],
       ["claude", {}, NEPRICAKOVAN_ODGOVOR],

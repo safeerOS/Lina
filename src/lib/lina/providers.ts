@@ -126,7 +126,7 @@ export type RezultatPonudnika =
 /** D3 (naloga 29): ponudnik je vrnil ovojnico (choices/content/candidates) brez besedila. */
 export const PRAZEN_ODGOVOR = "Ponudnik je vrnil prazen odgovor.";
 /** D3: ponudnik je s 200 vrnil napako ali JSON brez ovojnice (npr. promptFeedback.blockReason). */
-export const NEPRICAKOVAN_ODGOVOR = "Ponudnik je vrnil nepričakovan odgovor";
+export const NEPRICAKOVAN_ODGOVOR = "Ponudnik je vrnil nepričakovan odgovor.";
 
 /** Pravi vzrok zavrnitve ponudnika (lastnik 24. 11. 2026: uporabnik mora izvedeti pravi vzrok, ne »model: <ime>«). */
 export type VzrokNapake = "model" | "kljuc" | "dobroimetje" | "omejitev";
@@ -749,9 +749,8 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
       }
       if (!iz) {
         if (predmet && ["choices", "content", "candidates"].some((k) => Object.hasOwn(predmet, k))) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
-        const napaka = predmet?.error as { message?: unknown } | undefined;
-        const razlog = typeof napaka?.message === "string" ? `: ${napaka.message.replace(/\s+/g, " ").slice(0, 160)}` : "";
-        return { ok: false, sporocilo: hideSecret(`${NEPRICAKOVAN_ODGOVOR}${razlog}`, secret) };
+        // Besedila ponudnika ne vracamo (AGENTS.md »Model, ki ga ponudnik ne pozna«: surovega sporocila uporabnik ne vidi).
+        return { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR };
       }
       text = iz;
     }
