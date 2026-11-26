@@ -82,6 +82,8 @@ export type ZahtevaSinhron = {
   navodila: NavodilaSinhron | null;
   /** Id klicev, ki jih je uporabnik izbrisal na telefonu (telefon 0.2.14). */
   izbrisani?: string[];
+  /** Stevilo zapisov klicev, preskocenih zaradi casZacetka v prihodnosti (21r A8; za dnevnik, brez vsebine). */
+  preskoceniPrihodnost?: number;
 };
 export type OdgovorSinhron = {
   epoha: string;
@@ -92,7 +94,12 @@ export type OdgovorSinhron = {
   /** true = je se novejsih vnosov od meje enega odgovora: naprava naj takoj poizve znova od vrnjene revizije. */
   ostane: boolean;
   zmoznosti: string[];
+  /** Rok hrambe podjetniskih zapisov v dneh (pravila, celo stevilo 1..3650): telefon ga uporabi za svoj dnevnik (21t A7). */
+  rokHrambeDni: number;
 };
+
+/** Zapis klica z zacetkom vec kot dan za uro racunalnika se ne sprejme (21t A8, kot telefon DnevnikKlicev DAN_MS). */
+export const PRIHODNOST_KLICA_MS = 86_400_000;
 
 export class NapakaSinhron extends Error {}
 
@@ -141,7 +148,18 @@ function sPrepisom(klic: KlicSinhron, o: Record<string, unknown>): KlicSinhron {
   return { ...klic, prepisPogovora: prepis, prepisOkrnjen: okrnjen };
 }
 
-export function preveriKlic(v: unknown): KlicSinhron {
+/**
+ * Preveri zapis klica; neveljaven vrze NapakaSinhron. Z uro `zdaj` vrne null za zapis s casZacetka > zdaj + 1 dan (21t A8): ta se
+ * preskoci, ne zavrne, da en zapis z napacno uro ne zatakne vrste telefona.
+ */
+export function preveriKlic(v: unknown): KlicSinhron;
+export function preveriKlic(v: unknown, zdaj: number): KlicSinhron | null;
+export function preveriKlic(v: unknown, zdaj?: number): KlicSinhron | null {
+  const k = preveriObliko(v);
+  return zdaj !== undefined && k.casZacetka > zdaj + PRIHODNOST_KLICA_MS ? null : k;
+}
+
+function preveriObliko(v: unknown): KlicSinhron {
   if (!v || typeof v !== "object") throw new NapakaSinhron("Zapis klica ni objekt.");
   const o = v as Record<string, unknown>;
   const id = besedilo(o.id, 80, "id");
@@ -180,7 +198,7 @@ export function preveriPogovor(v: unknown): PogovorSinhron {
   return { vloga: o.vloga, besedilo: b, cas };
 }
 
-export function preveriZahtevo(v: unknown): ZahtevaSinhron {
+export function preveriZahtevo(v: unknown, zdaj: number = Date.now()): ZahtevaSinhron {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new NapakaSinhron("Vsebina ni objekt.");
   const o = v as Record<string, unknown>;
   const rev = o.rev === undefined ? 0 : o.rev;
@@ -196,11 +214,23 @@ export function preveriZahtevo(v: unknown): ZahtevaSinhron {
     if (typeof n !== "object" || !Number.isSafeInteger(n.cas) || (n.cas as number) < 0) throw new NapakaSinhron("Neveljavna navodila.");
     navodila = { besedilo: besedilo(n.besedilo, MEJA_NAVODIL, "navodila").trim(), cas: n.cas as number };
   }
+  let preskoceniPrihodnost = 0;
+  // Posamezen neveljaven vnos se PRESKOCI (ne zavrne cele zahteve): zastrupljen zapis ne sme za vedno zatakniti sinhronizacije.
+  const klici = sez(o.klici, "klici").flatMap((k) => {
+    let p: KlicSinhron | null;
+    try {
+      p = preveriKlic(k, zdaj);
+    } catch {
+      return [];
+    }
+    if (!p) preskoceniPrihodnost += 1;
+    return p ? [p] : [];
+  });
   return {
     rev: rev as number,
     epoha: typeof o.epoha === "string" && /^[0-9a-f]{16}$/.test(o.epoha) ? o.epoha : undefined,
-    // Posamezen neveljaven vnos se PRESKOCI (ne zavrne cele zahteve): zastrupljen zapis ne sme za vedno zatakniti sinhronizacije.
-    klici: sez(o.klici, "klici").flatMap((k) => { try { return [preveriKlic(k)]; } catch { return []; } }),
+    klici,
+    preskoceniPrihodnost,
     pogovor: sez(o.pogovor, "pogovor").flatMap((p) => { try { return [preveriPogovor(p)]; } catch { return []; } }),
     navodila,
     izbrisani: sez(o.izbrisani, "izbrisani").filter((x): x is string => typeof x === "string" && ID_KLICA.test(x)),
@@ -499,6 +529,7 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
       navodila: vzeti.find((x) => x.n)?.n ?? null,
       ostane,
       zmoznosti: izbrisOpravljen ? [ZMOZNOST_PREPIS, ZMOZNOST_IZBRIS] : [ZMOZNOST_PREPIS],
+      rokHrambeDni: rok,
     };
   });
 }

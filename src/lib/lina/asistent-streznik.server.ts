@@ -962,11 +962,13 @@ export class AsistentStreznik {
     await this.preveri(posiljatelj, t, (c, e) => nizSinhron(posiljatelj as string, c, e, zgostitevSinhron(vsebina)));
     let zahteva;
     try {
-      zahteva = preveriZahtevo(JSON.parse(vsebina));
+      zahteva = preveriZahtevo(JSON.parse(vsebina), this.zdaj());
     } catch (e) {
       if (e instanceof NapakaSinhron || e instanceof SyntaxError) throw new Napaka(400, "oblika", "Vsebina sinhronizacije ni veljavna.");
       throw e;
     }
+    // samo stevilo: id, stevilka in ime klica ne gredo v dnevnik (21t A8)
+    if (zahteva.preskoceniPrihodnost) this.dnevnik(`sinhronizacija: preskocenih zapisov klicev s casom vec kot dan v prihodnosti: ${zahteva.preskoceniPrihodnost}`);
     return { status: 200, telo: await izmenjajSinhron(zahteva, this.m.root) };
   }
 

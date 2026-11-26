@@ -72,11 +72,11 @@ function lazni() {
   return { iz, klici, dogodek: (id: string, d: Dogodek) => poslusalci.get(id)!(d) };
 }
 
-async function streznik(o: { krog: Array<{ id: string; kljuc: string }>; ura?: { t: number }; izvajalec?: Izvajalec; preberi?: typeof preberiKanal; rokRokovanja?: number }) {
+async function streznik(o: { krog: Array<{ id: string; kljuc: string }>; ura?: { t: number }; izvajalec?: Izvajalec; preberi?: typeof preberiKanal; rokRokovanja?: number; dnevnik?: (s: string) => void }) {
   const dir = await mkdtemp(path.join(tmpdir(), "lk-as-"));
   await pripraviKanal(o.krog, dir);
   const l = lazni();
-  const s = new AsistentStreznik({ root: dir, izvajalec: o.izvajalec ?? l.iz, zdaj: o.ura ? () => o.ura!.t : undefined, dnevnik: () => {}, preberiKanal: o.preberi, rokRokovanja: o.rokRokovanja });
+  const s = new AsistentStreznik({ root: dir, izvajalec: o.izvajalec ?? l.iz, zdaj: o.ura ? () => o.ura!.t : undefined, dnevnik: o.dnevnik ?? (() => {}), preberiKanal: o.preberi, rokRokovanja: o.rokRokovanja });
   const { vrata, odtis } = await s.zazeni();
   const { cert } = await potrdiloAsistenta(dir);
   const z = (metoda: string, pot: string, telo?: unknown, tip?: string) => zahteva(vrata, cert, odtis, metoda, pot, telo, tip);
@@ -419,6 +419,31 @@ test("sinhronizacija: podpisana zahteva izmenja klic; spremenjena vsebina, ponov
     assert.equal((await s.z("POST", `${POT}/sinhron`, sinhronTelo(ANA, velik))).status, 413);
     const slab = sinhronTelo(ANA, JSON.stringify({ rev: -1 }));
     assert.equal((await s.z("POST", `${POT}/sinhron`, slab)).status, 400);
+  } finally {
+    await s.pospravi();
+  }
+});
+
+test("sinhronizacija (21r A8, A7): zapis klica vec kot dan v prihodnosti se preskoci in presteje v dnevnik brez vsebine; odgovor nosi rokHrambeDni", async () => {
+  const vrstice: string[] = [];
+  const s = await streznik({ krog: [{ id: ANA.id, kljuc: ANA.kljuc }], dnevnik: (v) => vrstice.push(v) });
+  try {
+    const klic = (id: string, casZacetka: number, stevilka = "+38640111222") => ({ id, casZacetka, stevilka, trajanjeS: 5, nujno: false, povzetek: "Miha Horvat se oglasi.",
+      nacin: "osebna", klicatelj: "Miha Horvat", podjetje: "", sporocilo: "Pokličite nazaj.", sporociloDobesedno: "", brezSporocilaRazlog: "" });
+    const zdaj = Date.now();
+    const vsebina = JSON.stringify({ rev: 0, klici: [klic("klic-1", zdaj - 60_000), klic("klic-prihodnost-77", zdaj + 3 * 86_400_000, "+38640999888"), klic("klic-2", zdaj - 30_000)], pogovor: [], navodila: null });
+    const r = await s.z("POST", `${POT}/sinhron`, sinhronTelo(ANA, vsebina));
+    assert.equal(r.status, 200, JSON.stringify(r.telo));
+    assert.deepEqual(r.telo.klici.map((k: { id: string }) => k.id), ["klic-1", "klic-2"]);
+    assert.equal(r.telo.rokHrambeDni, 90);
+    const zapis = vrstice.filter((v) => /prihodnost/i.test(v));
+    assert.equal(zapis.length, 1, JSON.stringify(vrstice));
+    assert.match(zapis[0], /\b1\b/);
+    assert.ok(!vrstice.some((v) => /klic-prihodnost-77|38640999888|Miha/.test(v)), "dnevnik ne sme nositi vsebine zapisa");
+    // brez preskocenih ni vrstice
+    vrstice.length = 0;
+    assert.equal((await s.z("POST", `${POT}/sinhron`, sinhronTelo(ANA, JSON.stringify({ rev: 0, klici: [klic("klic-3", zdaj)], pogovor: [], navodila: null })))).status, 200);
+    assert.equal(vrstice.filter((v) => /prihodnost/i.test(v)).length, 0);
   } finally {
     await s.pospravi();
   }
