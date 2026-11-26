@@ -82,15 +82,15 @@ object KljuciMozganov {
     private val NAPRAVA = Regex("^[A-Za-z0-9._-]{1,80}$")
     private val PREJ = Regex("^$|^[0-9]{1,16}/[A-Za-z0-9._-]{1,80}$")
     private val NEDOVOLJENI_OZNAKA = Regex("[\\x00-\\x1F\\x7F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]")
-    // isti nabor kot JS \\s v kljuci-mozganov.ts (Unicode presledki), sicer telefon sprejme kljuc, ki ga racunalnik zavrne (slepi N3)
-    private val NEDOVOLJENI_VREDNOST = Regex("[\\s\\x00-\\x1F\\x7F\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]")
+    // kljuc API: samo natisljiv ASCII brez presledka, enako kot kljuci-mozganov.ts (\\s se med JS in Androidom/ICU razlikuje)
+    private val VREDNOST = Regex("^[\\x21-\\x7E]{8,400}$")
     private val POLJA = setOf("id", "ponudnik", "oznaka", "cas", "naprava", "izbrisan", "prej", "vrednost")
     private val nakljucje = SecureRandom()
     private val json = Json { ignoreUnknownKeys = false }
 
     fun jePonudnik(p: String): Boolean = p in PONUDNIKI
     fun veljavnaOznaka(o: String): Boolean = o.trim { it.isWhitespace() || it == '\uFEFF' }.isNotEmpty() && o.length <= NAJVEC_OZNAKA && !NEDOVOLJENI_OZNAKA.containsMatchIn(o)
-    fun veljavnaVrednost(v: String): Boolean = v.length in 8..400 && !NEDOVOLJENI_VREDNOST.containsMatchIn(v)
+    fun veljavnaVrednost(v: String): Boolean = VREDNOST.matches(v)
 
     fun novejsi(a: ZapisKljuca, b: ZapisKljuca): Boolean = when {
         a.cas != b.cas -> a.cas > b.cas
@@ -230,9 +230,11 @@ object KljuciMozganov {
     ): PoOdgovoru {
         val nabor = zdruzi(emptyList(), odgovor, zdaj)
         val potrjeni = poslani.filter { p -> nabor.any { it.id == p.id && it.razlicica == p.razlicica && it.izbrisan == p.izbrisan } }.map { it.id }.toSet()
-        val svoji = st.zapisi.filter { it.id in st.neposlani && it.id !in potrjeni }
+        val vNaboru = nabor.map { it.id }.toSet()
+        // zivi zapis telefona, ki ga racunalnik nima (nov ali obnovljen racunalnik): ne zavrzi ga, poslji ga znova
+        val svoji = st.zapisi.filter { (it.id in st.neposlani && it.id !in potrjeni) || (!it.izbrisan && it.id !in vNaboru) }
         var zapisi = zdruzi(nabor, svoji, zdaj)
-        var neposlani = svoji.filter { s -> zapisi.any { it.id == s.id && it.razlicica == s.razlicica } }.map { it.id }
+        var neposlani = svoji.filter { s -> zapisi.any { it.id == s.id && it.razlicica == s.razlicica && it.izbrisan == s.izbrisan } }.map { it.id }
         val u = zaUporabo(zapisi, st.aktivni, slotiPrej, neznani)
         val sloti = u.sloti.toMutableMap()
         var odstranjeni = u.odstranjeni

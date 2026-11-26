@@ -70,9 +70,9 @@ class KljuciMozganovTest {
     private val K3 = "sk-TESTkljuc-tri-3333"
 
     private class Racunalnik {
+        var par = KljuciMozganov.noviPar()
         var zapisi = listOf<ZapisKljuca>(); var aktivni = mapOf<String, String>(); var uvozeno = false
         val sloti = mutableMapOf<String, String>()
-        val par = KljuciMozganov.noviPar()
         val rele = ArrayList<String>()
         val jaz = "r-racunalnik"
         var zdaj = 1000L
@@ -291,5 +291,34 @@ class KljuciMozganovTest {
         assertFalse(KljuciMozganov.veljavnaOznaka("\uFEFF"))
         assertTrue(KljuciMozganov.veljavnaVrednost(K1))
         assertFalse(KljuciMozganov.Par("zasebni-skrivnost", "javni").toString().contains("zasebni-skrivnost"))
+    }
+
+    // ---- slepi pregled 2 ----
+
+    @Test
+    fun novRacunalnikDobiVseKljuceTelefona() {
+        val r1 = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sloti.m["gemini"] = K1
+        a.sinhroniziraj(r1)
+        assertNull(SinhronKljucev.dodaj(a.shramba, a.sloti, a.id, 2000, "gemini", "Drugi", K2))
+        r1.zdaj = 2100; a.sinhroniziraj(r1)
+        val r2 = Racunalnik() // nov ali obnovljen racunalnik: prazen nabor, nov kljuc para
+        r2.zdaj = 3000; assertTrue(a.sinhroniziraj(r2))
+        assertEquals(2, SinhronKljucev.seznam(a.shramba, a.id).size, "telefon ne zavrze kljucev, ki jih racunalnik nima")
+        assertEquals(setOf(K1, K2), r2.zapisi.filter { !it.izbrisan }.map { it.vrednost }.toSet())
+        assertEquals(1, r2.zapisi.count { it.vrednost == K1 }, "aktivni kljuc ne dobi novega id")
+    }
+
+    @Test
+    fun zamenjanKljucRacunalnikaNeZavrzeSpremembe() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa"); val b = Telefon("n-bbbbbbbbbbbbbbbb")
+        r.sloti["gemini"] = K1; r.korak(emptyList())
+        a.sinhroniziraj(r); b.sinhroniziraj(r)
+        a.sloti.m["gemini"] = K2
+        r.par = KljuciMozganov.noviPar() // racunalnik dobi nov kljuc para, A tega se ne ve
+        b.sloti.m["gemini"] = K3
+        r.zdaj = 3000; b.sinhroniziraj(r, 3000) // B: novejsa sprememba istega zapisa
+        r.zdaj = 3100; a.sinhroniziraj(r, 2000) // A: starejsa (2000), poslana s starim kljucem
+        assertTrue(r.zapisi.any { it.oznaka.endsWith("(spor)") && it.vrednost == K2 }, "sprememba A ni izgubljena")
     }
 }

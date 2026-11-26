@@ -676,6 +676,8 @@
     <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
     <string name="keys_sync_title">Clés IA sur tous les appareils</string>
     <string name="keys_sync_note">Une clé ajoutée, modifiée ou supprimée sur cet appareil ou un autre appareil associé à Lina est transmise chiffrée à tous vos appareils. Seuls le libellé et les 4 derniers caractères sont affichés.</string>
+    <string name="keys_sync_label_title">Libellé</string>
+    <string name="keys_sync_key_title">Clé API</string>
     <string name="keys_sync_ok">OK</string>
     <string name="keys_sync_label_hint">Libellé (p. ex. Gemini travail)</string>
     <string name="keys_sync_add_fmt">Ajouter une clé pour %1$s</string>

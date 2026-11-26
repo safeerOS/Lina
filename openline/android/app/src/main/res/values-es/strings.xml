@@ -676,6 +676,8 @@
     <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
     <string name="keys_sync_title">Claves de IA en todos los dispositivos</string>
     <string name="keys_sync_note">Una clave que añada, cambie o elimine en este u otro dispositivo vinculado con Lina se envía cifrada a todos sus dispositivos. Solo se muestran la etiqueta y los 4 últimos caracteres.</string>
+    <string name="keys_sync_label_title">Etiqueta</string>
+    <string name="keys_sync_key_title">Clave API</string>
     <string name="keys_sync_ok">Aceptar</string>
     <string name="keys_sync_label_hint">Etiqueta (p. ej. Gemini trabajo)</string>
     <string name="keys_sync_add_fmt">Añadir clave para %1$s</string>

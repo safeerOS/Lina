@@ -834,6 +834,8 @@
     <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
     <string name="keys_sync_title">Brain keys on all devices</string>
     <string name="keys_sync_note">A key you add, change or remove on this or another paired device with Lina is sent encrypted to all your devices. Only the label and the last 4 characters are shown.</string>
+    <string name="keys_sync_label_title">Label</string>
+    <string name="keys_sync_key_title">API key</string>
     <string name="keys_sync_ok">OK</string>
     <string name="keys_sync_label_hint">Label (e.g. Gemini work)</string>
     <string name="keys_sync_add_fmt">Add key for %1$s</string>

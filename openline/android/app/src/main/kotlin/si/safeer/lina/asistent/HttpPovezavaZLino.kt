@@ -72,8 +72,8 @@ class HttpPovezavaZLino(
     private fun kodaNapake(telo: String): String? =
         Regex("\"napaka\"\\s*:\\s*\"([a-z0-9_-]{1,40})\"").find(telo.take(2048))?.groupValues?.get(1)
 
-    private fun post(pot: String, telo: String, spreminja: Boolean = false) =
-        izvedi(Request.Builder().url("$osnova/$pot").post(telo.toRequestBody(json)).build(), spreminja = spreminja)
+    private fun post(pot: String, telo: String, spreminja: Boolean = false, najvec: Int = AsistentProtokol.NAJVEC_ODGOVORA) =
+        izvedi(Request.Builder().url("$osnova/$pot").post(telo.toRequestBody(json)).build(), najvec = najvec, spreminja = spreminja)
 
     override fun naloga(telo: String) = post("naloga", telo, spreminja = true)
     override fun odobritev(telo: String) = post("odobritev", telo, spreminja = true)
@@ -83,7 +83,8 @@ class HttpPovezavaZLino(
     override fun seznani(telo: String) = post("seznani", telo)
     override fun klici(telo: String) = post("seznani/klici", telo)
     override fun sinhron(telo: String) = post("sinhron", telo)
-    override fun kljuci(telo: String) = post("kljuci", telo)
+    // NALOGA-35: nabor do 40 zivih kljucev z ovojnico in 100 grobov je lahko nad privzeto mejo odgovora
+    override fun kljuci(telo: String) = post("kljuci", telo, najvec = 256 * 1024)
     override fun dodatek(telo: String) = post("dodatek", telo, spreminja = true)
 
     // Seznanitev s kodo (pogodba @fdd787b); /koda/zacni gre prek OdtisPrvePovezave, drugo pripeto na videni odtis.

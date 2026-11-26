@@ -676,6 +676,8 @@
     <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
     <string name="keys_sync_title">KI-Schlüssel auf allen Geräten</string>
     <string name="keys_sync_note">Ein Schlüssel, den Sie auf diesem oder einem anderen gekoppelten Gerät mit Lina hinzufügen, ändern oder entfernen, wird verschlüsselt an alle Ihre Geräte übertragen. Angezeigt werden nur die Bezeichnung und die letzten 4 Zeichen.</string>
+    <string name="keys_sync_label_title">Bezeichnung</string>
+    <string name="keys_sync_key_title">API-Schlüssel</string>
     <string name="keys_sync_ok">OK</string>
     <string name="keys_sync_label_hint">Bezeichnung (z. B. Gemini Arbeit)</string>
     <string name="keys_sync_add_fmt">Schlüssel für %1$s hinzufügen</string>

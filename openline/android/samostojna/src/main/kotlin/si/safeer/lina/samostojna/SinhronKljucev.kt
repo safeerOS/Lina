@@ -20,6 +20,8 @@ private data class ZapisNaDisku(
     override fun toString(): String = "ZapisNaDisku($id)" // nikoli vrednost
 }
 
+private class Priprava(val vse: ShrambaUskladitve.Vse, val slotiPrej: Map<String, String>, val neznani: Set<String>, val poslani: List<ZapisKljuca>)
+
 @Serializable
 private data class ShranjenoNaDisku(
     val v: Int = 1,
@@ -31,7 +33,9 @@ private data class ShranjenoNaDisku(
     val uvozeno: Boolean = false,
     val neposlani: List<String> = emptyList(),
     val odstranjeni: List<String> = emptyList(),
-)
+) {
+    override fun toString(): String = "ShranjenoNaDisku(zapisov=${zapisi.size})" // nikoli zasebni kljuc ali vrednost
+}
 
 /** Stanje uskladitve kljucev (z vrednostmi in zasebnim kljucem para) kot EN sifriran zapis v [shramba] (Keystore na telefonu). */
 class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca, private val obstaja: () -> Boolean = { false }) {
@@ -43,7 +47,11 @@ class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca, private val ob
     @Synchronized fun preberi(): Vse? {
         val surovo = try { shramba.preberi()?.izpostavi() } catch (_: Exception) { return null }
         // zapis obstaja, a se ne odpre (Keystore): ni prvi zagon - brez uskladitve, nic se ne prepise (slepi S4)
-        if (surovo == null) return if (obstaja()) null else KljuciMozganov.noviPar().let { Vse(StanjeKljucev(), it, null, emptyList()) }
+        if (surovo == null) {
+            if (obstaja()) return null
+            // nov par se zapise takoj: naslednje branje vrne ISTO stanje (izmenjava primerja stanje pred in po omrezju)
+            return Vse(StanjeKljucev(), KljuciMozganov.noviPar(), null, emptyList()).also { try { shrani(it) } catch (_: Exception) { return null } }
+        }
         val d = try { json.decodeFromString<ShranjenoNaDisku>(surovo) } catch (_: Exception) { return null }
         val zapisi = d.zapisi.map { ZapisKljuca(it.id, it.ponudnik, it.oznaka, it.cas, it.naprava, it.izbrisan, it.prej, it.vrednost) }
         return Vse(StanjeKljucev(zapisi, d.aktivni, d.uvozeno, d.neposlani), KljuciMozganov.Par(d.zasebni, d.javni), d.javniRacunalnika, d.odstranjeni)
@@ -66,8 +74,8 @@ class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca, private val ob
 object SinhronKljucev {
     private const val NAJVEC_KROGOV = 3
     /**
-     * Celotna izmenjava (branje - omrezje - zapis) in vsako dejanje vmesnika tecejo pod istim zaklepom (slepi pregled T1): sicer bi
-     * izmenjava z omrezja prepisala kljuc, ki ga je lastnik vmes dodal ali odstranil. Dejanje vmesnika (na niti v ozadju) pocaka.
+     * Branje in zapis stanja (pred in po omrezju) ter vsako dejanje vmesnika tecejo pod istim zaklepom; omrezje ne. Izmenjava odgovor
+     * uporabi samo, ce se stanje medtem ni spremenilo - sicer bi prepisala kljuc, ki ga je lastnik vmes dodal ali odstranil.
      */
     private val zaklep = Any()
 
@@ -75,32 +83,47 @@ object SinhronKljucev {
         "gemini" -> "Gemini"; "openai" -> "OpenAI"; "claude" -> "Claude"; "grok" -> "Grok"; "openrouter" -> "OpenRouter"; else -> p
     }
 
-    fun izmenjaj(shramba: ShrambaUskladitve, sloti: SlotiKljucev, jaz: String, zdaj: () -> Long, poslji: (String) -> String?): Boolean = synchronized(zaklep) {
+    fun izmenjaj(shramba: ShrambaUskladitve, sloti: SlotiKljucev, jaz: String, zdaj: () -> Long, poslji: (String) -> String?): Boolean {
         repeat(NAJVEC_KROGOV) {
-            val vse0 = shramba.preberi() ?: return false
-            val slotiPrej = try { sloti.preberi() } catch (_: Exception) { return false }
-            val neznani = try { sloti.neznani() } catch (_: Exception) { return false }
-            val (st, poslani) = KljuciMozganov.pripravi(vse0.stanje, slotiPrej, jaz, zdaj(), ::privzetaOznaka, neznani)
-            // lastna sprememba dobi cas zdaj in ostane zapisana tudi brez povezave (slepi S2: cas urejanja, ne cas naslednje izmenjave)
-            val vse = vse0.copy(stanje = st)
-            if (st != vse0.stanje) shramba.shrani(vse)
+            // 1. pod zaklepom, brez omrezja: lastne spremembe dobijo cas zdaj in ostanejo zapisane tudi brez povezave (cas urejanja)
+            val p = synchronized(zaklep) {
+                val vse0 = shramba.preberi() ?: return false
+                val slotiPrej = try { sloti.preberi() } catch (_: Exception) { return false }
+                val neznani = try { sloti.neznani() } catch (_: Exception) { return false }
+                val (st, poslani) = KljuciMozganov.pripravi(vse0.stanje, slotiPrej, jaz, zdaj(), ::privzetaOznaka, neznani)
+                val vse = vse0.copy(stanje = st)
+                if (st != vse0.stanje) shramba.shrani(vse)
+                Priprava(vse, slotiPrej, neznani, poslani)
+            }
+            val vse = p.vse
             val kljuc = vse.javniRacunalnika?.let { KljuciMozganov.javniKljuc(it) }?.let { KljuciMozganov.kljucPara(vse.par.zasebni, it, jaz) }
             // brez znanega kljuca racunalnika (prva izmenjava) gre samo javni kljuc para; zapisi sledijo v naslednjem krogu
-            val naZici = if (kljuc == null) emptyList() else poslani.map { KljuciMozganov.zaZico(it, kljuc, KljuciMozganov.SMER_TR) }
+            val naZici = if (kljuc == null) emptyList() else p.poslani.map { KljuciMozganov.zaZico(it, kljuc, KljuciMozganov.SMER_TR) }
+            // 2. omrezje BREZ zaklepa: dejanje vmesnika ne caka na Global Link (do roka povezave)
             val telo = poslji(KljuciMozganov.vsebina(vse.par.javni, naZici)) ?: return false
             val odg = KljuciMozganov.odgovor(telo) ?: return false
             val javniR = KljuciMozganov.javniKljuc(odg.javni) ?: return false
-            val k = KljuciMozganov.kljucPara(vse.par.zasebni, javniR, jaz)
-            val prejeti = odg.zapisi.mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_RT) }
-            val slotiZdaj = try { sloti.preberi() } catch (_: Exception) { return false }
-            val po = KljuciMozganov.poOdgovoru(st, if (kljuc == null) emptyList() else poslani, prejeti, slotiPrej, slotiZdaj, jaz, zdaj(), ::privzetaOznaka, neznani)
-            try {
-                for ((p, v) in po.uporaba.sloti) sloti.zapisi(p, v)
-            } catch (_: Exception) { return false }
-            shramba.shrani(ShrambaUskladitve.Vse(po.stanje, vse.par, odg.javni, (vse.odstranjeni + po.uporaba.odstranjeni).distinct()))
-            if (!po.znova) return true
+            // 3. pod zaklepom: odgovor velja samo za stanje, iz katerega je nastala zahteva (primerjaj in zamenjaj)
+            val koncano: Boolean? = synchronized(zaklep) {
+                if (shramba.preberi() != vse) return@synchronized null // lastnik je vmes nekaj spremenil: nov krog z novim stanjem
+                if (p.poslani.isNotEmpty() && odg.javni != vse.javniRacunalnika) {
+                    // racunalnik ima nov kljuc para (nov ali obnovljen): nasih ovojnic ni mogel odpreti - nic ne zavrzi, poslji znova
+                    shramba.shrani(vse.copy(javniRacunalnika = odg.javni))
+                    return@synchronized null
+                }
+                val k = KljuciMozganov.kljucPara(vse.par.zasebni, javniR, jaz)
+                val prejeti = odg.zapisi.mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_RT) }
+                val slotiZdaj = try { sloti.preberi() } catch (_: Exception) { return false }
+                val po = KljuciMozganov.poOdgovoru(vse.stanje, if (kljuc == null) emptyList() else p.poslani, prejeti, p.slotiPrej, slotiZdaj, jaz, zdaj(), ::privzetaOznaka, p.neznani)
+                try {
+                    for ((pp, v) in po.uporaba.sloti) sloti.zapisi(pp, v)
+                } catch (_: Exception) { return false }
+                shramba.shrani(ShrambaUskladitve.Vse(po.stanje, vse.par, odg.javni, (vse.odstranjeni + po.uporaba.odstranjeni).distinct()))
+                !po.znova
+            }
+            if (koncano == true) return true
         }
-        true
+        return true
     }
 
     // ---- Vmesnik na telefonu (Nastavitve > Kljuci): seznam brez vrednosti, dodaj z oznako, uporabi, odstrani -------------------

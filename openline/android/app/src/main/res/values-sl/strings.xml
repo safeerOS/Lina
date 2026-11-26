@@ -833,6 +833,8 @@
     <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
     <string name="keys_sync_title">Ključi za možgane na vseh napravah</string>
     <string name="keys_sync_note">Ključ, ki ga dodate, spremenite ali odstranite na tej ali drugi seznanjeni napravi z Lino, se šifrirano prenese na vse vaše naprave. Prikazana sta samo oznaka in zadnji 4 znaki.</string>
+    <string name="keys_sync_label_title">Oznaka</string>
+    <string name="keys_sync_key_title">Ključ API</string>
     <string name="keys_sync_ok">V redu</string>
     <string name="keys_sync_label_hint">Oznaka (npr. Gemini služba)</string>
     <string name="keys_sync_add_fmt">Dodaj ključ za %1$s</string>

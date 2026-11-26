@@ -58,8 +58,11 @@ class KljuciNaNapravahPogled(
         vrstica(vsebnik, obvestilo, 8)
         vrstica(vsebnik, obvestiloGumb, 4)
         vrstica(vsebnik, seznam, 4)
-        vrstica(vsebnik, oznaka, 8)
-        vrstica(vsebnik, kljuc, 8)
+        // vidni oznaki polj (namig izgine ob vnosu)
+        vrstica(vsebnik, TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.keys_sync_label_title); labelFor = View.generateViewId().also { oznaka.id = it } }, 8)
+        vrstica(vsebnik, oznaka, 4)
+        vrstica(vsebnik, TextView(a).apply { setTextAppearance(R.style.Gw_Muted); setText(R.string.keys_sync_key_title); labelFor = View.generateViewId().also { kljuc.id = it } }, 8)
+        vrstica(vsebnik, kljuc, 4)
         vrstica(vsebnik, dodaj, 8)
         vrstica(vsebnik, stanje, 4)
         obvestiloGumb.setOnClickListener { vOzadju { SinhronKljucev.potrdiObvestilo(UskladitevKljucev.shramba(a)); null } }
@@ -78,6 +81,8 @@ class KljuciNaNapravahPogled(
     /** [delo] vrne kljuc napake (SinhronKljucev) ali null; po uspehu pobrise vnosa in zazene uskladitev. */
     private fun vOzadju(delo: () -> String?) {
         dodaj.isEnabled = false
+        // med delom brez drugega dotika (sicer zavajajoce »ga ni vec«)
+        for (i in 0 until seznam.childCount) seznam.getChildAt(i).isEnabled = false
         nit.execute {
             val napaka = try { delo() } catch (_: Exception) { "napaka" }
             glavna.post {

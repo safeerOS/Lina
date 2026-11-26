@@ -21,33 +21,45 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object UskladitevKljucev {
     private val teka = AtomicBoolean(false)
+    private val cakajo = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
 
     fun shramba(context: Context): ShrambaUskladitve {
         val k = KeystoreShranjevalnik.zaKljuceMozganov(context.applicationContext)
         return ShrambaUskladitve(k) { k.imaZapis() }
     }
 
+    /** Vrednost in »neberljiv« iz ISTEGA branja slota (sicer bi prehodna napaka Keystore med dvema branjema postala izbris). */
     fun sloti(context: Context): SlotiKljucev = object : SlotiKljucev {
         private val c = context.applicationContext
-        override fun preberi(): Map<String, String> = KljuciMozganov.PONUDNIKI.mapNotNull { id ->
-            SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(id)).preberi()?.izpostavi()?.let { id to it }
-        }.toMap()
-        override fun neznani(): Set<String> = KljuciMozganov.PONUDNIKI.filter { id ->
-            val s = SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(id))
-            (s as? KeystoreShranjevalnik)?.imaZapis() == true && s.preberi() == null
-        }.toSet()
+        @Volatile private var zadnjiNeznani: Set<String>? = null
+        override fun preberi(): Map<String, String> {
+            val vrednosti = HashMap<String, String>()
+            val neznani = HashSet<String>()
+            for (id in KljuciMozganov.PONUDNIKI) {
+                val s = SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(id))
+                val v = s.preberi()?.izpostavi()
+                if (v != null) vrednosti[id] = v else if ((s as? KeystoreShranjevalnik)?.imaZapis() == true) neznani.add(id)
+            }
+            zadnjiNeznani = neznani
+            return vrednosti
+        }
+        override fun neznani(): Set<String> = zadnjiNeznani ?: preberi().let { zadnjiNeznani.orEmpty() }
         override fun zapisi(ponudnik: String, vrednost: String?) {
             val s = SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(ponudnik))
             if (vrednost == null) s.izbrisi() else s.shrani(KljucGemini(vrednost))
         }
     }
 
-    /** V ozadju; ob tekoci izmenjavi ne zacne druge (naslednji sprozilec jo dohiti). */
+    /** V ozadju; ob tekoci izmenjavi ne zacne druge, [poKoncu] pa se izvede ob koncu tekoce (seznam se osvezi). */
     fun zazeni(context: Context, poKoncu: (() -> Unit)? = null) {
         val app = context.applicationContext
+        poKoncu?.let(cakajo::add)
         if (!teka.compareAndSet(false, true)) return
         Thread({
-            try { runCatching { izvedi(app) } } finally { teka.set(false); poKoncu?.invoke() }
+            try { runCatching { izvedi(app) } } finally {
+                teka.set(false)
+                while (true) (cakajo.poll() ?: break).let { runCatching { it() } }
+            }
         }, "lina-kljuci").start()
     }
 
