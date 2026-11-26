@@ -38,6 +38,7 @@ const LAZNI_KLJUC = "sk-lazni-kljuc-0031";
 // Lazen OmniRoute (ga ustvari lazni »npm ci«): prijava z geslom iz okolja, kljuc samo s piskotkom, /v1 samo s kljucem.
 const LAZNI_STREZNIK = `import http from "node:http"; import fs from "node:fs"; import path from "node:path";
 fs.writeFileSync(path.join(process.env.HOME, "..", "streznik-okolje.json"), JSON.stringify(process.env));
+fs.appendFileSync(path.join(process.env.HOME, "..", "zagoni.txt"), "z\\n");
 const s = http.createServer(async (req, res) => {
   let b = ""; for await (const c of req) b += c;
   const json = (st, o, glave = {}) => res.writeHead(st, { "content-type": "application/json", ...glave }).end(JSON.stringify(o));
@@ -64,7 +65,7 @@ if (process.argv[2] === "ci") {
   fs.writeFileSync(path.join(nm, "omniroute", "dist", "server-ws.mjs"), ${JSON.stringify(LAZNI_STREZNIK)});
   for (const p of ["sql.js", "node-machine-id"]) { fs.mkdirSync(path.join(nm, p), { recursive: true }); fs.writeFileSync(path.join(nm, p, "package.json"), "{}"); }
   fs.mkdirSync(path.join(nm, "playwright"), { recursive: true });
-  fs.writeFileSync(path.join(nm, "playwright", "cli.js"), 'const fs=require("fs"),path=require("path");fs.writeFileSync(path.join(process.env.HOME,"..","pw-klic.json"),JSON.stringify({argv:process.argv.slice(2),pot:process.env.PLAYWRIGHT_BROWSERS_PATH}))');
+  fs.writeFileSync(path.join(nm, "playwright", "cli.js"), 'const fs=require("fs"),path=require("path");fs.writeFileSync(path.join(process.env.HOME,"..","pw-klic.json"),JSON.stringify({argv:process.argv.slice(2),pot:process.env.PLAYWRIGHT_BROWSERS_PATH}));if(fs.existsSync(path.join(process.env.HOME,"..","..","pw-pade")))process.exit(1)');
 }`;
 
 let register: Server;
@@ -199,15 +200,26 @@ describe("naloga 31: Lina namesti OmniRoute (nadomestni register)", () => {
     assert.equal(zanka, 401, "na zanki tece (brez kljuca 401)");
   });
 
-  it("ustavi in ob zagonu Line znova zazene namescen OmniRoute (brez ponovne namestitve)", async () => {
+  it("ustavi in ob zagonu Line znova zazene namescen OmniRoute (brez ponovne namestitve); hkratna zagona = en proces", async () => {
     await ustaviOmniroute();
+    assert.equal((await stanjeNamestitve(token, dir)).pripravljeno, false, "mrtev OmniRoute ni »pripravljen«");
+    writeFileSync(path.join(korenOmniroute(dir), "zagoni.txt"), "");
     const ustavljen = await fetch(`http://127.0.0.1:${vrata}/v1/models`, { signal: AbortSignal.timeout(2000) }).then(
       () => "tece",
       () => "ustavljen",
     );
     assert.equal(ustavljen, "ustavljen");
-    await zazeniObZagonu(dir, odvisnosti());
+    await Promise.all([zazeniObZagonu(dir, odvisnosti()), zazeniObZagonu(dir, odvisnosti())]);
     assert.equal((await stanjeNamestitve(token, dir)).tece, true);
+    assert.equal(readFileSync(path.join(korenOmniroute(dir), "zagoni.txt"), "utf8").split("\n").filter(Boolean).length, 1);
+    // Hkrati zagon ob zagonu Line in »Da, zazeni« v vmesniku: en proces in brez lazne napake »vrata zaseda drug program«.
+    await ustaviOmniroute();
+    writeFileSync(path.join(korenOmniroute(dir), "zagoni.txt"), "");
+    await Promise.all([zazeniObZagonu(dir, odvisnosti()), namestiOmniroute(token, dir, odvisnosti()).then(() => pocakajNamestitev())]);
+    const st = await stanjeNamestitve(token, dir);
+    assert.equal(st.napaka, null);
+    assert.equal(st.pripravljeno, true);
+    assert.equal(readFileSync(path.join(korenOmniroute(dir), "zagoni.txt"), "utf8").split("\n").filter(Boolean).length, 1);
     assert.equal(json<unknown[]>(path.join(korenOmniroute(dir), "npm-klici.json")).length, 1, "npm ci se ne ponovi");
   });
 
@@ -223,6 +235,28 @@ describe("naloga 31: Lina namesti OmniRoute (nadomestni register)", () => {
     );
     assert.equal(r, "ustavljen");
     await assert.rejects(odstraniOmniroute(token, dir), /ni namestila/);
+    const b = await readBrain(token, dir);
+    assert.equal(b.shranjeni?.some((p) => p.provider === "omniroute"), false, "asistentka ne ostane na odstranjenem OmniRoute");
+    assert.equal(b.pogovor ?? null, null);
+  });
+
+  it("padec brskalnika: namestitev ni koncana; ponovni poskus namesti znova in uspe", async () => {
+    const n = await nova();
+    const zastavica = path.join(n.dir, "pw-pade");
+    writeFileSync(zastavica, "1");
+    await namestiOmniroute(n.token, n.dir, odvisnosti());
+    await pocakajNamestitev();
+    let st = await stanjeNamestitve(n.token, n.dir);
+    assert.equal(st.koraki[1]?.stanje, "napaka");
+    assert.equal(st.pripravljeno, false);
+    rmSync(zastavica);
+    await namestiOmniroute(n.token, n.dir, odvisnosti());
+    await pocakajNamestitev();
+    st = await stanjeNamestitve(n.token, n.dir);
+    assert.equal(st.napaka, null);
+    assert.equal(st.pripravljeno, true);
+    assert.equal(json<unknown[]>(path.join(korenOmniroute(n.dir), "npm-klici.json")).length, 2, "drugi poskus ne preskoci namestitve");
+    await odstraniOmniroute(n.token, n.dir);
   });
 
   it("odstrani zavrne, ce je OmniRoute izbran za klice", async () => {

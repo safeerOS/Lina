@@ -72,6 +72,14 @@ describe("naloga 31: OmniRoute ne tece", () => {
     await assert.rejects(saveBrain({ provider: "omniroute", naslov: mrtev, samodejno: true }, token, dir), (e: Error) => e.message === OMNIROUTE_NE_TECE);
   });
 
+  it("tuj program na naslovu (404) ni OmniRoute: ista napaka, nic se ne shrani", async () => {
+    const { dir, token } = await nova();
+    await assert.rejects(
+      saveBrain({ provider: "omniroute", key: KLJUC, naslov: ziv.replace(/\/v1$/, "/drugo"), model: "auto" }, token, dir),
+      (e: Error) => e.message === OMNIROUTE_NE_TECE,
+    );
+  });
+
   it("besedilo napake ni surova napaka omrezja in je prevedeno (sl, en)", () => {
     assert.doesNotMatch(OMNIROUTE_NE_TECE, /ECONNREFUSED|fetch failed|TypeError/);
     assert.equal(besedila.sl.omNeTece, OMNIROUTE_NE_TECE);

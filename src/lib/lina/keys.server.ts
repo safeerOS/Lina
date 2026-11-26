@@ -677,13 +677,14 @@ async function shraniOmniroute(
   return { ...(await readBrainOsnova(root)), ...(await pogledPonudnikov(root)), ...(skupaj ? { sporociloModela: skupaj } : {}) };
 }
 
-/** Naloga 31: ali na naslovu OmniRoute kaj odgovori (vsak odgovor HTTP, tudi 401, pomeni, da tece); rok 2 s, brez preusmeritev. */
+/** Naloga 31: ali na naslovu tece OmniRoute (2xx, 401 ali 403 na /models); rok 2 s, brez preusmeritev. */
 export async function teceOmniroute(naslov: string): Promise<boolean> {
   const { omnirouteFetch } = await import("./providers.ts");
   try {
     const r = await omnirouteFetch(`${naslov.replace(/\/+$/, "")}/models`, { method: "GET" }, 2000, 2000);
     await r.body?.cancel();
-    return true;
+    // Slepi pregled #8: 404/500 tujega programa na teh vratih ni OmniRoute; 401/403 je OmniRoute, ki zahteva kljuc.
+    return r.ok || r.status === 401 || r.status === 403;
   } catch {
     return false;
   }
@@ -1007,6 +1008,19 @@ export async function preveriLastniStreznik(
 }
 
 /** Odstrani lasten streznik iz nastavitev (ne brise datotek namestitve); izbira pogovora se vrne na privzeto. */
+/** Naloga 31 (slepi pregled #4): ob odstranitvi OmniRoute, ki ga je namestila Lina, iz Mozganov samo zapis S TEM naslovom (in izbira asistentke). */
+export async function odstraniOmnirouteNaslova(token: string | null, naslov: string, dir?: string): Promise<void> {
+  const root = resolveDataDir(dir);
+  await requireOwner(token, root);
+  await zaporedno(root, async () => {
+    const trenutno = await preberiPonudnike(root);
+    const zapis = trenutno.ponudniki.omniroute;
+    if (!zapis || veljavenNaslovOmniroute(zapis.naslov) !== veljavenNaslovOmniroute(naslov)) return;
+    const { omniroute: _stari, ...drugi } = trenutno.ponudniki;
+    await zapisiPonudnike(root, { ponudniki: drugi, pogovor: trenutno.pogovor?.provider === "omniroute" ? null : trenutno.pogovor });
+  });
+}
+
 export async function odstraniLastniStreznik(token: string | null, dir?: string): Promise<BrainPublic> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
