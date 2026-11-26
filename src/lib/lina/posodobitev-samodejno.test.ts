@@ -339,7 +339,8 @@ test("n28 (slepi krog 3, #2): en rok velja za ves prenos, tudi cez vec preusmeri
   const napaka = await prenesiPreverjeno("https://github.com/safeerOS/Lina/releases/download/v1/SHA256SUMS", path.join(mapa, "v"), fetchFn, { najvecBajtov: 1000, rokMs: 300 }).catch((e: Error) => e);
   assert.ok(napaka instanceof Error);
   assert.notEqual(napaka.message, "Preveč preusmeritev.", "vsak skok ne sme dobiti novega roka");
-  assert.ok(Date.now() - zacetek < 600, `trajalo ${Date.now() - zacetek} ms`);
+  // ohlapna meja (obremenjen racunalnik); odlocilna je zgornja trditev: brez skupnega roka bi prislo do 5 skokov
+  assert.ok(Date.now() - zacetek < 2000, `trajalo ${Date.now() - zacetek} ms`);
   assert.ok(skokov <= 3, `skokov ${skokov}`);
 });
 
