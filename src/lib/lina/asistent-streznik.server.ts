@@ -23,6 +23,7 @@ import path from "node:path";
 import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_BAJTOV_VIDEA, preberiKnjiznico } from "./slike-knjiznica.server.ts";
 import { NAJVEC_ZNAKOV, type Dogodek, type Izvajalec, type Naloga } from "./asistent.server.ts";
 import {
   ENKRATNI,
@@ -45,6 +46,8 @@ import {
   nizN8nPotrditve,
   zgostitevN8nPredlogaVnos,
   nizApkGradnje,
+  nizSeznamaSlik,
+  nizSlike,
   nizPotrditveGradnje,
   nizPredlogaGradnje,
   nizStanjaGradenj,
@@ -261,6 +264,9 @@ export const GLAVA_VIR = "x-lina-vir";
 export const VIR_PREHODA = /^[A-Za-z0-9._:-]{1,64}$/;
 /** Povezav z lokalnega naslova, ko je prehod omogocen (vse oddaljene zahteve pridejo od tam; vir omejitve je drug). */
 export const NAJVEC_POVEZAV_PREHOD = 32;
+/** Naloga 20: datoteke knjiznice slik, ki jih sme dobiti telefon (isti vzorec kot mediji-datoteka.server.ts). */
+const DATOTEKA_KNJIZNICE = /^[a-z0-9]{12}\.(png|jpg|mp4)$/;
+const MIME_KNJIZNICE = { png: "image/png", jpg: "image/jpeg", mp4: "video/mp4" } as const;
 /** Poti, ki jih sme poklicati OSEBA ZUNAJ DOMA (beli seznam); seznanjanje (/seznani, /koda/*) nikoli. */
 export const POTI_ODDALJENO: ReadonlyMap<string, string> = new Map([
   [`${POT}/naloga`, "POST"], [`${POT}/odobritev`, "POST"], [`${POT}/ustavi`, "POST"], [`${POT}/nadaljuj`, "POST"], [`${POT}/dogodki`, "GET"], [`${POT}/stanje`, "GET"],
@@ -589,6 +595,9 @@ export class AsistentStreznik {
       if (req.method === "GET" && url.pathname === `${POT}/dodatki/n8n`) return this.poslji(res, 200, await this.stanjeN8n(url));
       if (req.method === "GET" && url.pathname === `${POT}/gradnje`) return this.poslji(res, 200, await this.stanjeGradenj(url));
       if (req.method === "GET" && url.pathname === `${POT}/gradnja/apk`) return await this.apkGradnje(url, res);
+      // naloga 20: knjiznica slik na telefon - samo doma (ni v POTI_ODDALJENO; Global Link sele po lastnikovem »da«)
+      if (req.method === "GET" && url.pathname === `${POT}/slike`) return this.poslji(res, 200, await this.seznamSlik(url));
+      if (req.method === "GET" && url.pathname === `${POT}/slika`) return await this.slikaKnjiznice(url, res);
       if (req.method === "GET" && url.pathname === `${POT}/agent-naloge`) return this.poslji(res, 200, await this.stanjeAgentNalog(url));
       if (req.method === "GET" && url.pathname === `${POT}/agent-vprasanja`) return this.poslji(res, 200, await this.stanjeVprasanjAgentov(url));
       if (req.method !== "POST") throw new Napaka(url.pathname.startsWith(POT) ? 405 : 404, "ni", "Ni take poti.");
@@ -1245,6 +1254,54 @@ export class AsistentStreznik {
         "x-lina-gradnja": a.id,
       });
       // pipeline se konca tudi ob prekinitvi odjemalca ali napaki branja (vticnica se tedaj zapre, ne visi)
+      await pipeline(ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false }), res).catch(() => {
+        res.destroy();
+      });
+    } finally {
+      await ds.close();
+    }
+  }
+
+  /** Naloga 20: seznam knjiznice slik (podpisana poizvedba); samo metapodatki, brez poziva in poti; najnovejsi do meje odgovora. */
+  private async seznamSlik(url: URL) {
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    await this.preveri(posiljatelj, t, (c, e) => nizSeznamaSlik(posiljatelj as string, c, e));
+    const slike = (await preberiKnjiznico(this.m.root)).slike
+      .filter((s) => typeof s.datoteka === "string" && DATOTEKA_KNJIZNICE.test(s.datoteka))
+      .slice(0, 60)
+      .map((s) => {
+        const pripona = s.datoteka.split(".")[1] as keyof typeof MIME_KNJIZNICE;
+        return { id: s.id, serija: s.serija, cas: s.cas, opis: String(s.opis ?? "").slice(0, 200), model: String(s.model ?? "").slice(0, 60), bajtov: s.bajtov, mime: MIME_KNJIZNICE[pripona], vrsta: pripona === "mp4" ? "video" : "slika" };
+      });
+    return { slike: dogodkiDoMeje(slike, NAJVEC_ODGOVOR_DOGODKOV_B) };
+  }
+
+  /**
+   * Naloga 20: ena slika ali video iz knjiznice kot surovi bajti (kot APK): id iz knjiznice, ime po vzorcu, odpre se brez sledenja
+   * povezavi, vrsta in velikost se preverita na odprti datoteki, sha256 iz ISTE datoteke v glavi x-lina-sha256.
+   */
+  private async slikaKnjiznice(url: URL, res: ServerResponse): Promise<void> {
+    const { posiljatelj, t } = this.podpisPoizvedbe(url);
+    const id = url.searchParams.get("id") ?? "";
+    if (!/^[a-z0-9]{12}$/.test(id)) throw new Napaka(400, "oblika", "Neveljaven id.");
+    await this.preveri(posiljatelj, t, (c, e) => nizSlike(posiljatelj as string, id, c, e));
+    const z = (await preberiKnjiznico(this.m.root)).slike.find((s) => s.id === id);
+    if (!z || typeof z.datoteka !== "string" || !DATOTEKA_KNJIZNICE.test(z.datoteka)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
+    const pripona = z.datoteka.split(".")[1] as keyof typeof MIME_KNJIZNICE;
+    let ds;
+    try {
+      ds = await open(path.join(this.m.root, MAPA_SLIK, z.datoteka), fsKonstante.O_RDONLY | (fsKonstante.O_NOFOLLOW ?? 0) | (fsKonstante.O_NONBLOCK ?? 0));
+    } catch {
+      throw new Napaka(404, "ni", "Slike ni v knjiznici.");
+    }
+    try {
+      const st = await ds.stat();
+      if (!st.isFile() || st.size === 0 || st.size > (pripona === "mp4" ? NAJVEC_BAJTOV_VIDEA : NAJVEC_BAJTOV_SLIKE)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
+      if (res.destroyed) return;
+      const h = createHash("sha256");
+      for await (const k of ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false })) h.update(k as Buffer);
+      if (res.destroyed) return;
+      res.writeHead(200, { "content-type": MIME_KNJIZNICE[pripona], "content-length": st.size, "cache-control": "no-store", "x-lina-sha256": h.digest("hex") });
       await pipeline(ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false }), res).catch(() => {
         res.destroy();
       });

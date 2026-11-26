@@ -15,6 +15,7 @@ import path from "node:path";
 import type { OrodjeOrkestratorja } from "./orkestrator.ts";
 import type { SpletOdv } from "./splet.ts";
 import type { Vir } from "./brave.server.ts";
+import { KAKOVOSTI_SLIK, RAZMERJA_SLIK, izberiGeneratorSlik, type KakovostSlike, type MoznostiGeneriranja } from "./slike-generator.server.ts";
 import { resolveDataDir } from "./store.server.ts";
 
 export type OdvisnostiOrodij = {
@@ -24,7 +25,13 @@ export type OdvisnostiOrodij = {
   isci?: (poizvedba: string) => Promise<Vir[] | null>;
   /** Branje strani brez vidnega besedila; privzeto TinyFish z lastnikovim kljucem. */
   tinyfish?: (naslov: string) => Promise<string | null>;
+  /** Naloga 20 (preizkus): nastavitev mozganov za izbiro generatorja in odvisnosti generatorja slik. */
+  slike?: Pick<MoznostiGeneriranja, "fetch" | "zeton" | "prevedi" | "nakljucno"> & { mozgani?: () => Promise<{ provider?: unknown; project?: unknown } | null> };
 };
+
+/** Naloga 20: slik na nalogo (ustvari_sliko je brez potrditve, zato je meja edina zavora porabe kreditov). */
+export const NAJVEC_SLIK_NA_NALOGO = 8;
+const ROK_SLIKE_MS = 3 * 60_000;
 
 /** Najvecja datoteka za branje (vecjo naj bere agent s peskovnikom). */
 export const NAJVEC_BAJTOV_DATOTEKE = 2_000_000;
@@ -244,5 +251,52 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
         return r.ok ? { ok: true, rezultat: `V koledar: ${r.zapis.vrsta} »${r.zapis.naslov}« ${r.zapis.cas ?? ""}`.trim() } : napaka(r.sporocilo);
       },
     },
+    {
+      // Naloga 20 (lastnik 25. 11. 2026): brez potrditve (krediti brezplacni). Opis gre samo v lastnikov projekt Vertex (isti kot za
+      // mozgane), ne tretjemu in ne napadalcu, slika ostane lokalno - zato ne caka niti po branju zasebnih podatkov. Okuzena naloga
+      // (zaznan vbrizg) vseeno caka lastnika (zahtevaPotrditev); poraba je omejena z NAJVEC_SLIK_NA_NALOGO.
+      razred: "zunanje",
+      potrditev: false,
+      rokMs: ROK_SLIKE_MS,
+      definicija: {
+        ime: "ustvari_sliko",
+        opis: `Ustvari sliko iz opisa z lastnikovim generatorjem (Google Vertex, modeli Gemini image) in jo shrani v Linino knjiznico (Mediji na racunalniku, na zahtevo tudi na telefon). Kakovost: hitri, standard (privzeto), ultra. Najvec ${NAJVEC_SLIK_NA_NALOGO} slik na nalogo. Vrne id slike.`,
+        parametri: {
+          type: "object",
+          properties: {
+            opis: { type: "string", minLength: 3, maxLength: 2000 },
+            stevilo: { type: "integer", minimum: 1, maximum: 2 },
+            razmerje: { type: "string", enum: [...RAZMERJA_SLIK] },
+            kakovost: { type: "string", enum: [...KAKOVOSTI_SLIK] },
+          },
+          required: ["opis"],
+        },
+      },
+      izvedi: async (a, k) => {
+        const stevilo = typeof a.stevilo === "number" ? a.stevilo : 1;
+        const porabljeno = slikNaNalogo.get(k.nalogaId) ?? 0;
+        if (porabljeno + stevilo > NAJVEC_SLIK_NA_NALOGO) return napaka(`Dosezena meja ${NAJVEC_SLIK_NA_NALOGO} slik na nalogo.`);
+        const mozgani = odv.slike?.mozgani ?? (async () => (await import("./keys.server.ts")).activeBrain(root));
+        const izbira = izberiGeneratorSlik(await mozgani(), (a.kakovost as KakovostSlike | undefined) ?? "standard");
+        if (!izbira.ok) return napaka(izbira.sporocilo);
+        if (k.signal.aborted) return napaka("Naloga je bila ustavljena.");
+        // shortcut: stevec je v pomnilniku procesa (ponovni zagon ga ponastavi); trajen stevec, ce bo to kdaj zlorabljeno
+        slikNaNalogo.set(k.nalogaId, porabljeno + stevilo);
+        const { ustvariSliko } = await import("./slike-generator.server.ts");
+        let izid;
+        try {
+          izid = await ustvariSliko(root, a.opis, { ...odv.slike, projekt: izbira.projekt, model: izbira.model, stevilo, razmerje: a.razmerje, signal: k.signal });
+        } catch (e) {
+          return napaka(`Slike ni bilo mogoce ustvariti: ${e instanceof Error ? e.message.slice(0, 200) : "napaka"}`);
+        }
+        if (!izid.slike.length) return napaka(`Generator ni vrnil slike (zavrnjenih ${izid.zavrnjenih}; morda filter vsebine). ${izbira.razlog}`);
+        // izid sestavi koda (id, datoteka, bajti, model) - nikoli base64 ali besedilo modela slik
+        const vrstice = izid.slike.map((s) => `- id ${s.id}, datoteka ${s.datoteka}, ${s.bajtov} B, model ${s.model}, serija ${s.serija}`);
+        return { ok: true, rezultat: `Ustvarjenih slik: ${izid.slike.length}${izid.zavrnjenih ? ` (zavrnjenih ${izid.zavrnjenih})` : ""}; vidne v Medijih.\n${vrstice.join("\n")}\n${izbira.razlog}` };
+      },
+    },
   ];
 }
+
+/** Naloga 20: porabljene slike po nalogi (meja NAJVEC_SLIK_NA_NALOGO). */
+const slikNaNalogo = new Map<string, number>();

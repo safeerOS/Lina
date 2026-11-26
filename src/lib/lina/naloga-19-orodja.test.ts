@@ -20,7 +20,8 @@ import { zaznajVbrizg } from "./vbrizg.ts";
 import { odgovoriNaVprasanje, stanjeVprasanjZaRoot, telefonVprasanja } from "./vprasanja-agentov.server.ts";
 import * as vrataLH from "./ucenje-lh-vrata.server.ts";
 
-const F2 = ["seznam_mape", "preberi_datoteko", "isci_splet", "preberi_stran", "poisci_v_znanju", "zapisi_datoteko", "ustvari_opomnik"];
+// naloga 20: ustvari_sliko (generator slik, brez potrditve, meja na nalogo) - preizkusi v naloga-20-slike.test.ts
+const F2 = ["seznam_mape", "preberi_datoteko", "isci_splet", "preberi_stran", "poisci_v_znanju", "zapisi_datoteko", "ustvari_opomnik", "ustvari_sliko"];
 
 /** Mapa podatkov Line in projektna mapa (dovoljena v claude-naloge.json), loceni. */
 async function okolje() {

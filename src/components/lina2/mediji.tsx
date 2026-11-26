@@ -23,7 +23,7 @@ import { jezikVmesnika } from "@/lib/lina/besedila.ts";
 import { t2 } from "./besedila.ts";
 
 /**
- * Lina 2.0, 22. 11. 2026: okno Slike in video (generator Imagen/Veo iz slike-generator.server.ts in video-generator.server.ts),
+ * Lina 2.0, 22. 11. 2026: okno Slike in video (generator Gemini image (od naloge 20; Imagen ugasnjen)/Veo iz slike-generator.server.ts in video-generator.server.ts),
  * kartica dnevne motivacije (Domov) in stikalo cistenja zvoka klicev (Nastavitve). Vse samo za lastnika; strezniske funkcije
  * so v functions.ts. Slike in video se berejo kot data URL na zahtevo (medijPodatkiFn), nikoli v klicih tajnice.
  */

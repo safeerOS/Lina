@@ -2,8 +2,12 @@
  * Linin generator videa (lastnik 22. 11. 2026: »Video« - ob generatorju slik iz ideje Muse4AI, brez novega racuna). Vertex Veo prek
  * obstojecega projekta: predictLongRunning vrne ime operacije, fetchPredictOperation jo preverja, dokler ni koncana. Slovenski opis
  * prevedejo Linini mozgani (mediji-opis.server.ts). Video gre v isto knjiznico (slike.json, mapa slike/), samo lastnik, nikoli v klicih.
- * Vir API: Vertex AI Veo (durationSeconds za Veo 3: 4, 6 ali 8; generateAudio obvezen za Veo 3). NEPREVERJENO: prava zahteva, oblika
- * odgovora operacije (response.videos[].bytesBase64Encoded brez storageUri) in poraba kreditov (video je drag). Komentarji brez sumnikov.
+ * Vir API: Vertex AI Veo (durationSeconds za Veo 3: 4, 6 ali 8; generateAudio obvezen za Veo 3).
+ * Naloga 20 (26. 11. 2026): Veo 3.1 NI opuscen - prava kratka zahteva (4 s, brez zvoka, us-central1) je uspela za oba modela:
+ * fast 23,8 s / 470 kB, standard 56,2 s / 562 kB. Oblika odgovora operacije izmerjena: {name, done, response: {@type,
+ * raiMediaFilteredCount, videos: [{bytesBase64Encoded, mimeType: "video/mp4"}]}} brez storageUri; ime operacije ima UUID.
+ * Metapodatki modela (GET publishers/google/models/veo-*) vrnejo 404 tudi za delujoc model - merilo je samo prava zahteva.
+ * NEPREVERJENO: poraba kreditov na sekundo videa. Komentarji brez sumnikov.
  */
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
@@ -15,11 +19,14 @@ import { prevajalnikPoZahtevnosti, pripraviPoziv, type Prevajalnik } from "./med
 import { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_V_KNJIZNICI, NAJVEC_ZNAKOV_OPISA } from "./slike-generator.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 
+/** Oba modela sta 26. 11. 2026 vrnila MP4 na pravo zahtevo (projekt lastnika, us-central1). */
+export const MODELI_VIDEA_PREVERJENI = "2026-11-26";
 export const MODELI_VIDEA = ["veo-3.1-fast-generate-001", "veo-3.1-generate-001"] as const;
 export type ModelVidea = (typeof MODELI_VIDEA)[number];
 export const PRIVZETI_MODEL_VIDEA: ModelVidea = "veo-3.1-fast-generate-001";
 export const DOLZINE_VIDEA = [4, 6, 8] as const;
-export const NAJVEC_BAJTOV_VIDEA = 60 * 1024 * 1024;
+export { NAJVEC_BAJTOV_VIDEA } from "./slike-knjiznica.server.ts";
+import { NAJVEC_BAJTOV_VIDEA } from "./slike-knjiznica.server.ts";
 export const ROK_VIDEA_MS = 6 * 60_000;
 export const PREMOR_POIZVEDBE_MS = 10_000;
 

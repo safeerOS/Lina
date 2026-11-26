@@ -15,6 +15,7 @@ import {
   naslovSlik,
   preveriVhodSlike,
   razberiSlike,
+  teloSlik,
 } from "./slike-generator.server.ts";
 
 const KOREN = mkdtempSync(path.join(tmpdir(), "lina-slike-"));
@@ -26,6 +27,10 @@ async function nova() {
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 7)]);
 const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 3)]);
 const ZETON = "ya29.zeton-preizkusa";
+/** Ena slika v obliki pravega odgovora generateContent (26. 11. 2026). */
+const odg = (b: Buffer, mimeType?: string) => ({ candidates: [{ content: { parts: [{ inlineData: { ...(mimeType ? { mimeType } : {}), data: b.toString("base64") } }] }, finishReason: "STOP" }] });
+const BREZ_SLIKE = { candidates: [{ content: { parts: [{ text: "ne" }] }, finishReason: "STOP" }] };
+const PREVOD = async (b: string) => b;
 
 function lazni(status: number, telo: unknown) {
   const klici: Array<{ url: string; init: RequestInit }> = [];
@@ -53,37 +58,28 @@ describe("ciste preverbe", () => {
     assert.equal(preveriVhodSlike("a", { serija: "abc123def456" }), null);
   });
 
-  it("naslov: regionalni predict; projekt in regija ne morejo vriniti poti", () => {
+  // Naloga 20: Imagen je ugasnjen; naslov in oblika odgovora Gemini image (generateContent, global) - podrobno v naloga-20-slike.test.ts.
+  it("naslov: generateContent na global; projekt ne more vriniti poti", () => {
     assert.equal(
-      naslovSlik("moj-projekt", "us-central1", "imagen-4.0-fast-generate-001"),
-      "https://us-central1-aiplatform.googleapis.com/v1/projects/moj-projekt/locations/us-central1/publishers/google/models/imagen-4.0-fast-generate-001:predict",
+      naslovSlik("moj-projekt", "gemini-3.1-flash-image"),
+      "https://aiplatform.googleapis.com/v1/projects/moj-projekt/locations/global/publishers/google/models/gemini-3.1-flash-image:generateContent",
     );
-    for (const p of ["../x", "a/b", "Moj", "moj-projekt/../../x", "ab"]) assert.throws(() => naslovSlik(p, "us-central1", "imagen-4.0-generate-001"), p);
-    for (const r of ["us-central1/x", "evil.com#", "us"]) assert.throws(() => naslovSlik("moj-projekt", r, "imagen-4.0-generate-001"), r);
+    for (const p of ["../x", "a/b", "Moj", "moj-projekt/../../x", "ab"]) assert.throws(() => naslovSlik(p, "gemini-3.1-flash-image"), p);
   });
 
-  it("odgovor: PNG in JPEG sprejeta; brez bajtov (filter), ne-slika in napacen mime zavrnjeni", () => {
-    const r = razberiSlike({
-      predictions: [
-        { bytesBase64Encoded: PNG.toString("base64"), mimeType: "image/png" },
-        { bytesBase64Encoded: JPG.toString("base64") },
-        { mimeType: "image/png" },
-        { bytesBase64Encoded: Buffer.from("<html>").toString("base64") },
-        { bytesBase64Encoded: PNG.toString("base64"), mimeType: "text/html" },
-      ],
-    });
-    assert.equal(r.slike.length, 2);
-    assert.deepEqual(r.slike.map((s) => s.mime), ["image/png", "image/jpeg"]);
-    assert.equal(r.zavrnjenih, 3);
-    assert.deepEqual(razberiSlike({}), { slike: [], zavrnjenih: 0 });
-    assert.deepEqual(razberiSlike(null), { slike: [], zavrnjenih: 0 });
+  it("odgovor: PNG in JPEG sprejeta; brez slike (filter), ne-slika in napacen mime zavrnjeni", () => {
+    assert.equal(razberiSlike(odg(PNG, "image/png")).slike[0]?.mime, "image/png");
+    assert.equal(razberiSlike(odg(JPG)).slike[0]?.mime, "image/jpeg");
+    for (const slabo of [{ candidates: [{ content: { parts: [{ text: "ne" }] } }] }, odg(Buffer.from("<html>")), odg(PNG, "text/html"), {}, null]) {
+      assert.deepEqual(razberiSlike(slabo), { slike: [], zavrnjenih: 1 });
+    }
   });
 });
 
 describe("generirajSliko", () => {
   it("samo lastnik: brez zetona vrze in zahteve ne poslje", async () => {
     const { dir } = await nova();
-    const { f, klici } = lazni(200, { predictions: [] });
+    const { f, klici } = lazni(200, BREZ_SLIKE);
     for (const z of [null, "napacen"]) await assert.rejects(generirajSliko("pes", z, dir, { fetch: f, zeton: async () => ZETON, projekt: "moj-projekt" }));
     await assert.rejects(knjiznicaSlik(null, dir));
     assert.equal(klici.length, 0);
@@ -91,18 +87,19 @@ describe("generirajSliko", () => {
 
   it("zahteva: Bearer zeton v glavi (ne v naslovu), brez preusmeritev, pravo telo; slike 0600 v knjiznici z isto serijo", async () => {
     const { dir, token } = await nova();
-    const { f, klici } = lazni(200, { predictions: [{ bytesBase64Encoded: PNG.toString("base64"), mimeType: "image/png" }, { bytesBase64Encoded: JPG.toString("base64") }, {}] });
-    const izid = await generirajSliko("  pes bere casopis  ", token, dir, { fetch: f, zeton: async () => ZETON, projekt: "moj-projekt", stevilo: 3, razmerje: "16:9", nakljucno: ids, zdaj: () => new Date("2026-11-21T22:00:00Z") });
-    assert.equal(klici.length, 1);
+    const { f, klici } = lazni(200, odg(PNG, "image/png"));
+    const izid = await generirajSliko("  pes bere casopis  ", token, dir, { fetch: f, zeton: async () => ZETON, projekt: "moj-projekt", stevilo: 2, razmerje: "16:9", prevedi: PREVOD, nakljucno: ids, zdaj: () => new Date("2026-11-21T22:00:00Z") });
+    // ena slika na zahtevo (candidateCount > 1 vrne 400)
+    assert.equal(klici.length, 2);
     assert.equal(klici[0].url.includes(ZETON), false);
     assert.equal((klici[0].init.headers as Record<string, string>).authorization, `Bearer ${ZETON}`);
     assert.equal(klici[0].init.redirect, "error");
-    assert.deepEqual(JSON.parse(String(klici[0].init.body)), { instances: [{ prompt: "pes bere casopis" }], parameters: { sampleCount: 3, aspectRatio: "16:9" } });
+    assert.deepEqual(JSON.parse(String(klici[0].init.body)), teloSlik("pes bere casopis", "16:9"));
     assert.equal(izid.slike.length, 2);
-    assert.equal(izid.zavrnjenih, 1);
+    assert.equal(izid.zavrnjenih, 0);
     const serija = izid.slike[0].serija;
-    assert.ok(izid.slike.every((s) => s.serija === serija && s.opis === "pes bere casopis" && s.model === "imagen-4.0-fast-generate-001"));
-    assert.deepEqual(izid.slike.map((s) => path.extname(s.datoteka)), [".png", ".jpg"]);
+    assert.ok(izid.slike.every((s) => s.serija === serija && s.opis === "pes bere casopis" && s.model === "gemini-3.1-flash-image"));
+    assert.deepEqual(izid.slike.map((s) => path.extname(s.datoteka)), [".png", ".png"]);
     for (const s of izid.slike) {
       const pot = path.join(dir, MAPA_SLIK, s.datoteka);
       assert.equal((await stat(pot)).mode & 0o777, 0o600);
@@ -110,7 +107,7 @@ describe("generirajSliko", () => {
     }
     assert.deepEqual((await knjiznicaSlik(token, dir)).slike.map((s) => s.id), izid.slike.map((s) => s.id));
     // Nadaljevanje niza: ista serija, nove slike na vrhu.
-    const naprej = await generirajSliko("pes pije kavo", token, dir, { fetch: lazni(200, { predictions: [{ bytesBase64Encoded: PNG.toString("base64") }] }).f, zeton: async () => ZETON, projekt: "moj-projekt", serija, nakljucno: ids });
+    const naprej = await generirajSliko("pes pije kavo", token, dir, { fetch: lazni(200, odg(JPG)).f, zeton: async () => ZETON, projekt: "moj-projekt", serija, prevedi: PREVOD, nakljucno: ids });
     const k = await knjiznicaSlik(token, dir);
     assert.equal(k.slike.length, 3);
     assert.equal(k.slike[0].id, naprej.slike[0].id);
@@ -121,7 +118,7 @@ describe("generirajSliko", () => {
     const { dir, token } = await nova();
     await assert.rejects(generirajSliko("pes", token, dir, { fetch: lazni(403, "zavrnjeno").f, zeton: async () => ZETON, projekt: "moj-projekt" }), /403/);
     await assert.rejects(generirajSliko("pes", token, dir, { fetch: lazni(200, "ni json").f, zeton: async () => ZETON, projekt: "moj-projekt" }), /neveljaven/);
-    const vse = await generirajSliko("pes", token, dir, { fetch: lazni(200, { predictions: [{}] }).f, zeton: async () => ZETON, projekt: "moj-projekt" });
+    const vse = await generirajSliko("pes", token, dir, { fetch: lazni(200, BREZ_SLIKE).f, zeton: async () => ZETON, projekt: "moj-projekt" });
     assert.deepEqual(vse, { slike: [], zavrnjenih: 1 });
     assert.deepEqual(await readdir(path.join(dir, MAPA_SLIK)), []);
     await assert.rejects(stat(path.join(dir, DATOTEKA_SLIK)));
@@ -129,8 +126,8 @@ describe("generirajSliko", () => {
 
   it("brez projekta Vertex jasna napaka; pokvarjena knjiznica = prazna", async () => {
     const { dir, token } = await nova();
-    const { f, klici } = lazni(200, { predictions: [] });
-    await assert.rejects(generirajSliko("pes", token, dir, { fetch: f, zeton: async () => ZETON }), /projekt Vertex/);
+    const { f, klici } = lazni(200, BREZ_SLIKE);
+    await assert.rejects(generirajSliko("pes", token, dir, { fetch: f, zeton: async () => ZETON }), /Vertex/);
     assert.equal(klici.length, 0);
     await writeFile(path.join(dir, DATOTEKA_SLIK), "{pokvarjeno");
     assert.deepEqual(await knjiznicaSlik(token, dir), { slike: [] });

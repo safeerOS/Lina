@@ -70,15 +70,15 @@ describe("prevod opisa", () => {
     assert.equal(await veriga("a", "/x"), "Second");
   });
 
-  it("slika: Imagen dobi preveden poziv, knjiznica hrani slovenski opis in poziv", async () => {
+  it("slika: generator (Gemini image, naloga 20) dobi preveden poziv, knjiznica hrani slovenski opis in poziv", async () => {
     const { dir, token } = await nova();
     let telo = "";
     const f = (async (_u: unknown, init?: RequestInit) => {
       telo = String(init?.body);
-      return new Response(JSON.stringify({ predictions: [{ bytesBase64Encoded: PNG.toString("base64") }] }), { status: 200 });
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: PNG.toString("base64") } }] } }] }), { status: 200 });
     }) as typeof fetch;
     const izid = await generirajSliko("pes bere časopis na klopi", token, dir, { fetch: f, zeton: async () => "z", projekt: "moj-projekt", prevedi: PREVOD });
-    assert.equal(JSON.parse(telo).instances[0].prompt, "A dog reading a newspaper on a sunny bench");
+    assert.equal(JSON.parse(telo).contents[0].parts[0].text, "A dog reading a newspaper on a sunny bench");
     assert.equal(izid.slike[0].opis, "pes bere časopis na klopi");
     assert.equal(izid.slike[0].prevedeno, true);
   });

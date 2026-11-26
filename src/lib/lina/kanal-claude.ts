@@ -235,6 +235,14 @@ export function nizOdgovoraVprasanja(posiljatelj: string, id: string, odlocitev:
 export function nizApkGradnje(posiljatelj: string, cas: number, enkratni: string): string {
   return `safeer-lina-gradnja-apk-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
 }
+/** Naloga 20: seznam slik in videov iz Linine knjiznice (GET /slike, samo doma). */
+export function nizSeznamaSlik(posiljatelj: string, cas: number, enkratni: string): string {
+  return `safeer-lina-slike-seznam-v1\n${posiljatelj}\n${cas}\n${enkratni}`;
+}
+/** Naloga 20: ena slika ali video iz knjiznice (GET /slika?id=, samo doma); podpis veze id. */
+export function nizSlike(posiljatelj: string, id: string, cas: number, enkratni: string): string {
+  return `safeer-lina-slika-v1\n${posiljatelj}\n${id}\n${cas}\n${enkratni}`;
+}
 
 /** Orodje Claude Code za dodatke (kanal lina); to ime nosi zahteva za odobritev na telefonu. */
 export const ORODJE_DODATKI = "mcp__lina__dodatki";
