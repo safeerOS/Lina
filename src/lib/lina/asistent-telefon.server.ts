@@ -449,12 +449,12 @@ export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolea
       // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi(); v rezervi ne (127.0.0.1)
       const tek = stanje().tekoci;
       if (tek) tek.omrezje = odtisOmrezja(v, p, n.naslov); // ista sprememba omrezja ne sprozi uskladitve vsakih 30 s
-      // CRR3-2: rezerva »vrata« v neodobrenem omrezju (ali brez shranjenega naslova) dobi razlog, ki bi ga dal nov zagon - »omrezje«
-      // pokaze gumb za odobritev. Ista rezerva (127.0.0.1 + rele) tece naprej: brez ponovnega zagona, naloge Global Linka ostanejo
-      // (slepi pregled 26r N1); »ne-vem« razloga ne spremeni (naloga 21 N1)
-      if (tek?.rezerva === "vrata" && dovoljeno === "ne") {
-        tek.rezerva = predlog !== null ? "omrezje" : "naslov";
-        nastaviNapako(Object.assign(new Error(""), { code: predlog !== null ? NEODOBRENO : "EADDRNOTAVAIL" }));
+      // CRR3-2: rezerva »vrata« pokaze razlog, ki bi ga dal nov zagon (neodobreno omrezje -> »omrezje« z gumbom za odobritev, brez
+      // naslova -> »naslov«, spet odobreno -> »vrata«). Spremeni se SAMO prikaz: rezerva ostane »vrata« (127.0.0.1 + rele, nadzor vrat),
+      // zato ni ponovnega zagona ne tja ne nazaj in naloge Global Linka ostanejo (slepi pregled 26r, N1 in krog 2 N0); »ne-vem« prikaza
+      // ne spremeni (naloga 21 N1)
+      if (tek?.rezerva === "vrata" && dovoljeno !== "ne-vem") {
+        nastaviNapako(Object.assign(new Error(""), { code: dovoljeno === "da" ? "EADDRINUSE" : predlog !== null ? NEODOBRENO : "EADDRNOTAVAIL" }));
       }
       if (tek && !tek.rezerva) void pripraviPotKlicev(root, tek.naslov);
       return;

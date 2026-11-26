@@ -78,10 +78,13 @@ test("CRR3-2: rezerva »vrata«, prehod se zamenja (neodobreno omrezje), vrata s
     assert.equal(ustavitve(), 0, "slepi pregled 26r N1: rezerva se ne zazene znova (naloge Global Linka ostanejo)");
     assert.equal(await preveriNaslovAsistenta(dir), false, "nespremenjeno omrezje: brez ponovne uskladitve (rele ne utripa)");
     assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "omrezje");
-    // omrezje se vrne in je odobreno: rezerva »omrezje« poskusi doma; vrata so se zasedena -> spet »vrata«
+    // slepi pregled 26r krog 2 (N0): omrezje se vrne, vrata so se zasedena - razlog spet »vrata«, BREZ ponovnega zagona na poti nazaj
     okolje.mac = MAC_DOMA;
     assert.equal(await preveriNaslovAsistenta(dir), true);
-    assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "vrata");
+    const d = await stanjeAsistenta(token, dir);
+    assert.equal(d.napakaKoda, "vrata");
+    assert.equal(d.predlogNaslova, "");
+    assert.equal(ustavitve(), 0, "tja in nazaj: streznik, rele in naloge Global Linka tecejo ves cas");
   });
 });
 
@@ -94,6 +97,19 @@ test("CRR3-2: rezerva »vrata«, shranjeni naslov izgine brez novega naslova - r
     assert.equal(s.samoGlobalLink, true);
     assert.equal(ustavitve(), 0);
     assert.equal(await preveriNaslovAsistenta(dir), false, "brez utripanja");
+    // krog 2 (N1): tuje omrezje z novim naslovom - razlog »omrezje« z gumbom za ta naslov (kot nov zagon), ne zataknjen »naslov«
+    okolje.vm = { enp1s0: [v4("127.0.0.9")] };
+    okolje.mac = MAC_TUJ;
+    assert.equal(await preveriNaslovAsistenta(dir), true);
+    const t = await stanjeAsistenta(token, dir);
+    assert.equal(t.napakaKoda, "omrezje");
+    assert.equal(t.predlogNaslova, "127.0.0.9");
+    // domov: shranjeni naslov in prehod sta spet tu, vrata se zasedena -> »vrata«, brez ponovnega zagona
+    okolje.vm = { enp1s0: [v4("127.0.0.5")] };
+    okolje.mac = MAC_DOMA;
+    assert.equal(await preveriNaslovAsistenta(dir), true);
+    assert.equal((await stanjeAsistenta(token, dir)).napakaKoda, "vrata");
+    assert.equal(ustavitve(), 0, "ves krog brez ponovnega zagona");
   });
 });
 

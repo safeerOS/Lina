@@ -788,8 +788,9 @@ export class AsistentStreznik {
   }
 
   /**
-   * CRR3-3: telefon je za /ustavi ze dobil 202 in ga ne poslje vec - neuspela ustavitev (seja se znova povezuje) se ponavlja, dokler ne
-   * uspe, dokler streznik tece in naloga obstaja (pocisti jo po 1 h / 24 h). Napaka gre v dnevnik enkrat.
+   * CRR3-3: telefon je za /ustavi ze dobil 202 in ga ne poslje vec - neuspela ustavitev (seja se znova povezuje) se ponavlja, dokler
+   * ne uspe, streznik tece, naloga obstaja IN podpis telefona se velja (OKNO_PODPISA_MS: starejsega kanal zavrne, naloga bi tekla naprej,
+   * Lina pa bi jo stela za ustavljeno). Napaka gre v dnevnik enkrat, opustitev tudi.
    */
   private async ustaviPozneje(id: string, dokaz: Dokaz, prvic = true): Promise<void> {
     try {
@@ -797,6 +798,11 @@ export class AsistentStreznik {
     } catch (e) {
       if (prvic) this.dnevnik(`ustavitev po zacetku ni uspela: ${(e as Error).message.slice(0, 300)}`);
       if (!this.streznik || !this.naloge.has(id)) return;
+      // naslednji poskus mora priti v kanal, preden podpis zastara
+      if (this.zdaj() + ponovitevUstavitve.ms - dokaz.cas >= OKNO_PODPISA_MS) {
+        this.dnevnik("ustavitev po zacetku opuscena: podpis telefona je za kanal prestar");
+        return;
+      }
       setTimeout(() => { if (this.streznik && this.naloge.has(id)) void this.ustaviPozneje(id, dokaz, false); }, ponovitevUstavitve.ms).unref?.();
     }
   }

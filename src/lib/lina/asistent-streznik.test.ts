@@ -16,7 +16,7 @@ import {
   AsistentStreznik, NAJVEC_NEZNANIH_NA_MINUTO, NAJVEC_POVEZAV_NA_NASLOV, NAJVEC_ZAHTEV_NA_MINUTO, NAJVEC_ZAVRNITEV_NA_MINUTO, POT, odtisPotrdila, potrdiloAsistenta, ustvariPotrdilo, zasebenNaslov, zasebenOdjemalec,
   dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO, POT_SLIKA_KONTROLE, ponovitevUstavitve,
 } from "./asistent-streznik.server.ts";
-import { idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizSlikeKontrole, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
+import { OKNO_PODPISA_MS, idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizSlikeKontrole, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
 import { nizDovoljenjaOdobritve } from "./dovoljenja-podobne.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
@@ -993,4 +993,30 @@ test("naloga 26r CRR3-3: ponavljanje odlozene ustavitve se konca, ko se streznik
   }
   await premor(150);
   assert.equal(z.ustavitve.length, n, "po ustavitvi streznika ni novih poskusov (tudi casovnik, ki je ze cakal, ne poskusi)");
+});
+
+test("naloga 26r CRR3-3: ponavljanje se konca, preden podpis telefona zastara (kanal bi ga zavrnil, naloga bi tekla naprej)", async () => {
+  const prej = ponovitevUstavitve.ms;
+  ponovitevUstavitve.ms = 20;
+  const ura = { t: Date.now() };
+  const z = ustavitevPoZacni(Number.MAX_SAFE_INTEGER);
+  const dnevnik: string[] = [];
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz, ura, dnevnik: (v) => dnevnik.push(v) });
+  try {
+    const id = idNaloge();
+    const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum", ura.t));
+    await caka(() => z.klici.some((k) => k.kaj === "zacni"));
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id, ura.t))).status, 202);
+    z.odpri();
+    await p;
+    await caka(() => z.ustavitve.length >= 2, 3000);
+    ura.t += OKNO_PODPISA_MS;                                                                     // podpis /ustavi je zdaj prestar
+    await caka(() => dnevnik.some((v) => v.includes("opuscena")), 3000);
+    const n = z.ustavitve.length;
+    await premor(150);
+    assert.equal(z.ustavitve.length, n, "po izteku okna podpisa ni vec poskusov");
+  } finally {
+    ponovitevUstavitve.ms = prej;
+    await s.pospravi();
+  }
 });
