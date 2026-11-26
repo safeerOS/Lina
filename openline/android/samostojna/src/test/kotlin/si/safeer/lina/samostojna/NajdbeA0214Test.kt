@@ -187,6 +187,31 @@ class NajdbeA0214Test {
         assertTrue(s.prepisOkrnjen, "telefon mora sam oznaciti, da je prepis okrnil")
     }
 
+    // A3 mejni primer: prepis tocno do meje racunalnika (osnova s prepisOkrnjen=false) telefon poslje cel in neokrnjen; izvoz za preveriKlic racunalnika.
+    @Test
+    fun `A3 - prepis tocno do meje racunalnika gre cel in neokrnjen`() {
+        fun niz(n: Int) = "č".repeat(n)
+        val osnova = ZapisKlica(
+            id = "klic-meja-2", casZacetka = zdaj, stevilka = "+99955501003", trajanjeS = 30, povzetek = niz(2000), nacin = NacinKlica.PODJETJE,
+            klicatelj = niz(240), podjetje = niz(240), sporocilo = niz(2000), sporociloDobesedno = niz(6000), brezSporocilaRazlog = niz(2000),
+        )
+        val b = { v: ZapisKlicaSinhronizacija -> json.encodeToString(v).toByteArray().size }
+        val izmenjava = { e: IzmenjavaKlica -> json.encodeToString(e).toByteArray().size + 1 }
+        val meja = minOf(MEJA_PREPISA_SINHRON_B, MEJA_ZAPISA_SINHRON_B - b(osnova.zaSinhronizacijo().copy(prepisPogovora = emptyList(), prepisOkrnjen = false)))
+        val izm = ArrayList<IzmenjavaKlica>()
+        var bajti = 2
+        val ovoj = izmenjava(IzmenjavaKlica("klicatelj", zdaj, ""))
+        while (meja - bajti - ovoj > 0) {
+            val n = minOf(1000, meja - bajti - ovoj)
+            izm.add(IzmenjavaKlica("klicatelj", zdaj, "a".repeat(n))); bajti += ovoj + n
+        }
+        assertEquals(meja, bajti, "kontrola: prepis zapolni mejo racunalnika")
+        val s = osnova.copy(prepisPogovora = izm).zaSinhronizacijo()
+        System.getProperty("a3b.izhod")?.let { File(it).writeText(json.encodeToString(s)) }
+        assertEquals(izm.size, s.prepisPogovora.size, "telefon je okrnil prepis, ki ga racunalnik sprejme")
+        assertFalse(s.prepisOkrnjen)
+    }
+
     // A4: lastnikovo pravilo »nikoli posnetek zvoka«: stari posnetki Lininega izhoda (0.2.13) se ob zagonu izbrisejo.
     @Test
     fun `A4 - ob zagonu izbrise mapo starih posnetkov, ostalo ostane`() {
