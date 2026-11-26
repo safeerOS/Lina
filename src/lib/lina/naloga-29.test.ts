@@ -190,6 +190,9 @@ describe("naloga 29 D1: Claude z orodji brez temperature", () => {
   });
 });
 
+/** Surova telesa s 200, ki niso odgovor modela: prazno, presledki, HTML (drug program na vratih), JSON niz, stevilo, logicna vrednost. */
+const SUROVA = ["", "   \n", "<html><title>OmniRoute Dashboard</title></html>", '"Napaka: kljuc ni veljaven"', "42", "true"];
+
 describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
   const klic = (provider: "gemini" | "openai" | "claude") => callProvider({ provider, model: DEFAULT_BRAIN_MODELS[provider], key: "izmisljen-kljuc-0029", text: "Zivjo", vsebinaKlica: false });
 
@@ -200,7 +203,6 @@ describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
       ["openai", { choices: [{ message: { content: "" }, finish_reason: "stop" }] }],
       ["openai", { choices: [] }],
       ["claude", { content: [], stop_reason: "end_turn" }],
-      ["claude", { content: "napacna oblika", stop_reason: "end_turn" }],
       ["claude", { content: [{ type: "thinking", thinking: "..." }], stop_reason: "max_tokens" }],
     ];
     for (const [provider, telo] of primeri) {
@@ -220,9 +222,14 @@ describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
       ["openai", [1, 2], NEPRICAKOVAN_ODGOVOR],
       ["claude", {}, NEPRICAKOVAN_ODGOVOR],
       ["claude", null, NEPRICAKOVAN_ODGOVOR],
+      ["claude", { content: "Invalid API key", stop_reason: "end_turn" }, NEPRICAKOVAN_ODGOVOR],
+      ["claude", { type: "error", error: { type: "authentication_error" }, content: null }, NEPRICAKOVAN_ODGOVOR],
+      ["openai", { error: { code: 401 }, choices: [] }, NEPRICAKOVAN_ODGOVOR],
+      ["openai", { choices: [{ message: { content: {} } }] }, NEPRICAKOVAN_ODGOVOR],
+      ["gemini", { candidates: null, error: { code: 403 } }, NEPRICAKOVAN_ODGOVOR],
     ];
-    for (const [provider, telo, sporocilo] of primeri) {
-      const zajeto = lazni(200, JSON.stringify(telo));
+    for (const [provider, telo, sporocilo] of [...primeri, ...SUROVA.map((t) => ["claude", t, NEPRICAKOVAN_ODGOVOR] as const)]) {
+      const zajeto = lazni(200, typeof telo === "string" && SUROVA.includes(telo) ? telo : JSON.stringify(telo));
       assert.deepEqual(await klic(provider), { ok: false, sporocilo }, JSON.stringify(telo));
       assert.equal(zajeto.length, 1);
     }
@@ -257,12 +264,17 @@ describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
   it("N1 meja: preverba kljuca in preizkus modela NE sprejmeta {error} s 200 ali {} kot delujoc kljuc", async () => {
     const { dir, token } = await nova();
     await saveBrain({ provider: "claude", model: "claude-opus-5-5", key: KLJUC }, token, dir);
-    for (const telo of [{ error: { code: 401, message: "invalid x-api-key" } }, {}]) {
-      lazni(200, JSON.stringify(telo));
-      const izid = await checkBrain({ provider: "claude", model: "claude-opus-5-5" }, token, dir);
-      assert.equal(izid.ok, false, JSON.stringify(telo));
-      lazni(200, JSON.stringify(telo));
-      assert.equal((await preizkusiModel({ provider: "claude", model: "claude-opus-5-5", key: KLJUC, text: "da", maxTokens: 8, vsebinaKlica: true })).ok, false);
+    const telesa = [
+      ...[{ error: { code: 401, message: "invalid x-api-key" } }, {}, { content: "Invalid API key" }, { type: "error", content: null }, { error: {}, content: [] }].map((t) => JSON.stringify(t)),
+      ...SUROVA,
+    ];
+    for (const telo of telesa) {
+      let zajeto = lazni(200, telo);
+      assert.deepEqual(await checkBrain({ provider: "claude", model: "claude-opus-5-5" }, token, dir), { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR }, telo);
+      assert.equal(zajeto.length, 1);
+      zajeto = lazni(200, telo);
+      assert.equal((await preizkusiModel({ provider: "claude", model: "claude-opus-5-5", key: KLJUC, text: "da", maxTokens: 8, vsebinaKlica: true })).ok, false, telo);
+      assert.equal(zajeto.length, 1);
     }
   });
 });

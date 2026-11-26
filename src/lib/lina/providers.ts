@@ -734,23 +734,30 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
     } catch {
       /* Kratek odgovor je lahko golo besedilo. */
     }
-    // D3 (naloga 29): JSON brez besedila ni uspeh in surovi JSON nikoli ne gre naprej kot odgovor. Lasten streznik (custom) ima svojo
-    // pot (callLastni) in sem ne pride. Samo prazna OVOJNICA je PRAZEN_ODGOVOR (preverbe z 8 zetoni jo smejo sprejeti); {error} s 200
-    // in drug JSON sta napaka, ki je nobena preverba ne sprejme.
-    if (parsed !== undefined && (parsed === null || typeof parsed === "object")) {
-      const predmet = parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-      const telo = (predmet ?? {}) as Parameters<typeof readText>[0];
-      if (predmet) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(telo), "pogovor");
+    // D3 (naloga 29): odgovor brez besedila ni uspeh in surovo telo nikoli ne gre naprej kot odgovor. Lasten streznik (custom) ima svojo
+    // pot (callLastni) in sem ne pride. Samo prava prazna OVOJNICA (polje choices/content/candidates, brez error) je PRAZEN_ODGOVOR, ki ga
+    // preverbe z 8 zetoni smejo sprejeti; prazno telo, HTML (drug program na vratih OmniRoute), {error} s 200 in drug JSON so
+    // NEPRICAKOVAN_ODGOVOR, ki ga ne sprejme nobena preverba. Besedila ponudnika ne vracamo (AGENTS.md: surovega sporocila uporabnik ne vidi).
+    if (!text || text.startsWith("<")) return { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR };
+    if (parsed !== undefined) {
+      const predmet = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+      if (predmet) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(predmet as Parameters<typeof razberiPorabo>[0]), "pogovor");
       let iz = "";
+      let berljiva = false;
       try {
-        iz = predmet ? readText(telo) : "";
+        iz = predmet ? readText(predmet as Parameters<typeof readText>[0]) : "";
+        berljiva = predmet !== null;
       } catch {
-        /* napacna oblika ovojnice = prazno */
+        /* napacna oblika ovojnice */
       }
       if (!iz) {
-        if (predmet && ["choices", "content", "candidates"].some((k) => Object.hasOwn(predmet, k))) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
-        // Besedila ponudnika ne vracamo (AGENTS.md »Model, ki ga ponudnik ne pozna«: surovega sporocila uporabnik ne vidi).
-        return { ok: false, sporocilo: NEPRICAKOVAN_ODGOVOR };
+        const ovojnica =
+          berljiva &&
+          predmet !== null &&
+          !Object.hasOwn(predmet, "error") &&
+          predmet.type !== "error" &&
+          ["choices", "content", "candidates"].some((k) => Array.isArray(predmet[k]));
+        return { ok: false, sporocilo: ovojnica ? PRAZEN_ODGOVOR : NEPRICAKOVAN_ODGOVOR };
       }
       text = iz;
     }
