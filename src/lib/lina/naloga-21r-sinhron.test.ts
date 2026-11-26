@@ -82,6 +82,13 @@ describe("21r A7: odgovor nosi rok hrambe za telefon", () => {
       assert.ok(Number.isInteger(o.rokHrambeDni));
     }
   });
+
+  it("neberljiva pravila (pokvarjen pravila.json): polja ni, telefon obdrzi zadnji znani rok (slepi pregled 21r #1)", async () => {
+    const dir = await novaMapa();
+    await writeFile(path.join(dir, "pravila.json"), "{ pokvarjen");
+    const o = await izmenjajSinhron(zTelefona([]), dir, { zdaj: () => ZDAJ });
+    assert.equal("rokHrambeDni" in o, false, JSON.stringify(o));
+  });
 });
 
 describe("21r A3: racunalnik ne okrni zapisa, ki ga je telefon poslal v mejah (navzkrizno s telefonom 21t)", () => {

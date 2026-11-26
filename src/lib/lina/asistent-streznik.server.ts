@@ -969,7 +969,7 @@ export class AsistentStreznik {
     }
     // samo stevilo: id, stevilka in ime klica ne gredo v dnevnik (21t A8)
     if (zahteva.preskoceniPrihodnost) this.dnevnik(`sinhronizacija: preskocenih zapisov klicev s casom vec kot dan v prihodnosti: ${zahteva.preskoceniPrihodnost}`);
-    return { status: 200, telo: await izmenjajSinhron(zahteva, this.m.root) };
+    return { status: 200, telo: await izmenjajSinhron(zahteva, this.m.root, { zdaj: this.zdaj }) };
   }
 
   private sprejemSlike = false;

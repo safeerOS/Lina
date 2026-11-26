@@ -94,8 +94,8 @@ export type OdgovorSinhron = {
   /** true = je se novejsih vnosov od meje enega odgovora: naprava naj takoj poizve znova od vrnjene revizije. */
   ostane: boolean;
   zmoznosti: string[];
-  /** Rok hrambe podjetniskih zapisov v dneh (pravila, celo stevilo 1..3650): telefon ga uporabi za svoj dnevnik (21t A7). */
-  rokHrambeDni: number;
+  /** Rok hrambe podjetniskih zapisov v dneh (pravila, celo stevilo 1..3650): telefon ga uporabi za svoj dnevnik (21t A7). Brez polja = pravila neberljiva. */
+  rokHrambeDni?: number;
 };
 
 /** Zapis klica z zacetkom vec kot dan za uro racunalnika se ne sprejme (21t A8, kot telefon DnevnikKlicev DAN_MS). */
@@ -269,10 +269,15 @@ async function preberiStanje(root: string): Promise<Stanje> {
 
 /** Izmenja zapise: sprejme, kar je novega od naprave, vrne vse z revizijo nad `zahteva.rev`. */
 async function rokZapiskov(root: string): Promise<number> {
+  return (await rokIzPravil(root)) ?? 90;
+}
+
+/** null = pravil ni mogoce prebrati (pokvarjen pravila.json): zasilnih 90 dni ne posljemo telefonu, da po njih ne brise (slepi pregled 21r #1). */
+async function rokIzPravil(root: string): Promise<number | null> {
   try {
     return (await loadPravila(root)).zapiskiHrambaDni;
   } catch {
-    return 90;
+    return null;
   }
 }
 
@@ -432,7 +437,8 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
     }
     if (st.klici.length > MEJA_KLICEV) st.klici = st.klici.slice(-MEJA_KLICEV);
     // Rok hrambe podjetniskih zapisov (lastnik 22. 11. 2026, privzeto 90 dni): zapis s prepisom gre iz sinhronizacije, mapa klica z njim (N4).
-    const rok = await rokZapiskov(root);
+    const rokPravil = await rokIzPravil(root);
+    const rok = rokPravil ?? 90;
     const zdaj = (odv.zdaj ?? Date.now)();
     for (const x of st.klici) if (x && typeof x === "object" && potekelKlicTelefona(x.k, rok, zdaj)) dodajIzbrisan(x.k.id);
     const pred = st.klici.length;
@@ -529,7 +535,7 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
       navodila: vzeti.find((x) => x.n)?.n ?? null,
       ostane,
       zmoznosti: izbrisOpravljen ? [ZMOZNOST_PREPIS, ZMOZNOST_IZBRIS] : [ZMOZNOST_PREPIS],
-      rokHrambeDni: rok,
+      ...(rokPravil === null ? {} : { rokHrambeDni: rokPravil }),
     };
   });
 }
