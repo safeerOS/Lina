@@ -896,3 +896,25 @@ test("naloga 25 (slepi pregled 2): /ustavi med cakanjem na zaprto sejo - seja Cl
     await s.pospravi();
   }
 });
+
+test("naloga 25 (slepi pregled 7): Borov /ustavi, ki se preverja med Aninim sprejemom istega id, Anine naloge ne ustavi (403)", async () => {
+  let odpri!: () => void;
+  const vrata = new Promise<void>((r) => { odpri = r; });
+  let branj = 0;
+  const preberi: typeof preberiKanal = async (...a) => { if (++branj === 1) await vrata; return preberiKanal(...a); };
+  const s = await streznik({ krog: [ANA, BOR], preberi });
+  let ub: Promise<Odgovor> | undefined;
+  try {
+    const id = idNaloge();
+    ub = s.z("POST", `${POT}/ustavi`, ustaviNiz(BOR, id));                                          // Bor: branje kanala zadrzano
+    await caka(() => branj >= 1);
+    assert.equal((await s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"))).status, 202);
+    odpri();
+    assert.equal((await ub).status, 403);
+    assert.equal(s.l.klici.filter((k) => k.kaj === "ustavi").length, 0, "Anina naloga ni ustavljena");
+  } finally {
+    odpri();
+    await ub?.catch(() => undefined);
+    await s.pospravi();
+  }
+});
