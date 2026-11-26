@@ -340,10 +340,9 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
           slikNaNalogo.set(k.nalogaId, (slikNaNalogo.get(k.nalogaId) ?? stevilo) - stevilo);
           return napaka(izbira.sporocilo);
         }
-        const [{ ustvariSliko }, { googlePrevajalnik, verigaPrevajalnikov }] = await Promise.all([import("./slike-generator.server.ts"), import("./mediji-opis.server.ts")]);
-        // prevod samo prek Googla v lastnikovem projektu; brez rezerve v mozgane asistentke (lahko tretji, npr. OpenRouter - B9)
-        const g = { fetch: odv.slike?.fetch, zeton: odv.slike?.zeton };
-        const prevedi = odv.slike?.prevedi ?? verigaPrevajalnikov(googlePrevajalnik(izbira.projekt, { ...g, model: "nmt" }), googlePrevajalnik(izbira.projekt, { ...g, model: "llm" }));
+        const [{ ustvariSliko }, { googlePoZahtevnosti }] = await Promise.all([import("./slike-generator.server.ts"), import("./mediji-opis.server.ts")]);
+        // prevod samo prek Googla v lastnikovem projektu (tezji opis najprej TLLM, lastnik 22. 11.); brez mozganov asistentke (B9)
+        const prevedi = odv.slike?.prevedi ?? googlePoZahtevnosti(izbira.projekt, { fetch: odv.slike?.fetch, zeton: odv.slike?.zeton });
         let izid;
         try {
           izid = await ustvariSliko(root, a.opis, { ...odv.slike, prevedi, projekt: izbira.projekt, model: izbira.model, stevilo, razmerje: a.razmerje, signal: k.signal });

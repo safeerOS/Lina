@@ -11,6 +11,24 @@ import { callProvider } from "./providers.ts";
 
 export const NAJVEC_ZNAKOV_POZIVA = 1800;
 export const ROK_PREVODA_MS = 15_000;
+/** Odgovor prevajalnika Google: en prevod do NAJVEC_ZNAKOV_POZIVA, ovoj JSON je majhen. */
+export const NAJVEC_BAJTOV_PREVODA = 64 * 1024;
+
+/** Telo odgovora po kosih z mejo znakov (UTF-8 bajti): pokvarjen ali zlonameren odgovor ne napolni pomnilnika procesa. */
+export async function teloZMejo(odg: Response, meja: number, sporocilo: string): Promise<string> {
+  if (!odg.body) return "";
+  const kosi: Buffer[] = [];
+  let n = 0;
+  for await (const k of odg.body as unknown as AsyncIterable<Uint8Array>) {
+    n += k.byteLength;
+    if (n > meja) {
+      await odg.body.cancel().catch(() => undefined);
+      throw new Error(sporocilo);
+    }
+    kosi.push(Buffer.from(k));
+  }
+  return Buffer.concat(kosi).toString("utf8");
+}
 
 export const NAVODILO_PREVODA =
   "Prevedi uporabnikov opis slike ali videa iz slovenscine (ali drugega jezika) v natancen angleski poziv za generator slik. " +
@@ -70,7 +88,7 @@ export function googlePrevajalnik(projekt: string, moznosti: { fetch?: typeof fe
         signal: AbortSignal.timeout(ROK_PREVODA_MS),
       });
       if (!odg.ok) return null;
-      const j = (await odg.json()) as { translations?: Array<{ translatedText?: unknown }> };
+      const j = JSON.parse(await teloZMejo(odg, NAJVEC_BAJTOV_PREVODA, "Odgovor prevajalnika je prevelik.")) as { translations?: Array<{ translatedText?: unknown }> };
       return ocistiPoziv(j.translations?.[0]?.translatedText);
     } catch {
       return null;
@@ -118,6 +136,13 @@ export function prevajalnikPoZahtevnosti(projekt: string, moznosti: { fetch?: ty
   const llm = googlePrevajalnik(projekt, { ...moznosti, model: "llm" });
   return async (opis, root, namig) =>
     jeLazjiOpis(opis) ? verigaPrevajalnikov(nmt, llm, privzetiPrevajalnik)(opis, root, namig) : verigaPrevajalnikov(llm, privzetiPrevajalnik, nmt)(opis, root, namig);
+}
+
+/** Ista izbira po zahtevnosti, a SAMO Google v lastnikovem projektu (brez mozganov asistentke; orodje orkestratorja, B9). */
+export function googlePoZahtevnosti(projekt: string, moznosti: { fetch?: typeof fetch; zeton?: () => Promise<string> } = {}): Prevajalnik {
+  const nmt = googlePrevajalnik(projekt, { ...moznosti, model: "nmt" });
+  const llm = googlePrevajalnik(projekt, { ...moznosti, model: "llm" });
+  return async (opis, root, namig) => (jeLazjiOpis(opis) ? verigaPrevajalnikov(nmt, llm) : verigaPrevajalnikov(llm, nmt))(opis, root, namig);
 }
 
 /** Opis -> poziv. Vrne poziv in ali je bil preveden. */

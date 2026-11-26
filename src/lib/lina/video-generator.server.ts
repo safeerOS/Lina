@@ -10,7 +10,7 @@
  * NEPREVERJENO: poraba kreditov na sekundo videa. Komentarji brez sumnikov.
  */
 import { randomBytes } from "node:crypto";
-import { chmod, writeFile } from "node:fs/promises";
+import { chmod, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { vertexAccessToken } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
@@ -118,13 +118,15 @@ export async function generirajVideo(opis: unknown, token: string | null, dir?: 
   const regija = m.regija ?? "us-central1";
   const zacetni = naslovVidea(projekt, regija, model, "predictLongRunning");
   const poizvedba = naslovVidea(projekt, regija, model, "fetchPredictOperation");
+  // mapa, ki ni navadna mapa, zavrne PRED placljivo zahtevo (pred zapisom se preveri se enkrat)
+  await mapaKnjiznice(root);
   const { poziv, prevedeno } = await pripraviPoziv(besedilo, root, m.prevedi ?? prevajalnikPoZahtevnosti(projekt, { fetch: m.fetch, zeton: m.zeton }), m.namigRsdo);
   const f = m.fetch ?? fetch;
   const zeton = await (m.zeton ?? (() => vertexAccessToken()))();
   const glave = { authorization: `Bearer ${zeton}`, "content-type": "application/json" };
   const odg = await f(zacetni, { method: "POST", redirect: "error", headers: glave, body: JSON.stringify(teloVidea(poziv, sekund, razmerje, zvok)), signal: AbortSignal.timeout(60_000) });
   if (!odg.ok) throw new Error(`Ponudnik videa je zavrnil zahtevo (${odg.status}).`);
-  const ime = ((await odg.json().catch(() => null)) as { name?: unknown } | null)?.name;
+  const ime = (await teloZMejo(odg, 64 * 1024, "Odgovor ponudnika videa je prevelik.").then((t) => JSON.parse(t) as { name?: unknown }, () => null))?.name;
   if (!veljavnaOperacija(ime, projekt, regija, model)) throw new Error("Ponudnik videa je vrnil neveljavno operacijo.");
   const cakaj = m.cakaj ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const rok = Date.now() + (m.rokMs ?? ROK_VIDEA_MS);
@@ -149,8 +151,14 @@ export async function generirajVideo(opis: unknown, token: string | null, dir?: 
   const datoteka = `${id}.mp4`;
   const pot = path.join(mapa, datoteka);
   await writeFile(pot, video, { mode: 0o600, flag: "wx" });
-  await chmod(pot, 0o600);
   const zapis: ZapisVidea = { id, serija: (m.serija as string | undefined) ?? nov(), cas: (m.zdaj ?? (() => new Date()))().toISOString(), opis: besedilo, poziv, prevedeno, model, datoteka, bajtov: video.length, vrsta: "video", sekund };
-  await dodajVKnjiznico(root, [zapis]);
+  try {
+    await chmod(pot, 0o600);
+    await dodajVKnjiznico(root, [zapis]);
+  } catch (e) {
+    // napaka pred objavo: odstrani SAMO datoteko, ki jo je ustvaril ta klic (wx), da ni videa brez zapisa
+    await unlink(pot).catch(() => undefined);
+    throw e;
+  }
   return zapis;
 }

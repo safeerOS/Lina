@@ -8,11 +8,15 @@
  */
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, stat, symlink, writeFile } from "node:fs/promises";
+import type { IncomingMessage } from "node:http";
 import { request } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { setupOwner } from "./auth.server.ts";
 import type { Izvajalec } from "./asistent.server.ts";
 import { AsistentStreznik, POT, POTI_ODDALJENO, potrdiloAsistenta } from "./asistent-streznik.server.ts";
@@ -30,14 +34,17 @@ import {
   MODELI_SLIK,
   MODEL_PO_KAKOVOSTI,
   PRIVZETI_MODEL_SLIK,
+  dodajVKnjiznico,
   generirajSliko,
   izberiGeneratorSlik,
   knjiznicaSlik,
   naslovSlik,
   razberiSlike,
   teloSlik,
+  ustvariSliko,
 } from "./slike-generator.server.ts";
-import { MODELI_VIDEA, PRIVZETI_MODEL_VIDEA } from "./video-generator.server.ts";
+import { googlePrevajalnik } from "./mediji-opis.server.ts";
+import { MODELI_VIDEA, PRIVZETI_MODEL_VIDEA, generirajVideo } from "./video-generator.server.ts";
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 7)]);
 const PNG_MISEL = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 1)]);
@@ -602,5 +609,153 @@ describe("naloga 20: popravki po pregledu", () => {
     } finally {
       await s.ustavi();
     }
+  });
+});
+
+/** Tok 120 MB po 1 MB; prebrano pove, koliko je bralec res potegnil. */
+function velikTok() {
+  const s = { prebrano: 0 };
+  const KOS = new Uint8Array(1024 * 1024).fill(0x61);
+  const telo = () => new ReadableStream({
+    pull(c) {
+      if (s.prebrano >= 120 * 1024 * 1024) return c.close();
+      s.prebrano += KOS.length;
+      c.enqueue(KOS);
+    },
+  });
+  return { s, telo };
+}
+/** Pisalec FIFO iz otroskega procesa (ne prek niti libuv). */
+const pisiFifo = (fifo: string, vsebina: string) => new Promise<void>((ok) => execFile("sh", ["-c", 'printf "%s" "$2" > "$1"', "sh", fifo, vsebina], { timeout: 5000 }, () => ok()));
+
+describe("naloga 20: drugi krog", () => {
+  it("telefon: seznam preskoci polja, ki niso nizi (objekt brez toString iz slike.json ne podre seznama)", async () => {
+    const { dir } = await lastnik();
+    await mkdir(path.join(dir, MAPA_SLIK), { recursive: true, mode: 0o700 });
+    await writeFile(path.join(dir, MAPA_SLIK, "aaaaaaaaaaaa.png"), PNG);
+    await writeFile(path.join(dir, DATOTEKA_SLIK), JSON.stringify({ slike: [zapisK("aaaaaaaaaaaa", "aaaaaaaaaaaa.png", PNG.length, { cas: { toString: null }, opis: { toString: null }, model: { toString: null } })] }));
+    const s = await streznikSlik(dir);
+    try {
+      const r = await s.seznam();
+      assert.equal(r.status, 200, r.telo.toString());
+      const j = JSON.parse(r.telo.toString()) as { slike: Array<{ id: string; cas: string; opis: string; model: string }> };
+      assert.deepEqual(j.slike.map((x) => [x.id, x.cas, x.opis, x.model]), [["aaaaaaaaaaaa", "", "", ""]]);
+    } finally {
+      await s.ustavi();
+    }
+  });
+
+  it("telefon: odjemalec, ki odgovora ne bere, ne zadrzi cele datoteke v pomnilniku (video 40 MB, 6 zahtev)", async () => {
+    setFlagsFromString("--expose-gc");
+    const gc = runInNewContext("gc") as () => void;
+    const { dir } = await lastnik();
+    await mkdir(path.join(dir, MAPA_SLIK), { recursive: true, mode: 0o700 });
+    const VEL = 40 * 1024 * 1024;
+    const mp4 = Buffer.alloc(VEL);
+    Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]).copy(mp4);
+    await writeFile(path.join(dir, MAPA_SLIK, "vvvvvvvvvvvv.mp4"), mp4);
+    await writeFile(path.join(dir, DATOTEKA_SLIK), JSON.stringify({ slike: [zapisK("vvvvvvvvvvvv", "vvvvvvvvvvvv.mp4", VEL)] }));
+    await pripraviKanal([{ id: ANA.id, kljuc: ANA.kljuc }], dir);
+    const s = new AsistentStreznik({ root: dir, izvajalec: neIzvajalec, dnevnik: () => {} });
+    const { vrata, odtis } = await s.zazeni();
+    const { cert } = await potrdiloAsistenta(dir);
+    const odprti: IncomingMessage[] = [];
+    try {
+      gc();
+      const prej = process.memoryUsage().arrayBuffers;
+      await Promise.all(Array.from({ length: 6 }, () => new Promise<void>((ok, ne) => {
+        const pot = q("/slika", ANA, podpisi(ANA, (c, e) => nizSlike(ANA.id, "vvvvvvvvvvvv", c, e)), "&id=vvvvvvvvvvvv");
+        const r = request({
+          host: "127.0.0.1", port: vrata, method: "GET", path: pot, ca: cert, rejectUnauthorized: true,
+          checkServerIdentity: (_h, c) => (c.fingerprint256.replace(/:/g, "").toLowerCase() === odtis ? undefined : new Error("odtis")),
+        }, (res) => {
+          res.pause();
+          odprti.push(res);
+          assert.equal(res.statusCode, 200);
+          ok();
+        });
+        r.on("error", ne);
+        r.end();
+      })));
+      await new Promise((r) => setTimeout(r, 300));
+      gc();
+      const rast = process.memoryUsage().arrayBuffers - prej;
+      assert.ok(rast < VEL, `zadrzano ${Math.round(rast / 1048576)} MB za 6 zahtev (datoteka ${VEL / 1048576} MB)`);
+    } finally {
+      for (const r of odprti) r.destroy();
+      await s.ustavi();
+    }
+  });
+
+  it("generator: prekinitev med cakanjem v vrsti knjiznice - nic objavljeno in nic na disku", async () => {
+    const { dir } = await lastnik();
+    const fifo = path.join(dir, DATOTEKA_SLIK);
+    await new Promise<void>((ok, ne) => execFile("mkfifo", [fifo], (e) => (e ? ne(e) : ok())));
+    // predhodnik v vrsti istega korena caka na branje FIFO, dokler ga ne spustimo
+    const predhodnik = dodajVKnjiznico(dir, []);
+    const ac = new AbortController();
+    const tece = ustvariSliko(dir, "pes", { projekt: "moj-projekt", fetch: lazni([{ status: 200, telo: odgovorFlash() }]).f, zeton: async () => ZETON, prevedi: PREVOD, nakljucno: ids, signal: ac.signal })
+      .then(() => "objavljeno", () => "zavrnjeno");
+    const mapa = path.join(dir, MAPA_SLIK);
+    for (let i = 0; i < 200 && !(await readdir(mapa).catch(() => [])).length; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal((await readdir(mapa)).length, 1, "datoteka zapisana, objava caka v vrsti");
+    await new Promise((r) => setTimeout(r, 50));
+    ac.abort();
+    await pisiFifo(fifo, '{"slike":[]}');
+    await predhodnik;
+    assert.equal(await tece, "zavrnjeno");
+    assert.deepEqual((JSON.parse(await readFile(fifo, "utf8")) as { slike: unknown[] }).slike, []);
+    assert.deepEqual(await readdir(mapa), []);
+  });
+
+  it("generator: mapa slike/ kot povezava zavrne PRED placljivo zahtevo (slika in video)", async () => {
+    const { dir, token } = await lastnik();
+    await symlink(await mkdtemp(path.join(tmpdir(), "lina-n20-drugam-")), path.join(dir, MAPA_SLIK));
+    const { f, klici } = lazni([{ status: 200, telo: odgovorFlash() }]);
+    await assert.rejects(ustvariSliko(dir, "pes", { projekt: "moj-projekt", fetch: f, zeton: async () => ZETON, prevedi: PREVOD, stevilo: 2 }));
+    await assert.rejects(generirajVideo("pes", token, dir, { projekt: "moj-projekt", fetch: f, zeton: async () => ZETON, prevedi: PREVOD, cakaj: async () => undefined }));
+    assert.equal(klici.length, 0, klici.map((k) => k.url).join(","));
+  });
+
+  it("knjiznica: neberljiv slike.json ne izbrise starih zapisov; slike, ki niso seznam, gredo v .pokvarjen", async () => {
+    const { dir } = await lastnik();
+    const pot = path.join(dir, DATOTEKA_SLIK);
+    await writeFile(pot, JSON.stringify({ slike: [zapisK("aaaaaaaaaaa1", "aaaaaaaaaaa1.png", 10), zapisK("aaaaaaaaaaa2", "aaaaaaaaaaa2.png", 10)] }));
+    await chmod(pot, 0o000);
+    const izid = await dodajVKnjiznico(dir, [zapisK("bbbbbbbbbbb1", "bbbbbbbbbbb1.png", 10)]).then(() => "zapisano", () => "napaka");
+    await chmod(pot, 0o600);
+    assert.equal(izid, "napaka");
+    assert.equal((JSON.parse(await readFile(pot, "utf8")) as { slike: unknown[] }).slike.length, 2);
+    await writeFile(pot, JSON.stringify({ slike: "x", drugo: 1 }));
+    await dodajVKnjiznico(dir, [zapisK("bbbbbbbbbbb2", "bbbbbbbbbbb2.png", 10)]);
+    assert.deepEqual(JSON.parse(await readFile(`${pot}.pokvarjen`, "utf8")), { slike: "x", drugo: 1 });
+  });
+
+  it("prevajalnik Google in zacetni odgovor videa ne bereta 120 MB odgovora v celoti", async () => {
+    const a = velikTok();
+    assert.equal(await googlePrevajalnik("moj-projekt", { fetch: (async () => new Response(a.telo(), { status: 200 })) as typeof fetch, zeton: async () => ZETON, model: "nmt" })("pes", "/ni"), null);
+    assert.ok(a.s.prebrano < 40 * 1024 * 1024, `prevod: prebrano ${a.s.prebrano} B`);
+    const { dir, token } = await lastnik();
+    const b = velikTok();
+    await assert.rejects(generirajVideo("pes", token, dir, { projekt: "moj-projekt", zeton: async () => ZETON, prevedi: PREVOD, fetch: (async () => new Response(b.telo(), { status: 200 })) as typeof fetch, cakaj: async () => undefined }));
+    assert.ok(b.s.prebrano < 40 * 1024 * 1024, `video: prebrano ${b.s.prebrano} B`);
+  });
+
+  it("orodje: tezji opis gre najprej v Translation LLM, lazji v klasicni prevajalnik (samo Google)", async () => {
+    const { root } = await okolje();
+    const prevodi: string[] = [];
+    const f = (async (u: string | URL | Request, init?: RequestInit) => {
+      if (String(u).startsWith("https://translation.googleapis.com/")) {
+        prevodi.push(String(init?.body ?? ""));
+        return new Response(JSON.stringify({ translations: [{ translatedText: "A dog" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify(odgovorFlash()), { status: 200 });
+    }) as typeof fetch;
+    const o = poImenu(orodjaLine(root, { slike: { mozgani: vertex, fetch: f, zeton: async () => ZETON, nakljucno: ids } })).get("ustvari_sliko")!;
+    await o.izvedi({ opis: "pes, ki tece po travniku, ker je vesel" }, ctx("o-00000000prevod12"));
+    await o.izvedi({ opis: "rdec pes" }, ctx("o-00000000prevod13"));
+    assert.equal(prevodi.length, 2, prevodi.join("\n"));
+    assert.match(prevodi[0]!, /translation-llm/);
+    assert.doesNotMatch(prevodi[1]!, /translation-llm/);
   });
 });

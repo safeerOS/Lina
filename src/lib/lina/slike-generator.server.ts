@@ -10,11 +10,11 @@
  * NEPREVERJENO: oblika pravega odgovora ob zavrnitvi (filter) - obravnavano kot »ni slike«. Komentarji brez sumnikov.
  */
 import { randomBytes } from "node:crypto";
-import { chmod, writeFile } from "node:fs/promises";
+import { chmod, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { vertexAccessToken } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
-import { prevajalnikPoZahtevnosti, pripraviPoziv, type Prevajalnik } from "./mediji-opis.server.ts";
+import { prevajalnikPoZahtevnosti, pripraviPoziv, teloZMejo, type Prevajalnik } from "./mediji-opis.server.ts";
 import { activeBrain } from "./keys.server.ts";
 import {
   DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_V_KNJIZNICI, dodajVKnjiznico, mapaKnjiznice, preberiKnjiznico, type Knjiznica, type ZapisSlike,
@@ -22,7 +22,7 @@ import {
 import { resolveDataDir } from "./store.server.ts";
 
 // Knjiznica je v slike-knjiznica.server.ts (pot telefona jo bere brez generatorja); ponovni izvoz za obstojece klicatelje.
-export { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_V_KNJIZNICI, dodajVKnjiznico, mapaKnjiznice, preberiKnjiznico, type Knjiznica, type ZapisSlike };
+export { DATOTEKA_SLIK, MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_V_KNJIZNICI, dodajVKnjiznico, mapaKnjiznice, preberiKnjiznico, teloZMejo, type Knjiznica, type ZapisSlike };
 /** Datum, ko je vsak model spodaj odgovoril na pravo zahtevo generateContent s sliko (projekt lastnika, lokacija global). */
 export const MODELI_PREVERJENI = "2026-11-26";
 /** Cas odgovora 26. 11. 2026: flash-lite 4,2 s (JPEG), 2.5-flash 5,8 s, flash 11,6 s, nano-banana-2.1 12,6 s, pro 16,4 s. */
@@ -166,6 +166,8 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
     projekt = izbira.projekt;
   }
   const url = naslovSlik(projekt, model);
+  // mapa, ki ni navadna mapa, zavrne PRED placljivimi zahtevami (pred zapisom se preveri se enkrat)
+  await mapaKnjiznice(root);
   m.signal?.throwIfAborted();
   const { poziv, prevedeno } = await pripraviPoziv(besedilo, root, m.prevedi ?? prevajalnikPoZahtevnosti(projekt, { fetch: m.fetch, zeton: m.zeton }), m.namigRsdo);
   const zeton = await (m.zeton ?? (() => vertexAccessToken()))();
@@ -194,37 +196,28 @@ export async function ustvariSliko(root: string, opis: unknown, m: MoznostiGener
     slike.push(...r.slike);
     zavrnjenih += r.zavrnjenih;
   }
-  // ustavljena naloga ne objavi slike (prekinitev med zadnjo zahtevo in zapisom)
+  // ustavljena naloga ne objavi slike (prekinitev med zadnjo zahtevo in zapisom ali med cakanjem na mapo)
   m.signal?.throwIfAborted();
   const mapa = await mapaKnjiznice(root);
+  m.signal?.throwIfAborted();
   const nov = m.nakljucno ?? nakljucniId;
   const serija = (m.serija as string | undefined) ?? nov();
   const cas = (m.zdaj ?? (() => new Date()))().toISOString();
   const zapisi: ZapisSlike[] = [];
-  for (const s of slike) {
-    const id = nov();
-    const datoteka = `${id}${s.mime === "image/png" ? ".png" : ".jpg"}`;
-    const pot = path.join(mapa, datoteka);
-    await writeFile(pot, s.bajti, { mode: 0o600, flag: "wx" });
-    await chmod(pot, 0o600);
-    zapisi.push({ id, serija, cas, opis: besedilo, poziv, prevedeno, model, datoteka, bajtov: s.bajti.length });
-  }
-  if (zapisi.length) await dodajVKnjiznico(root, zapisi);
-  return { slike: zapisi, zavrnjenih };
-}
-
-/** Telo odgovora po kosih z mejo znakov (UTF-8 bajti): pokvarjen ali zlonameren odgovor ne napolni pomnilnika procesa. */
-export async function teloZMejo(odg: Response, meja: number, sporocilo: string): Promise<string> {
-  if (!odg.body) return "";
-  const kosi: Buffer[] = [];
-  let n = 0;
-  for await (const k of odg.body as unknown as AsyncIterable<Uint8Array>) {
-    n += k.byteLength;
-    if (n > meja) {
-      await odg.body.cancel().catch(() => undefined);
-      throw new Error(sporocilo);
+  try {
+    for (const s of slike) {
+      const id = nov();
+      const datoteka = `${id}${s.mime === "image/png" ? ".png" : ".jpg"}`;
+      const pot = path.join(mapa, datoteka);
+      await writeFile(pot, s.bajti, { mode: 0o600, flag: "wx" });
+      zapisi.push({ id, serija, cas, opis: besedilo, poziv, prevedeno, model, datoteka, bajtov: s.bajti.length });
+      await chmod(pot, 0o600);
     }
-    kosi.push(Buffer.from(k));
+    if (zapisi.length) await dodajVKnjiznico(root, zapisi, m.signal);
+  } catch (e) {
+    // napaka ali prekinitev pred objavo: odstrani SAMO datoteke, ki jih je ustvaril ta klic (wx), da ni slik brez zapisa
+    await Promise.all(zapisi.map((z) => unlink(path.join(mapa, z.datoteka)).catch(() => undefined)));
+    throw e;
   }
-  return Buffer.concat(kosi).toString("utf8");
+  return { slike: zapisi, zavrnjenih };
 }

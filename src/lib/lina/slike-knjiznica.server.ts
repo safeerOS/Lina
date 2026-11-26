@@ -3,7 +3,7 @@
  * ne sme biti dosegljiv s poti telefona (prek mediji-opis vleče live/ = pot klica; zaklep v kanal-claude.test.ts 4.4).
  * Preverbo lastnika ali naprave naredi klicatelj. Komentarji brez sumnikov.
  */
-import { lstat, mkdir } from "node:fs/promises";
+import { lstat, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { readJsonFile, writeJson } from "./store.server.ts";
 
@@ -40,11 +40,15 @@ export async function mapaKnjiznice(root: string): Promise<string> {
 
 /** Pisanje v slike.json po vrsti za vsak koren: socasna generiranja (lastnik in naloga) ne izgubita zapisa. */
 const vrste = new Map<string, Promise<unknown>>();
-export function dodajVKnjiznico(root: string, novi: unknown[]): Promise<void> {
+export function dodajVKnjiznico(root: string, novi: unknown[], signal?: AbortSignal): Promise<void> {
   const prej = vrste.get(root) ?? Promise.resolve();
   const zdaj = prej.catch(() => undefined).then(async () => {
-    const k = await readJsonFile<{ slike?: unknown[] }>(root, DATOTEKA_SLIK, { premakniPokvarjen: true }).catch(() => null);
+    // Napaka branja (EACCES, EIO, EMFILE) gre klicatelju: prazna knjiznica bi ob zapisu tiho izbrisala stare zapise.
+    const k = await readJsonFile<{ slike?: unknown }>(root, DATOTEKA_SLIK, { premakniPokvarjen: true });
+    if (k && !Array.isArray(k.slike)) await rename(path.join(root, DATOTEKA_SLIK), path.join(root, `${DATOTEKA_SLIK}.pokvarjen`));
     const stari = Array.isArray(k?.slike) ? k.slike : [];
+    // ustavljena naloga ne objavi (tudi ce je prekinitev prisla med cakanjem v vrsti)
+    signal?.throwIfAborted();
     // Najnovejse na vrhu; knjiznica ima mejo (stare datoteke ostanejo na disku - brisanje samo po ukazu lastnika).
     await writeJson(root, DATOTEKA_SLIK, { slike: [...novi, ...stari].slice(0, NAJVEC_V_KNJIZNICI) });
   });

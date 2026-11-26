@@ -21,7 +21,7 @@ import { TLSSocket, createSecureContext, type SecureContext } from "node:tls";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Socket } from "node:net";
-import type { Duplex } from "node:stream";
+import { Transform, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MAPA_SLIK, NAJVEC_BAJTOV_SLIKE, NAJVEC_BAJTOV_VIDEA, preberiKnjiznico } from "./slike-knjiznica.server.ts";
 import { NAJVEC_ZNAKOV, type Dogodek, type Izvajalec, type Naloga } from "./asistent.server.ts";
@@ -1272,9 +1272,11 @@ export class AsistentStreznik {
       .slice(0, 60)
       .map((s) => {
         const pripona = s.datoteka.split(".")[1] as keyof typeof MIME_KNJIZNICE;
+        // samo nizi: String() na objektu iz slike.json lahko vrze (toString: null) in en zapis bi podrl cel seznam (500)
+        const niz = (x: unknown, n: number) => (typeof x === "string" ? x.slice(0, n) : "");
         return {
-          id: s.id, serija: typeof s.serija === "string" && /^[a-z0-9]{12}$/.test(s.serija) ? s.serija : "", cas: String(s.cas ?? "").slice(0, 30),
-          opis: String(s.opis ?? "").slice(0, 200), model: String(s.model ?? "").slice(0, 60), bajtov: Number.isSafeInteger(s.bajtov) ? s.bajtov : 0,
+          id: s.id, serija: typeof s.serija === "string" && /^[a-z0-9]{12}$/.test(s.serija) ? s.serija : "", cas: niz(s.cas, 30),
+          opis: niz(s.opis, 200), model: niz(s.model, 60), bajtov: Number.isSafeInteger(s.bajtov) ? s.bajtov : 0,
           mime: MIME_KNJIZNICE[pripona], vrsta: pripona === "mp4" ? "video" : "slika",
         };
       });
@@ -1303,29 +1305,51 @@ export class AsistentStreznik {
     } catch {
       throw new Napaka(404, "ni", "Slike ni v knjiznici.");
     }
-    let bajti: Buffer;
     try {
       const st = await ds.stat();
       if (!st.isFile() || st.size === 0 || st.size !== z.bajtov || st.size > (pripona === "mp4" ? NAJVEC_BAJTOV_VIDEA : NAJVEC_BAJTOV_SLIKE)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
-      // ENO branje: telo, vsota in preverba vrste so iz istih bajtov
-      bajti = Buffer.alloc(st.size);
+      // Pretok iz enega opisnika (video do 60 MB ni cel v pomnilniku na zahtevo): 1. prehod vsota in vrsta, 2. prehod telo, ki se
+      // konca SAMO, ce so poslani bajti enaki zgoscenim (sicer se povezava prekine pred zadnjim kosom - odjemalec nima cele datoteke).
+      const preberi = () => ds.createReadStream({ start: 0, end: st.size - 1, autoClose: false });
+      const h = createHash("sha256");
+      let glava = Buffer.alloc(0);
       let n = 0;
-      while (n < st.size) {
-        const { bytesRead } = await ds.read(bajti, n, st.size - n, n);
-        if (!bytesRead) break;
-        n += bytesRead;
+      for await (const k of preberi()) {
+        const b = k as Buffer;
+        if (glava.length < 12) glava = Buffer.concat([glava, b.subarray(0, 12 - glava.length)]);
+        h.update(b);
+        n += b.length;
       }
       if (n !== st.size) throw new Napaka(409, "vsota", "Datoteka se je spremenila.");
+      const png = glava.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      const jpg = glava[0] === 0xff && glava[1] === 0xd8 && glava[2] === 0xff;
+      const mp4 = glava.length >= 12 && glava.subarray(4, 8).toString("latin1") === "ftyp";
+      if (!(pripona === "png" ? png : pripona === "jpg" ? jpg : mp4)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
+      const vsota = h.digest("hex");
+      if (res.destroyed) return;
+      res.writeHead(200, { "content-type": MIME_KNJIZNICE[pripona], "content-length": st.size, "cache-control": "no-store", "x-lina-sha256": vsota });
+      const h2 = createHash("sha256");
+      let zadnji: Buffer | null = null;
+      let poslano = 0;
+      const enakaVsota = new Transform({
+        transform(k: Buffer, _e, cb) {
+          h2.update(k);
+          poslano += k.length;
+          const prej = zadnji;
+          zadnji = k;
+          cb(null, prej ?? undefined);
+        },
+        flush(cb) {
+          if (poslano !== st.size || h2.digest("hex") !== vsota) return cb(new Error("vsota"));
+          cb(null, zadnji ?? undefined);
+        },
+      });
+      await pipeline(preberi(), enakaVsota, res).catch(() => {
+        res.destroy();
+      });
     } finally {
       await ds.close();
     }
-    const png = bajti.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    const jpg = bajti[0] === 0xff && bajti[1] === 0xd8 && bajti[2] === 0xff;
-    const mp4 = bajti.length >= 12 && bajti.subarray(4, 8).toString("latin1") === "ftyp";
-    if (!(pripona === "png" ? png : pripona === "jpg" ? jpg : mp4)) throw new Napaka(404, "ni", "Slike ni v knjiznici.");
-    if (res.destroyed) return;
-    res.writeHead(200, { "content-type": MIME_KNJIZNICE[pripona], "content-length": bajti.length, "cache-control": "no-store", "x-lina-sha256": createHash("sha256").update(bajti).digest("hex") });
-    res.end(bajti);
   }
 
   private neznan(naslov: string): void {
