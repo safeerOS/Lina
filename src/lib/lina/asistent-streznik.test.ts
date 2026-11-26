@@ -1046,3 +1046,40 @@ test("naloga 26r krog 3 K3-3: ura gre nazaj za vec kot okno podpisa - ponavljanj
     await s.pospravi();
   }
 });
+
+// --- naloga 27r (CodeRabbit r4, :801): odlozena ustavitev (202) ne sme ustaviti poznejsega /nadaljuj - /nadaljuj se zavrne, dokler
+// ustavitev caka; ustavljena naloga se ne nadaljuje (kanal: p.ustavljen, izvajalec: ustavljene). Vrata so stanje, ne ura.
+test("naloga 27r CRR4-1: /nadaljuj med cakajoco odlozeno ustavitvijo dobi 409 in ne gre izvajalcu; ustavitev nato uspe", async () => {
+  const prej = ponovitevUstavitve.ms;
+  ponovitevUstavitve.ms = 20;
+  const z = ustavitevPoZacni(0);
+  let dol = true;
+  const ustavitve: string[] = [];
+  const nadaljevanja: string[] = [];
+  z.iz.ustavi = async () => {
+    if (dol) { ustavitve.push("napaka"); throw new Error("Ustavitve ni bilo mogoce poslati: seja Claude Code ni dosegljiva."); }
+    ustavitve.push("ok");
+  };
+  z.iz.nadaljuj = async (_id, b) => { nadaljevanja.push(b); };
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  try {
+    const id = idNaloge();
+    const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    await caka(() => z.klici.some((k) => k.kaj === "zacni"));
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id))).status, 202);
+    z.odpri();
+    assert.equal((await p).status, 202);
+    await caka(() => ustavitve.length >= 1, 3000);                                               // prvi poskus je padel, ponovitev caka
+    const r = await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, id, "nadaljuj z gradnjo"));
+    assert.equal(r.status, 409, "ustavljena naloga (202) se ne nadaljuje");
+    assert.deepEqual(nadaljevanja, [], "nadaljevanje ni slo v sejo, zato ga zakasnjena ustavitev ne more ustaviti");
+    dol = false;
+    await caka(() => ustavitve.includes("ok"), 3000);
+    assert.equal(ustavitve.filter((u) => u === "ok").length, 1);
+  } finally {
+    ponovitevUstavitve.ms = prej;
+    dol = false;
+    z.odpri();
+    await s.pospravi();
+  }
+});

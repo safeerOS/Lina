@@ -1594,3 +1594,37 @@ test("B2 (najdba 1750): dovoljenje programa velja samo za isti podukaz; tvegan p
     await k.pospravi();
   }
 });
+
+// --- naloga 27r (CodeRabbit r4, asistent-streznik :807): ali neuspela ustavitev porabi enkratni niz v kanalu, tako da vsaka ponovitev
+// odlozene ustavitve pade? Pravi izvajalec in pravi kanal: ustavi() pade samo v povezi() - pred pisanjem v vticnico (asistent.server.ts
+// ustavi: povezi pred poslji; povezi razresi sele po »pozdravljen«), zato kanal dokaza ni videl in ga ob ponovitvi sprejme.
+test("naloga 27r CRR4-2: ustavitev, ki pade pred dostavo, ne porabi enkratnega niza - isti dokaz po vrnitvi povezave nalogo ustavi", async () => {
+  const k = await zazeniKanal();
+  let dol = false;
+  const vticnice: net.Socket[] = [];
+  const l = new IzvajalecClaudeCode({
+    pot: k.pot, zeton: async () => (dol ? null : (await preberiKanal(k.dir)).zeton), ozjiKrog: () => new Set([ANA.id]),
+    ponovnaPovezavaMs: 60_000,                                                                   // samodejna ponovna povezava ne poseze v preizkus
+    povezi: (pot) => { const s = net.connect(pot); vticnice.push(s); return s; },
+  });
+  try {
+    const dogodki: Dogodek[] = [];
+    const id = "naloga-ust-dok1";
+    await l.zacni(naloga(ANA, id, "pozeni gradnjo"), (d) => dogodki.push(d));
+    await caka(() => k.obvestila(KANALSKO).length === 1);
+    dol = true;                                                                                  // seja se znova povezuje: zeton ni na voljo
+    vticnice.at(-1)!.destroy();
+    await caka(() => dogodki.some((d) => d.vrsta === "stanje" && d.besedilo === SPOROCILO_IZGUBLJENA));
+    const d = dokazUstavitve(ANA, id);
+    const povezav = vticnice.length;
+    await assert.rejects(l.ustavi(id, d), /ni dosegljiva/);
+    assert.equal(vticnice.length, povezav, "neuspeh pred odprtjem vticnice - v kanal ni slo nic");
+    dol = false;
+    await l.ustavi(id, d);                                                                       // ista ponovitev, isti dokaz
+    await caka(() => k.obvestila(KANALSKO).some((o) => o.params?.meta?.ustavi === "da"));
+    assert.equal(k.obvestila(KANALSKO).filter((o) => o.params?.meta?.ustavi === "da").length, 1);
+  } finally {
+    l.zapri();
+    await k.pospravi();
+  }
+});

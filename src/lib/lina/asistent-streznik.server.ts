@@ -298,6 +298,8 @@ type NalogaTelefona = {
   cas: number;
   odprte: Map<string, string>; // zahtevaId -> zgostitev prikazanega
   cakajo: Set<() => void>;
+  /** CRR4-1: /ustavi je dobil 202 med oddajo v sejo (odlozena ustavitev) - naloga je za telefon ustavljena, /nadaljuj se zavrne. */
+  ustavljena?: true;
 };
 
 /** Enkratna koda iz QR (128 bitov, base64url). */
@@ -793,6 +795,8 @@ export class AsistentStreznik {
    * Lina pa bi jo stela za ustavljeno). Napaka gre v dnevnik enkrat, opustitev tudi.
    */
   private async ustaviPozneje(id: string, dokaz: Dokaz, prvic = true): Promise<void> {
+    const n = this.naloge.get(id);
+    if (n) n.ustavljena = true;
     try {
       await this.m.izvajalec.ustavi(id, dokaz);
     } catch (e) {
@@ -914,6 +918,8 @@ export class AsistentStreznik {
     }
     if (!n || n.posiljatelj !== posiljatelj) throw zavrnjeno();
     const dokaz = await this.preveri(posiljatelj, t, (c, e) => nizNadaljevanja(id as string, posiljatelj as string, besedilo, c, e));
+    // CRR4-1: zakasnjena ponovitev ustavitve bi sicer ustavila sprejeto nadaljevanje; kot kanal (p.ustavljen) - ustavljena se ne nadaljuje
+    if (n.ustavljena) throw new Napaka(409, "ni-v-teku", "Naloga ni v teku ali nadaljevanje ni dovoljeno.");
     if (!this.m.izvajalec.nadaljuj) throw new Napaka(501, "ni-podprto", "Izvajalec ne podpira odgovora v nalogo.");
     try {
       await this.m.izvajalec.nadaljuj(id as string, besedilo, posiljatelj as string, dokaz);
