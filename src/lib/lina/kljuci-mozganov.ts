@@ -224,7 +224,7 @@ export function zaUporabo(zapisi: readonly ZapisKljuca[], aktivni: Aktivni, slot
       continue;
     }
     if (v !== "") continue; // slot brez zapisa: lokalna sprememba jo zajame (lokalneSpremembe), ne prepisemo je
-    const kandidat = [...m.values()].filter((z) => z.ponudnik === p && !z.izbrisan).sort((x, y) => (novejsi(x, y) ? -1 : 1))[0];
+    const kandidat = [...m.values()].filter((z) => z.ponudnik === p && !z.izbrisan).reduce<ZapisKljuca | undefined>((a, b) => (!a || novejsi(b, a) ? b : a), undefined);
     if (kandidat) {
       akt[p] = kandidat.id;
       izid.sloti[p] = kandidat.vrednost;

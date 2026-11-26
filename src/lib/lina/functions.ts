@@ -275,6 +275,40 @@ export const odstraniKljucAsistentkeFn = createServerFn({ method: "POST" }).hand
   return odstraniKljucAsistentke(await sessionToken());
 });
 
+// ---- NALOGA-35: kljuci za mozgane na vseh seznanjenih napravah (samo lastnik; vmesnik nikoli ne dobi celega kljuca) ----
+
+export const pregledKljucevFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  await requireOwner(await sessionToken(), resolveDataDir());
+  const { pregledKljucev } = await import("./kljuci-mozganov.server.ts");
+  return pregledKljucev();
+});
+
+export const dodajKljucMozganovFn = createServerFn({ method: "POST" })
+  .validator((data: { ponudnik?: unknown; oznaka?: unknown; kljuc?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    await requireOwner(await sessionToken(), resolveDataDir());
+    const { dodajKljucMozganov } = await import("./kljuci-mozganov.server.ts");
+    return dodajKljucMozganov(data);
+  });
+
+export const urediKljucMozganovFn = createServerFn({ method: "POST" })
+  .validator((data: { dejanje?: unknown; id?: unknown; oznaka?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    await requireOwner(await sessionToken(), resolveDataDir());
+    const k = await import("./kljuci-mozganov.server.ts");
+    if (data.dejanje === "uporabi") return k.uporabiKljucMozganov(data.id);
+    if (data.dejanje === "odstrani") return k.odstraniKljucMozganov(data.id);
+    if (data.dejanje === "preimenuj") return k.preimenujKljucMozganov(data.id, data.oznaka);
+    if (data.dejanje === "potrdi") return k.potrdiObvestiloKljucev();
+    throw new Error("Neznano dejanje.");
+  });
+
 export const nastaviBrezplacneFn = createServerFn({ method: "POST" })
   .validator((data: { vklop?: unknown }) => data)
   .handler(async ({ data }) => {

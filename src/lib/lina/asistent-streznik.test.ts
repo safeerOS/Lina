@@ -16,11 +16,12 @@ import {
   AsistentStreznik, NAJVEC_NEZNANIH_NA_MINUTO, NAJVEC_POVEZAV_NA_NASLOV, NAJVEC_ZAHTEV_NA_MINUTO, NAJVEC_ZAVRNITEV_NA_MINUTO, POT, odtisPotrdila, potrdiloAsistenta, ustvariPotrdilo, zasebenNaslov, zasebenOdjemalec,
   dogodkiDoMeje, NAJVEC_ODGOVOR_DOGODKOV_B, POTI_ODDALJENO, POT_SLIKA_KONTROLE, ponovitevUstavitve,
 } from "./asistent-streznik.server.ts";
-import { OKNO_PODPISA_MS, idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizSinhron, nizSlikeKontrole, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
+import { OKNO_PODPISA_MS, idIzKljuca, nizDogodkov, nizNadaljevanja, nizNaloge, nizOdobritve, nizKljucev, nizSinhron, nizSlikeKontrole, nizUstavitve, potVticnice, zgostitevPrikaza, zgostitevSinhron, type Dokaz } from "./kanal-claude.ts";
 import { preberiKanal, pripraviKanal } from "./kanal-claude.server.ts";
 import { nizDovoljenjaOdobritve } from "./dovoljenja-podobne.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { ovijCilj } from "./cilj-naloge.server.ts";
+import { javniKljucPara, noviParKljucev } from "./kljuci-mozganov.ts";
 
 const KOREN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 /** Vektor 21. 11. 2026 (odobritev v3; prejsnji iz 14. 11. je bil v2): ustvaril ga je Kotlin (podpis: Podpisnik, NiziLine, NalogaLine; generator outputs/naloge/ui-racunalnik/kotlin-vektor-v3/GeneriraVektor.kt) z novim kljucem; prej: Kotlin (openline-gemini-linije @a54d304, modul podpis: Podpisnik, NiziLine, NalogaLine), JCA SHA256withECDSA. */
@@ -419,6 +420,31 @@ test("sinhronizacija: podpisana zahteva izmenja klic; spremenjena vsebina, ponov
     assert.equal((await s.z("POST", `${POT}/sinhron`, sinhronTelo(ANA, velik))).status, 413);
     const slab = sinhronTelo(ANA, JSON.stringify({ rev: -1 }));
     assert.equal((await s.z("POST", `${POT}/sinhron`, slab)).status, 400);
+  } finally {
+    await s.pospravi();
+  }
+});
+
+const kljuciTelo = (d: Naprava, vsebina: string, cas?: number) =>
+  ({ posiljatelj: d.id, vsebina, ...podpisi(d, (c, e) => nizKljucev(d.id, c, e, zgostitevSinhron(vsebina)), cas) });
+
+test("naloga 35: POST /kljuci - podpisana izmenjava vrne javni kljuc para; ponovitev, podpis sinhronizacije, tuja naprava in slab kljuc para se zavrnejo; pot je tudi prek Global Linka", async () => {
+  assert.equal(POTI_ODDALJENO.get(`${POT}/kljuci`), "POST");
+  const s = await streznik({ krog: [{ id: ANA.id, kljuc: ANA.kljuc }] });
+  try {
+    const par = noviParKljucev();
+    const vsebina = JSON.stringify({ v: 1, javni: par.javni, zapisi: [] });
+    const telo = kljuciTelo(ANA, vsebina);
+    const r = await s.z("POST", `${POT}/kljuci`, telo);
+    assert.equal(r.status, 200, JSON.stringify(r.telo));
+    assert.equal(r.telo.v, 1);
+    assert.ok(javniKljucPara(r.telo.javni), "javni kljuc para racunalnika");
+    assert.deepEqual(r.telo.zapisi, []);
+    assert.equal((await s.z("POST", `${POT}/kljuci`, telo)).status, 403); // ponovitev istega podpisa
+    const sinhronPodpis = { posiljatelj: ANA.id, vsebina, ...podpisi(ANA, (c, e) => nizSinhron(ANA.id, c, e, zgostitevSinhron(vsebina))) };
+    assert.equal((await s.z("POST", `${POT}/kljuci`, sinhronPodpis)).status, 403); // podpis za drug namen
+    assert.equal((await s.z("POST", `${POT}/kljuci`, kljuciTelo(BOR, vsebina))).status, 403); // naprava izven seznama
+    assert.equal((await s.z("POST", `${POT}/kljuci`, kljuciTelo(ANA, JSON.stringify({ v: 1, javni: "x", zapisi: [] })))).status, 400);
   } finally {
     await s.pospravi();
   }
