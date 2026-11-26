@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -169,4 +169,57 @@ test("naloga 35 (racunalnik): kljuc, ki ga lastnik zamenja v Mozganih, gre telef
   assert.equal(drugi.zapisi.length, 1);
   assert.equal(drugi.zapisi[0].id, prvi.zapisi[0].id);
   assert.equal(drugi.zapisi[0].vrednost, K2);
+});
+
+// ---- slepi pregled 1 (S1, N2, S4/S5) ----
+
+test("naloga 35 (slepi S1): po odstranitvi kljuca v uporabi Lina ne preklopi sama na drug kljuc istega ponudnika", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  let p = await dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Drugi", kljuc: K2 }, dir);
+  const vUporabi = p.kljuci.find((k) => k.vUporabi)!;
+  p = await odstraniKljucMozganov(vUporabi.id, dir);
+  assert.equal(await activeBrain(dir), null);
+  await pregledKljucev(dir);
+  assert.equal(await activeBrain(dir), null, "naslednji korak prazno mesto ne zapolni z drugim kljucem");
+  // oddaljeno: telefon odstrani kljuc v uporabi, drugi kljuc istega ponudnika ostane neuporabljen
+  const { dir: dir2, token: t2 } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, t2, dir2);
+  await dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Drugi", kljuc: K2 }, dir2);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir2, [], null);
+  const g = prvi.zapisi.find((z) => z.vrednost === K1)!;
+  await t.izmenjaj(dir2, [{ ...g, cas: Date.now(), naprava: TEL, izbrisan: true, prej: `${g.cas}/${g.naprava}`, vrednost: "" }], prvi.odg.javni);
+  await pregledKljucev(dir2);
+  assert.equal(await activeBrain(dir2), null);
+  assert.deepEqual((await pregledKljucev(dir2)).odstranjeni, ["gemini"]);
+});
+
+test("naloga 35 (slepi N2): telefon ne more poslati zapisa v imenu druge naprave", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const tuj: ZapisKljuca = { id: "dddddddddddddddd", ponudnik: "openai", oznaka: "Tuj", cas: Date.now(), naprava: "n-ffffffffffffffff", izbrisan: false, prej: "", vrednost: K3 };
+  const drugi = await t.izmenjaj(dir, [tuj], prvi.odg.javni);
+  assert.ok(!drugi.zapisi.some((z) => z.id === tuj.id));
+});
+
+test("naloga 35 (slepi S4/S5): neberljiv kljuc v slotu ni izbris; pokvarjena datoteka nabora se ne prepise", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "openai", key: K3 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  assert.equal(prvi.zapisi.length, 1);
+  // sifra kljuca v ponudniki.json se ne odpre vec (npr. zamenjan .kljuc): zapis mora ostati ziv na vseh napravah
+  const pot = path.join(dir, "ponudniki.json");
+  const pon = JSON.parse(await readFile(pot, "utf8"));
+  pon.ponudniki.openai.ciphertext = Buffer.from("pokvarjeno-pokvarjeno").toString("base64");
+  await writeFile(pot, JSON.stringify(pon));
+  const drugi = await t.izmenjaj(dir, [], prvi.odg.javni);
+  assert.ok(drugi.zapisi.some((z) => z.id === prvi.zapisi[0].id && !z.izbrisan && z.vrednost === K3));
+  // pokvarjena datoteka nabora: napaka, brez novega praznega stanja
+  await writeFile(path.join(dir, DATOTEKA_KLJUCEV), "{");
+  await assert.rejects(pregledKljucev(dir));
+  assert.equal(await readFile(path.join(dir, DATOTEKA_KLJUCEV), "utf8"), "{");
 });

@@ -144,6 +144,8 @@ export const novId = (): string => randomBytes(8).toString("hex");
 
 export type Sloti = Partial<Record<PonudnikKljuca, string>>;
 export type Aktivni = Partial<Record<PonudnikKljuca, string>>;
+/** aktivni[p] = BREZ: kljuc v uporabi je bil odstranjen; prazno mesto se NE zapolni samo z drugim kljucem (brez samodejnega preklopa). */
+export const BREZ = "-";
 
 /**
  * Lastne spremembe: [sloti] = kljuc, ki ga ta naprava ta hip uporablja za ponudnika (obstojeca shramba: ponudniki.json / Keystore).
@@ -158,11 +160,14 @@ export function lokalneSpremembe(
   zdaj: number,
   uvoz: boolean,
   privzetaOznaka: (p: PonudnikKljuca) => string,
+  neznani: ReadonlySet<PonudnikKljuca> = new Set(),
 ): { zapisi: ZapisKljuca[]; aktivni: Aktivni; spremenjeni: string[] } {
   const m = new Map(zapisi.map((z) => [z.id, z]));
   const akt: Aktivni = { ...aktivni };
   const spremenjeni: string[] = [];
   for (const p of PONUDNIKI_KLJUCEV) {
+    // slot, ki ga ta hip ni mogoce prebrati (zamenjan glavni kljuc, Keystore): ni ne sprememba ne izbris (Safeer »neznani«)
+    if (neznani.has(p)) continue;
     const v = sloti[p];
     const a = akt[p] !== undefined ? m.get(akt[p] as string) : undefined;
     if (v !== undefined && v !== "") {
@@ -204,15 +209,16 @@ export type Uporaba = {
  * Kaj iz nabora gre v sloto te naprave. Prejet zapis NIKOLI ne izbere ponudnika za klice ali asistentko in ne doda rezervnega
  * ponudnika (B9): spremeni samo kljuc ze aktivnega zapisa, ga odstrani ob izbrisu ali zapolni PRAZNO mesto ponudnika.
  */
-export function zaUporabo(zapisi: readonly ZapisKljuca[], aktivni: Aktivni, sloti: Sloti): Uporaba {
+export function zaUporabo(zapisi: readonly ZapisKljuca[], aktivni: Aktivni, sloti: Sloti, neznani: ReadonlySet<PonudnikKljuca> = new Set()): Uporaba {
   const m = new Map(zapisi.map((z) => [z.id, z]));
   const akt: Aktivni = { ...aktivni };
   const izid: Uporaba = { sloti: {}, aktivni: akt, odstranjeni: [] };
   for (const p of PONUDNIKI_KLJUCEV) {
+    if (neznani.has(p)) continue;
     const a = akt[p] !== undefined ? m.get(akt[p] as string) : undefined;
     const v = sloti[p] ?? "";
     if (a && a.izbrisan) {
-      delete akt[p];
+      akt[p] = BREZ;
       if (v !== "") {
         izid.sloti[p] = null;
         izid.odstranjeni.push(p);
@@ -224,6 +230,7 @@ export function zaUporabo(zapisi: readonly ZapisKljuca[], aktivni: Aktivni, slot
       continue;
     }
     if (v !== "") continue; // slot brez zapisa: lokalna sprememba jo zajame (lokalneSpremembe), ne prepisemo je
+    if (akt[p] === BREZ) continue; // po odstranitvi kljuca v uporabi lastnik izbere sam (slepi pregled S1)
     const kandidat = [...m.values()].filter((z) => z.ponudnik === p && !z.izbrisan).reduce<ZapisKljuca | undefined>((a, b) => (!a || novejsi(b, a) ? b : a), undefined);
     if (kandidat) {
       akt[p] = kandidat.id;
@@ -246,11 +253,13 @@ export function korakRacunalnika(
   jaz: string,
   zdaj: number,
   privzetaOznaka: (p: PonudnikKljuca) => string,
+  neznani: ReadonlySet<PonudnikKljuca> = new Set(),
 ): { stanje: StanjeNabora; uporaba: Uporaba; spori: string[] } {
-  const l = lokalneSpremembe(st.zapisi, st.aktivni, sloti, jaz, zdaj, !st.uvozeno, privzetaOznaka);
+  const l = lokalneSpremembe(st.zapisi, st.aktivni, sloti, jaz, zdaj, !st.uvozeno, privzetaOznaka, neznani);
   const z = zdruzi(l.zapisi, prejeti, zdaj, true);
-  const uporaba = zaUporabo(z.zapisi, l.aktivni, sloti);
-  return { stanje: { zapisi: z.zapisi, aktivni: uporaba.aktivni, uvozeno: true }, uporaba, spori: z.spori };
+  const uporaba = zaUporabo(z.zapisi, l.aktivni, sloti, neznani);
+  // ob neberljivem slotu uvoz se ni koncan (ta kljuc bi sicer ob prvem branju dobil cas zdaj namesto CAS_UVOZA)
+  return { stanje: { zapisi: z.zapisi, aktivni: uporaba.aktivni, uvozeno: st.uvozeno || neznani.size === 0 }, uporaba, spori: z.spori };
 }
 
 /** Telefon pred zahtevo: lastne spremembe -> kaj poslati. Pred prvo izmenjavo ne uvaza (najprej dobi nabor, da ne podvoji kljuca). */

@@ -703,18 +703,21 @@ export async function naslovOmniroute(dir?: string): Promise<string | null> {
  * NALOGA-35: kljuci za mozgane, kot jih vidi uskladitev med napravami (en »slot« na ponudnika = zapis v ponudniki.json oz. kljuci.json).
  * Samo ponudniki s kljucem API (PONUDNIKI_KLJUCEV); naslov, projekt in OmniRoute ostanejo lokalni.
  */
-export async function slotiKljucev(dir?: string): Promise<Sloti> {
+export async function slotiKljucev(dir?: string): Promise<{ sloti: Sloti; neznani: Set<PonudnikKljuca> }> {
   const root = resolveDataDir(dir);
   return zaporedno(root, async () => {
     const { ponudniki } = await preberiPonudnike(root);
     const kljuc = await masterKey(root);
     const sloti: Sloti = {};
+    // zapis s sifro, ki se ne odpre (zamenjan .kljuc): »neznan«, ne prazen - sicer bi uskladitev kljuc izbrisala na vseh napravah
+    const neznani = new Set<PonudnikKljuca>();
     for (const p of PONUDNIKI_KLJUCEV) {
       const z = ponudniki[p];
       const v = z ? skrivnostZapisa(p, z, kljuc) : null;
       if (v) sloti[p] = v;
+      else if (z?.ciphertext) neznani.add(p);
     }
-    return sloti;
+    return { sloti, neznani };
   });
 }
 

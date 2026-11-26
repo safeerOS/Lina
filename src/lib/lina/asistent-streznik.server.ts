@@ -215,8 +215,8 @@ export const ID_NALOGE_TELEFONA = /^[A-Za-z0-9_-]{22,64}$/;
 export const NAJVEC_TELO = 16 * 1024;
 /** Sinhronizacija: telefon poslje do 400 000 B zapisov klicev (SinhronLine.NAJVEC_BAJTOV_KLICEV) + pogovor + navodila, JSON-niz v JSON-u. */
 export const NAJVEC_TELO_SINHRON = 768 * 1024;
-/** NALOGA-35: najvec 2 x NAJVEC_ZIVIH zapisov z ovojnico (~400 B) in javni kljuc para. */
-export const NAJVEC_TELO_KLJUCEV = 64 * 1024;
+/** NALOGA-35: neposlane spremembe telefona (do NAJVEC_ZIVIH + NAJVEC_GROBOV zapisov po ~500 B z ovojnico) in javni kljuc para. */
+export const NAJVEC_TELO_KLJUCEV = 128 * 1024;
 /**
  * Fotografija za kontrolo tiska: telo so SUROVI bajti slike (image/jpeg ali image/png) do 16 MiB; podpis je v glavah in se
  * preveri PRED branjem telesa (neodvisni pregled 24. 11. 2026, N1), zgostitev telesa se primerja po branju.

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { odsifrirajSkrivnost, sifrirajSkrivnost, slotiKljucev, uporabiSlote } from "./keys.server.ts";
 import {
+  BREZ,
   NAJVEC_ZIVIH,
   jePonudnikKljuca,
   javniKljucPara,
@@ -46,7 +47,8 @@ type Datoteka = {
   odstranjeni: PonudnikKljuca[];
 };
 
-type Stanje = { d: Datoteka; st: StanjeNabora; zasebni: string };
+/** [neberljivi]: zapisi, ki se ne odprejo (zamenjan glavni kljuc) - ostanejo na disku nespremenjeni, v uskladitev ne gredo. */
+type Stanje = { d: Datoteka; st: StanjeNabora; zasebni: string; neberljivi: ZapisNaDisku[] };
 
 const aadDiska = (id: string) => `lina-kljuci-mozganov-disk-v1|${id}`;
 const privzetaOznaka = (p: PonudnikKljuca) => ({ gemini: "Gemini", openai: "OpenAI", claude: "Claude", grok: "Grok", openrouter: "OpenRouter" })[p];
@@ -63,8 +65,10 @@ function zaporedno<T>(root: string, delo: () => Promise<T>): Promise<T> {
 }
 
 async function preberi(root: string): Promise<Stanje> {
-  const d = await readJsonFile<Datoteka>(root, DATOTEKA_KLJUCEV).catch(() => null);
-  if (!d || d.v !== 1 || typeof d.jaz !== "string" || !d.zasebni || typeof d.javni !== "string") {
+  // samo manjkajoca datoteka je nov zacetek; pokvarjena ali neberljiva vrze napako in se NE prepise (slepi pregled S5)
+  const d = await readJsonFile<Datoteka>(root, DATOTEKA_KLJUCEV);
+  if (d !== null && (d.v !== 1 || typeof d.jaz !== "string" || !d.zasebni || typeof d.javni !== "string")) throw new Error("Datoteka kljucev za uskladitev ni veljavna.");
+  if (d === null) {
     const par = noviParKljucev();
     const nova: Datoteka = {
       v: 1,
@@ -77,11 +81,12 @@ async function preberi(root: string): Promise<Stanje> {
       telefoni: {},
       odstranjeni: [],
     };
-    return { d: nova, st: { zapisi: [], aktivni: {}, uvozeno: false }, zasebni: par.zasebni };
+    return { d: nova, st: { zapisi: [], aktivni: {}, uvozeno: false }, zasebni: par.zasebni, neberljivi: [] };
   }
   const zasebni = await odsifrirajSkrivnost(d.zasebni, root, aadDiska("zasebni"));
   if (!zasebni) throw new Error("Kljuca naprave za uskladitev ni mogoce prebrati.");
   const zapisi: ZapisKljuca[] = [];
+  const neberljivi: ZapisNaDisku[] = [];
   for (const z of Array.isArray(d.zapisi) ? d.zapisi : []) {
     const { sifra, ...meta } = z;
     if (meta.izbrisan) {
@@ -89,8 +94,8 @@ async function preberi(root: string): Promise<Stanje> {
       continue;
     }
     const vrednost = sifra ? await odsifrirajSkrivnost(sifra, root, aadDiska(meta.id)) : null;
-    // neberljiv zapis (zamenjan glavni kljuc) izpade iz nabora; naslednja izmenjava ga vrne z druge naprave
     if (vrednost) zapisi.push({ ...meta, vrednost });
+    else neberljivi.push(z);
   }
   const aktivni: Aktivni = {};
   for (const [p, id] of Object.entries(d.aktivni ?? {})) if (jePonudnikKljuca(p) && typeof id === "string") aktivni[p] = id;
@@ -98,6 +103,7 @@ async function preberi(root: string): Promise<Stanje> {
     d: { ...d, telefoni: d.telefoni ?? {}, odstranjeni: Array.isArray(d.odstranjeni) ? d.odstranjeni.filter(jePonudnikKljuca) : [] },
     st: { zapisi, aktivni, uvozeno: d.uvozeno === true },
     zasebni,
+    neberljivi,
   };
 }
 
@@ -107,7 +113,9 @@ async function zapisi(root: string, s: Stanje): Promise<void> {
     const { vrednost, ...meta } = z;
     zapisi.push(z.izbrisan ? meta : { ...meta, sifra: await sifrirajSkrivnost(vrednost, root, aadDiska(z.id)) });
   }
-  await writeJson(root, DATOTEKA_KLJUCEV, { ...s.d, uvozeno: s.st.uvozeno, aktivni: s.st.aktivni, zapisi } satisfies Datoteka);
+  const znani = new Set(zapisi.map((z) => z.id));
+  const ohranjeni = s.neberljivi.filter((z) => !znani.has(z.id));
+  await writeJson(root, DATOTEKA_KLJUCEV, { ...s.d, uvozeno: s.st.uvozeno, aktivni: s.st.aktivni, zapisi: [...zapisi, ...ohranjeni] } satisfies Datoteka);
 }
 
 /**
@@ -115,8 +123,8 @@ async function zapisi(root: string, s: Stanje): Promise<void> {
  * kljuca v uporabi gre v obvestilo); lokalna dejanja vmesnika obvestila ne naredijo.
  */
 async function korak(root: string, s: Stanje, prejeti: readonly ZapisKljuca[], zdaj: number, oddaljeno: boolean): Promise<Stanje> {
-  const sloti = await slotiKljucev(root);
-  const k = korakRacunalnika(s.st, sloti, prejeti, s.d.jaz, zdaj, privzetaOznaka);
+  const { sloti, neznani } = await slotiKljucev(root);
+  const k = korakRacunalnika(s.st, sloti, prejeti, s.d.jaz, zdaj, privzetaOznaka, neznani);
   const spremembe: Partial<Record<PonudnikKljuca, { prej: string; novo: string | null }>> = {};
   for (const [p, novo] of Object.entries(k.uporaba.sloti) as Array<[PonudnikKljuca, string | null]>) spremembe[p] = { prej: sloti[p] ?? "", novo };
   const preskoceni = Object.keys(spremembe).length ? await uporabiSlote(spremembe, root) : [];
@@ -152,7 +160,11 @@ export function izmenjajKljuce(
     const zdaj = (odv.zdaj ?? Date.now)();
     let s = await preberi(root);
     const kljuc = kljucPara(s.zasebni, javni, idTelefona);
-    const prejeti = zapisiNaZici.slice(0, 2 * NAJVEC_ZIVIH).map((z) => zZice(z, kljuc, "telefon-racunalnik")).filter((z): z is ZapisKljuca => z !== null);
+    // telefon poslje samo SVOJE spremembe (Safeer: izvor = posiljatelj); zapis z drugo napravo se prezre (slepi pregled N2)
+    const prejeti = zapisiNaZici
+      .slice(0, 2 * NAJVEC_ZIVIH)
+      .map((z) => zZice(z, kljuc, "telefon-racunalnik"))
+      .filter((z): z is ZapisKljuca => z !== null && z.naprava === idTelefona);
     s = await korak(root, s, prejeti, zdaj, true);
     const telefoni = Object.fromEntries(Object.entries({ ...s.d.telefoni, [idTelefona]: javniTelefona as string }).filter(([id]) => dovoljene.has(id)));
     s = { ...s, d: { ...s.d, telefoni } };
@@ -202,7 +214,7 @@ function dejanje(dir: string | undefined, f: (s: Stanje, zdaj: number) => { s: S
     const s0 = await korak(root, await preberi(root), [], zdaj, false);
     const { s, pisi } = f(s0, zdaj);
     if (pisi && Object.keys(pisi).length) {
-      const sloti = await slotiKljucev(root);
+      const { sloti } = await slotiKljucev(root);
       const spremembe: Partial<Record<PonudnikKljuca, { prej: string; novo: string | null }>> = {};
       for (const [p, novo] of Object.entries(pisi) as Array<[PonudnikKljuca, string | null]>) spremembe[p] = { prej: sloti[p] ?? "", novo };
       if ((await uporabiSlote(spremembe, root)).length) throw new Error("Ključ se je medtem spremenil; poskusite znova.");
@@ -253,8 +265,7 @@ export function odstraniKljucMozganov(id: unknown, dir?: string, odv: { zdaj?: (
     const z = poisci(s, id);
     const s1 = zamenjaj(s, z, { ...z, izbrisan: true, vrednost: "" }, zdaj);
     if (s.st.aktivni[z.ponudnik] !== z.id) return { s: s1 };
-    const { [z.ponudnik]: _a, ...aktivni } = s1.st.aktivni;
-    return { s: { ...s1, st: { ...s1.st, aktivni } }, pisi: { [z.ponudnik]: null } };
+    return { s: { ...s1, st: { ...s1.st, aktivni: { ...s1.st.aktivni, [z.ponudnik]: BREZ } } }, pisi: { [z.ponudnik]: null } };
   }, odv);
 }
 
