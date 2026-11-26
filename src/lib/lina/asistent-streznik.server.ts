@@ -298,7 +298,7 @@ type NalogaTelefona = {
   cas: number;
   odprte: Map<string, string>; // zahtevaId -> zgostitev prikazanega
   cakajo: Set<() => void>;
-  /** CRR4-1: /ustavi je dobil 202 med oddajo v sejo (odlozena ustavitev) - naloga je za telefon ustavljena, /nadaljuj se zavrne. */
+  /** CRR4-1: /ustavi je dobil 202 - naloga je za telefon ustavljena, /nadaljuj se zavrne (tudi ce je odlozena ustavitev opuscena). */
   ustavljena?: true;
 };
 
@@ -896,8 +896,14 @@ export class AsistentStreznik {
     if (z) {
       // N6c/d: /naloga se obdeluje - ne zacne se (ali se ustavi takoj po zacni); grob za ponovljen POST
       z.ustavi = dokaz;
+      // slepi 27r S1: naloga je lahko ze v this.naloge (zacni tece) - /nadaljuj do konca zacni ne sme mimo
+      if (n) n.ustavljena = true;
       this.vGrob(posiljatelj as string, id);
-    } else if (n) await this.m.izvajalec.ustavi(id, dokaz);
+    } else if (n) {
+      await this.m.izvajalec.ustavi(id, dokaz);
+      // slepi 27r S2: samo po uspehu (ob napaki telefon ne dobi 202 in naloga tece)
+      n.ustavljena = true;
+    }
     else {
       // N3b: naloga se ni prisla (zadrzan POST) - podpisan preklic se zapomni; ni zavrnitev (N5), zato 202 in ne 403
       this.vGrob(posiljatelj as string, id);

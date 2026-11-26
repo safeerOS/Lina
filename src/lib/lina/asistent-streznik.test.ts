@@ -1083,3 +1083,39 @@ test("naloga 27r CRR4-1: /nadaljuj med cakajoco odlozeno ustavitvijo dobi 409 in
     await s.pospravi();
   }
 });
+
+test("naloga 27r slepi S1: /ustavi med zacni (naloga ze obstaja, 202) - /nadaljuj pred koncem zacni dobi 409 in ne gre izvajalcu", async () => {
+  const z = ustavitevPoZacni(0);
+  const nadaljevanja: string[] = [];
+  z.iz.nadaljuj = async (_id, b) => { nadaljevanja.push(b); };
+  const s = await streznik({ krog: [ANA], izvajalec: z.iz });
+  try {
+    const id = idNaloge();
+    const p = s.z("POST", `${POT}/naloga`, telefonNaloga(ANA, id, "pokazi datum"));
+    p.catch(() => undefined);                                                                    // ob padcu trditve pospravi zapre vticnico
+    await caka(() => z.klici.some((k) => k.kaj === "zacni"));                                  // naloga je v this.naloge, zacni caka na vrata
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, id))).status, 202);
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, id, "nadaljuj"))).status, 409);
+    assert.deepEqual(nadaljevanja, []);
+    z.odpri();
+    await p;
+  } finally {
+    z.odpri();
+    await s.pospravi();
+  }
+});
+
+test("naloga 27r slepi S2: neposredna /ustavi tekoce naloge (202) - /nadaljuj nato 409, kot kanal (ustavljena se ne nadaljuje)", async () => {
+  const s = await streznik({ krog: [ANA] });
+  try {
+    const n = telefonNaloga(ANA, idNaloge(), "uredi nacrt");
+    assert.equal((await s.z("POST", `${POT}/naloga`, n)).status, 202);
+    const nadaljevanja: string[] = [];
+    s.l.iz.nadaljuj = async (_id, b) => { nadaljevanja.push(b); };
+    assert.equal((await s.z("POST", `${POT}/ustavi`, ustaviNiz(ANA, n.id))).status, 202);
+    assert.equal((await s.z("POST", `${POT}/nadaljuj`, telefonNadaljuj(ANA, n.id, "korak 2"))).status, 409);
+    assert.deepEqual(nadaljevanja, []);
+  } finally {
+    await s.pospravi();
+  }
+});
