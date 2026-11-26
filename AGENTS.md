@@ -46,6 +46,13 @@ Velja za vsako spremembo v tem repozitoriju. Kratko in preverljivo; podrobnosti 
   AGENTS.md »Koncna tocka asistentke za telefon«). Logika v modulu podpis (DodatkiLine, NiziLine.nizStanjaDodatkov/nizDodatka,
   skupni vektor z TS), app samo pogled (DodatkiRacunalnikaPogled). Vklop slovenskega modela samo po pojasnilu (~1,6 GB) in potrditvi.
 
+## Kljuci za mozgane na vseh napravah (lastnik 26. 11. 2026, NALOGA-35; celotno pravilo v Lininem AGENTS.md »Uskladitev kljucev«)
+- Logika v modulu samostojna (KljuciMozganov, SinhronKljucev; skupni vektor s TS v KljuciMozganovTest), app samo Keystore, sloti in pogled
+  (UskladitevKljucev, KljuciNaNapravahPogled). POST /kljuci s podpisom naprave (Podpisnik.podpisiKljuce), doma ali prek Global Linka.
+- Telefon poslje samo svoje neposlane spremembe in ne zavrze kljuca, ki ga racunalnik nima; odgovor uporabi samo, ce se stanje medtem ni
+  spremenilo (primerjaj in zamenjaj, omrezje brez zaklepa). Neberljiv slot ali shramba (Keystore) ni izbris in ni prvi zagon.
+- Modul app ni preveden z Gradlom lokalno: kotlinc z android.jar brez novih napak (orodje n34-app-prevod.sh); NEPREVERJENO na napravi.
+
 ## Pravi klici in naprave
 - Pravi klici prek OpenLine so PREPOVEDANI do cistega neodvisnega pregleda (lastnik 10. 11. 2026). Ko bo dovolj stabilno,
   lastnik aplikacijo SAM namesti na svoj Samsung. Na pravih telefonih agent nic ne namesca brez izrecne naloge.
