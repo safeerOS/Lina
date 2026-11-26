@@ -43,6 +43,8 @@ class PosodobitevPogled(private val a: Activity, private val plosca: LinearLayou
     private val preveri = dodaj(Button(a, null, 0, R.style.Gw_Button).apply { setText(R.string.update_check_now) })
 
     init {
+        // ostanki prenosa, ki ga je prekinila smrt procesa (do 300 MB); samo, ko noben prenos ne tece
+        if (NamestitevApk.zacetekPrenosa()) try { PosodobitevGithub.pobrisiOstanke(mapa) } finally { NamestitevApk.konecPrenosa() }
         stikalo.isChecked = PosodobitevLine.samodejno(a)
         stikalo.setOnCheckedChangeListener { _, v -> PosodobitevLine.nastaviSamodejno(a, v) }
         preveri.setOnClickListener { preveriZdaj() }
@@ -104,7 +106,7 @@ class PosodobitevPogled(private val a: Activity, private val plosca: LinearLayou
             return
         }
         posodobi.isEnabled = false
-        stanje.setText(R.string.install_downloading)
+        stanje.setText(R.string.update_downloading)
         Thread({
             var kopija: File? = null
             val sporocilo: String = try {

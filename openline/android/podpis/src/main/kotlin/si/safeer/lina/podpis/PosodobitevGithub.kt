@@ -48,6 +48,10 @@ object PosodobitevGithub {
     private val OZNAKA = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     private val VRSTICA_VSOTE = Regex("^([0-9a-fA-F]{64}) [ *](.+?)\\s*$")
     private val ENKRATNI = Regex("^[A-Za-z0-9_-]{16,64}$")
+    private val OSTANEK = Regex("^lina-(posodobitev-[0-9]{1,9}-[A-Za-z0-9_-]{16,64}\\.apk|vsote-[A-Za-z0-9_-]{16,64}\\.(txt|sig))$")
+    /** Skupni rok enega prenosa (readTimeout velja samo za posamezno branje: kapljanje bi zadrzalo zaklep za vedno). */
+    const val ROK_APK_MS = 30L * 60_000
+    private const val ROK_MALO_MS = 60_000L
 
     /** Brez sledenja preusmeritvam: vsak skok preveri prenesi() (gostitelj s seznama, https). */
     interface Http { fun get(url: String, glave: Map<String, String>): OdgovorHttp }
@@ -181,7 +185,7 @@ object PosodobitevGithub {
     private fun napaka(s: StanjePreverbe, zdaj: Long): StanjePreverbe = (s.napak + 1).let { n -> s.copy(napak = n, naslednjaMs = zdaj + zamikPoNapakah(n)) }
 
     /** Ena preverba releases/latest z If-None-Match. 304 obdrzi znano izdajo; 403/429/5xx/omrezje = napaka z odmikom. */
-    fun preveri(http: Http, s: StanjePreverbe, namesceniCode: Long, zdaj: Long): StanjePreverbe {
+    fun preveri(http: Http, s: StanjePreverbe, namesceniCode: Long, zdaj: Long, javniSpki: ByteArray = javniKljuc()): StanjePreverbe {
         val glave = mutableMapOf("Accept" to "application/vnd.github+json", "User-Agent" to "Lina")
         s.etag?.let { glave["If-None-Match"] = it }
         return try {
@@ -190,10 +194,13 @@ object PosodobitevGithub {
                     o.status == 304 && s.etag != null ->
                         s.copy(izdaja = s.izdaja?.takeIf { it.versionCode > namesceniCode }, napak = 0, naslednjaMs = zdaj + OBDOBJE_MS)
                     o.status == 200 -> {
-                        val telo = beri(o.telo, NAJVEC_API) ?: return napaka(s, zdaj)
+                        val telo = beri(o.telo, NAJVEC_API, ROK_MALO_MS) ?: return napaka(s, zdaj)
                         val i = razcleniIzdajo(String(telo, Charsets.UTF_8))
-                        val etag = o.glave["etag"]?.takeIf { e -> e.length <= 200 && e.none { it < ' ' || it == '\u007f' } }
-                        s.copy(etag = etag, izdaja = i?.takeIf { it.versionCode > namesceniCode }, napak = 0, naslednjaMs = zdaj + OBDOBJE_MS)
+                        // slepi pregled S1: samo natisljiv ASCII (ne-ASCII glava bi ob naslednji zahtevi vrgla izjemo za vedno)
+                        val etag = o.glave["etag"]?.takeIf { e -> e.length in 1..200 && e.all { it in ' '..'~' } }
+                        // slepi pregled S2: izdaja (razlicica in opombe v obvestilu) samo, ce je SHA256SUMS podpisan in nasteje ta APK
+                        val nova = i?.takeIf { it.versionCode > namesceniCode }?.takeIf { podpisanSeznam(http, it, javniSpki)?.let { v -> vsotaIzSeznama(String(v, Charsets.UTF_8), it.imeApk) } != null }
+                        s.copy(etag = etag, izdaja = nova, napak = 0, naslednjaMs = zdaj + OBDOBJE_MS)
                     }
                     else -> napaka(s, zdaj)
                 }
@@ -203,16 +210,35 @@ object PosodobitevGithub {
         }
     }
 
-    private fun beri(vhod: InputStream?, najvec: Long): ByteArray? {
+    private fun beri(vhod: InputStream?, najvec: Long, rokMs: Long): ByteArray? {
         vhod ?: return null
+        val konec = System.nanoTime() + rokMs * 1_000_000
         val izid = java.io.ByteArrayOutputStream()
         val buf = ByteArray(16 * 1024)
         while (true) {
             val n = vhod.read(buf)
             if (n < 0) return izid.toByteArray()
-            if (izid.size() + n > najvec) return null
+            if (izid.size() + n > najvec || System.nanoTime() > konec) return null
             izid.write(buf, 0, n)
         }
+    }
+
+    /** SHA256SUMS izdaje, ce je podpis veljaven (oba z majhno mejo); null = nepodpisan. Napaka prenosa vrze IOException. */
+    private fun podpisanSeznam(http: Http, i: Izdaja, javniSpki: ByteArray): ByteArray? {
+        val vsote = prenesiBajte(http, i.urlVsot, NAJVEC_VSOT)
+        val podpis = prenesiBajte(http, i.urlPodpisa, 64)
+        return vsote.takeIf { podpisVeljaven(it, podpis, javniSpki) }
+    }
+
+    private fun prenesiBajte(http: Http, url: String, najvec: Long): ByteArray =
+        java.io.ByteArrayOutputStream().also { prenesiV(http, url, najvec, ROK_MALO_MS, it) }.toByteArray()
+
+    /** Ostanki prekinjenih prenosov v mapi posodobitve (samo nasa imena); true, ce ni ostalo nobenega. */
+    fun pobrisiOstanke(mapa: File): Boolean {
+        val datoteke = mapa.listFiles() ?: return !mapa.exists()
+        var vse = true
+        for (f in datoteke) if (f.isFile && OSTANEK.matches(f.name) && !f.delete() && f.exists()) vse = false
+        return vse
     }
 
     private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
@@ -221,8 +247,16 @@ object PosodobitevGithub {
      * Prenos z rocnimi preusmeritvami (najvec 4): zacetek samo github.com, vsak skok https na gostitelja s seznama, telo najvec
      * `najvec` bajtov. Vrne sha256 zapisane datoteke; ob napaki datoteka ne ostane in izjema gre klicatelju.
      */
-    fun prenesi(http: Http, url: String, cilj: File, najvec: Long): String {
+    fun prenesi(http: Http, url: String, cilj: File, najvec: Long, rokMs: Long = ROK_APK_MS): String = try {
+        cilj.outputStream().use { izhod -> prenesiV(http, url, najvec, rokMs, izhod).also { izhod.fd.sync() } }
+    } catch (e: Exception) {
+        cilj.delete()
+        throw e
+    }
+
+    private fun prenesiV(http: Http, url: String, najvec: Long, rokMs: Long, izhod: java.io.OutputStream): String {
         if (!dovoljenNaslov(url) || URI(url).host != "github.com") throw IOException("Nedovoljen naslov prenosa.")
+        val konec = System.nanoTime() + rokMs * 1_000_000
         var u = url
         repeat(NAJVEC_SKOKOV + 1) {
             if (!dovoljenNaslov(u)) throw IOException("Nedovoljen naslov prenosa.")
@@ -235,23 +269,16 @@ object PosodobitevGithub {
                     o.glave["content-length"]?.toLongOrNull()?.let { if (it > najvec) throw IOException("Datoteka je prevelika.") }
                     val vhod = o.telo ?: throw IOException("Prenos ni uspel.")
                     val md = MessageDigest.getInstance("SHA-256")
-                    try {
-                        cilj.outputStream().use { izhod ->
-                            val buf = ByteArray(64 * 1024)
-                            var skupaj = 0L
-                            while (true) {
-                                val n = vhod.read(buf)
-                                if (n < 0) break
-                                skupaj += n
-                                if (skupaj > najvec) throw IOException("Datoteka je prevelika.")
-                                md.update(buf, 0, n)
-                                izhod.write(buf, 0, n)
-                            }
-                            izhod.fd.sync()
-                        }
-                    } catch (e: Exception) {
-                        cilj.delete()
-                        throw e
+                    val buf = ByteArray(64 * 1024)
+                    var skupaj = 0L
+                    while (true) {
+                        val n = vhod.read(buf)
+                        if (n < 0) break
+                        skupaj += n
+                        if (skupaj > najvec) throw IOException("Datoteka je prevelika.")
+                        if (System.nanoTime() > konec) throw IOException("Prenos je trajal predolgo.")
+                        md.update(buf, 0, n)
+                        izhod.write(buf, 0, n)
                     }
                     return hex(md.digest())
                 }
@@ -271,34 +298,24 @@ object PosodobitevGithub {
     fun pripravi(http: Http, izdaja: Izdaja, mapa: File, enkratni: String, javniSpki: ByteArray = javniKljuc()): IzidPriprave {
         if (!ENKRATNI.matches(enkratni)) return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PRENOS)
         mapa.mkdirs()
-        val vsoteF = File(mapa, "lina-vsote-$enkratni.txt")
-        val podpisF = File(mapa, "lina-vsote-$enkratni.sig")
         val apkF = File(mapa, "lina-posodobitev-${izdaja.versionCode}-$enkratni.apk")
-        try {
-            try {
-                prenesi(http, izdaja.urlVsot, vsoteF, NAJVEC_VSOT)
-                prenesi(http, izdaja.urlPodpisa, podpisF, 64)
-            } catch (_: Exception) {
-                return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PRENOS)
-            }
-            val vsote = vsoteF.readBytes()
-            if (!podpisVeljaven(vsote, podpisF.readBytes(), javniSpki)) return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PODPIS)
-            val pricakovana = vsotaIzSeznama(String(vsote, Charsets.UTF_8), izdaja.imeApk) ?: return IzidPriprave.Zavrnjeno(RazlogPosodobitve.VSOTA)
-            val dobljena = try {
-                prenesi(http, izdaja.urlApk, apkF, NamestitevApk.NAJVEC_BAJTOV)
-            } catch (_: Exception) {
-                apkF.delete()
-                return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PRENOS)
-            }
-            if (dobljena != pricakovana) {
-                apkF.delete()
-                return IzidPriprave.Zavrnjeno(RazlogPosodobitve.VSOTA)
-            }
-            return IzidPriprave.Ok(apkF, izdaja.versionCode)
-        } finally {
-            vsoteF.delete()
-            podpisF.delete()
+        val vsote = try {
+            podpisanSeznam(http, izdaja, javniSpki) ?: return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PODPIS)
+        } catch (_: Exception) {
+            return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PRENOS)
         }
+        val pricakovana = vsotaIzSeznama(String(vsote, Charsets.UTF_8), izdaja.imeApk) ?: return IzidPriprave.Zavrnjeno(RazlogPosodobitve.VSOTA)
+        val dobljena = try {
+            prenesi(http, izdaja.urlApk, apkF, NamestitevApk.NAJVEC_BAJTOV)
+        } catch (_: Exception) {
+            apkF.delete()
+            return IzidPriprave.Zavrnjeno(RazlogPosodobitve.PRENOS)
+        }
+        if (dobljena != pricakovana) {
+            apkF.delete()
+            return IzidPriprave.Zavrnjeno(RazlogPosodobitve.VSOTA)
+        }
+        return IzidPriprave.Ok(apkF, izdaja.versionCode)
     }
 
     /** Arhiv mora nositi versionCode iz podpisanega imena izdaje in biti novejsi od namescene Line. */

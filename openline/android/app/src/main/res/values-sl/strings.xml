@@ -829,4 +829,5 @@
     <string name="update_err_other_key">Posodobitev je podpisana z drugim ključem kot nameščena Lina. Ni nameščeno (namestitev bi zahtevala odstranitev Line in izgubo nastavitev).</string>
     <string name="set_menu_update">Posodobitev</string>
     <string name="set_menu_update_desc">Nova različica Line z GitHuba</string>
+    <string name="update_downloading">Prenašam posodobitev z GitHuba …</string>
 </resources>

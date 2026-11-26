@@ -830,4 +830,5 @@
     <string name="update_err_other_key">The update is signed with a different key than the installed Lina. Not installed (installing it would require removing Lina and losing settings).</string>
     <string name="set_menu_update">Update</string>
     <string name="set_menu_update_desc">New Lina version from GitHub</string>
+    <string name="update_downloading">Downloading the update from GitHub…</string>
 </resources>

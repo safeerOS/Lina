@@ -627,7 +627,8 @@ class DialerActivity : Activity() {
         }
         // Naloga 28: posodobitev z GitHuba (stikalo privzeto vklopljeno); obvestilo odpre Nastavitve > Posodobitev.
         si.safeer.lina.asistent.PosodobitevLine.obZagonu(this)
-        odpriPosodobitev(intent)
+        // samo ob prvem odprtju: po zasuku zaslona namen ostane v getIntent() in ne sme znova odpreti zaslona
+        if (!poZasuku) odpriPosodobitev(intent)
     }
 
     /** Dotik obvestila »Na voljo je Lina X.Y.Z«: Nastavitve > Posodobitev z gumbom Posodobi. */

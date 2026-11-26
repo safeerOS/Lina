@@ -667,4 +667,10 @@
     <string name="update_err_other_key">L\'aggiornamento è firmato con una chiave diversa da quella della Lina installata. Non installato (servirebbe disinstallare Lina e perdere le impostazioni).</string>
     <string name="set_menu_update">Aggiornamento</string>
     <string name="set_menu_update_desc">Nuova versione di Lina da GitHub</string>
+    <string name="update_downloading">Download dell\'aggiornamento da GitHub…</string>
+    <string name="install_perm_needed">Per installare, Lina deve poter installare app. Si aprono le impostazioni del telefono per Lina: consenti l\'installazione da questa origine, poi torna indietro.</string>
+    <string name="install_perm_open">Apri impostazioni</string>
+    <string name="install_checking">Controllo di somma, pacchetto e firma…</string>
+    <string name="install_err_paket">Questo non è il pacchetto Lina. Non installato.</string>
+    <string name="install_confirm_system">Conferma l\'installazione nella finestra di sistema.</string>
 </resources>

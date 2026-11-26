@@ -109,40 +109,39 @@ class PosodobitevGithubTest {
     }
 
     @Test fun `preverba - novejsa izdaja, ETag, 304, odmik po napakah`() {
-        val h = LaznHttp(
-            mutableMapOf(
-                PosodobitevGithub.API to mutableListOf(
+        val h = github()
+        h.odgovori[PosodobitevGithub.API] = mutableListOf(
                     Triple(200, mapOf("etag" to "W/\"abc\""), izdajaJson().toByteArray()),
                     Triple(304, emptyMap(), null),
                     Triple(403, emptyMap(), "rate".toByteArray()),
                     Triple(429, emptyMap(), null),
                     Triple(200, emptyMap(), izdajaJson().toByteArray()),
-                ),
-            ),
-        )
+                )
         var s = PosodobitevGithub.StanjePreverbe()
-        s = PosodobitevGithub.preveri(h, s, namesceniCode = 214, zdaj = 1000)
+        s = PosodobitevGithub.preveri(h, s, namesceniCode = 214, zdaj = 1000, javniSpki = javni)
         assertEquals("0.2.15", s.izdaja?.razlicica)
         assertEquals(0, s.napak)
         assertEquals(1000 + PosodobitevGithub.OBDOBJE_MS, s.naslednjaMs)
-        assertNull(h.klici[0].second["If-None-Match"])
-        s = PosodobitevGithub.preveri(h, s, 214, 2000)
-        assertEquals("W/\"abc\"", h.klici[1].second["If-None-Match"])
+        val api = { h.klici.filter { it.first == PosodobitevGithub.API } }
+        assertNull(api()[0].second["If-None-Match"])
+        s = PosodobitevGithub.preveri(h, s, 214, 2000, javniSpki = javni)
+        assertEquals("W/\"abc\"", api()[1].second["If-None-Match"])
         assertEquals("0.2.15", s.izdaja?.razlicica, "304 obdrzi znano izdajo")
-        s = PosodobitevGithub.preveri(h, s, 214, 3000)
+        s = PosodobitevGithub.preveri(h, s, 214, 3000, javniSpki = javni)
         assertEquals(1, s.napak)
         assertEquals(3000 + 2 * PosodobitevGithub.OBDOBJE_MS, s.naslednjaMs, "po napaki ne prej kot odmik")
         assertEquals("0.2.15", s.izdaja?.razlicica, "napaka ne pozabi najdene izdaje")
-        s = PosodobitevGithub.preveri(h, s, 214, 4000)
+        s = PosodobitevGithub.preveri(h, s, 214, 4000, javniSpki = javni)
         assertEquals(2, s.napak)
         assertEquals(4000 + 4 * PosodobitevGithub.OBDOBJE_MS, s.naslednjaMs)
-        s = PosodobitevGithub.preveri(h, s, 215, 5000)
+        s = PosodobitevGithub.preveri(h, s, 215, 5000, javniSpki = javni)
         assertEquals(0, s.napak)
         assertNull(s.izdaja, "enaka versionCode ni posodobitev")
     }
 
     @Test fun `stanje preverbe prezivi zapis in branje (SharedPreferences), pokvarjen zapis da privzeto`() {
-        val s = PosodobitevGithub.preveri(github(), PosodobitevGithub.StanjePreverbe(), 214, 7).copy(obvescenaCode = 215)
+        val s = PosodobitevGithub.preveri(github(), PosodobitevGithub.StanjePreverbe(), 214, 7, javni).copy(obvescenaCode = 215)
+        assertNotNull(s.izdaja)
         assertEquals(s, PosodobitevGithub.StanjePreverbe.izNiza(s.vNiz()))
         assertEquals(PosodobitevGithub.StanjePreverbe(), PosodobitevGithub.StanjePreverbe.izNiza("{pokvarjeno"))
         assertEquals(PosodobitevGithub.StanjePreverbe(), PosodobitevGithub.StanjePreverbe.izNiza(null))
@@ -200,5 +199,70 @@ class PosodobitevGithubTest {
         assertEquals(PosodobitevGithub.RazlogPosodobitve.RAZLICICA, PosodobitevGithub.preveriRazlicico(arhiv = 216, izdaja = 215, namescena = 214))
         assertEquals(PosodobitevGithub.RazlogPosodobitve.RAZLICICA, PosodobitevGithub.preveriRazlicico(arhiv = 214, izdaja = 214, namescena = 214))
         assertEquals(PosodobitevGithub.RazlogPosodobitve.RAZLICICA, PosodobitevGithub.preveriRazlicico(arhiv = null, izdaja = 215, namescena = 214))
+    }
+
+    @Test fun `slepi S2 - nepodpisana ali nenasteta izdaja ni posodobitev, APK se ob preverbi ne prenese`() {
+        for ((opis, h) in listOf(
+            "tuj podpis" to github(podpis = ByteArray(64)),
+            "APK ni v seznamu" to "${"2".repeat(64)}  drugo.apk\n".toByteArray().let { v -> github(vsoteTelo = v, podpis = podpisi(v)) },
+        )) {
+            val s = PosodobitevGithub.preveri(h, PosodobitevGithub.StanjePreverbe(), 214, 1, javni)
+            assertNull(s.izdaja, opis)
+            assertEquals(0, s.napak, "$opis: ni napaka omrezja")
+            assertTrue(h.klici.none { it.first.endsWith(".apk") || it.first.endsWith("/apk") }, "$opis: APK se ne prenese")
+        }
+        val brez = github()
+        brez.odgovori[PosodobitevGithub.API] = mutableListOf(Triple(200, emptyMap(), izdajaJson(sredstva = listOf(ime, "SHA256SUMS")).toByteArray()))
+        assertNull(PosodobitevGithub.preveri(brez, PosodobitevGithub.StanjePreverbe(), 214, 1, javni).izdaja, "brez .sig")
+    }
+
+    @Test fun `slepi S1 - ETag z ne-ASCII ali nadzornimi znaki se ne shrani`() {
+        for (e in listOf("\"\u00e9\"", "\"a\u0001\"", "x".repeat(201))) {
+            val h = github()
+            h.odgovori[PosodobitevGithub.API] = mutableListOf(Triple(200, mapOf("etag" to e), izdajaJson().toByteArray()))
+            assertNull(PosodobitevGithub.preveri(h, PosodobitevGithub.StanjePreverbe(), 214, 1, javni).etag, e)
+        }
+        val h = github()
+        h.odgovori[PosodobitevGithub.API] = mutableListOf(Triple(200, mapOf("etag" to "W/\"ab-12\""), izdajaJson().toByteArray()))
+        assertEquals("W/\"ab-12\"", PosodobitevGithub.preveri(h, PosodobitevGithub.StanjePreverbe(), 214, 1, javni).etag)
+    }
+
+    /** Tok, ki steje branja: meja iz content-length mora zavrniti PRED branjem telesa. */
+    private class StetiTok(b: ByteArray) : java.io.InputStream() {
+        private val v = ByteArrayInputStream(b)
+        var branj = 0
+        override fun read(): Int { branj++; return v.read() }
+        override fun read(b: ByteArray, o: Int, l: Int): Int { branj++; return v.read(b, o, l) }
+    }
+
+    @Test fun `meja velikosti - content-length nad mejo se zavrne brez branja, telo brez glave se ustavi pri meji`() {
+        val mapa = Files.createTempDirectory("lina-pos").toFile()
+        val tok = StetiTok(ByteArray(5000))
+        val h1 = object : PosodobitevGithub.Http {
+            override fun get(url: String, glave: Map<String, String>) = PosodobitevGithub.OdgovorHttp(200, mapOf("content-length" to "5000"), tok)
+        }
+        assertNull(runCatching { PosodobitevGithub.prenesi(h1, osnova + ime, File(mapa, "a.apk"), 100) }.getOrNull())
+        assertEquals(0, tok.branj, "telo se ne bere")
+        val h2 = object : PosodobitevGithub.Http {
+            override fun get(url: String, glave: Map<String, String>) = PosodobitevGithub.OdgovorHttp(200, emptyMap(), ByteArrayInputStream(ByteArray(5000)))
+        }
+        assertNull(runCatching { PosodobitevGithub.prenesi(h2, osnova + ime, File(mapa, "b.apk"), 100) }.getOrNull(), "brez content-length")
+        assertFalse(File(mapa, "b.apk").exists())
+    }
+
+    @Test fun `skupni rok prenosa - po roku se prenos ustavi in datoteka ne ostane`() {
+        val mapa = Files.createTempDirectory("lina-pos").toFile()
+        assertNull(runCatching { PosodobitevGithub.prenesi(github(), osnova + ime, File(mapa, "c.apk"), 1_000_000, rokMs = 0) }.getOrNull())
+        assertFalse(File(mapa, "c.apk").exists())
+        assertNotNull(runCatching { PosodobitevGithub.prenesi(github(), osnova + ime, File(mapa, "d.apk"), 1_000_000) }.getOrNull(), "brez roka uspe")
+    }
+
+    @Test fun `ostanki prekinjenih prenosov se pobrisejo, tuje datoteke ostanejo`() {
+        val mapa = Files.createTempDirectory("lina-pos").toFile()
+        val nasi = listOf("lina-posodobitev-215-${"a".repeat(32)}.apk", "lina-vsote-${"b".repeat(32)}.txt", "lina-vsote-${"b".repeat(32)}.sig")
+        val tuji = listOf("lina-posodobitev-215.apk", "drugo.apk", "lina-gradnja.apk")
+        (nasi + tuji).forEach { File(mapa, it).writeText("x") }
+        assertTrue(PosodobitevGithub.pobrisiOstanke(mapa))
+        assertEquals(tuji.sorted(), mapa.list()!!.sorted())
     }
 }

@@ -33,6 +33,8 @@ object PosodobitevLine {
     private const val KANAL = "lina_posodobitev"
     private const val ID_OBVESTILA = 2801
     private const val ID_NALOGE = 2801
+    /** Periodicna naloga se sprozi v oknu (fleks) tudi malo pred 12 h: brez tolerance bi se vsaka druga preskocila. */
+    private const val TOLERANCA_NALOGE_MS = 3600_000L
     /** Namen iz obvestila: DialerActivity odpre Nastavitve > Posodobitev. */
     const val ODPRI = "si.safeer.lina.ODPRI_POSODOBITEV"
 
@@ -84,9 +86,10 @@ object PosodobitevLine {
      * Ena preverba (blokira; samo v ozadju). rocno = gumb »Preveri zdaj« (izkljucen stikalo in cas ne veljata). Obvestilo enkrat na
      * versionCode; ce ga sistem ne dovoli, ostane gumb v aplikaciji.
      */
-    @Synchronized fun preveriZdaj(c: Context, rocno: Boolean): PosodobitevGithub.StanjePreverbe {
+    @Synchronized fun preveriZdaj(c: Context, rocno: Boolean, izNaloge: Boolean = false): PosodobitevGithub.StanjePreverbe {
         val prej = stanje(c)
-        if (!rocno && (!samodejno(c) || System.currentTimeMillis() < prej.naslednjaMs)) return prej
+        val rok = prej.naslednjaMs - if (izNaloge) TOLERANCA_NALOGE_MS else 0L
+        if (!rocno && (!samodejno(c) || System.currentTimeMillis() < rok)) return prej
         var s = PosodobitevGithub.preveri(PosodobitevGithub.HttpsHttp(), prej, namesceniCode(c), System.currentTimeMillis())
         val i = s.izdaja
         if (i != null && s.obvescenaCode < i.versionCode && obvesti(c, i)) s = s.copy(obvescenaCode = i.versionCode)
@@ -116,7 +119,7 @@ class PosodobitevNaloga : JobService() {
     override fun onStartJob(p: JobParameters): Boolean {
         val ac = applicationContext
         Thread({
-            runCatching { PosodobitevLine.preveriZdaj(ac, false) }
+            runCatching { PosodobitevLine.preveriZdaj(ac, false, izNaloge = true) }
             jobFinished(p, false)
         }, "lina-posodobitev").start()
         return true
