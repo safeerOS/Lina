@@ -18,7 +18,7 @@ class NastavitveMeni(
     /** Nastavitve > O Lini: opozorilo (osebna raba, odgovornost, nadzor), vedno dosegljivo (24. 11. 2026). */
     private val odpriOLini: () -> Unit,
 ) {
-    enum class Podmeni { IME, MOZGANI, SPOMIN, ORODJA, KLICI, ZAPISKI, DOVOLJENJA, DOKUMENTI }
+    enum class Podmeni { IME, MOZGANI, SPOMIN, ORODJA, KLICI, ZAPISKI, DOVOLJENJA, DOKUMENTI, POSODOBITEV }
 
     private val koren: LinearLayout = a.findViewById(R.id.tabSettings)
     private val meni = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
@@ -28,6 +28,8 @@ class NastavitveMeni(
     private val dovoljenja = DovoljenjaPogled(a)
     /** Nastavitve > Dokumenti (lokalni indeks in OCR, 23. 11. 2026); plosca je zgrajena v kodi, brez postavitve XML. */
     lateinit var dokumenti: DokumentiPogled; private set
+    /** Nastavitve > Posodobitev (naloga 28): posodobitev Line z GitHuba brez racunalnika. */
+    lateinit var posodobitev: PosodobitevPogled; private set
 
     private fun dp(v: Int) = (v * a.resources.displayMetrics.density).toInt()
 
@@ -64,6 +66,7 @@ class NastavitveMeni(
         novaPlosca(Podmeni.DOVOLJENJA).addView(dovoljenja.koren)
         koren.removeView(asist)
         dokumenti = DokumentiPogled(a, novaPlosca(Podmeni.DOKUMENTI))
+        posodobitev = PosodobitevPogled(a, novaPlosca(Podmeni.POSODOBITEV))
         zgradiMeni()
         koren.addView(meni, 0)
         for (p in Podmeni.entries) plosce[p]?.let { koren.addView(it) }
@@ -113,6 +116,7 @@ class NastavitveMeni(
         Podmeni.ZAPISKI -> R.string.set_menu_notes to R.string.set_menu_notes_desc
         Podmeni.DOVOLJENJA -> R.string.set_menu_permissions to R.string.set_menu_permissions_desc
         Podmeni.DOKUMENTI -> R.string.set_menu_docs to R.string.set_menu_docs_desc
+        Podmeni.POSODOBITEV -> R.string.set_menu_update to R.string.set_menu_update_desc
     }
 
     private fun vrstica(naslov: Int, opis: Int, klik: () -> Unit): View = LinearLayout(a).apply {
@@ -156,6 +160,7 @@ class NastavitveMeni(
         meni.visibility = View.GONE
         for ((k, v) in plosce) v.visibility = if (k == p) View.VISIBLE else View.GONE
         if (p == Podmeni.DOKUMENTI) dokumenti.osvezi()
+        if (p == Podmeni.POSODOBITEV) posodobitev.osvezi()
         koren.rootView.findViewById<View>(R.id.root)?.scrollTo(0, 0)
     }
 

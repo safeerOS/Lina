@@ -648,4 +648,23 @@
     <string name="docs_chat_send">Invia a Lina</string>
     <string name="docs_chat_send_prefix">Dai miei documenti (ricerca locale):</string>
     <string name="install_err_global">Il download dell\'APK tramite Global Link è stato interrotto. Sulla rete di casa il download è affidabile; riprova a casa o tocca di nuovo Installa.</string>
+    <!-- Naloga 28: posodobitev Line z GitHuba -->
+    <string name="update_channel">Aggiornamenti di Lina</string>
+    <string name="update_available">Lina %1$s è disponibile</string>
+    <string name="update_notify_text">Tocca per aprire Aggiornamento. Impostazioni e chiavi restano.</string>
+    <string name="update_auto">Controlla automaticamente gli aggiornamenti</string>
+    <string name="update_auto_note">All\'avvio e ogni 12 ore (solo con rete) Lina chiede a GitHub se esiste una nuova versione. Installa solo quando tocchi Aggiorna.</string>
+    <string name="update_button">Aggiorna</string>
+    <string name="update_check_now">Controlla ora</string>
+    <string name="update_checking">Controllo di GitHub …</string>
+    <string name="update_check_failed">Il controllo non è riuscito (rete o GitHub). Lina riproverà più tardi.</string>
+    <string name="update_none">Hai la versione più recente.</string>
+    <string name="update_found">È disponibile una nuova versione.</string>
+    <string name="update_err_signature">La firma della versione non è valida. Non installato.</string>
+    <string name="update_err_checksum">Il file non corrisponde alla somma firmata. Non installato.</string>
+    <string name="update_err_download">Il download non è riuscito. Riprova più tardi.</string>
+    <string name="update_err_version">La versione nel file non corrisponde alla pubblicazione o non è più recente. Non installato.</string>
+    <string name="update_err_other_key">L\'aggiornamento è firmato con una chiave diversa da quella della Lina installata. Non installato (servirebbe disinstallare Lina e perdere le impostazioni).</string>
+    <string name="set_menu_update">Aggiornamento</string>
+    <string name="set_menu_update_desc">Nuova versione di Lina da GitHub</string>
 </resources>

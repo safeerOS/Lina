@@ -811,4 +811,23 @@
     <string name="docs_source_page_fmt">%1$s, page %2$d</string>
     <string name="docs_chat_send">Send to Lina</string>
     <string name="docs_chat_send_prefix">From my documents (local search):</string>
+    <!-- Naloga 28: posodobitev Line z GitHuba -->
+    <string name="update_channel">Lina updates</string>
+    <string name="update_available">Lina %1$s is available</string>
+    <string name="update_notify_text">Tap to open Update. Your settings and keys stay.</string>
+    <string name="update_auto">Automatically check for updates</string>
+    <string name="update_auto_note">At startup and every 12 hours (only with a network) Lina asks GitHub whether a new version exists. It installs only when you tap Update.</string>
+    <string name="update_button">Update</string>
+    <string name="update_check_now">Check now</string>
+    <string name="update_checking">Checking GitHub …</string>
+    <string name="update_check_failed">The check failed (network or GitHub). Lina will try again later.</string>
+    <string name="update_none">You have the latest version.</string>
+    <string name="update_found">A new version is available.</string>
+    <string name="update_err_signature">The release signature is not valid. Not installed.</string>
+    <string name="update_err_checksum">The file does not match the signed checksum. Not installed.</string>
+    <string name="update_err_download">The download failed. Try again later.</string>
+    <string name="update_err_version">The version in the file does not match the release or is not newer. Not installed.</string>
+    <string name="update_err_other_key">The update is signed with a different key than the installed Lina. Not installed (installing it would require removing Lina and losing settings).</string>
+    <string name="set_menu_update">Update</string>
+    <string name="set_menu_update_desc">New Lina version from GitHub</string>
 </resources>

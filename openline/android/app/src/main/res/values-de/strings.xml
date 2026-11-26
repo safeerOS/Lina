@@ -648,4 +648,23 @@
     <string name="docs_chat_send">An Lina senden</string>
     <string name="docs_chat_send_prefix">Aus meinen Dokumenten (lokale Suche):</string>
     <string name="install_err_global">Der APK-Download über Global Link wurde unterbrochen. Im Heimnetz ist der Download zuverlässig; versuchen Sie es zu Hause erneut oder tippen Sie noch einmal auf Installieren.</string>
+    <!-- Naloga 28: posodobitev Line z GitHuba -->
+    <string name="update_channel">Lina-Updates</string>
+    <string name="update_available">Lina %1$s ist verfügbar</string>
+    <string name="update_notify_text">Tippen, um Aktualisierung zu öffnen. Einstellungen und Schlüssel bleiben erhalten.</string>
+    <string name="update_auto">Automatisch nach Updates suchen</string>
+    <string name="update_auto_note">Beim Start und alle 12 Stunden (nur mit Netzwerk) fragt Lina GitHub nach einer neuen Version. Installiert wird erst, wenn Sie Aktualisieren tippen.</string>
+    <string name="update_button">Aktualisieren</string>
+    <string name="update_check_now">Jetzt prüfen</string>
+    <string name="update_checking">GitHub wird geprüft …</string>
+    <string name="update_check_failed">Die Prüfung ist fehlgeschlagen (Netzwerk oder GitHub). Lina versucht es später erneut.</string>
+    <string name="update_none">Sie haben die neueste Version.</string>
+    <string name="update_found">Eine neue Version ist verfügbar.</string>
+    <string name="update_err_signature">Die Signatur der Veröffentlichung ist ungültig. Nicht installiert.</string>
+    <string name="update_err_checksum">Die Datei stimmt nicht mit der signierten Prüfsumme überein. Nicht installiert.</string>
+    <string name="update_err_download">Der Download ist fehlgeschlagen. Später erneut versuchen.</string>
+    <string name="update_err_version">Die Version in der Datei passt nicht zur Veröffentlichung oder ist nicht neuer. Nicht installiert.</string>
+    <string name="update_err_other_key">Das Update ist mit einem anderen Schlüssel signiert als die installierte Lina. Nicht installiert (sonst müsste Lina entfernt werden und die Einstellungen gingen verloren).</string>
+    <string name="set_menu_update">Aktualisierung</string>
+    <string name="set_menu_update_desc">Neue Lina-Version von GitHub</string>
 </resources>

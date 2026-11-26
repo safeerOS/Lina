@@ -648,4 +648,23 @@
     <string name="docs_chat_send">Envoyer à Lina</string>
     <string name="docs_chat_send_prefix">De mes documents (recherche locale) :</string>
     <string name="install_err_global">Le téléchargement de l\'APK via Global Link a été interrompu. Sur le réseau domestique, le téléchargement est fiable ; réessayez à la maison ou appuyez encore sur Installer.</string>
+    <!-- Naloga 28: posodobitev Line z GitHuba -->
+    <string name="update_channel">Mises à jour de Lina</string>
+    <string name="update_available">Lina %1$s est disponible</string>
+    <string name="update_notify_text">Touchez pour ouvrir Mise à jour. Vos réglages et clés sont conservés.</string>
+    <string name="update_auto">Rechercher automatiquement les mises à jour</string>
+    <string name="update_auto_note">Au démarrage et toutes les 12 heures (uniquement avec un réseau), Lina demande à GitHub si une nouvelle version existe. Elle installe seulement quand vous touchez Mettre à jour.</string>
+    <string name="update_button">Mettre à jour</string>
+    <string name="update_check_now">Vérifier maintenant</string>
+    <string name="update_checking">Vérification de GitHub …</string>
+    <string name="update_check_failed">La vérification a échoué (réseau ou GitHub). Lina réessaiera plus tard.</string>
+    <string name="update_none">Vous avez la dernière version.</string>
+    <string name="update_found">Une nouvelle version est disponible.</string>
+    <string name="update_err_signature">La signature de la version est invalide. Non installé.</string>
+    <string name="update_err_checksum">Le fichier ne correspond pas à la somme signée. Non installé.</string>
+    <string name="update_err_download">Le téléchargement a échoué. Réessayez plus tard.</string>
+    <string name="update_err_version">La version du fichier ne correspond pas à la publication ou n\'est pas plus récente. Non installé.</string>
+    <string name="update_err_other_key">La mise à jour est signée avec une autre clé que la Lina installée. Non installé (il faudrait désinstaller Lina et perdre les réglages).</string>
+    <string name="set_menu_update">Mise à jour</string>
+    <string name="set_menu_update_desc">Nouvelle version de Lina depuis GitHub</string>
 </resources>

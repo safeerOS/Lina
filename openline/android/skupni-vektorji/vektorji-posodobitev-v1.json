@@ -1,0 +1,7 @@
+{
+  "opis": "Naloga 28: SHA256SUMS izdaje, podpisan s PREIZKUSNIM kljucem Ed25519 (zasebni del zavrzen). Surov 64-bajtni podpis. Isti vektor preverita posodobitev.server.ts in PosodobitevGithub.kt.",
+  "javniSpkiB64": "MCowBQYDK2VwAyEAMfcubjkSxrhhnLIDOkmlvpBieQF/RZm2TRBe5zHMaZo=",
+  "vsebinaB64": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZiAgbGluYS1hbmRyb2lkXzAuMi4xNV8yMTUuYXBrCjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEgIGxpbmEtbHVwaW5hXzAuMi4xNV9hbWQ2NC5kZWIK",
+  "podpisB64": "WCPBiFpUr30npVNboRruS/xxkIxuRXiVSLtWY0AjH4b5z9y2cAAX/LnyWaQNCj1bHXtxoIdSjCG2N+NtnFXABg==",
+  "odtisPravegaKljuca": "a3ae3bcb5b6de559199ee5212bf04d9b25c9e45ea499b635f7869821971a0b56"
+}

@@ -810,4 +810,23 @@
     <string name="docs_source_page_fmt">%1$s, str. %2$d</string>
     <string name="docs_chat_send">Pošlji Lini</string>
     <string name="docs_chat_send_prefix">Iz mojih dokumentov (lokalno iskanje):</string>
+    <!-- Naloga 28: posodobitev Line z GitHuba -->
+    <string name="update_channel">Posodobitve Line</string>
+    <string name="update_available">Na voljo je Lina %1$s</string>
+    <string name="update_notify_text">Tapnite za Posodobitev. Nastavitve in ključi ostanejo.</string>
+    <string name="update_auto">Samodejno preveri posodobitve</string>
+    <string name="update_auto_note">Ob zagonu in vsakih 12 ur (samo z omrežjem) Lina vpraša GitHub, ali je na voljo nova različica. Namesti šele, ko tapnete Posodobi.</string>
+    <string name="update_button">Posodobi</string>
+    <string name="update_check_now">Preveri zdaj</string>
+    <string name="update_checking">Preverjam GitHub …</string>
+    <string name="update_check_failed">Preverba ni uspela (omrežje ali GitHub). Lina bo poskusila pozneje.</string>
+    <string name="update_none">Imate najnovejšo različico.</string>
+    <string name="update_found">Na voljo je nova različica.</string>
+    <string name="update_err_signature">Podpis izdaje ni veljaven. Ni nameščeno.</string>
+    <string name="update_err_checksum">Datoteka se ne ujema s podpisano vsoto. Ni nameščeno.</string>
+    <string name="update_err_download">Prenos ni uspel. Poskusite pozneje.</string>
+    <string name="update_err_version">Različica v datoteki se ne ujema z izdajo ali ni novejša. Ni nameščeno.</string>
+    <string name="update_err_other_key">Posodobitev je podpisana z drugim ključem kot nameščena Lina. Ni nameščeno (namestitev bi zahtevala odstranitev Line in izgubo nastavitev).</string>
+    <string name="set_menu_update">Posodobitev</string>
+    <string name="set_menu_update_desc">Nova različica Line z GitHuba</string>
 </resources>

@@ -335,6 +335,7 @@ class DialerActivity : Activity() {
             return
         }
         if (sprejmiDeljenje(intent)) return
+        if (odpriPosodobitev(intent)) return
         fillAdvancedFields()
         applyDialIntent(intent)
         applyPairingIntent(intent)
@@ -624,6 +625,17 @@ class DialerActivity : Activity() {
             odpriNastavitveKljucev()   // prijava Google je v Nastavitvah
             samostojniPogled.obdelajPovezavo(intent.data.toString())
         }
+        // Naloga 28: posodobitev z GitHuba (stikalo privzeto vklopljeno); obvestilo odpre Nastavitve > Posodobitev.
+        si.safeer.lina.asistent.PosodobitevLine.obZagonu(this)
+        odpriPosodobitev(intent)
+    }
+
+    /** Dotik obvestila »Na voljo je Lina X.Y.Z«: Nastavitve > Posodobitev z gumbom Posodobi. */
+    private fun odpriPosodobitev(i: Intent?): Boolean {
+        if (i?.action != si.safeer.lina.asistent.PosodobitevLine.ODPRI) return false
+        showTab(Zavihek.NASTAVITVE)
+        nastavitveMeni.odpri(si.safeer.lina.asistent.NastavitveMeni.Podmeni.POSODOBITEV)
+        return true
     }
 
     /** Kljuci so v Nastavitvah (lastnik 19. 11. 2026: zavihek Lina je pogovor): odpri jih in drsi do ploscice kljucev. */

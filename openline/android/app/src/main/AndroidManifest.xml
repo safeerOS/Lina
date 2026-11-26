@@ -160,6 +160,12 @@
                 android:resource="@xml/tipka_slusalk_storitev" />
         </service>
 
+        <!-- Naloga 28: periodicna preverba izdaje Line na GitHubu (JobScheduler, samo branje; namesti sele lastnik). -->
+        <service
+            android:name=".asistent.PosodobitevNaloga"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <service
             android:name=".shell.PairingService"
             android:exported="false"
