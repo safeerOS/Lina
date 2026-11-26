@@ -13,7 +13,7 @@ import { setupOwner } from "./auth.server.ts";
 import { nastaviOgrevanjeZaPreizkus } from "./ogrevanje-klica.server.ts";
 import { nastaviToplePovezave } from "./povezave.server.ts";
 import { activeBrain, checkBrain, izberiModelPogovora, preslikajUmaknjeneModele, readBrain, saveBrain } from "./keys.server.ts";
-import { callProvider, callProviderZOrodji, PRAZEN_ODGOVOR, preizkusiModel, pozabiZamenjaveModelov, providerRequest } from "./providers.ts";
+import { callProvider, callProviderZOrodji, NEPRICAKOVAN_ODGOVOR, PRAZEN_ODGOVOR, preizkusiModel, pozabiZamenjaveModelov, providerRequest } from "./providers.ts";
 import { DEFAULT_BRAIN_MODELS, naslednikUmaknjenegaClaude, PRIPOROCENI_MODELI, UMAKNJENI_MODELI_CLAUDE } from "./types.ts";
 
 const KOREN = mkdtempSync(path.join(tmpdir(), "lina-naloga-29-"));
@@ -33,6 +33,8 @@ beforeEach(() => {
   // N5: saveBrain po 1 s ogreje povezave (topel bazen obide globalThis.fetch v pravo omrezje) - v preizkusu brez ogrevanja
   nastaviOgrevanjeZaPreizkus(async () => {});
   nastaviToplePovezave(false);
+  // brez omrezja tudi za korake pred laznim fetch (saveBrain, izbira asistentke)
+  brezOmrezja();
   pozabiZamenjaveModelov();
   for (const ime of OKOLJE) {
     shranjeno[ime] = process.env[ime];
@@ -142,6 +144,11 @@ describe("naloga 29: umaknjeni modeli Claude", () => {
     assert.deepEqual(await preslikajUmaknjeneModele(dir, "2026-11-30"), []);
     assert.equal(await readFile(pot, "utf8"), "{ pokvarjeno");
     assert.equal((await activeBrain(dir))?.model, "claude-sonnet-4-5");
+    for (const vsebina of ["[]", '"x"', '{"ponudniki":"abc"}']) {
+      await writeFile(pot, vsebina, { mode: 0o600 });
+      assert.deepEqual(await preslikajUmaknjeneModele(dir, "2026-11-30"), [], vsebina);
+      assert.equal(await readFile(pot, "utf8"), vsebina);
+    }
   });
 
   it("zagon programa poklice preslikavo pred orkestratorjem in asistentko", () => {
@@ -195,16 +202,29 @@ describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
       ["claude", { content: [], stop_reason: "end_turn" }],
       ["claude", { content: "napacna oblika", stop_reason: "end_turn" }],
       ["claude", { content: [{ type: "thinking", thinking: "..." }], stop_reason: "max_tokens" }],
-      ["gemini", { promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { promptTokenCount: 3 } }],
-      ["openai", { error: { message: "upstream error", code: 502 } }],
-      ["openai", { podjetje: "X", vrstice: [] }],
-      ["openai", [1, 2]],
     ];
     for (const [provider, telo] of primeri) {
       const zajeto = lazni(200, JSON.stringify(telo));
       const r = await klic(provider);
       assert.equal(zajeto.length, 1, "zahteva gre skozi lazni fetch, ne v omrezje");
       assert.deepEqual(r, { ok: false, sporocilo: PRAZEN_ODGOVOR }, `${provider} ${JSON.stringify(telo)}`);
+    }
+  });
+
+  it("napaka s 200 in JSON brez ovojnice -> nepricakovan odgovor (ne prazen), razlog ponudnika ohranjen", async () => {
+    await nova();
+    const primeri: Array<["gemini" | "openai" | "claude", unknown, string]> = [
+      ["gemini", { promptFeedback: { blockReason: "SAFETY" }, usageMetadata: { promptTokenCount: 3 } }, NEPRICAKOVAN_ODGOVOR],
+      ["openai", { error: { message: "upstream\nerror", code: 502 } }, `${NEPRICAKOVAN_ODGOVOR}: upstream error`],
+      ["openai", { podjetje: "X", vrstice: [] }, NEPRICAKOVAN_ODGOVOR],
+      ["openai", [1, 2], NEPRICAKOVAN_ODGOVOR],
+      ["claude", {}, NEPRICAKOVAN_ODGOVOR],
+      ["claude", null, NEPRICAKOVAN_ODGOVOR],
+    ];
+    for (const [provider, telo, sporocilo] of primeri) {
+      const zajeto = lazni(200, JSON.stringify(telo));
+      assert.deepEqual(await klic(provider), { ok: false, sporocilo }, JSON.stringify(telo));
+      assert.equal(zajeto.length, 1);
     }
   });
 
@@ -232,5 +252,17 @@ describe("naloga 29 D3: prazna ovojnica ponudnika ni uspeh", () => {
     const izid = await checkBrain({ provider: "claude", model: "claude-opus-5-5" }, token, dir);
     assert.equal(zajeto.length, 1);
     assert.deepEqual(izid, { ok: true, sporocilo: "Ključ deluje." });
+  });
+
+  it("N1 meja: preverba kljuca in preizkus modela NE sprejmeta {error} s 200 ali {} kot delujoc kljuc", async () => {
+    const { dir, token } = await nova();
+    await saveBrain({ provider: "claude", model: "claude-opus-5-5", key: KLJUC }, token, dir);
+    for (const telo of [{ error: { code: 401, message: "invalid x-api-key" } }, {}]) {
+      lazni(200, JSON.stringify(telo));
+      const izid = await checkBrain({ provider: "claude", model: "claude-opus-5-5" }, token, dir);
+      assert.equal(izid.ok, false, JSON.stringify(telo));
+      lazni(200, JSON.stringify(telo));
+      assert.equal((await preizkusiModel({ provider: "claude", model: "claude-opus-5-5", key: KLJUC, text: "da", maxTokens: 8, vsebinaKlica: true })).ok, false);
+    }
   });
 });

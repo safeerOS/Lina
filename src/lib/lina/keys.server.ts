@@ -442,9 +442,12 @@ async function zamenjajModelZdaj(
 export async function preslikajUmaknjeneModele(dir?: string, danes = new Date().toISOString().slice(0, 10)): Promise<string[]> {
   const root = resolveDataDir(dir);
   // N3: pokvarjen ponudniki.json bi preberiPonudnike prebral kot prazen in zamenjava bi ga prepisala brez drugih kljucev
-  try {
-    await readJsonFile<PonudnikiFile>(root, PONUDNIKI_DATOTEKA);
-  } catch {
+  const surovo = await readJsonFile<unknown>(root, PONUDNIKI_DATOTEKA).then(
+    (v) => v,
+    () => false as const,
+  );
+  const jePredmet = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (surovo === false || (surovo !== null && (!jePredmet(surovo) || ((surovo as PonudnikiFile).ponudniki !== undefined && !jePredmet((surovo as PonudnikiFile).ponudniki))))) {
     return [];
   }
   const saved = await readFileState(root);
@@ -465,7 +468,7 @@ export async function preslikajUmaknjeneModele(dir?: string, danes = new Date().
   return zamenjani;
 }
 
-/** Preverba z 8 zetoni: prazna ovojnica s 200 (model je porabil zetone za razmislek) pomeni, da kljuc in model delata (N1). */
+/** Preverba z 8 zetoni: prazna OVOJNICA s 200 (model je porabil zetone za razmislek) pomeni, da kljuc in model delata (N1); {error} in drug JSON ne. */
 function prazenJeOdziv(r: RezultatPonudnika): RezultatPonudnika {
   return !r.ok && r.sporocilo === PRAZEN_ODGOVOR ? { ok: true, text: "" } : r;
 }
@@ -774,16 +777,18 @@ export async function checkBrain(
     const project = gcpProject(input.project ?? saved?.project);
     const location = gcpLocation(input.location ?? saved?.location);
     if (!project) return { ok: false, sporocilo: "Vpišite ID projekta Google Cloud." };
-    const result = await callProvider({
-      provider,
-      model,
-      key: "",
-      project,
-      location,
-      text: "Odgovori samo z besedo: da.",
-      maxTokens: 8,
-      brezZamenjave: true,
-    });
+    const result = prazenJeOdziv(
+      await callProvider({
+        provider,
+        model,
+        key: "",
+        project,
+        location,
+        text: "Odgovori samo z besedo: da.",
+        maxTokens: 8,
+        brezZamenjave: true,
+      }),
+    );
     if (!result.ok) return { ok: false, sporocilo: result.sporocilo };
     return { ok: true, sporocilo: "Prijava Google Cloud deluje." };
   }

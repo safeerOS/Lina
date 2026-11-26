@@ -123,8 +123,10 @@ export type RezultatPonudnika =
   | { ok: true; text: string; opozorilo?: string; povratek?: string }
   | { ok: false; sporocilo: string; vzrok?: VzrokNapake };
 
-/** D3 (naloga 29): ponudnik je vrnil JSON (ovojnico ali drug predmet) brez besedila. */
+/** D3 (naloga 29): ponudnik je vrnil ovojnico (choices/content/candidates) brez besedila. */
 export const PRAZEN_ODGOVOR = "Ponudnik je vrnil prazen odgovor.";
+/** D3: ponudnik je s 200 vrnil napako ali JSON brez ovojnice (npr. promptFeedback.blockReason). */
+export const NEPRICAKOVAN_ODGOVOR = "Ponudnik je vrnil nepričakovan odgovor";
 
 /** Pravi vzrok zavrnitve ponudnika (lastnik 24. 11. 2026: uporabnik mora izvedeti pravi vzrok, ne »model: <ime>«). */
 export type VzrokNapake = "model" | "kljuc" | "dobroimetje" | "omejitev";
@@ -732,18 +734,25 @@ async function callProviderNeposredno(vhod: ProviderCall): Promise<RezultatPonud
     } catch {
       /* Kratek odgovor je lahko golo besedilo. */
     }
-    // D3 (naloga 29): JSON predmet ali polje brez besedila (prazna ovojnica, promptFeedback, {error} s 200) ni uspeh in surovi JSON
-    // nikoli ne gre naprej kot odgovor. Lasten streznik (custom) ima svojo pot in sem ne pride.
-    if (parsed !== null && typeof parsed === "object") {
-      const telo = parsed as Parameters<typeof readText>[0];
-      if (!Array.isArray(parsed)) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(telo), "pogovor");
+    // D3 (naloga 29): JSON brez besedila ni uspeh in surovi JSON nikoli ne gre naprej kot odgovor. Lasten streznik (custom) ima svojo
+    // pot (callLastni) in sem ne pride. Samo prazna OVOJNICA je PRAZEN_ODGOVOR (preverbe z 8 zetoni jo smejo sprejeti); {error} s 200
+    // in drug JSON sta napaka, ki je nobena preverba ne sprejme.
+    if (parsed !== undefined && (parsed === null || typeof parsed === "object")) {
+      const predmet = parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+      const telo = (predmet ?? {}) as Parameters<typeof readText>[0];
+      if (predmet) zabeleziPorabo(input.provider, cleanModel(input.model, input.provider), razberiPorabo(telo), "pogovor");
       let iz = "";
       try {
-        iz = Array.isArray(parsed) ? "" : readText(telo);
+        iz = predmet ? readText(telo) : "";
       } catch {
         /* napacna oblika ovojnice = prazno */
       }
-      if (!iz) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
+      if (!iz) {
+        if (predmet && ["choices", "content", "candidates"].some((k) => Object.hasOwn(predmet, k))) return { ok: false, sporocilo: PRAZEN_ODGOVOR };
+        const napaka = predmet?.error as { message?: unknown } | undefined;
+        const razlog = typeof napaka?.message === "string" ? `: ${napaka.message.replace(/\s+/g, " ").slice(0, 160)}` : "";
+        return { ok: false, sporocilo: hideSecret(`${NEPRICAKOVAN_ODGOVOR}${razlog}`, secret) };
+      }
       text = iz;
     }
     return { ok: true, text: hideSecret(text.slice(0, input.audio ? 2000 : mejaZnakov(input.najvecZnakov)), secret) };
