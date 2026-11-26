@@ -403,7 +403,8 @@ export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
     && (t.vrataPreverjena = zdaj, await prostaVrata(t.zeleniNaslov, t.zelenaVrata));
   // naloga 21 (N1): tekoci streznik doma se ustavi, ce omrezje NI odobreno (npr. isti naslov za drugim prehodom) v dveh zaporednih
   // preverbah; »ne-vem« ga ne ustavi
-  if (t && t.rezerva === null) t.neodobreno = odobritev(n, t.naslov, v, p) === "ne" ? t.neodobreno + 1 : 0;
+  // stevec ponastavi samo »da«: izmenicna »ne« in »ne-vem« v tujem omrezju streznika ne pustita teci (slepi pregled 21b, 2)
+  if (t && t.rezerva === null) { const o = odobritev(n, t.naslov, v, p); t.neodobreno = o === "da" ? 0 : o === "ne" ? t.neodobreno + 1 : t.neodobreno; }
   const treba = !t || vrata
     || ((t.rezerva === "naslov" || t.rezerva === "omrezje") && odtisOmrezja(v, p, t.zeleniNaslov) !== t.omrezje)
     || (t.rezerva === null && (!naslovNaVmesniku(t.naslov, v) || t.neodobreno >= 2));
@@ -663,8 +664,12 @@ export async function shraniAsistenta(token: string | null, vnos: { vklop?: unkn
   if (typeof vnos.naslov === "string" && !zasebniNaslovi(vmesniki()).includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
   let odobri: string | null = null;
   if (vnos.odobriOmrezje === true && typeof vnos.naslov === "string" && !naslovZanke(vnos.naslov)) {
-    odobri = omrezjeNaslova(vnos.naslov, vmesniki(), await prehodi());
-    if (odobri === null) throw new Error("Omrezja se ni mogoce prepoznati (prehod se ni znan). Poskusite znova cez nekaj sekund.");
+    const p = await prehodi();
+    odobri = omrezjeNaslova(vnos.naslov, vmesniki(), p);
+    // slepi pregled 21b (5): sistem brez podatka o prehodih (Windows) omrezja nikoli ne prepozna - ne obljubi ponovnega poskusa
+    if (odobri === null) throw new Error(Object.keys(p).length === 0
+      ? "Ta racunalnik omrezja ne zna prepoznati (ni podatka o prehodu); seznanjanje telefona doma tu se ni podprto. Global Link deluje."
+      : "Omrezja se ni mogoce prepoznati (prehod se ni znan). Poskusite znova cez nekaj sekund.");
   }
   // isti zaklep kot seznam naprav (A-12): branje-sprememba-zapis se ne prepleta z odlociSeznanitev ali odstraniNapravo
   await naSeznamu(async () => {

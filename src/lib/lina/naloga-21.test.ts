@@ -138,7 +138,10 @@ test("N1: tekoci streznik doma - menjava prehoda (drugo omrezje) ga ustavi v dru
     assert.equal(await preveriNaslovAsistenta(o.dir), false, "MAC se je vrnil: stevec gre na 0");
     prehod = MAC_TUJE;
     assert.equal(await preveriNaslovAsistenta(o.dir), false);
-    assert.equal(await preveriNaslovAsistenta(o.dir), true, "druga zaporedna preverba v tujem omrezju");
+    prehod = "";
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "»ne-vem« stevca ne ponastavi (slepi pregled 21b, 2)");
+    prehod = MAC_TUJE;
+    assert.equal(await preveriNaslovAsistenta(o.dir), true, "druga preverba v tujem omrezju");
     const s = await stanjeAsistenta(o.token, o.dir);
     assert.equal(s.tece, false);
     assert.equal(s.napakaKoda, "omrezje");
@@ -171,10 +174,10 @@ test("prehodiVmesnikov: privzeti prehod iz /proc/net/route (little-endian) in MA
   assert.equal(omrezjeNaslova("192.168.1.20", {}, {}), null);
   // slepi pregled 21 (2): brez prehodov (Windows) ali vmesnik brez privzete poti - samo podomrezje bi bilo enako v tujem omrezju, zato ne vemo
   assert.equal(omrezjeNaslova("192.168.1.20", { Ethernet: [v4("192.168.1.20")] }, {}), null);
-  // slepi pregled 21 (4): kabel in Wi-Fi v isti mrezi, ARP prehoda samo na kablu - isti IP prehoda da MAC tudi Wi-Fi vmesniku
+  // slepi pregled 21b (1): MAC prehoda samo z ISTEGA vmesnika (MAC z drugega vmesnika z istim IP prehoda bi tuje omrezje razvrstil kot domace)
   const route2 = "Iface\tDestination\tGateway\nenp1s0\t00000000\t0101A8C0\nwlp2s0\t00000000\t0101A8C0\n";
   const arp2 = "IP address HW type Flags HW address Mask Device\n192.168.1.1 0x1 0x2 aa:bb:cc:00:00:01 * enp1s0\n";
-  assert.deepEqual(await prehodiVmesnikov(async (p) => (p.endsWith("route") ? route2 : arp2)), { enp1s0: MAC_DOMA, wlp2s0: MAC_DOMA });
+  assert.deepEqual(await prehodiVmesnikov(async (p) => (p.endsWith("route") ? route2 : arp2)), { enp1s0: MAC_DOMA, wlp2s0: "" });
 });
 
 test("slepi pregled 21 (5): ob menjavi neodobrenega omrezja med rezervo predlog naslova ni zastarel", async () => {
@@ -318,6 +321,17 @@ test("N2: zapora kode po viru - tujec z enim naslovom zaklene samo sebe; prava s
   assert.notEqual(kljucVira("fd00:1:2:4::1"), kljucVira("fd00:1:2:3::1"));
   assert.equal(kljucVira("192.168.1.66"), "192.168.1.66");
   assert.equal(kljucVira("::ffff:192.168.1.66"), "::ffff:192.168.1.66");
+  // skozi SeznanitevSKodo: napadalec, ki za vsak krog vzame nov IPv6 iz iste /64, se zaklene kot en vir (slepi pregled 21b, 4)
+  const skupna2 = new VarovalkaKode({ ura: () => t / 1000, krat: SKUPNO_KRAT });
+  const k2 = new SeznanitevSKodo({ varovalka: skupna2, odtis: () => "ab".repeat(32), zdaj: () => t, koda: () => "482913" });
+  const izidi6: string[] = [];
+  for (let i = 0; i < 25; i++) {
+    try { k2.odpri(); const z = k2.zacni(`fd00:1:2:3::${(i + 1).toString(16)}`, ID, "Tujec", false); k2.spake(z.pair_id, ID, pb()); izidi6.push("ok"); }
+    catch (e) { if (!(e instanceof NapakaKode)) throw e; izidi6.push(e.koda); }
+    t += 1000;
+  }
+  assert.ok(izidi6.includes("seznanitev_zaprta"), izidi6.join(","));
+  assert.equal(skupna2.zaprto(), false);
 });
 
 test("N2: »Dodaj« za cakajoci telefon je izrecen klik - ime in id sta vidna, gumb ni privzet (ni v obrazcu, brez autoFocus)", async () => {

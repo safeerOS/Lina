@@ -253,9 +253,8 @@ export async function prehodiVmesnikov(beri: (pot: string) => Promise<string> = 
   for (const vrsta of arp.split("\n").slice(1)) {
     const f = vrsta.trim().split(/\s+/); // IP, HW type, Flags, HW address, Mask, Device
     if (f.length >= 6 && f[2] !== "0x0" && /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(f[3]) && !/^(00:){5}00$/.test(f[3])) {
+      // samo MAC na ISTEM vmesniku (slepi pregled 21b, 1): MAC z drugega vmesnika z istim IP prehoda bi tuje omrezje razvrstil kot domace
       mac.set(`${f[5]}|${f[0]}`, f[3].toLowerCase());
-      // slepi pregled 21 (4): kabel in Wi-Fi v isti mrezi - ARP prehoda je samo na vmesniku, ki nosi promet; isti IP prehoda = isti MAC
-      if (!mac.has(`*|${f[0]}`)) mac.set(`*|${f[0]}`, f[3].toLowerCase());
     }
   }
   const izid: Record<string, string> = {};
@@ -263,7 +262,7 @@ export async function prehodiVmesnikov(beri: (pot: string) => Promise<string> = 
     const f = vrsta.trim().split(/\s+/); // Iface, Destination, Gateway (hex, little-endian) ...
     if (f.length < 3 || f[1] !== "00000000" || !/^[0-9a-f]{8}$/i.test(f[2]) || f[2] === "00000000" || f[0] in izid) continue;
     const ip = [6, 4, 2, 0].map((i) => parseInt(f[2].slice(i, i + 2), 16)).join(".");
-    izid[f[0]] = mac.get(`${f[0]}|${ip}`) ?? mac.get(`*|${ip}`) ?? "";
+    izid[f[0]] = mac.get(`${f[0]}|${ip}`) ?? "";
   }
   return izid;
 }
