@@ -462,7 +462,7 @@ export async function preslikajUmaknjeneModele(dir?: string, danes = new Date().
     return novo ? [[staro, novo] as const] : [];
   });
   // N4: eno obvestilo za vse zamenjave (vsak zapis zamenjave prepise prejsnjega)
-  const obvestilo = `Anthropic je umaknil ${pari.map(([s, n]) => `${s} (zdaj ${n})`).join(", ")}; Lina uporablja naslednika.`;
+  const obvestilo = `Anthropic umika ali je umaknil model ${pari.map(([s, n]) => `${s} (zdaj ${n})`).join(", ")}; Lina uporablja naslednika.`;
   const zamenjani: string[] = [];
   for (const [staro, novo] of pari) if (await zamenjajModel("claude", staro, novo, obvestilo, root)) zamenjani.push(staro);
   return zamenjani;

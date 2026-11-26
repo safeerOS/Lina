@@ -14,7 +14,7 @@ import { nastaviOgrevanjeZaPreizkus } from "./ogrevanje-klica.server.ts";
 import { nastaviToplePovezave } from "./povezave.server.ts";
 import { activeBrain, checkBrain, izberiModelPogovora, preslikajUmaknjeneModele, readBrain, saveBrain } from "./keys.server.ts";
 import { callProvider, callProviderZOrodji, NEPRICAKOVAN_ODGOVOR, PRAZEN_ODGOVOR, preizkusiModel, pozabiZamenjaveModelov, providerRequest } from "./providers.ts";
-import { DEFAULT_BRAIN_MODELS, naslednikUmaknjenegaClaude, PRIPOROCENI_MODELI, UMAKNJENI_MODELI_CLAUDE } from "./types.ts";
+import { DEFAULT_BRAIN_MODELS, DNI_PRED_UMIKOM, naslednikUmaknjenegaClaude, PRIPOROCENI_MODELI, UMAKNJENI_MODELI_CLAUDE } from "./types.ts";
 
 const KOREN = mkdtempSync(path.join(tmpdir(), "lina-naloga-29-"));
 process.on("exit", () => rmSync(KOREN, { recursive: true, force: true }));
@@ -78,8 +78,12 @@ describe("naloga 29: umaknjeni modeli Claude", () => {
       assert.ok(!kljuci.includes(z.naslednik), `${k} -> ${z.naslednik}`);
       assert.match(z.umik, /^\d{4}-\d{2}-\d{2}$/, k);
     }
-    assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-4-5", "2026-11-29"), null, "pred umikom model se dela");
+    assert.equal(DNI_PRED_UMIKOM, 7);
+    assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-4-5", "2026-11-22"), null, "vec kot 7 dni pred umikom izbira ostane");
+    assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-4-5", "2026-11-23"), "claude-sonnet-5-5", "7 dni pred umikom");
     assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-4-5", "2026-11-30"), "claude-sonnet-5-5");
+    assert.equal(naslednikUmaknjenegaClaude("claude-opus-4-5", "2027-01-14"), null);
+    assert.equal(naslednikUmaknjenegaClaude("claude-opus-4-5", "2027-01-15"), "claude-opus-5-5", "prek meje meseca/leta");
     assert.equal(naslednikUmaknjenegaClaude("toString", "2030-01-01"), null, "lastnosti predmeta niso modeli");
     assert.equal(naslednikUmaknjenegaClaude("claude-sonnet-5-5", "2030-01-01"), null);
   });
@@ -98,7 +102,7 @@ describe("naloga 29: umaknjeni modeli Claude", () => {
     const claude = pogled.shranjeni?.find((p) => p.provider === "claude");
     assert.equal(claude?.model, "claude-sonnet-5-5", "ponudnik");
     assert.ok(!claude?.modeli.includes("claude-sonnet-4-5"));
-    assert.match(pogled.zamenjavaModela ?? "", /umaknil claude-sonnet-4-5 \(zdaj claude-sonnet-5-5\)/, "obvestilo lastniku");
+    assert.match(pogled.zamenjavaModela ?? "", /umaknil model claude-sonnet-4-5 \(zdaj claude-sonnet-5-5\)/, "obvestilo lastniku");
     assert.deepEqual(await preslikajUmaknjeneModele(dir, "2026-11-30"), [], "drugi zagon nic ne spremeni");
   });
 
@@ -106,12 +110,12 @@ describe("naloga 29: umaknjeni modeli Claude", () => {
     const { dir, token } = await nova();
     await saveBrain({ provider: "claude", model: "claude-sonnet-4-5", key: KLJUC }, token, dir);
     brezOmrezja();
-    assert.deepEqual(await preslikajUmaknjeneModele(dir, "2026-11-29"), []);
+    assert.deepEqual(await preslikajUmaknjeneModele(dir, "2026-11-22"), []);
     assert.equal((await activeBrain(dir))?.model, "claude-sonnet-4-5");
     assert.equal((await readBrain(token, dir)).zamenjavaModela, undefined);
     const drugi = await nova();
     await saveBrain({ provider: "claude", model: "claude-opus-4-5", key: KLJUC }, drugi.token, drugi.dir);
-    assert.deepEqual(await preslikajUmaknjeneModele(drugi.dir, "2026-12-01"), [], "opus 4.5 dela do 22. 1. 2027");
+    assert.deepEqual(await preslikajUmaknjeneModele(drugi.dir, "2027-01-14"), [], "opus 4.5 dela do 22. 1. 2027");
     assert.equal((await activeBrain(drugi.dir))?.model, "claude-opus-4-5");
     const tretji = await nova();
     await saveBrain({ provider: "claude", model: "claude-sonnet-5-5", key: KLJUC }, tretji.token, tretji.dir);

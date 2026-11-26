@@ -508,7 +508,7 @@ export const PRIPOROCENI_MODELI: Record<Exclude<BrainProvider, "custom">, readon
 
 /**
  * Umaknjeni modeli Claude in naslednik po uradni tabeli Anthropic (platform.claude.com/docs/en/about-claude/model-deprecations,
- * prebrano 26. 11. 2026). `umik` = datum umika; pred njim model se dela in lastnikova izbira ostane. Samo ID-ji, ki jih tabela
+ * prebrano 26. 11. 2026). `umik` = datum umika; preslikava velja DNI_PRED_UMIKOM pred njim (prej lastnikova izbira ostane). Samo ID-ji, ki jih tabela
  * izrecno nasteje (claude-sonnet-4, claude-opus-4-1 brez datuma tabela ne omenja: zanje velja zamenjava ob 404).
  * claude-mythos-preview nima naslednika v tabeli, zato ga ni.
  */
@@ -525,10 +525,19 @@ export const UMAKNJENI_MODELI_CLAUDE: Readonly<Record<string, { naslednik: strin
   "claude-3-haiku-20240307": { naslednik: "claude-haiku-4-5-20251001", umik: "2026-04-20" },
 };
 
-/** Naslednik modela Claude, ki je na dan `danes` (YYYY-MM-DD) ze umaknjen; null = model se dela ali ni v tabeli. */
+/**
+ * Preslikava velja 7 dni pred umikom: preslikava tece samo ob zagonu, pot z orodji (orkestrator) pa nima zamenjave ob 404 - Lina,
+ * zagnana teden pred umikom in neprekinjeno tekoca cez datum, bi sicer naloge z orodji izgubila do ponovnega zagona.
+ */
+export const DNI_PRED_UMIKOM = 7;
+
+/** Naslednik modela Claude, ki ga ponudnik na dan `danes` (YYYY-MM-DD) umika (najvec DNI_PRED_UMIKOM pred umikom) ali ga je umaknil; null = ni. */
 export function naslednikUmaknjenegaClaude(model: string, danes: string): string | null {
   const z = Object.hasOwn(UMAKNJENI_MODELI_CLAUDE, model) ? UMAKNJENI_MODELI_CLAUDE[model] : undefined;
-  return z && danes >= z.umik ? z.naslednik : null;
+  if (!z) return null;
+  const od = new Date(`${z.umik}T00:00:00Z`);
+  od.setUTCDate(od.getUTCDate() - DNI_PRED_UMIKOM);
+  return danes >= od.toISOString().slice(0, 10) ? z.naslednik : null;
 }
 
 /**
