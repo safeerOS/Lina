@@ -1,0 +1,172 @@
+/**
+ * NALOGA-35 na racunalniku s pravo podatkovno mapo: prehod obstojecih kljucev, izmenjava s telefonom (ovojnica para), oddaljen
+ * izbris, tuja naprava, vec kljucev istega ponudnika in izbira, ki je prejet zapis ne spremeni. Brez omrezja; kljuci so izmisljeni.
+ */
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, test } from "node:test";
+import { setupOwner } from "./auth.server.ts";
+import { activeBrain, readBrain, saveBrain } from "./keys.server.ts";
+import { javniKljucPara, kljucPara, noviParKljucev, zZice, zaZico, type ZapisKljuca, type ZapisNaZici } from "./kljuci-mozganov.ts";
+import {
+  DATOTEKA_KLJUCEV,
+  dodajKljucMozganov,
+  izmenjajKljuce,
+  odstraniKljucMozganov,
+  pregledKljucev,
+  preimenujKljucMozganov,
+  uporabiKljucMozganov,
+} from "./kljuci-mozganov.server.ts";
+
+const KOREN = mkdtempSync(path.join(tmpdir(), "lina-n35-"));
+process.on("exit", () => rmSync(KOREN, { recursive: true, force: true }));
+const OKOLJE = ["XAI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENROUTER_API_KEY", "LINA_DATA"];
+const shranjeno: Record<string, string | undefined> = {};
+beforeEach(() => {
+  for (const ime of OKOLJE) {
+    shranjeno[ime] = process.env[ime];
+    delete process.env[ime];
+  }
+});
+afterEach(() => {
+  for (const ime of OKOLJE) {
+    if (shranjeno[ime] === undefined) delete process.env[ime];
+    else process.env[ime] = shranjeno[ime];
+  }
+});
+
+const K1 = "AIzaTEST-racunalnik-1111";
+const K2 = "AIzaTEST-telefon-2222";
+const K3 = "sk-TEST-openai-3333";
+const TEL = "n-0123456789abcdef";
+
+async function nova() {
+  const dir = await mkdtemp(path.join(KOREN, "d-"));
+  process.env.LINA_DATA = dir;
+  const token = await setupOwner("geslo-test-1234", dir);
+  return { dir, token };
+}
+
+/** Telefon na zici: zapise ovije s kljucem para, odgovor odpre. */
+function telefon() {
+  const par = noviParKljucev();
+  return {
+    par,
+    async izmenjaj(dir: string, zapisi: ZapisKljuca[], javniR: string | null, dovoljene = new Set([TEL]), zdaj = Date.now()) {
+      const k = javniR ? kljucPara(par.zasebni, javniKljucPara(javniR)!, TEL) : null;
+      const naZici: ZapisNaZici[] = k ? zapisi.map((z) => zaZico(z, k, "telefon-racunalnik")) : [];
+      const odg = await izmenjajKljuce(TEL, par.javni, naZici, dovoljene, dir, { zdaj: () => zdaj });
+      const kk = kljucPara(par.zasebni, javniKljucPara(odg.javni)!, TEL);
+      return { odg, zapisi: odg.zapisi.map((z) => zZice(z, kk, "racunalnik-telefon")).filter((z): z is ZapisKljuca => z !== null) };
+    },
+  };
+}
+
+test("naloga 35 (racunalnik): prehod - obstojeci kljuc ostane, telefon ga dobi v ovojnici; datoteka 0600 brez kljuca v cistem besedilu", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const { odg, zapisi } = await t.izmenjaj(dir, [], null);
+  assert.equal(zapisi.length, 1);
+  assert.equal(zapisi[0].vrednost, K1);
+  assert.equal(zapisi[0].ponudnik, "gemini");
+  assert.ok(!JSON.stringify(odg).includes(K1), "kljuc ne sme biti v odgovoru v cistem besedilu");
+  const datoteka = await readFile(path.join(dir, DATOTEKA_KLJUCEV), "utf8");
+  assert.ok(!datoteka.includes(K1));
+  if (process.platform !== "win32") assert.equal(statSync(path.join(dir, DATOTEKA_KLJUCEV)).mode & 0o777, 0o600);
+  assert.equal((await activeBrain(dir))?.key, K1, "mozgani za klice nespremenjeni");
+});
+
+test("naloga 35 (racunalnik): nov kljuc s telefona zapolni prazno mesto ponudnika, izbira za klice ostane", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const z: ZapisKljuca = { id: "aaaaaaaaaaaaaaaa", ponudnik: "openai", oznaka: "OpenAI telefon", cas: Date.now(), naprava: TEL, izbrisan: false, prej: "", vrednost: K3 };
+  const drugi = await t.izmenjaj(dir, [z], prvi.odg.javni);
+  assert.ok(drugi.zapisi.some((x) => x.id === z.id && x.vrednost === K3));
+  const javno = await readBrain(token, dir);
+  assert.equal(javno.provider, "gemini", "klici ostanejo na gemini");
+  assert.ok(javno.shranjeni?.some((p) => p.provider === "openai" && p.namig === "3333"));
+  const p = await pregledKljucev(dir);
+  assert.ok(p.kljuci.some((k) => k.oznaka === "OpenAI telefon" && k.namig === "…3333" && k.vUporabi));
+  assert.ok(!JSON.stringify(p).includes(K3), "vmesnik nikoli ne dobi celega kljuca");
+});
+
+test("naloga 35 (racunalnik): izbris s telefona odstrani kljuc v uporabi (vidno obvestilo, brez samodejnega preklopa)", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const g = prvi.zapisi[0];
+  const grob: ZapisKljuca = { ...g, cas: Date.now(), naprava: TEL, izbrisan: true, prej: `${g.cas}/${g.naprava}`, vrednost: "" };
+  await t.izmenjaj(dir, [grob], prvi.odg.javni);
+  assert.equal(await activeBrain(dir), null, "brez kljuca ni mozganov (ne drug ponudnik)");
+  assert.equal((await readBrain(token, dir)).provider, "gemini", "izbira ponudnika za klice ostane");
+  assert.deepEqual((await pregledKljucev(dir)).odstranjeni, ["gemini"]);
+});
+
+test("naloga 35 (racunalnik): tuja (neseznanjena) naprava ne dobi nicesar in nic ne spremeni", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  await assert.rejects(t.izmenjaj(dir, [], null, new Set(["n-ffffffffffffffff"])), /ni-dovoljen/);
+  assert.equal((await activeBrain(dir))?.key, K1);
+});
+
+test("naloga 35 (racunalnik): prejet zapis z neznanim ponudnikom ali dodatnim poljem se prezre; izbira asistentke ostane", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const zdaj = Date.now();
+  const slabi = [
+    { id: "bbbbbbbbbbbbbbbb", ponudnik: "omniroute", oznaka: "x", cas: zdaj, naprava: TEL, izbrisan: false, prej: "", vrednost: K3 },
+    { id: "cccccccccccccccc", ponudnik: "openai", oznaka: "x", cas: zdaj, naprava: TEL, izbrisan: false, prej: "", vrednost: K3, naslov: "https://x.invalid" },
+  ] as unknown as ZapisKljuca[];
+  const drugi = await t.izmenjaj(dir, slabi, prvi.odg.javni);
+  assert.equal(drugi.zapisi.length, 1);
+  const javno = await readBrain(token, dir);
+  assert.ok(!javno.shranjeni?.some((p) => p.provider === "openai" || p.provider === "omniroute"));
+});
+
+test("naloga 35 (racunalnik): vec kljucev istega ponudnika z oznako; uporabi, preimenuj, odstrani", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  let p = await dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Gemini sluzba", kljuc: K2 }, dir);
+  assert.equal(p.kljuci.filter((k) => k.ponudnik === "gemini").length, 2);
+  assert.equal((await activeBrain(dir))?.key, K1, "drugi kljuc istega ponudnika ne zamenja kljuca v uporabi");
+  await assert.rejects(dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Dvojnik", kljuc: K2 }, dir), /že shranjen/);
+  const drugi = p.kljuci.find((k) => k.oznaka === "Gemini sluzba")!;
+  await uporabiKljucMozganov(drugi.id, dir);
+  assert.equal((await activeBrain(dir))?.key, K2);
+  p = await preimenujKljucMozganov(drugi.id, "Gemini podjetje", dir);
+  assert.ok(p.kljuci.some((k) => k.oznaka === "Gemini podjetje" && k.vUporabi));
+  const prvi = p.kljuci.find((k) => !k.vUporabi)!;
+  p = await odstraniKljucMozganov(prvi.id, dir);
+  assert.equal(p.kljuci.length, 1);
+  assert.equal((await activeBrain(dir))?.key, K2, "odstranitev kljuca, ki ni v uporabi, ne spremeni mozganov");
+  p = await odstraniKljucMozganov(drugi.id, dir);
+  assert.equal(p.kljuci.length, 0);
+  assert.equal(await activeBrain(dir), null);
+  assert.deepEqual(p.odstranjeni, [], "lokalna odstranitev ni obvestilo »z druge naprave«");
+  const t = telefon();
+  const { zapisi } = await t.izmenjaj(dir, [], null);
+  assert.ok(zapisi.every((z) => z.izbrisan), "odstranitev gre telefonu kot grob");
+  void token;
+});
+
+test("naloga 35 (racunalnik): kljuc, ki ga lastnik zamenja v Mozganih, gre telefonu kot sprememba istega zapisa", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  await saveBrain({ provider: "gemini", key: K2 }, token, dir);
+  const drugi = await t.izmenjaj(dir, [], prvi.odg.javni);
+  assert.equal(drugi.zapisi.length, 1);
+  assert.equal(drugi.zapisi[0].id, prvi.zapisi[0].id);
+  assert.equal(drugi.zapisi[0].vrednost, K2);
+});
