@@ -139,9 +139,9 @@ class Naloga24Test {
         assertTrue(k.contains("val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null, seznanjen = AsistentShramba.beri(context) != null) ?: return"), "koncaj prek stroja (krog 2 N7: seznanitev)")
         assertEquals(1, Regex("""shrambaNaloge\.vzemiRocno\(\)""").findAll(k).count(), "rocno vzame samo lastnikov vzem")
         assertTrue(k.contains("shrambaNaloge.porabiRocno(vnos)"), "krog 2 N3")
-        // CR3/CR6, 26t: nit po odgovoru (ne glede na zaslon) poslje dolgovan /ustavi; dolg se poravna samo s 202 ali 404
+        // CR3/CR6, 26t: nit po odgovoru (ne glede na zaslon) poslje dolgovan /ustavi; dolg se poravna samo s 202
         assertTrue(Regex("""\n\s+CakanjeSeje\.ustaviPoPreklicu\(izid\)\?\.takeIf \{ shrambaNaloge\.dolgujeUstavitev\(it\) \}\?\.let \{ posljiUstavitve\(\) \}\n(\s*//[^\n]*\n)*\s+naGlavni \{ koncajCakanje""").containsMatchIn(k), "CR3 nit")
-        assertTrue(k.contains("if (izPreklica && (odg is OdgovorLine.Ok || (odg is OdgovorLine.Napaka && odg.status == 404))) shrambaNaloge.ustavitevPotrjena(id)"), "poravnava dolga")
+        assertTrue(k.contains("if (izPreklica && odg is OdgovorLine.Ok) shrambaNaloge.ustavitevPotrjena(id)"), "poravnava dolga samo z 202")
         assertEquals(1, Regex("""posljiUstavitev\([^)]*izPreklica = true\)""").findAll(k).count(), "krog 2 N5: ustavitev ob preklicu samo iz posljiUstavitve")
         // »Pozabi racunalnik« brise pod istim zaklepom
         assertTrue(app("asistent/AsistentShramba.kt").contains("synchronized(si.safeer.lina.samostojna.NalogaRacunalnika.ZAKLEP)"), "pozabi pod zaklepom")

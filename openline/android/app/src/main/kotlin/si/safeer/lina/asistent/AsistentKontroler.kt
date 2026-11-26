@@ -742,9 +742,9 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             val odg = if (pov == null || podpis == null || posiljatelj == null) OdgovorLine.Nedosegljiva
                 else pov.ustavi(AsistentProtokol.teloUstavitve(id, posiljatelj, cas, enkratni, podpis))
             pov?.zapri()
-            // naloga 26t: dolgovan /ustavi je poravnan, ko ga racunalnik sprejme (202; za id, ki ga se nima, ga zapise v grob) ali naloge
-            // ne pozna (404); 403 (starejsa Lina pred sprejemom), nedosegljiv ali neznan izid ostane za naslednji poskus
-            if (izPreklica && (odg is OdgovorLine.Ok || (odg is OdgovorLine.Napaka && odg.status == 404))) shrambaNaloge.ustavitevPotrjena(id)
+            // naloga 26t: dolgovan /ustavi je poravnan SAMO, ko ga racunalnik sprejme (202; za id, ki ga se nima, ga zapise v grob).
+            // 403 (starejsa Lina pred sprejemom), 404, nedosegljiv ali neznan izid ostane za naslednji poskus (TLS je pripet na Lino tudi prek releja)
+            if (izPreklica && odg is OdgovorLine.Ok) shrambaNaloge.ustavitevPotrjena(id)
             // slepi pregled 24 krog 2 N5: ustavitev ob preklicu (morda pred sprejemom, 403) ne pise napake druge, nove naloge
             if (!izPreklica) naGlavni { napaka = NapakaLine.sporocilo(odg) }
         }.start()

@@ -206,7 +206,7 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
     @Suppress("UNUSED_PARAMETER")
     fun zaUstavitev(zdaj: Long): List<String> = stanje().zaUstaviti.map { it.id }
 
-    /** Racunalnik je /ustavi sprejel (202) ali naloge ne pozna vec (404). */
+    /** Racunalnik je /ustavi sprejel (202). */
     fun ustavitevPotrjena(id: String) {
         spremeni { s -> s.copy(zaUstaviti = s.zaUstaviti.filter { it.id != id }) to Unit }
     }
