@@ -257,16 +257,19 @@ class KljuciMozganovTest {
 
     @Test
     fun s4NeberljivaShrambaNiPrviZagon() {
+        var pisal = false
         val pokvarjen = object : ShranjevalnikKljuca {
             override fun preberi(): KljucGemini? = null
-            override fun shrani(k: KljucGemini) = error("ne sme pisati")
+            override fun shrani(k: KljucGemini) { pisal = true } // brez izjeme: zapis bi prepisal neberljiv pravi zapis
             override fun izbrisi() = error("ne sme brisati")
         }
         val s = ShrambaUskladitve(pokvarjen) { true }
         assertNull(s.preberi())
+        assertFalse(pisal, "neberljiv zapis se ne prepise z novim praznim stanjem")
         val sloti = Sloti().also { it.m["gemini"] = K1 }
         assertFalse(SinhronKljucev.izmenjaj(s, sloti, "n-aaaaaaaaaaaaaaaa", { 1000 }) { error("ne sme poslati") })
         assertEquals("napaka", SinhronKljucev.dodaj(s, sloti, "n-aaaaaaaaaaaaaaaa", 1000, "gemini", "x", K2))
+        assertFalse(pisal)
     }
 
     @Test
