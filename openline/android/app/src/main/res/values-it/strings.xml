@@ -673,4 +673,21 @@
     <string name="install_checking">Controllo di somma, pacchetto e firma…</string>
     <string name="install_err_paket">Questo non è il pacchetto Lina. Non installato.</string>
     <string name="install_confirm_system">Conferma l\'installazione nella finestra di sistema.</string>
+    <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
+    <string name="keys_sync_title">Chiavi IA su tutti i dispositivi</string>
+    <string name="keys_sync_note">Una chiave aggiunta, modificata o rimossa su questo o su un altro dispositivo associato a Lina viene inviata cifrata a tutti i tuoi dispositivi. Sono mostrati solo l\'etichetta e gli ultimi 4 caratteri.</string>
+    <string name="keys_sync_ok">OK</string>
+    <string name="keys_sync_label_hint">Etichetta (es. Gemini lavoro)</string>
+    <string name="keys_sync_add_fmt">Aggiungi chiave per %1$s</string>
+    <string name="keys_sync_err_key">La chiave deve avere 8–400 caratteri senza spazi.</string>
+    <string name="keys_sync_err_label">Inserisci un\'etichetta (fino a 40 caratteri).</string>
+    <string name="keys_sync_err_exists">Questa chiave è già salvata o non esiste più.</string>
+    <string name="keys_sync_err">Impossibile salvare la chiave. Riprova.</string>
+    <string name="keys_sync_removed_fmt">La chiave per %1$s è stata rimossa su un altro dispositivo. Lina non ha più una chiave per questo fornitore: aggiungine una nuova o usane un\'altra dall\'elenco.</string>
+    <string name="keys_sync_empty">Nessuna chiave salvata.</string>
+    <string name="keys_sync_row_fmt">%1$s · %2$s · %3$s</string>
+    <string name="keys_sync_row_used_fmt">%1$s · %2$s · %3$s (in uso su questo telefono)</string>
+    <string name="keys_sync_use">Usa su questo telefono</string>
+    <string name="keys_sync_remove">Rimuovi</string>
+    <string name="keys_sync_remove_confirm_fmt">Rimuovere la chiave «%1$s» su tutti i tuoi dispositivi?</string>
 </resources>

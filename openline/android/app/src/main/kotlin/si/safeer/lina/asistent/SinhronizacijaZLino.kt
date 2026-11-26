@@ -37,7 +37,8 @@ object SinhronizacijaZLino {
         if (!teka.compareAndSet(false, true)) return
         zadnjiZagon = zdaj
         Thread({
-            try { runCatching { izvedi(app) } } finally { teka.set(false) }
+            // NALOGA-35: kljuci za mozgane ob istih sprozilcih (odprtje, odgovor, konec klica); doma ali prek Global Linka
+            try { runCatching { izvedi(app) }; runCatching { UskladitevKljucev.izvedi(app) } } finally { teka.set(false) }
         }, "lina-sinhron").start()
     }
 

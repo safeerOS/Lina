@@ -55,6 +55,8 @@ class IzbirnaPovezava(
         po { it.dogodki(id, posiljatelj, cas, enkratni, podpis, od, cakaS) }
     override fun klici(telo: String) = po(oddaljeno = false) { it.klici(telo) }
     override fun sinhron(telo: String) = po(oddaljeno = false) { it.sinhron(telo) }
+    // NALOGA-35: kljuci tudi zunaj doma (POTI_ODDALJENO na racunalniku); vrednosti so v ovojnici para, rele vidi samo sifrat.
+    override fun kljuci(telo: String) = po { it.kljuci(telo) }
     override fun odobritev(telo: String) = po { it.odobritev(telo) }
     override fun ustavi(telo: String) = po { it.ustavi(telo) }
     override fun nadaljuj(telo: String) = po { it.nadaljuj(telo) }

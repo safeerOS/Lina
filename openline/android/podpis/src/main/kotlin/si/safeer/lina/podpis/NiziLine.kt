@@ -35,6 +35,8 @@ object NiziLine {
     const val PREDPONA_DOGODKI = "safeer-lina-dogodki-v1"
     const val PREDPONA_KLICI = "safeer-lina-klici-v1"
     const val PREDPONA_SINHRON = "safeer-lina-sinhron-v1"
+    /** NALOGA-35: izmenjava kljucev za mozgane (POST /kljuci); locen namen, da podpis sinhronizacije ne velja zanjo. */
+    const val PREDPONA_KLJUCEV = "safeer-lina-kljuci-v1"
     const val PREDPONA_DODATKI_STANJE = "safeer-lina-dodatki-stanje-v1"
     const val PREDPONA_DODATEK = "safeer-lina-dodatek-v1"
     /** Dodatki na racunalniku, ki jih telefon sme videti in preklopiti (kanal-claude.ts DODATKI_TELEFONA, 23. 11. 2026). */
@@ -134,6 +136,12 @@ object NiziLine {
     fun nizSinhron(posiljatelj: String, cas: Long, enkratni: String, zgostitev: String): String? {
         if (!skupno(posiljatelj, cas, enkratni) || !ZGOSTITEV.matches(zgostitev)) return null
         return "$PREDPONA_SINHRON\n$posiljatelj\n$cas\n$enkratni\n$zgostitev"
+    }
+
+    /** NALOGA-35 (kanal-claude.ts nizKljucev): podpis pokriva zgostitev vsebine (javni kljuc para in zapisi v ovojnicah). */
+    fun nizKljucev(posiljatelj: String, cas: Long, enkratni: String, zgostitev: String): String? {
+        if (!skupno(posiljatelj, cas, enkratni) || !ZGOSTITEV.matches(zgostitev)) return null
+        return "$PREDPONA_KLJUCEV\n$posiljatelj\n$cas\n$enkratni\n$zgostitev"
     }
 
     /** Branje stanja dodatkov na racunalniku (kanal-claude.ts nizStanjaDodatkov). */

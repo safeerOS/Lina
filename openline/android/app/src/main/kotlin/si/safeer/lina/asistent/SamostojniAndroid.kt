@@ -85,6 +85,11 @@ class KeystoreShranjevalnik private constructor(
 
     private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
 
+    companion object {
+        /** NALOGA-35: stanje uskladitve kljucev za mozgane (z vrednostmi in kljucem para) - svoj AES kljuc in zapis. */
+        fun zaKljuceMozganov(context: Context) = KeystoreShranjevalnik(context, "lina_kljuci_mozganov", "kljuci_mozganov_stanje")
+    }
+
     private fun kljucAes(ustvari: Boolean): SecretKey? {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }

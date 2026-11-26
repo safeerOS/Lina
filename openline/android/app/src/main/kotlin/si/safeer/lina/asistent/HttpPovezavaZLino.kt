@@ -83,6 +83,7 @@ class HttpPovezavaZLino(
     override fun seznani(telo: String) = post("seznani", telo)
     override fun klici(telo: String) = post("seznani/klici", telo)
     override fun sinhron(telo: String) = post("sinhron", telo)
+    override fun kljuci(telo: String) = post("kljuci", telo)
     override fun dodatek(telo: String) = post("dodatek", telo, spreminja = true)
 
     // Seznanitev s kodo (pogodba @fdd787b); /koda/zacni gre prek OdtisPrvePovezave, drugo pripeto na videni odtis.

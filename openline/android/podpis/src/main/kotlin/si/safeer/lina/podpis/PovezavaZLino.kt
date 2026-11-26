@@ -18,6 +18,8 @@ interface PovezavaZLino {
     fun klici(telo: String): OdgovorLine
     /** POST /sinhron (20. 11. 2026): podpisana izmenjava klicev, pogovora in navodil z racunalnikom. */
     fun sinhron(telo: String): OdgovorLine
+    /** POST /kljuci (NALOGA-35): kljuci za mozgane v ovojnicah para; starejsa Lina poti nima (404). Tudi prek Global Linka. */
+    fun kljuci(telo: String): OdgovorLine = OdgovorLine.Napaka(404, "ni")
     fun odobritev(telo: String): OdgovorLine
     fun ustavi(telo: String): OdgovorLine
     /** POST /nadaljuj (23. 11. 2026): odgovor v isto nalogo; starejsa Lina poti nima (404). */
