@@ -157,3 +157,11 @@ Celotno pravilo: projekt-3/AGENTS.md »Lina gradi APK in deb na GitHubu«. Na te
   Racunalnik polja `mape` v GET /agent-naloge SE NE POSILJA: dokler ga ni, telefon ponudi samo mape, ki so ze v vrsti.
   »Zazeni zdaj« za zamujeno nalogo s telefona: SE NI (ni poti na racunalniku). Ura »ob uri« se v oknu pred podpisom pokaze z dnem
   (danes / jutri / datum). NEPREVERJENO na napravi.
+
+## Vec racunalnikov in razdelitev dela (lastnik 26. 11. 2026 18:48, NALOGA-34)
+»Uporabnik ima lahko vec racunalnikov in Lina se more znati povezati v vec racunalnikov, tudi zato, da zna enakomerno razporediti delo med vec racunalniki.«
+- Telefon hrani SEZNAM seznanjenih racunalnikov (samostojna/Racunalniki.kt, AsistentShramba): nova seznanitev ne prepise stare (isti odtis = isti racunalnik); prehod: stara ena seznanitev postane prvi clan. Vsak racunalnik je seznanjen loceno (QR/koda + Dodaj na TISTEM racunalniku), s svojim pripetim odtisom in relejem; zaupanje enega ne velja za drugega.
+- Racunalnik v podpisanem /stanje vrne `racunalnik: {ime, jedra?, obremenitev5?, prostMb?}` (obremenitev.server.ts); neznano se IZPUSTI, nikoli 0 (Windows loadavg = 0).
+- Nova naloga s telefona gre na najmanj obremenjen dosegljiv racunalnik (load5/jedro, prag 1,25, prost RAM >= 1500 MB; RazdelitevDela.cilj); uporabnik lahko izbere rocno (»Uporabi samo tega«) ali racunalnik izkljuci. Vse poti naloge (poizvedbe, odgovori, nadaljevanje, ustavitev) gredo racunalniku ob oddaji (Racunalniki.zaNalogo), izbira v zavihku ali nova seznanitev ga ne zamenjata; dolgovan /ustavi gre vsem racunalnikom. Telefon dela eno nalogo naenkrat (hkratni nalogi na dveh racunalnikih: v kodi se ni).
+- Zapisi klicev in pogovor se sinhronizirajo samo z GLAVNIM racunalnikom (prvi seznanjeni); sinhronizacija z vec racunalniki (vrsta po racunalniku) in podpis, ki veze ciljni racunalnik (ponovitev podpisane zahteve z enega racunalnika na drugega v oknu 2 min): v kodi se ni.
+- Racunalnik z racunalnikom (predaja naloge, »Moji racunalniki« na racunalniku): v kodi se ni - odlocitev vodje (0.2.14 ali naslednji sklop).
