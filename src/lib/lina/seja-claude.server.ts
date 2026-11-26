@@ -78,14 +78,17 @@ export function casZagonaProcesa(pid: number): string | null {
   }
 }
 
-/** N4: zivi samo nas proces - signal dovoljen (EPERM = tuj uporabnik) in isti cas zagona kot ob odprtju (ponovna uporaba PID). */
+/**
+ * N4: zivi samo nas proces - signal dovoljen (EPERM = tuj uporabnik) in isti cas zagona kot ob odprtju (ponovna uporaba PID).
+ * Brez /proc (cas zagona neznan ob odprtju) odloci samo signal, kot pred nalogo 21 (slepi pregled 21, najdba 7).
+ */
 const zivPid = (pid: number, zacetek: string | null) => {
   try {
     process.kill(pid, 0);
   } catch {
     return false;
   }
-  return zacetek !== null && casZagonaProcesa(pid) === zacetek;
+  return zacetek === null || casZagonaProcesa(pid) === zacetek;
 };
 
 /** Mapa seje: navadna mapa tega uporabnika pod domom (ustvari 0700), ne simbolna povezava in ne v podatkih Line. */

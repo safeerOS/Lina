@@ -39,7 +39,8 @@ describe("naloga 21: Poveži telefon na neodobrenem omrezju", () => {
     }
     const ui = readFileSync(new URL("../../components/povezi-telefon.tsx", import.meta.url), "utf8");
     expect(ui).toMatch(/shraniAsistentaFn\(\{ data: \{ naslov: s\.predlogNaslova, odobriOmrezje: true \} \}\)/);
-    expect(ui).toMatch(/naslov, vrata: Number\(vrata\), odobriOmrezje: true/);
+    // »Shrani« odobri samo NOV naslov (slepi pregled 21, najdba 8)
+    expect(ui).toMatch(/naslov, vrata: Number\(vrata\), odobriOmrezje: naslov !== s\.naslov/);
     expect(ui).toMatch(/void prekliciSeznanitevFn\(\)\.catch\(\(\) => undefined\);/);
     const fn = readFileSync(new URL("./functions.ts", import.meta.url), "utf8");
     expect(fn).toMatch(/odobriOmrezje: data\?\.odobriOmrezje/);

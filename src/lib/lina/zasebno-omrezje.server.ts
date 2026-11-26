@@ -252,30 +252,36 @@ export async function prehodiVmesnikov(beri: (pot: string) => Promise<string> = 
   const mac = new Map<string, string>();
   for (const vrsta of arp.split("\n").slice(1)) {
     const f = vrsta.trim().split(/\s+/); // IP, HW type, Flags, HW address, Mask, Device
-    if (f.length >= 6 && f[2] !== "0x0" && /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(f[3]) && !/^(00:){5}00$/.test(f[3])) mac.set(`${f[5]}|${f[0]}`, f[3].toLowerCase());
+    if (f.length >= 6 && f[2] !== "0x0" && /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(f[3]) && !/^(00:){5}00$/.test(f[3])) {
+      mac.set(`${f[5]}|${f[0]}`, f[3].toLowerCase());
+      // slepi pregled 21 (4): kabel in Wi-Fi v isti mrezi - ARP prehoda je samo na vmesniku, ki nosi promet; isti IP prehoda = isti MAC
+      if (!mac.has(`*|${f[0]}`)) mac.set(`*|${f[0]}`, f[3].toLowerCase());
+    }
   }
   const izid: Record<string, string> = {};
   for (const vrsta of route.split("\n").slice(1)) {
     const f = vrsta.trim().split(/\s+/); // Iface, Destination, Gateway (hex, little-endian) ...
     if (f.length < 3 || f[1] !== "00000000" || !/^[0-9a-f]{8}$/i.test(f[2]) || f[2] === "00000000" || f[0] in izid) continue;
     const ip = [6, 4, 2, 0].map((i) => parseInt(f[2].slice(i, i + 2), 16)).join(".");
-    izid[f[0]] = mac.get(`${f[0]}|${ip}`) ?? "";
+    izid[f[0]] = mac.get(`${f[0]}|${ip}`) ?? mac.get(`*|${ip}`) ?? "";
   }
   return izid;
 }
 
 /**
  * Naloga 21 (N1): odtis omrezja, v katerem je [naslov] - podomrezje vmesnika in MAC privzetega prehoda (ob lastnikovi izbiri naslova
- * se shrani, samodejno sledenje in poslusanje veljata samo v shranjenem omrezju). null = ne vemo (naslova ni ali MAC prehoda se ni znan).
+ * se shrani, samodejno sledenje in poslusanje veljata samo v shranjenem omrezju). null = ne vemo: naslova ni, MAC prehoda se ni znan,
+ * vmesnik nima privzete poti ali sistem prehodov ne pove (Windows, brez /proc) - samo podomrezje bi bilo enako v tujem omrezju
+ * (slepi pregled 21, najdba 2), zato tam odobritve ni (Lina na Windows telefona doma se ne sprejema; AGENTS.md »NI SE: Windows«).
  */
 export function omrezjeNaslova(naslov: string, vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, prehodi: Readonly<Record<string, string>>): string | null {
   for (const [ime, v] of Object.entries(vmesniki)) for (const e of v ?? []) {
     if (e.address !== naslov) continue;
     const mreza = podomrezje(e);
     const mac = prehodi[ime];
-    if (!mreza || mac === "") return null;
-    // shortcut: brez /proc (Windows) ali brez privzete poti na vmesniku odtis nosi samo podomrezje; nadgradi z Get-NetNeighbor, ko Lina na Windows sprejema telefon doma
-    return `${mreza}|${mac ?? ""}`;
+    // shortcut: Windows nima /proc, zato omrezja ne prepozna (null); nadgradi z Get-NetNeighbor/GetIpNetTable2, ko Lina na Windows sprejema telefon doma
+    if (!mreza || !mac) return null;
+    return `${mreza}|${mac}`;
   }
   return null;
 }

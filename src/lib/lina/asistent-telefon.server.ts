@@ -141,6 +141,8 @@ type Tekoci = {
   omrezje: string;
   /** Naloga 21 (N3): zadnja preverba, ali so zelena vrata spet prosta (rezerva »vrata«). */
   vrataPreverjena: number;
+  /** Slepi pregled 21 (9): zaporedne preverbe, v katerih omrezje tekocega streznika ni odobreno (ustavi sele druga - ARP ali VRRP ne utripa). */
+  neodobreno: number;
 };
 
 /** Koda napake asistenta za vmesnik (besedilo v jeziku vmesnika: telNapaka_<koda>); prazno = brez napake. */
@@ -321,8 +323,10 @@ const prehodi = (): Promise<Record<string, string>> => {
   const o = stanje().omrezjeNaslovov;
   return o ? (o.prehodi?.() ?? Promise.resolve({})) : prehodiVmesnikov();
 };
-// naloga 21 (N10): samo pravi LAN naslovi in prehodi (zacasni IPv6, docker/veth ne sprozijo ponovnega zagona streznika in releja)
-const odtisOmrezja = (v: NodeJS.Dict<NetworkInterfaceInfo[]>, p: Readonly<Record<string, string>>) => odtisLan(v, p);
+// naloga 21 (N10): samo pravi LAN naslovi in prehodi (zacasni IPv6, docker/veth ne sprozijo ponovnega zagona streznika in releja) ter
+// ali je shranjeni naslov na kateremkoli vmesniku (tudi izven odtisLan: vEthernet, wg - slepi pregled 21, najdba 6)
+const odtisOmrezja = (v: NodeJS.Dict<NetworkInterfaceInfo[]>, p: Readonly<Record<string, string>>, naslov: string) =>
+  `${odtisLan(v, p)}#${naslovNaVmesniku(naslov, v) ? 1 : 0}`;
 const izvorPoti = () => stanje().omrezjeNaslovov?.izvor() ?? izvorPrivzetePoti();
 
 /**
@@ -394,12 +398,15 @@ export async function preveriNaslovAsistenta(dir?: string): Promise<boolean> {
   const p = await prehodi();
   const zdaj = Date.now();
   // naloga 21 (N3): rezerva »vrata« ni trajna - najvec vsakih nadzorVrat.ms poskus na zelenih vratih; ponovni zagon SAMO, ce so res prosta
-  const vrata = !!t && t.rezerva === "vrata" && zdaj - t.vrataPreverjena >= nadzorVrat.ms
+  // (abs: ura, ki gre nazaj, preverbe ne odlozi za dni - slepi pregled 21, najdba 11)
+  const vrata = !!t && t.rezerva === "vrata" && Math.abs(zdaj - t.vrataPreverjena) >= nadzorVrat.ms
     && (t.vrataPreverjena = zdaj, await prostaVrata(t.zeleniNaslov, t.zelenaVrata));
+  // naloga 21 (N1): tekoci streznik doma se ustavi, ce omrezje NI odobreno (npr. isti naslov za drugim prehodom) v dveh zaporednih
+  // preverbah; »ne-vem« ga ne ustavi
+  if (t && t.rezerva === null) t.neodobreno = odobritev(n, t.naslov, v, p) === "ne" ? t.neodobreno + 1 : 0;
   const treba = !t || vrata
-    || ((t.rezerva === "naslov" || t.rezerva === "omrezje") && odtisOmrezja(v, p) !== t.omrezje)
-    // naloga 21 (N1): tekoci streznik doma se ustavi, ce omrezje NI odobreno (npr. isti naslov za drugim prehodom); »ne-vem« ga ne ustavi
-    || (t.rezerva === null && (!naslovNaVmesniku(t.naslov, v) || odobritev(n, t.naslov, v, p) === "ne"));
+    || ((t.rezerva === "naslov" || t.rezerva === "omrezje") && odtisOmrezja(v, p, t.zeleniNaslov) !== t.omrezje)
+    || (t.rezerva === null && (!naslovNaVmesniku(t.naslov, v) || t.neodobreno >= 2));
   if (treba) await uskladiAsistenta(root, { zamenjajRezervoVrat: vrata });
   return treba;
 }
@@ -421,6 +428,10 @@ export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolea
     const v = vmesniki();
     const p = await prehodi();
     const dovoljeno = odobritev(n, n.naslov, v, p);
+    // naloga 21 (N1): predlog za »Uporabi ta naslov« - shranjeni naslov na neodobrenem omrezju ali trenutni naslov lokalnega omrezja;
+    // izracunan pred vejo »tece ze«, da ob menjavi neodobrenega omrezja ni zastarel (slepi pregled 21, najdba 5)
+    const predlog = dovoljeno === "da" ? null : naslovNaVmesniku(n.naslov, v) ? n.naslov : izberiLanNaslov(v, await izvorPoti());
+    stanje().predlogNaslova = predlog ?? "";
     const t = stanje().tekoci;
     if (t && (!n.vklop || t.zeleniNaslov !== n.naslov || t.zelenaVrata !== n.vrata || t.globalLink !== n.globalLink
       // rezerva zaradi naslova: naslov je spet tu; doma dosegljiv: vezani naslov je izginil ali omrezje ni (vec) odobreno (N1);
@@ -428,18 +439,15 @@ export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolea
       || (t.rezerva === "naslov" ? naslovNaVmesniku(n.naslov, v)
         : t.rezerva === "omrezje" ? dovoljeno === "da"
           : t.rezerva === "vrata" ? o.zamenjajRezervoVrat === true
-            : !naslovNaVmesniku(t.naslov, v) || dovoljeno === "ne"))) await ustavi();
+            : !naslovNaVmesniku(t.naslov, v) || (dovoljeno === "ne" && t.neodobreno >= 2)))) await ustavi();
     if (!n.vklop || stanje().tekoci) {
       if (!n.vklop) { stanje().napaka = ""; stanje().napakaKoda = ""; stanje().predlogNaslova = ""; }
       // tece ze: pot klicev se zagotovi znova (ce je OpenLine med tem padel); ob izklopu jo je ustavil ustavi(); v rezervi ne (127.0.0.1)
       const tek = stanje().tekoci;
-      if (tek) tek.omrezje = odtisOmrezja(v, p); // ista sprememba omrezja ne sprozi uskladitve vsakih 30 s
+      if (tek) tek.omrezje = odtisOmrezja(v, p, n.naslov); // ista sprememba omrezja ne sprozi uskladitve vsakih 30 s
       if (tek && !tek.rezerva) void pripraviPotKlicev(root, tek.naslov);
       return;
     }
-    // naloga 21 (N1): predlog za »Uporabi ta naslov« - shranjeni naslov na neodobrenem omrezju ali trenutni naslov lokalnega omrezja
-    const predlog = dovoljeno === "da" ? null : naslovNaVmesniku(n.naslov, v) ? n.naslov : izberiLanNaslov(v, await izvorPoti());
-    stanje().predlogNaslova = predlog ?? "";
     try {
       const k = await preberiKanal(root);
       // pregled 6: kljuc releja PRED izvajalcem in casovnikom (napaka tu ne pusti odprtih virov)
@@ -509,7 +517,7 @@ export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolea
         stanje: async () => telefonVprasanja(root),
         odgovori: (id: string, odlocitev: string, zgostitev: string, naprava: string) => telefonOdgovor(root, id, odlocitev, zgostitev, naprava),
       };
-      const omrezje = odtisOmrezja(v, p);
+      const omrezje = odtisOmrezja(v, p, n.naslov);
       const novStreznik = (naslov: string, vrata: number) => new AsistentStreznik({ root, naslov, vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje,
         agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null,
         // naloga 18: stikalo se prebere ob vsaki nalogi (izklop velja takoj); streznik klice samo po preverbi podpisa naprave
@@ -547,7 +555,7 @@ export function uskladiAsistenta(dir?: string, o: { zamenjajRezervoVrat?: boolea
         }) : null;
         rele?.zazeni();
         stanje().tekoci = { streznik, izvajalec, osvezi, naslov, vrata, odtis, koda, varovalka, rele, globalLink: n.globalLink,
-          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva, omrezje, vrataPreverjena: Date.now() };
+          zeleniNaslov: n.naslov, zelenaVrata: n.vrata, rezerva, omrezje, vrataPreverjena: Date.now(), neodobreno: 0 };
         if (rezerva) nastaviNapako(napakaLan); // vidno v Poveži telefon: doma telefon Line ne doseze, Global Link tece
         else {
           stanje().napaka = "";

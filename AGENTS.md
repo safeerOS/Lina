@@ -616,9 +616,10 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
   Global Link vklopljen, tece streznik na 127.0.0.1 (prosta vrata) samo za kanale releja; QR in koda se takrat ne izdata. Napaka je v »Povezi
   telefon« kot opozorilo (napakaKoda -> telNapaka_*, sl in en). mDNS oglas ostane samo med odprtim oknom kode. Preizkus: naloga-15-naslov.test.ts.
   Naloga 21 (sklepni slepi pregled 0.2.14, N1/N3/N10): samodejno sledenje naslovu in poslusanje na zasebnem naslovu (tudi OpenLine) SAMO v
-  omrezju, ki ga je lastnik odobril: odtis omrezja = podomrezje vmesnika + MAC privzetega prehoda (/proc/net/route + /proc/net/arp; Windows brez
-  /proc samo podomrezje), shrani se v asistent-telefon.json `omrezja` (najvec 16) ob »Shrani« ali »Uporabi ta naslov« (odobriOmrezje: true;
-  stikala ne odobrijo). Neodobreno omrezje = rezerva »omrezje« (samo Global Link, napakaKoda »omrezje«, predlogNaslova + gumb »Uporabi ta naslov«,
+  omrezju, ki ga je lastnik odobril: odtis omrezja = podomrezje vmesnika + MAC privzetega prehoda (/proc/net/route + /proc/net/arp, MAC tudi
+  z drugega vmesnika z istim IP prehoda; brez MAC - Windows, vmesnik brez privzete poti, ARP se prazen - omrezja ni mogoce odobriti), shrani se
+  v asistent-telefon.json `omrezja` (najvec 16) ob »Shrani« z NOVIM naslovom ali »Uporabi ta naslov« (odobriOmrezje: true; stikala in sama
+  vrata ne odobrijo). Tekoci streznik se ustavi sele po dveh zaporednih preverbah v tujem omrezju. Neodobreno omrezje = rezerva »omrezje« (samo Global Link, napakaKoda »omrezje«, predlogNaslova + gumb »Uporabi ta naslov«,
   QR in koda z napisom, zakaj ju ni); neznan MAC (ARP) tekocega streznika ne ustavi, novega ne zazene. Brez zapisa `omrezja` (nadgradnja) ni
   odobreno nobeno omrezje (fail-closed, en klik). Rezerva »vrata« preveri prosta vrata vsakih 5 min (nadzorVrat) in se zamenja samo, ce so res
   prosta. Odtis za nadzor (odtisLan) brez docker/veth in zacasnih IPv6 (ULA kot predpona /64). Preizkusi: naloga-21.test.ts.
@@ -1169,7 +1170,8 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   roku), 401 napacna_koda (cb ali mac ne ustreza; v nacinu B lastnik kodo vtipka znova), 429 prevec_poskusov, 429
   seznanitev_zaprta, 403 zavrnjeno.
 - Naloga 21 (N2, lastnikov ukaz: QR in koda ostaneta vedno vidna): vsak vir (naslov odjemalca / kanal releja) ima svojo varovalko z mejami Linka in
-  brez kredita vabila, skupna varovalka je zgornja meja cez vse vire (krat = SKUPNO_KRAT 10) - tujec z enim naslovom zaklene samo sebe. Nov QR
+  brez kredita vabila (IPv6 po predponi /64), skupna varovalka je zgornja meja cez vse vire (krat = SKUPNO_KRAT 3, odlocitev lastnika odprta) -
+  tujec z enim ali dvema naslovoma zaklene samo sebe. Nov QR
   preklice prejsnjega neporabljenega, zapustitev zaslona preklice neporabljeni QR (prekliciSeznanitev); cakajoce in sprejete prijave ostanejo.
 - Meje (kot Link): najvec 5 krogov SPAKE2 in 5 napacnih potrditev na prijavo, najvec 10 krogov na eno kodo nacina A cez vse prijave
   (nato se okno zapre), najvec 8 cakajocih prijav. Skupna varovalka (varovalka-kode.ts, stanje v koda-varovalka.json, prezivi ponovni

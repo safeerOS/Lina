@@ -8,8 +8,10 @@
  * Cas je v sekundah kot v Pythonu.
  * Naloga 21 (N2, namerna razlika od Linka): `krat` pomnozi meje poskusov in zacetkov - Lina ima varovalko na vir (koda-seznanitev.ts)
  * z mejami Linka in skupno varovalko s krat = SKUPNO_KRAT kot zgornjo mejo cez vse vire. Privzeto 1 = natanko Link.
+ * SKUPNO_KRAT 3 (slepi pregled 21, najdba 1): tujec potrebuje vsaj 3 naslove, da zaklene seznanitev s kodo (lastnik jo odklene z gumbom,
+ * QR ni prizadet), ugibanj kode na leto je najvec ~3x vec kot v Linku; uspeh dostopa ne da (»Dodaj« z vidnim id-jem). Odlocitev lastnika.
  */
-export const SKUPNO_KRAT = 10;
+export const SKUPNO_KRAT = 3;
 export const OKNO_S = 3600;
 export const POSKUSOV = 20;
 export const POSKUSOV_PO_ZAPORI = 5;

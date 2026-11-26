@@ -328,8 +328,9 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
         className="grid gap-2 text-sm"
         onSubmit={(e) => {
           e.preventDefault();
-          // naloga 21 (N1): »Shrani« je lastnikova izbira naslova - omrezje tega naslova postane odobreno
-          void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { vklop: s.vklop, naslov, vrata: Number(vrata), odobriOmrezje: true } })));
+          // naloga 21 (N1): »Shrani« z NOVIM naslovom je lastnikova izbira - omrezje tega naslova postane odobreno; samo sprememba vrat ne
+          // odobri omrezja (slepi pregled 21, najdba 8), za to je gumb »Uporabi ta naslov«
+          void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { vklop: s.vklop, naslov, vrata: Number(vrata), odobriOmrezje: naslov !== s.naslov } })));
         }}
       >
         <label className="flex items-center gap-2">

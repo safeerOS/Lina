@@ -15,9 +15,9 @@ import {
   registrirajVezoKlicev, shraniAsistenta, stanjeAsistenta, uskladiAsistenta, zacniSeznanitev,
 } from "./asistent-telefon.server.ts";
 import { odtisLan, omrezjeNaslova, prehodiVmesnikov } from "./zasebno-omrezje.server.ts";
-import { NapakaKode, SeznanitevSKodo } from "./koda-seznanitev.ts";
+import { kljucVira, NapakaKode, SeznanitevSKodo } from "./koda-seznanitev.ts";
 import { Spake2 } from "./spake2.ts";
-import { SKUPNO_KRAT, VarovalkaKode } from "./varovalka-kode.ts";
+import { POSKUSOV, SKUPNO_KRAT, VarovalkaKode } from "./varovalka-kode.ts";
 import { casZagonaProcesa, odpriSejoClaude, ponastaviSejo, ROK_ODPIRANJA_MS } from "./seja-claude.server.ts";
 import { nalogSStevcemSlik, orodjaLine } from "./orkestrator-orodja.server.ts";
 import { ustvariOrkestrator, type KlicModela } from "./orkestrator.server.ts";
@@ -123,7 +123,7 @@ test("N1: brez zapisa odobrenih omrezij (nadgradnja) - fail-closed; MAC prehoda 
   } finally { await pospravi(o); }
 });
 
-test("N1: tekoci streznik doma - menjava prehoda (drugo omrezje) ga ustavi; neznan MAC (ARP) ga ne ustavi", async () => {
+test("N1: tekoci streznik doma - menjava prehoda (drugo omrezje) ga ustavi v drugi zaporedni preverbi (ARP/VRRP ne utripa); neznan MAC ga ne ustavi", async () => {
   const o = await pripravi("127.0.0.5", { omrezja: [`127.0.0.0/24|${MAC_DOMA}`] });
   try {
     let prehod = MAC_DOMA;
@@ -133,7 +133,12 @@ test("N1: tekoci streznik doma - menjava prehoda (drugo omrezje) ga ustavi; nezn
     prehod = "";
     assert.equal(await preveriNaslovAsistenta(o.dir), false, "neznan MAC ni sprememba omrezja");
     prehod = MAC_TUJE;
-    assert.equal(await preveriNaslovAsistenta(o.dir), true);
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "ena preverba z drugim MAC se ne ustavi (slepi pregled 21, najdba 9)");
+    prehod = MAC_DOMA;
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "MAC se je vrnil: stevec gre na 0");
+    prehod = MAC_TUJE;
+    assert.equal(await preveriNaslovAsistenta(o.dir), false);
+    assert.equal(await preveriNaslovAsistenta(o.dir), true, "druga zaporedna preverba v tujem omrezju");
     const s = await stanjeAsistenta(o.token, o.dir);
     assert.equal(s.tece, false);
     assert.equal(s.napakaKoda, "omrezje");
@@ -164,6 +169,41 @@ test("prehodiVmesnikov: privzeti prehod iz /proc/net/route (little-endian) in MA
   assert.equal(omrezjeNaslova("192.168.1.20", { wlp2s0: [v4("192.168.1.20")] }, { wlp2s0: MAC_DOMA }), `192.168.1.0/24|${MAC_DOMA}`);
   assert.equal(omrezjeNaslova("192.168.1.20", { wlp2s0: [v4("192.168.1.20")] }, { wlp2s0: "" }), null, "MAC prehoda se ni znan = ne vemo");
   assert.equal(omrezjeNaslova("192.168.1.20", {}, {}), null);
+  // slepi pregled 21 (2): brez prehodov (Windows) ali vmesnik brez privzete poti - samo podomrezje bi bilo enako v tujem omrezju, zato ne vemo
+  assert.equal(omrezjeNaslova("192.168.1.20", { Ethernet: [v4("192.168.1.20")] }, {}), null);
+  // slepi pregled 21 (4): kabel in Wi-Fi v isti mrezi, ARP prehoda samo na kablu - isti IP prehoda da MAC tudi Wi-Fi vmesniku
+  const route2 = "Iface\tDestination\tGateway\nenp1s0\t00000000\t0101A8C0\nwlp2s0\t00000000\t0101A8C0\n";
+  const arp2 = "IP address HW type Flags HW address Mask Device\n192.168.1.1 0x1 0x2 aa:bb:cc:00:00:01 * enp1s0\n";
+  assert.deepEqual(await prehodiVmesnikov(async (p) => (p.endsWith("route") ? route2 : arp2)), { enp1s0: MAC_DOMA, wlp2s0: MAC_DOMA });
+});
+
+test("slepi pregled 21 (5): ob menjavi neodobrenega omrezja med rezervo predlog naslova ni zastarel", async () => {
+  const o = await pripravi("127.0.0.5", { globalLink: true, omrezja: [`127.0.0.0/24|${MAC_DOMA}`] });
+  try {
+    let naslov = "127.0.0.5";
+    nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4(naslov)] }), izvor: async () => naslov, prehodi: async () => ({ enp1s0: MAC_TUJE }) });
+    registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
+    await uskladiAsistenta(o.dir);
+    assert.equal((await stanjeAsistenta(o.token, o.dir)).predlogNaslova, "127.0.0.5");
+    naslov = "127.0.0.9";
+    await preveriNaslovAsistenta(o.dir);
+    assert.equal((await stanjeAsistenta(o.token, o.dir)).predlogNaslova, "127.0.0.9");
+  } finally { await pospravi(o); }
+});
+
+test("slepi pregled 21 (6): shranjen naslov na vmesniku izven odtisa (vEthernet, wg) se vrne - rezerva »naslov« poskusi znova (enkrat)", async () => {
+  const o = await pripravi("192.168.77.7", { globalLink: true, omrezja: [`192.168.77.0/24|${MAC_DOMA}`] });
+  try {
+    let vm: NodeJS.Dict<NetworkInterfaceInfo[]> = {};
+    nastaviOmrezjeNaslovov({ vmesniki: () => vm, izvor: async () => null, prehodi: async () => ({ "vEthernet (External)": MAC_DOMA }) });
+    registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
+    await uskladiAsistenta(o.dir);
+    assert.equal((await stanjeAsistenta(o.token, o.dir)).samoGlobalLink, true);
+    // lazno: vmesnik ima naslov, jedro ga ne veze (192.168.77.7) - pomembno je, da se uskladitev sprozi, in to samo enkrat
+    vm = { "vEthernet (External)": [v4("192.168.77.7")] };
+    assert.equal(await preveriNaslovAsistenta(o.dir), true);
+    assert.equal(await preveriNaslovAsistenta(o.dir), false, "brez ponovnega zagona vsakih 30 s");
+  } finally { await pospravi(o); }
 });
 
 // ------------------------------------------------------------------ N10
@@ -267,9 +307,17 @@ test("N2: zapora kode po viru - tujec z enim naslovom zaklene samo sebe; prava s
   assert.ok(izidi.includes("seznanitev_zaprta"), izidi.join(","));
   assert.equal(skupna.zaprto(), false, "skupna zapora ni sprozena z enim virom");
   assert.equal(krog("192.168.1.20"), "ok", "lastnikov telefon z drugega naslova ni zaklenjen");
-  // skupna meja cez vse vire ostane (napadalec z mnogo naslovi)
-  for (let v = 0; v < 40 && !skupna.zaprto(); v++) for (let i = 0; i < 15; i++) { krog(`10.0.${v}.1`); t += 100; }
-  assert.equal(skupna.zaprto(), true);
+  // skupna meja cez vse vire ostane (napadalec z mnogo naslovi) - natanko SKUPNO_KRAT * POSKUSOV neuspelih krogov (slepi pregled 21, najdba 12)
+  const g = new VarovalkaKode({ ura: () => t / 1000, krat: SKUPNO_KRAT });
+  let n = 0;
+  while (g.poskus(`10.0.${n}.1`) && n < 10_000) n++;
+  assert.equal(n + 1, SKUPNO_KRAT * POSKUSOV);
+  assert.equal(SKUPNO_KRAT, 3, "visja skupna meja je odlocitev lastnika (POROCILO-21)");
+  // IPv6: vsi naslovi iste predpone /64 so en vir (SLAAC da napadalcu neomejeno naslovov)
+  assert.equal(kljucVira("fd00:1:2:3::aaaa"), kljucVira("fd00:1:2:3:dead:beef:0:1"));
+  assert.notEqual(kljucVira("fd00:1:2:4::1"), kljucVira("fd00:1:2:3::1"));
+  assert.equal(kljucVira("192.168.1.66"), "192.168.1.66");
+  assert.equal(kljucVira("::ffff:192.168.1.66"), "::ffff:192.168.1.66");
 });
 
 test("N2: »Dodaj« za cakajoci telefon je izrecen klik - ime in id sta vidna, gumb ni privzet (ni v obrazcu, brez autoFocus)", async () => {
@@ -284,7 +332,7 @@ test("N2: »Dodaj« za cakajoci telefon je izrecen klik - ime in id sta vidna, g
 
 // ------------------------------------------------------------------ N4
 
-test("N4: PID tujega procesa (EPERM) po roku odpiranja ne blokira nove seje; isti zivi proces (cas zagona) jo blokira", async () => {
+test("N4: PID tujega procesa (EPERM) po roku odpiranja ne blokira nove seje; isti zivi proces (cas zagona) jo blokira", { skip: process.getuid?.() === 0 ? "root nima EPERM" : casZagonaProcesa(process.pid) === null ? "brez /proc" : false }, async () => {
   const root = await mkdtemp(path.join(tmpdir(), "lina-n21-seja-"));
   const dom = await mkdtemp(path.join(tmpdir(), "lina-n21-dom-"));
   try {

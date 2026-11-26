@@ -30,6 +30,17 @@ export const ROK_POTRDI_MS = 10_000;
  * zaklene samo sebe, ne prave seznanitve. Najvec toliko virov v pomnilniku (najstarejsi odpade, skupna meja ostane).
  */
 export const NAJVEC_VIROV_VAROVALKE = 256;
+/** Kljuc vira za varovalko: IPv6 (brez ::ffff:) po prvih 4 skupinah, sicer nespremenjen (IPv4, kanal releja r:...). */
+export function kljucVira(vir: string): string {
+  const a = vir.toLowerCase();
+  if (!a.includes(":") || a.startsWith("::ffff:") || a.startsWith("r:")) return vir;
+  const [glava, rep] = a.split("%")[0].split("::");
+  const g = glava ? glava.split(":") : [];
+  const r = rep === undefined ? [] : rep ? rep.split(":") : [];
+  const vse = [...g, ...Array<string>(Math.max(0, 8 - g.length - r.length)).fill("0"), ...r];
+  return `${vse.slice(0, 4).map((x) => x.padStart(4, "0")).join(":")}::/64`;
+}
+
 /** Identiteta strani A v SPAKE2 (v Linku "safeer-link-hub"); stran B je id telefona. */
 export const ID_LINE = "lina-asistent";
 export const PAIR_ID = /^[A-Za-z0-9_-]{22}$/;
@@ -105,8 +116,9 @@ export class SeznanitevSKodo {
     if (bilo) try { this.obZaprtju?.(); } catch { /* oglas ni pogoj za seznanitev */ }
   }
 
-  /** Varovalka enega vira (N2); nov vir izrine najstarejsega, ko jih je NAJVEC_VIROV_VAROVALKE. */
-  private varovalkaVira(vir: string): VarovalkaKode {
+  /** Varovalka enega vira (N2); nov vir izrine najstarejsega, ko jih je NAJVEC_VIROV_VAROVALKE. IPv6 po predponi /64 (SLAAC: naslovov je brez meje). */
+  private varovalkaVira(vir0: string): VarovalkaKode {
+    const vir = kljucVira(vir0);
     let v = this.viri.get(vir);
     if (!v) {
       if (this.viri.size >= NAJVEC_VIROV_VAROVALKE) this.viri.delete(this.viri.keys().next().value as string);

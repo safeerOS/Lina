@@ -16,6 +16,9 @@ import {
 import { izberiLanNaslov } from "./zasebno-omrezje.server.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4", internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null }) as NetworkInterfaceInfo;
+// naloga 21 (N1): vsak lazni vmesnik ima privzeti prehod z znanim MAC (brez njega omrezja ni mogoce odobriti)
+const MAC_PREHODA = "aa:bb:cc:00:00:15";
+const PREHODI = new Proxy({} as Record<string, string>, { get: () => MAC_PREHODA });
 const v6 = (address: string) => ({ address, family: "IPv6", internal: false, netmask: "ffff:ffff:ffff:ffff::", mac: "00:00:00:00:00:00", cidr: null, scopeid: 0 }) as NetworkInterfaceInfo;
 
 async function prostaVrata(): Promise<number> {
@@ -34,7 +37,7 @@ async function pripravi(naslov: string, globalLink = false): Promise<Okolje> {
   // shranjen naslov, ki ga ta racunalnik nima (kot pri lastniku po menjavi Wi-Fi -> kabel); shraniAsistenta bi ga zavrnil
   // naloga 21 (N1): samodejno sledenje in poslusanje samo v omrezju, ki ga je lastnik odobril - tu lazna omrezja preizkusov (127.0.0.0/24 in
   // 192.168.77.0/24 brez prehoda); preizkusi neodobrenega omrezja so v naloga-21.test.ts
-  await writeFile(path.join(dir, NASTAVITVE_ASISTENTA), JSON.stringify({ vklop: true, naslov, vrata, imena: {}, ocenaIzida: true, globalLink, omrezja: ["127.0.0.0/24|", "192.168.77.0/24|"] }));
+  await writeFile(path.join(dir, NASTAVITVE_ASISTENTA), JSON.stringify({ vklop: true, naslov, vrata, imena: {}, ocenaIzida: true, globalLink, omrezja: [`127.0.0.0/24|${MAC_PREHODA}`, `192.168.77.0/24|${MAC_PREHODA}`] }));
   return { dir, token, vrata };
 }
 async function pospravi(o: Okolje): Promise<void> {
@@ -70,7 +73,7 @@ test("izberiLanNaslov: vmesnik privzete poti, nikoli docker/br-/veth/lo/notranji
 test("shranjenega naslova ni vec: Lina izbere trenutni naslov lokalnega omrezja, poslusa na njem in ga shrani", async () => {
   const o = await pripravi("192.168.77.7");
   try {
-    nastaviOmrezjeNaslovov({ vmesniki: () => ({ lo: [v4("127.0.0.1", true)], docker0: [v4("172.17.0.1")], enp1s0: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5" });
+    nastaviOmrezjeNaslovov({ prehodi: async () => PREHODI, vmesniki: () => ({ lo: [v4("127.0.0.1", true)], docker0: [v4("172.17.0.1")], enp1s0: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5" });
     await uskladiAsistenta(o.dir);
     const s = await stanjeAsistenta(o.token, o.dir);
     assert.equal(s.tece, true, s.napaka);
@@ -85,7 +88,7 @@ test("sprememba omrezja med tekom: preveriNaslovAsistenta preklopi na nov naslov
   const o = await pripravi("127.0.0.5");
   try {
     let naslov = "127.0.0.5";
-    nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4(naslov)] }), izvor: async () => naslov });
+    nastaviOmrezjeNaslovov({ prehodi: async () => PREHODI, vmesniki: () => ({ enp1s0: [v4(naslov)] }), izvor: async () => naslov });
     await uskladiAsistenta(o.dir);
     const prej = await stanjeAsistenta(o.token, o.dir);
     assert.equal(prej.tece, true, prej.napaka);
@@ -103,7 +106,7 @@ test("sprememba omrezja med tekom: preveriNaslovAsistenta preklopi na nov naslov
 test("brez lokalnega naslova: Global Link (agent releja) vseeno tece, napaka je vidna s kodo, QR doma se ne izda", async () => {
   const o = await pripravi("192.168.77.7", true);
   try {
-    nastaviOmrezjeNaslovov({ vmesniki: () => ({ lo: [v4("127.0.0.1", true)], docker0: [v4("172.17.0.1")] }), izvor: async () => null });
+    nastaviOmrezjeNaslovov({ prehodi: async () => PREHODI, vmesniki: () => ({ lo: [v4("127.0.0.1", true)], docker0: [v4("172.17.0.1")] }), izvor: async () => null });
     registrirajRele({ host: "127.0.0.1", port: await prostaVrata() }); // zaprta vrata: agent poskusa, a tece
     await uskladiAsistenta(o.dir);
     const s = await stanjeAsistenta(o.token, o.dir);
@@ -115,7 +118,7 @@ test("brez lokalnega naslova: Global Link (agent releja) vseeno tece, napaka je 
     await assert.rejects(zacniSeznanitev(o.token, o.dir), /omrezj/i);
     assert.equal(await preveriNaslovAsistenta(o.dir), false, "omrezje se ni spremenilo: brez ponovnega zagona (rele ne utripa)");
     // omrezje se vrne: preveriNaslovAsistenta preklopi s samo Global Linka na lokalni naslov
-    nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4("127.0.0.7")] }), izvor: async () => "127.0.0.7" });
+    nastaviOmrezjeNaslovov({ prehodi: async () => PREHODI, vmesniki: () => ({ enp1s0: [v4("127.0.0.7")] }), izvor: async () => "127.0.0.7" });
     assert.equal(await preveriNaslovAsistenta(o.dir), true);
     const po = await stanjeAsistenta(o.token, o.dir);
     assert.equal(po.samoGlobalLink, false);
@@ -129,7 +132,7 @@ test("naslov je na vmesniku, a vezava pade (npr. IPv6 DAD): ena rezerva, brez po
   const o = await pripravi("192.168.77.7", true);
   try {
     let vm: NodeJS.Dict<NetworkInterfaceInfo[]> = { enp1s0: [v4("192.168.77.7")] }; // lazno: vmesnik ga ima, jedro ga ne veze
-    nastaviOmrezjeNaslovov({ vmesniki: () => vm, izvor: async () => "192.168.77.7" });
+    nastaviOmrezjeNaslovov({ prehodi: async () => PREHODI, vmesniki: () => vm, izvor: async () => "192.168.77.7" });
     registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
     await uskladiAsistenta(o.dir);
     assert.equal((await stanjeAsistenta(o.token, o.dir)).samoGlobalLink, true);
@@ -148,7 +151,7 @@ test("vrata zasedena (EADDRINUSE): Global Link tece, koda »vrata«, preverba vs
   const zaseden = net.createServer();
   await new Promise<void>((ok, ne) => { zaseden.once("error", ne); zaseden.listen(o.vrata, "127.0.0.5", () => ok()); });
   try {
-    nastaviOmrezjeNaslovov({ vmesniki: () => ({ enp1s0: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5" });
+    nastaviOmrezjeNaslovov({ prehodi: async () => PREHODI, vmesniki: () => ({ enp1s0: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5" });
     registrirajRele({ host: "127.0.0.1", port: await prostaVrata() });
     await uskladiAsistenta(o.dir);
     const s = await stanjeAsistenta(o.token, o.dir);
