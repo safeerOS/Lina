@@ -559,7 +559,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             CakanjeSeje.Izid.Preklicano -> si.safeer.lina.samostojna.NalogaRacunalnika.Konec.Preklicano
         }
         // preklic ali nova naloga v tej instanci: nit je zastarela, nic vec (slepi pregled N1, 24 N2)
-        val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null) ?: return
+        // slepi 26t krog 2 N7: po »Pozabi racunalnik« (ni seznanitve) ta zaslon naloge ne prevzame v spremljanje
+        val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null, seznanjen = AsistentShramba.beri(context) != null) ?: return
         val napakaIzida = if (odg != null) NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
             else if (izid is CakanjeSeje.Izid.Rok) SporociloNapake.CLAUDE_CODE_NI else SporociloNapake.NAPAKA
         when (u) {

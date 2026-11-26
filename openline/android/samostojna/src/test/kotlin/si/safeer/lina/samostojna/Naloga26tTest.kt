@@ -274,6 +274,29 @@ class Naloga26tTest {
         assertFalse(n.predOddajo(idA))
     }
 
+    // slepi 26t krog 2 N1: oba zaslona oddata isti id; prvi dobi 202 in nalogo spremlja, drugi 409 - drugi je ne sme spremljati se enkrat
+    @Test fun `slepi K2 N1 - drugi zaslon ne spremlja naloge, ki jo ze spremlja prvi`() {
+        val io = LaznaIoNaloge()
+        val z1 = ZaslonNaloge(NalogaRacunalnika(io)); val z2 = ZaslonNaloge(NalogaRacunalnika(io))
+        val g1 = z1.zacni(idA, "A", "o", t0)
+        val o = z2.naloga.obnovi("o", t0 + 1, rok) as NalogaRacunalnika.Obnova.Nadaljuj
+        val g2 = z2.zacni(o.naloga.id, o.naloga.besedilo, o.naloga.odtis, o.naloga.zacetek)
+        assertTrue(z1.naloga.predOddajo(idA)); assertTrue(z2.naloga.predOddajo(idA))
+        assertEquals(NalogaRacunalnika.Ukrep.Spremljaj(idA), z1.koncaj(g1, idA, NalogaRacunalnika.Konec.Odgovor(IzidPredaje.SPREJETA), false))
+        assertEquals(NalogaRacunalnika.Ukrep.Tuje, z2.koncaj(g2, idA, NalogaRacunalnika.Konec.Odgovor(IzidPredaje.SPREJETA), false),
+            "drugi zaslon spremlja isto nalogo (dvojni samodejni odgovori)")
+    }
+
+    // slepi 26t krog 2 N7: »Pozabi racunalnik« med oddajo - sprejeta naloga se ne spremlja (ni vec seznanitve)
+    @Test fun `slepi K2 N7 - po Pozabi racunalnik sprejeta oddaja ni spremljana`() {
+        val io = LaznaIoNaloge()
+        val z = ZaslonNaloge(NalogaRacunalnika(io))
+        val g = z.zacni(idA, "A", "o", t0)
+        assertTrue(z.naloga.predOddajo(idA))
+        io.m.clear() // AsistentShramba.pozabi
+        assertEquals(NalogaRacunalnika.Ukrep.Tuje, z.koncaj(g, idA, NalogaRacunalnika.Konec.Odgovor(IzidPredaje.SPREJETA), false, seznanjen = false))
+    }
+
     // CRA5: 1001 izbrisov brez racunalnika; racunalnik sprejme najvec 300 na zahtevo (sinhron-telefon.server.ts MEJA_VNOSOV_ZAHTEVE).
     @Test fun `CRA5 - izbrisi gredo v paketih do 300, potrdi se samo poslano, nic se ne izgubi`() {
         val d = DnevnikKlicev(PomnilniskaShramba(), ura = { t0 })

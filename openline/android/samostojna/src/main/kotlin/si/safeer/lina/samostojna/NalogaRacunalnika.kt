@@ -46,6 +46,8 @@ data class StanjeNaloge(
     val preklicani: List<String> = emptyList(),
     /** Preklicane naloge, ki so bile morda oddane: /ustavi se poslje znova (tudi po ponovnem zagonu), dokler ga racunalnik ne sprejme. */
     val zaUstaviti: List<UstavitevZapis> = emptyList(),
+    /** Zadnja naloga, ki jo ze spremlja kak zaslon (slepi 26t krog 2 N1: drugi zaslon je ne spremlja se enkrat). */
+    val spremljana: String? = null,
 )
 
 /** Dostop do shrambe (SharedPreferences v app, lazna v preizkusih). [vse] je cel zapis (prefs.all), da staro obliko beremo strpno. */
@@ -217,24 +219,25 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
      * pred prevzemom id (503 z razlogom zagona: asistent-streznik.server.ts preveri id pred sejo). NEDOSEGLJIV ponovne oddaje po
      * prejsnji oddaji istega id (CRA1: drug zaslon ali proces) je NEZNAN.
      */
-    fun koncaj(id: String, konec: Konec, sKlepetom: Boolean): Ukrep = spremeni { s ->
+    fun koncaj(id: String, konec: Konec, sKlepetom: Boolean, seznanjen: Boolean = true): Ukrep = spremeni { s ->
         val c = s.cakajoca
         if (c == null || c.id != id) {
             // slepi 26t N4: mesto je medtem pocistil drug zaslon (npr. njegov poskus je dobil neznan izid), ta poskus pa je racunalnik
             // sprejel: naloga ni preklicana, zato jo ta zaslon spremlja (ali javi neznan izid), ne javi »preklicano«
-            val preklicana = id in s.preklicani
+            // Krog 2: ne, ce jo ze spremlja drug zaslon (N1) ali je lastnik medtem pozabil racunalnik (N7, [seznanjen] = false)
+            val prosta = id !in s.preklicani && id != s.spremljana && seznanjen
             val i = (konec as? Konec.Odgovor)?.izid
-            return@spremeni s to when {
-                !preklicana && i == IzidPredaje.SPREJETA -> Ukrep.Spremljaj(id)
-                !preklicana && i == IzidPredaje.NEZNAN -> Ukrep.Neznan
-                else -> Ukrep.Tuje
+            return@spremeni when {
+                prosta && i == IzidPredaje.SPREJETA -> s.copy(spremljana = id) to Ukrep.Spremljaj(id)
+                prosta && i == IzidPredaje.NEZNAN -> s to Ukrep.Neznan
+                else -> s to Ukrep.Tuje
             }
         }
         val brez = s.copy(cakajoca = null)
         val rocno = brez.copy(rocno = c.besedilo)
         when (konec) {
             is Konec.Odgovor -> when (val i = konec.izid) {
-                IzidPredaje.SPREJETA -> brez to Ukrep.Spremljaj(id)
+                IzidPredaje.SPREJETA -> brez.copy(spremljana = id) to Ukrep.Spremljaj(id)
                 IzidPredaje.NEZNAN -> brez to Ukrep.Neznan
                 // CRA1 in preizkus lastnosti: odgovor velja samo za TA poskus; ce je bil zacet se drug (drug zaslon ali proces, morda se
                 // na poti), racunalnik nalogo morda ima - brez rocne ponovitve (nov id bi jo izvedel dvakrat) in brez »shrani za pozneje«
@@ -338,9 +341,9 @@ class ZaslonNaloge(val naloga: NalogaRacunalnika) {
     fun nitVelja(gen: Int, id: String): Boolean = generacija.get() == gen && naloga.cakajocaId() == id
 
     /** Glavna nit po koncu niti; null = nit je zastarela (preklic ali nova naloga v tej instanci), nic se ne naredi. */
-    fun koncaj(gen: Int, id: String, konec: NalogaRacunalnika.Konec, sKlepetom: Boolean): NalogaRacunalnika.Ukrep? {
+    fun koncaj(gen: Int, id: String, konec: NalogaRacunalnika.Konec, sKlepetom: Boolean, seznanjen: Boolean = true): NalogaRacunalnika.Ukrep? {
         if (generacija.get() != gen) return null
         cakaSejo = null
-        return naloga.koncaj(id, konec, sKlepetom)
+        return naloga.koncaj(id, konec, sKlepetom, seznanjen)
     }
 }
