@@ -61,6 +61,21 @@ class Naloga24Test {
         assertTrue(d.seznam().none { it.id == "klic-podjetje-1" }, "potekel klic je ostal v dnevniku")
     }
 
+    // druzina CR7: bralca dnevnika (zaslon, navodila Line) ne vrneta klica, ki je potekel med delovanjem
+    @Test
+    fun `CR7 - seznam in iskanje ne vrneta klica, ki je potekel med delovanjem`() {
+        var zdaj = zacetek
+        val shramba = ZavrnjenaShramba()
+        val d = DnevnikKlicev(shramba, ura = { zdaj })
+        assertTrue(d.dodaj(podjetniski("klic-podjetje-1", zacetek - 89 * DAN)))
+        assertTrue(d.dodaj(oseben("klic-oseben-1", zacetek)))
+        zdaj += 2 * DAN
+        shramba.zavrni = true // tudi ko zapis ciscenja ne uspe
+        assertTrue(d.seznam().none { it.id == "klic-podjetje-1" }, "seznam je vrnil potekel klic")
+        assertTrue(d.poisci("Narocilo").isEmpty(), "iskanje je vrnilo potekel klic")
+        assertEquals(listOf("klic-oseben-1"), d.seznam().map { it.id })
+    }
+
     @Test
     fun `CR7 - ce zapis ciscenja ne uspe, potekel klic vseeno ne odide`() {
         var zdaj = zacetek
@@ -131,7 +146,7 @@ class Naloga24Test {
         assertTrue(k.contains("preklicano = { ustavljen || generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id ||"), "N1")
         // CR2: naloga za ponovitev se vzame sele po obnovi stanja pogleda (post), ne neposredno v renderAssistant
         val a = app("DialerActivity.kt")
-        assertTrue(Regex("""assistantTaskInput\.post \{\s+if \(!isDestroyed && assistantTaskInput\.text\.isNullOrEmpty\(\)\) asistent\.vzemiZaPonovitev\(\)""").containsMatchIn(a), "CR2 post")
+        assertTrue(Regex("""assistantTaskInput\.post \{\s+val q = AsistentPrikaz\.izracunaj\(asistent\.stanje\(\)\)[^\n]*\n\s+if \(!isDestroyed && q\.vnos && !q\.odgovor && assistantTaskInput\.text\.isNullOrEmpty\(\)\) asistent\.vzemiZaPonovitev\(\)""").containsMatchIn(a), "CR2 post")
         assertEquals(1, Regex("""vzemiZaPonovitev\(\)""").findAll(a).count(), "CR2 neposreden klic")
     }
 

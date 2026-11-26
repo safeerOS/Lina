@@ -477,7 +477,10 @@ class DnevnikKlicev(
     // Vrne seznam klicev urejen po datumu (od najnovejsega), pri cemer so nujni klici privzeto na vrhu.
     @Synchronized
     fun seznamPoDatumu(nujniNaVrhu: Boolean = true): List<ZapisKlica> {
-        return urediZapise(zapisi.values, nujniNaVrhu)
+        // naloga 24 (CR7, druzina): klic, ki je potekel med delovanjem, se ne pokaze in ne gre v navodila Line
+        uveljaviHramboInShrani()
+        val zdaj = ura()
+        return urediZapise(zapisi.values.filter { !potekel(it.nacin, it.casZacetka, zdaj) }, nujniNaVrhu)
     }
 
     // Okrajsava za seznam klicev z nujnimi klici na vrhu.
@@ -488,13 +491,15 @@ class DnevnikKlicev(
     fun poisci(poizvedba: String): List<ZapisKlica> {
         val iskalniNiz = normalizirajZaPreverbo(poizvedba.trim())
         if (iskalniNiz.isEmpty()) return emptyList()
+        uveljaviHramboInShrani()
+        val zdaj = ura()
 
-        val zadetki = zapisi.values.filter { zapis ->
+        val zadetki = zapisi.values.filter { zapis -> !potekel(zapis.nacin, zapis.casZacetka, zdaj) && (
             normalizirajZaPreverbo(zapis.stevilka).contains(iskalniNiz) ||
                 normalizirajZaPreverbo(zapis.povzetek).contains(iskalniNiz) ||
                 normalizirajZaPreverbo(zapis.prepis).contains(iskalniNiz) ||
                 normalizirajZaPreverbo(zapis.nacin.koda).contains(iskalniNiz) ||
-                (zapis.nujno && "nujno".contains(iskalniNiz))
+                (zapis.nujno && "nujno".contains(iskalniNiz)))
         }
         return urediZapise(zadetki, nujniNaVrhu = true)
     }

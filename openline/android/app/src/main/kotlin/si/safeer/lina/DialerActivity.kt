@@ -773,7 +773,8 @@ class DialerActivity : Activity() {
         // naloga 24 CR2: vzame jo sele po obnovi stanja pogleda (onRestoreInstanceState teče po onStart, renderAssistant pa ze v onCreate) -
         // sicer obnovljen osnutek prepise nalogo, ki je iz shrambe ze izbrisana; neprazen osnutek jo pusti v shrambi
         if (p.vnos && !p.odgovor && assistantTaskInput.text.isNullOrEmpty()) assistantTaskInput.post {
-            if (!isDestroyed && assistantTaskInput.text.isNullOrEmpty()) asistent.vzemiZaPonovitev()?.let { assistantTaskInput.setText(it) }
+            val q = AsistentPrikaz.izracunaj(asistent.stanje()) // stanje se je do izvedbe lahko spremenilo (npr. vnos za odgovor)
+            if (!isDestroyed && q.vnos && !q.odgovor && assistantTaskInput.text.isNullOrEmpty()) asistent.vzemiZaPonovitev()?.let { assistantTaskInput.setText(it) }
         }
         assistantStopButton.visibility = if (p.ustavi) View.VISIBLE else View.GONE
         val zaOdgovor = asistent.nalogaZaOdgovor()
