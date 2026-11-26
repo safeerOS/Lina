@@ -470,6 +470,8 @@ export async function mejeOrodijOrkestratorja(dir?: string, o: Odvisnosti = {}):
   const podatki = (await kanonicna(root)) ?? root;
   // naloga 19b N2: datoteka je nepodpisana in jo lahko zapise vsak lokalni proces brez gesla - seznama veljata samo s podpisom ukaza
   // lastnika; nepodpisan, spremenjen ali pokvarjen seznam (tudi prepovedanih) = nobena mapa (fail-closed)
+  // brez map (nova namestitev, pokvarjena datoteka) ni kaj preverjati: nobena mapa, obicajno sporocilo orodja
+  if (!s.mape.length) return { dovoljene: [], podatki, prepovedane: [] };
   const nepotrjen = !(await seznamVelja(root, "mape", s.mape, s.podpisMap)) ? "Dovoljene mape niso potrjene" : !(await seznamVelja(root, "prepovedane", s.prepovedane ?? [], s.podpisPrepovedanih)) ? "Prepovedane mape niso potrjene" : null;
   if (nepotrjen) {
     return { dovoljene: [], podatki, prepovedane: [], razlog: `${nepotrjen} z geslom lastnika (spremenjena datoteka ali starejsa razlicica): lastnik ta seznam znova shrani v zavihku Racunalnik.` };

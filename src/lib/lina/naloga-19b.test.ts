@@ -9,7 +9,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { setupOwner } from "./auth.server.ts";
 import { podpisSeznama, ukazClaudeNalog } from "./claude-naloge.server.ts";
-import { NAJVEC_ZNAKOV_IZIDA_ORODJA, ovijPodatek, type OrodjeOrkestratorja } from "./orkestrator.ts";
+import { NAJVEC_ZNAKOV_IZIDA_ORODJA, ovijPodatek, vnosZaPotrditev, type OrodjeOrkestratorja } from "./orkestrator.ts";
 import { KOS_DATOTEKE, orodjaLine } from "./orkestrator-orodja.server.ts";
 import { ustvariOrkestrator, type KlicModela } from "./orkestrator.server.ts";
 import { potrdiOpozorilo } from "./opozorilo.server.ts";
@@ -128,6 +128,11 @@ describe("naloga 19b N1: branje strani v linearnem casu (napadalceva stran z nez
     const t = izid(await orodje(root, "preberi_stran", { splet: lazniSplet(() => html) }).izvedi({ naslov: "https://mizar.primer.si/" }, ctx()));
     assert.ok(t.includes("Prvi &lt;ne&gt; odstavek"), t);
     assert.ok(t.includes("Drugi") && !t.includes("b\">") && !t.includes("d'>"), t);
+    // po zaprti vrednosti narekovaj ne odpre nove vrednosti (sicer bi oznaka pogoltnila preostanek strani)
+    for (const h of ['<p title="a"">Prvi</p><p>Drugi</p>', '<a href="/x" "y">L</a><p>Prvi</p><p>Drugi</p>', '<p title="a" "b">Prvi</p><p>Drugi</p>']) {
+      const u = izid(await orodje(root, "preberi_stran", { splet: lazniSplet(() => h) }).izvedi({ naslov: "https://mizar.primer.si/" }, ctx()));
+      assert.ok(u.includes("Prvi") && u.includes("Drugi"), `${h} -> ${u}`);
+    }
   });
 
   it("obicajna stran: naslov, odstavki, seznami, tabela, naslovi, entitete; skripta in komentar nista besedilo", async () => {
@@ -183,10 +188,10 @@ describe("naloga 19b N2: dovoljene in prepovedane mape samo s podpisom ukaza las
     assert.match(napakaIz(await orodje(root, "preberi_datoteko").izvedi({ pot: path.join(proj, "beri.txt") }, ctx())), /potrjene z geslom/);
   });
 
-  it("pokvarjena datoteka: fail-closed", async () => {
+  it("pokvarjena datoteka ali nova namestitev: fail-closed z obicajnim sporocilom", async () => {
     const { root, proj } = await okolje();
     await writeFile(path.join(root, "claude-naloge.json"), "{ne json");
-    assert.match(napakaIz(await orodje(root, "preberi_datoteko").izvedi({ pot: path.join(proj, "beri.txt") }, ctx())), /potrjene z geslom|Ni dovoljenih/);
+    assert.match(napakaIz(await orodje(root, "preberi_datoteko").izvedi({ pot: path.join(proj, "beri.txt") }, ctx())), /Ni dovoljenih map/);
   });
 
   it("krog zapis-branje: ukaz lastnika mape in prepovedane podpise, drug zapis stanja podpis ohrani, orodje bere", async () => {
@@ -304,6 +309,8 @@ describe("naloga 19b N5: prepis datoteke, ki ni bila prebrana dobesedno", () => 
   it("celotna je v shemi in v predogledu potrditve pred vsebino", () => {
     const d = orodje("/tmp/x", "zapisi_datoteko").definicija;
     assert.ok((d.parametri as { properties: Record<string, unknown> }).properties.celotna);
+    const kljuci = Object.keys(vnosZaPotrditev({ vsebina: "x".repeat(5000), celotna: true, pot: "/p/f.txt", prepisi: true }));
+    assert.ok(kljuci.indexOf("celotna") < kljuci.indexOf("vsebina"), kljuci.join(","));
   });
 });
 

@@ -431,8 +431,10 @@ function konecZnacke(html: string, od: number): number {
       continue;
     }
     if (c === ">") return j;
-    if ((c === '"' || c === "'") && poEnacaju) narekovaj = c;
-    else if (c === "=") poEnacaju = true;
+    if ((c === '"' || c === "'") && poEnacaju) {
+      narekovaj = c;
+      poEnacaju = false; // po zaprti vrednosti narekovaj ne odpre nove (title="a"" ...)
+    } else if (c === "=") poEnacaju = true;
     else if (c !== " " && c !== "\t" && c !== "\n" && c !== "\r" && c !== "\f") poEnacaju = false;
   }
   return -1;
