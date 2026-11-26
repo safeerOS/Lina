@@ -148,6 +148,18 @@ test("N1: tekoci streznik doma - menjava prehoda (drugo omrezje) ga ustavi v dru
   } finally { await pospravi(o); }
 });
 
+test("N1 (Windows, brez podatka o prehodih): lastnik omrezje izrecno odobri, samodejno sledenje ga NE uporabi (isto podomrezje je lahko tuje)", async () => {
+  const o = await pripravi("192.168.77.7", { omrezja: ["127.0.0.0/24|brez-prehoda"] });
+  try {
+    nastaviOmrezjeNaslovov({ vmesniki: () => ({ Ethernet: [v4("127.0.0.5")] }), izvor: async () => "127.0.0.5", prehodi: async () => ({}) });
+    await uskladiAsistenta(o.dir);
+    assert.equal((await shranjeno(o)).naslov, "192.168.77.7", "brez MAC prehoda ni samodejnega sledenja");
+    assert.equal((await stanjeAsistenta(o.token, o.dir)).tece, false);
+    const s = await shraniAsistenta(o.token, { naslov: "127.0.0.5", odobriOmrezje: true }, o.dir);
+    assert.equal(s.tece, true, s.napaka);
+  } finally { await pospravi(o); }
+});
+
 test("N1: Global Link na neodobrenem omrezju tece naprej (samo rele), QR in koda se ne izdata", async () => {
   const o = await pripravi("127.0.0.5", { globalLink: true, omrezja: [`127.0.0.0/24|${MAC_DOMA}`] });
   try {
@@ -172,8 +184,9 @@ test("prehodiVmesnikov: privzeti prehod iz /proc/net/route (little-endian) in MA
   assert.equal(omrezjeNaslova("192.168.1.20", { wlp2s0: [v4("192.168.1.20")] }, { wlp2s0: MAC_DOMA }), `192.168.1.0/24|${MAC_DOMA}`);
   assert.equal(omrezjeNaslova("192.168.1.20", { wlp2s0: [v4("192.168.1.20")] }, { wlp2s0: "" }), null, "MAC prehoda se ni znan = ne vemo");
   assert.equal(omrezjeNaslova("192.168.1.20", {}, {}), null);
-  // slepi pregled 21 (2): brez prehodov (Windows) ali vmesnik brez privzete poti - samo podomrezje bi bilo enako v tujem omrezju, zato ne vemo
-  assert.equal(omrezjeNaslova("192.168.1.20", { Ethernet: [v4("192.168.1.20")] }, {}), null);
+  // slepi pregled 21 (2): vmesnik brez privzete poti, ko jo imajo drugi = ne vemo; sistem brez podatka o prehodih (Windows) = samo podomrezje
+  assert.equal(omrezjeNaslova("192.168.1.20", { eth1: [v4("192.168.1.20")] }, { wlp2s0: MAC_DOMA }), null);
+  assert.equal(omrezjeNaslova("192.168.1.20", { Ethernet: [v4("192.168.1.20")] }, {}), "192.168.1.0/24|brez-prehoda");
   // slepi pregled 21b (1): MAC prehoda samo z ISTEGA vmesnika (MAC z drugega vmesnika z istim IP prehoda bi tuje omrezje razvrstil kot domace)
   const route2 = "Iface\tDestination\tGateway\nenp1s0\t00000000\t0101A8C0\nwlp2s0\t00000000\t0101A8C0\n";
   const arp2 = "IP address HW type Flags HW address Mask Device\n192.168.1.1 0x1 0x2 aa:bb:cc:00:00:01 * enp1s0\n";

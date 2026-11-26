@@ -246,6 +246,8 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       .then((p) => {
         neuspehov.current.qr = 0;
         if (ziv.current) setPovabilo({ ...p, do: Date.now() + p.velja, kljuc: kljucStreznika });
+        // naloga 21 (N2): QR, ki je prisel po zapustitvi zaslona (zacniSeznanitev caka do 25 s na pot klicev), ne ostane veljaven
+        else void prekliciSeznanitevFn().catch(() => undefined);
       })
       .catch((e: unknown) => {
         premorDo.current.qr = Date.now() + PREMOR_PO_NAPAKI_MS;

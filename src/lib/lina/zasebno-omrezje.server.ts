@@ -269,16 +269,19 @@ export async function prehodiVmesnikov(beri: (pot: string) => Promise<string> = 
 
 /**
  * Naloga 21 (N1): odtis omrezja, v katerem je [naslov] - podomrezje vmesnika in MAC privzetega prehoda (ob lastnikovi izbiri naslova
- * se shrani, samodejno sledenje in poslusanje veljata samo v shranjenem omrezju). null = ne vemo: naslova ni, MAC prehoda se ni znan,
- * vmesnik nima privzete poti ali sistem prehodov ne pove (Windows, brez /proc) - samo podomrezje bi bilo enako v tujem omrezju
- * (slepi pregled 21, najdba 2), zato tam odobritve ni (Lina na Windows telefona doma se ne sprejema; AGENTS.md »NI SE: Windows«).
+ * se shrani, samodejno sledenje in poslusanje veljata samo v shranjenem omrezju). null = ne vemo: naslova ni, MAC prehoda se ni znan
+ * ali vmesnik nima privzete poti, ceprav jo imajo drugi.
+ * Sistem brez podatka o prehodih (Windows brez /proc, ali racunalnik brez privzete poti): odtis »<podomrezje>|BREZ_PREHODA« - lastnik ga
+ * sme izrecno odobriti, samodejno sledenje pa ga ne uporabi (samo podomrezje je v tujem omrezju lahko enako - slepi pregled 21, najdba 2).
  */
+export const BREZ_PREHODA = "brez-prehoda";
 export function omrezjeNaslova(naslov: string, vmesniki: NodeJS.Dict<NetworkInterfaceInfo[]>, prehodi: Readonly<Record<string, string>>): string | null {
   for (const [ime, v] of Object.entries(vmesniki)) for (const e of v ?? []) {
     if (e.address !== naslov) continue;
     const mreza = podomrezje(e);
     const mac = prehodi[ime];
-    // shortcut: Windows nima /proc, zato omrezja ne prepozna (null); nadgradi z Get-NetNeighbor/GetIpNetTable2, ko Lina na Windows sprejema telefon doma
+    // shortcut: Windows nima /proc - odtis samo s podomrezjem (BREZ_PREHODA, brez samodejnega sledenja); nadgradi z Get-NetNeighbor/GetIpNetTable2
+    if (mreza && mac === undefined && Object.keys(prehodi).length === 0) return `${mreza}|${BREZ_PREHODA}`;
     if (!mreza || !mac) return null;
     return `${mreza}|${mac}`;
   }

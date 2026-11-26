@@ -19,7 +19,7 @@ import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { IzvajalecClaudeCode } from "./asistent.server.ts";
 import { AsistentStreznik, zasebenNaslov, type Seznanitve, type StanjeSeznanitve } from "./asistent-streznik.server.ts";
-import { izberiLanNaslov, izvorPrivzetePoti, naslovNaVmesniku, naslovZanke, odtisLan, omrezjeNaslova, prehodiVmesnikov, zasebniNaslovi } from "./zasebno-omrezje.server.ts";
+import { BREZ_PREHODA, izberiLanNaslov, izvorPrivzetePoti, naslovNaVmesniku, naslovZanke, odtisLan, omrezjeNaslova, prehodiVmesnikov, zasebniNaslovi } from "./zasebno-omrezje.server.ts";
 import { createServer } from "node:net";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import { requireOwner } from "./auth.server.ts";
@@ -374,7 +374,9 @@ function prostaVrata(naslov: string, vrata: number): Promise<boolean> {
 async function slediNaslovu(root: string, n: Nastavitve): Promise<Nastavitve> {
   if (!n.vklop || naslovNaVmesniku(n.naslov, vmesniki())) return n;
   const nov = izberiLanNaslov(vmesniki(), await izvorPoti());
-  if (!nov || nov === n.naslov || odobritev(n, nov, vmesniki(), await prehodi()) !== "da") return n;
+  const p = await prehodi();
+  // odtis brez prehoda (Windows) samodejnemu sledenju ne zadosca: isto podomrezje je lahko tuje omrezje (izrecno »Uporabi ta naslov« gre)
+  if (!nov || nov === n.naslov || odobritev(n, nov, vmesniki(), p) !== "da" || omrezjeNaslova(nov, vmesniki(), p)?.endsWith(`|${BREZ_PREHODA}`)) return n;
   // isti zaklep kot seznam naprav (A-12), z novim branjem: ne prepise imen ali lastnikove sprotne izbire
   return naSeznamu(async () => {
     const m = await preberiNastavitve(root);
@@ -664,12 +666,8 @@ export async function shraniAsistenta(token: string | null, vnos: { vklop?: unkn
   if (typeof vnos.naslov === "string" && !zasebniNaslovi(vmesniki()).includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
   let odobri: string | null = null;
   if (vnos.odobriOmrezje === true && typeof vnos.naslov === "string" && !naslovZanke(vnos.naslov)) {
-    const p = await prehodi();
-    odobri = omrezjeNaslova(vnos.naslov, vmesniki(), p);
-    // slepi pregled 21b (5): sistem brez podatka o prehodih (Windows) omrezja nikoli ne prepozna - ne obljubi ponovnega poskusa
-    if (odobri === null) throw new Error(Object.keys(p).length === 0
-      ? "Ta racunalnik omrezja ne zna prepoznati (ni podatka o prehodu); seznanjanje telefona doma tu se ni podprto. Global Link deluje."
-      : "Omrezja se ni mogoce prepoznati (prehod se ni znan). Poskusite znova cez nekaj sekund.");
+    odobri = omrezjeNaslova(vnos.naslov, vmesniki(), await prehodi());
+    if (odobri === null) throw new Error("Omrezja se ni mogoce prepoznati (prehod se ni znan). Poskusite znova cez nekaj sekund.");
   }
   // isti zaklep kot seznam naprav (A-12): branje-sprememba-zapis se ne prepleta z odlociSeznanitev ali odstraniNapravo
   await naSeznamu(async () => {

@@ -617,7 +617,8 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
   telefon« kot opozorilo (napakaKoda -> telNapaka_*, sl in en). mDNS oglas ostane samo med odprtim oknom kode. Preizkus: naloga-15-naslov.test.ts.
   Naloga 21 (sklepni slepi pregled 0.2.14, N1/N3/N10): samodejno sledenje naslovu in poslusanje na zasebnem naslovu (tudi OpenLine) SAMO v
   omrezju, ki ga je lastnik odobril: odtis omrezja = podomrezje vmesnika + MAC privzetega prehoda (/proc/net/route + /proc/net/arp, MAC tudi
-  z drugega vmesnika z istim IP prehoda; brez MAC - Windows, vmesnik brez privzete poti, ARP se prazen - omrezja ni mogoce odobriti), shrani se
+  samo z istega vmesnika; vmesnik brez privzete poti ali ARP se prazen = ne vemo; sistem brez podatka o prehodih - Windows - odtis samo s
+  podomrezjem »|brez-prehoda«, ki ga lastnik izrecno odobri, samodejno sledenje pa ga ne uporabi), shrani se
   v asistent-telefon.json `omrezja` (najvec 16) ob »Shrani« z NOVIM naslovom ali »Uporabi ta naslov« (odobriOmrezje: true; stikala in sama
   vrata ne odobrijo). Tekoci streznik se ustavi sele po dveh zaporednih preverbah v tujem omrezju. Neodobreno omrezje = rezerva »omrezje« (samo Global Link, napakaKoda »omrezje«, predlogNaslova + gumb »Uporabi ta naslov«,
   QR in koda z napisom, zakaj ju ni); neznan MAC (ARP) tekocega streznika ne ustavi, novega ne zazene. Brez zapisa `omrezja` (nadgradnja) ni
