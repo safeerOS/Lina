@@ -212,7 +212,8 @@ describe("omniroute z laznim streznikom na 127.0.0.1", () => {
     assert.match(r.ok ? "" : r.sporocilo, /OmniRoute/);
     assert.equal((await activeBrain(dir))?.model, "star/model");
     assert.deepEqual(zahteve.filter((z) => z.model !== undefined && z.model !== "star/model").map((z) => z.model), []);
-    assert.equal(zahteve.every((z) => z.avtorizacija === `Bearer ${KLJUC}`), true);
+    // Naloga 31: preverba dosegljivosti (GET /v1/models) namenoma brez kljuca; vse drugo s kljucem.
+    assert.equal(zahteve.every((z) => z.avtorizacija === `Bearer ${KLJUC}` || (z.avtorizacija === "" && z.metoda === "GET" && z.pot === "/v1/models")), true);
   });
 
   it("asistentka lahko izbere omniroute; pogovorBrain vrne naslov", async () => {
@@ -239,7 +240,11 @@ describe("omniroute z laznim streznikom na 127.0.0.1", () => {
   it("nov naslov ne prenese starega kljuca k drugemu gostitelju", async () => {
     const { dir, token } = await nova();
     await saveBrain({ provider: "omniroute", key: KLJUC, naslov: osnova, model: "auto" }, token, dir);
-    await assert.rejects(() => saveBrain({ provider: "omniroute", naslov: "https://omni.primer.si/v1", model: "auto" }, token, dir), /kljuc|ključ/i);
+    // Naloga 31 (26. 11. 2026): preverba dosegljivosti je pred preverbo kljuca, zato drug naslov, ki TECE (localhost namesto 127.0.0.1);
+    // nedosegljiv https://omni.primer.si bi zdaj vrnil OMNIROUTE_NE_TECE. Namen ostane: kljuc ne gre k drugemu naslovu.
+    const drug = osnova.replace("127.0.0.1", "localhost");
+    await assert.rejects(() => saveBrain({ provider: "omniroute", naslov: drug, model: "auto" }, token, dir), /kljuc|ključ/i);
+    assert.equal(zahteve.at(-1)?.avtorizacija, "", "preverba dosegljivosti ne nese kljuca");
   });
 
   it("checkBrain preveri omniroute na shranjenem naslovu", async () => {

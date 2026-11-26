@@ -6,7 +6,7 @@ import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
 import { callProvider, gcpLocation, gcpProject, hideSecret, PRAZEN_ODGOVOR, razlogVzroka, type RezultatPonudnika } from "./providers.ts";
 import { normirajNaslov } from "./lastni-streznik.ts";
-import { OMNIROUTE_PRIVZETI_NASLOV, veljavenNaslovOmniroute } from "./omniroute.ts";
+import { OMNIROUTE_NE_TECE, OMNIROUTE_PRIVZETI_NASLOV, veljavenNaslovOmniroute } from "./omniroute.ts";
 import { imaPosixDovoljenja } from "./platforma.server.ts";
 import { readJsonFile, resolveDataDir, writeJson } from "./store.server.ts";
 import {
@@ -635,6 +635,8 @@ async function shraniOmniroute(
 ): Promise<BrainPublic> {
   const naslov = veljavenNaslovOmniroute(typeof input.naslov === "string" && input.naslov.trim() ? input.naslov.trim() : OMNIROUTE_PRIVZETI_NASLOV);
   if (!naslov) throw new Error("Naslov OmniRoute ni veljaven: http samo za 127.0.0.1 ali localhost, sicer https (brez gesla in parametrov).");
+  // Naloga 31: pred vsakim zapisom; nedosegljiv OmniRoute ne postane ponudnik (klici ostanejo na prejsnjem), vmesnik vprasa za namestitev.
+  if (!(await teceOmniroute(naslov))) throw new Error(OMNIROUTE_NE_TECE);
   const typed = typeof input.key === "string" ? input.key.trim() : "";
   if (typed && (typed.length < 8 || typed.length > 400)) throw new Error("Ključ mora imeti med 8 in 400 znakov.");
   const glavni = await masterKey(root);
@@ -673,6 +675,18 @@ async function shraniOmniroute(
   const opomba = zaKlice ? "" : "OmniRoute je shranjen samo za asistentko; za klice ga izrecno izberite.";
   const skupaj = [sporociloModela, opomba].filter(Boolean).join(" ");
   return { ...(await readBrainOsnova(root)), ...(await pogledPonudnikov(root)), ...(skupaj ? { sporociloModela: skupaj } : {}) };
+}
+
+/** Naloga 31: ali na naslovu OmniRoute kaj odgovori (vsak odgovor HTTP, tudi 401, pomeni, da tece); rok 2 s, brez preusmeritev. */
+export async function teceOmniroute(naslov: string): Promise<boolean> {
+  const { omnirouteFetch } = await import("./providers.ts");
+  try {
+    const r = await omnirouteFetch(`${naslov.replace(/\/+$/, "")}/models`, { method: "GET" }, 2000, 2000);
+    await r.body?.cancel();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Shranjen naslov OmniRoute (najprej mozgani za klice, nato zapis ponudnika); null = ni nastavljen. */

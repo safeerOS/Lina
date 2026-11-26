@@ -48,3 +48,5 @@ function veljavenNaslovOmniroute(vnos) {
 export { veljavenNaslovPrehoda, smePrekPrehoda, naslovKlica, veljavenNaslovOmniroute };
 export type PrehodNastavitve = any;
 export const OMNIROUTE_PRIVZETI_NASLOV = "http://127.0.0.1:20128/v1";
+/** Naloga 31: dogovorjeno besedilo (= besedila.sl.omNeTece); vmesnik nanj vpraša za namestitev namesto surove napake. */
+export const OMNIROUTE_NE_TECE = "OmniRoute na tem računalniku ne teče.";

@@ -1754,8 +1754,12 @@ Lastnik: »OmniRoute ponuja več brezplacbih modelov zato kot ponudnika pri mož
 - Opozorilo v vmesniku: brezplacni modeli prek OmniRoute so storitve tretjih ponudnikov s svojimi pogoji in lahko uporabljajo poslane
   podatke; za klice (tajnica, osebni podatki klicateljev) Lina OmniRoute ponudi sele, ko uporabnik to izrecno izbere za klice.
 - Velja tudi za rezervni ponudnik (razdelek iz orodij lastnika): OmniRoute je lahko na seznamu rezervnih.
-- Namestitev samega OmniRoute na racunalnik uporabnika ni del Line (tuj program); vodja ga za lastnika namesti po varnostnem pregledu,
-  samo na 127.0.0.1.
+- Namestitev OmniRoute (lastnik 26. 11. 2026 18:36, nadomesti »ni del Line«): Lina vpraša »OmniRoute še ni nameščen. Ga namestim?«
+  in ga na »Da« namesti in zažene SAMA (omniroute-namestitev.server.ts): pripet npm in zaklepna datoteka z integriteto vseh paketov
+  (vendor/omniroute), `npm ci --ignore-scripts`, Electron kot Node, mapa <podatki Line>/omniroute, poslušanje samo 127.0.0.1,
+  okolje samo z dovoljenega seznama (nikoli ključi Line), geslo in ključ API ustvari Lina (šifrirano), ob koncu Line se ustavi,
+  »Odstrani OmniRoute« odstrani samo mapo z oznako Line. Nedosegljiv naslov se ne shrani (klici ostanejo na prejšnjem ponudniku).
+  Novejšo različico prinese nova Lina (nova zaklepna datoteka), nikoli »latest« ob namestitvi.
 - Dopolnitev 24. 11. 02:35 (lastnikova NALOGA-LINA-MODELI-KLICI-IN-ASISTENTKA.md, B9): Lina NIKOLI samodejno ne poslje vsebine drugemu
   ponudniku, ki ga uporabnik ni izrecno dolocil za to vlogo; rezervni ponudnik obstaja samo, ce ga uporabnik izrecno doda na seznam
   rezervnih (privzeto prazen - soglasje za osebne podatke). Znotraj OpenRouter velja C6.
