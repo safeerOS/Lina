@@ -93,6 +93,7 @@ class PosodobitevGithubTest {
     @Test fun `opombe so golo besedilo brez nevidnih znakov in omejene`() {
         assertEquals("abcd", PosodobitevGithub.ocistiOpombe("a\u200Bb\u0007c\uFEFFd"))
         assertEquals("abc", PosodobitevGithub.ocistiOpombe("a\u202Eb\u2066c"), "smerni znaki (Trojan Source)")
+        assertEquals("abcde", PosodobitevGithub.ocistiOpombe("a\u2800b\u180Bc\uFFFCd" + String(Character.toChars(0x1BCA0)) + "e"), "krog 3: dodatni nevidni znaki")
         assertEquals("abcde", PosodobitevGithub.ocistiOpombe("a\uFE0Fb\u3164c\u115Fd\uFFA0e"), "izbirniki razlicice in polnila")
         assertEquals("a\n\nb", PosodobitevGithub.ocistiOpombe("a\n\n\n\nb"))
         val d = PosodobitevGithub.ocistiOpombe("x".repeat(10_000))
