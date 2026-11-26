@@ -48,7 +48,7 @@ dependencies {
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
-    implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
+    implementation("org.bouncycastle:bcpkix-jdk15to18:1.87")
     // QR pairing with the admin console (Google code scanner: no camera permission needed).
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     // OCR na telefonu za lokalni indeks dokumentov (23. 11. 2026): model prek storitev Google Play (APK ostane majhen),
