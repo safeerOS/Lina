@@ -981,6 +981,14 @@ Merilo za vsako novo besedilo in vsak popravek glasu; kar je ze izpolnjeno, je o
   --dangerously-load-development-channels samo v interaktivni seji), stalna seja kot systemd --user, Windows (imenovana cev s
   predvidljivim imenom; Node ne zna nastaviti ACL cevi - varujeta jo samo vzajemna prijava in podpis naprave, NEPREVERJENO).
   Ustavitev je sporocilo v sejo: Claude Code ga dobi ob naslednjem obratu, trenutnega orodja ne prekine.
+- Lina sama odpre sejo (naloga 18, lastnik 25. 11. 2026 23:25 in 23:35 »Da«; seja-claude.server.ts): SAMO pot /naloga po preverbi podpisa
+  naprave ozjega kroga, ko seje ni: terminal + `claude --mcp-config <podatki>/kanal/seja-mcp.json --dangerously-load-development-channels
+  server:lina <stalen poziv>` v <dom>/Lina-Claude (0700, ne povezava, ne v podatkih), okolje okoljeZaAgenta, brez besedila naloge v argv.
+  Ena seja naenkrat (rezervacija, 3 min, PID), najvec 3 poskusi na uro, razlogi ni-terminala/ni-claude/omejitev/napaka (503 stanje.zagon).
+  Naloga se zadrzi (202) in preda, ko se kanal poveze, najvec do roka podpisa (2 min); sicer izid »se ni odprla pravocasno«. Stikalo
+  samodejniAgenti (Povezi telefon, privzeto VKLOPLJENO) velja tudi za »Dodeli nalogo« agentom: izklop = naloga s telefona je predlog, ki caka
+  lastnika. Opozorilo Claude Code o razvojnih kanalih (DevChannelsDialog) lastnik potrdi v terminalu - NEPREVERJENO s pravim Claude Code.
+  Preizkusi: naloga-18-seja-claude.test.ts, naloga-18-odpri-sejo.test.ts, naloga-18-agenti.test.ts, naloga-18-povezi-ui.spec.ts.
 
 ## Vprasanja in delo agenta v Lini (naloga 23, del 1; 25. 11. 2026; vprasanja-agentov.ts, vprasanja-agentov.server.ts)
 - Lastnik 23. 11. in 25. 11. 2026: »neposreden vpogled v vprasanja in delo Claude Code-a«. Naloga za claude (brez peskovnika, ne Windows)

@@ -1769,10 +1769,16 @@ export async function telefonStanjeNalog(dir?: string, o: Odvisnosti = {}, zdaj 
   };
 }
 
-export async function telefonDodeli(dir: string | undefined, agent: unknown, mapa: unknown, besedilo: unknown, pogoj: unknown, o: Odvisnosti = {}, zdaj = new Date()): Promise<{ id: string }> {
+export async function telefonDodeli(
+  dir: string | undefined, agent: unknown, mapa: unknown, besedilo: unknown, pogoj: unknown, o: Odvisnosti = {}, zdaj = new Date(),
+  m: { samodejno?: boolean } = {},
+): Promise<{ id: string }> {
   const root = resolveDataDir(dir);
   if (!(await ownerExists(root))) throw new ClaudeNalogaNapaka("geslo");
-  const z = await dodeli(root, "telefon", { agent, mapa, besedilo, pogoj }, o, zdaj);
+  // Naloga 18: stikalo »Lina sama zazene agente« izklopljeno - naloga s telefona je samo predlog, ki caka lastnikovo potrditev na racunalniku
+  const z = m.samodejno === false
+    ? await dodajPredlog(root, "telefon", mapa, besedilo, o, zdaj, agent, pogoj)
+    : await dodeli(root, "telefon", { agent, mapa, besedilo, pogoj }, o, zdaj);
   return { id: z.id };
 }
 

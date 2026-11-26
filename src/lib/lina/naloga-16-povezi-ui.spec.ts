@@ -14,7 +14,7 @@ type S = NonNullable<PovezavaPloscaLastnosti["s"]>;
 
 function stanje(delno: Partial<S> = {}): S {
   return {
-    vklop: true, globalLink: false, globalLinkStanje: "izklopljen", ocenaIzida: false, naslov: "192.168.77.7", vrata: 8446, naslovi: ["192.168.77.7"],
+    vklop: true, globalLink: false, globalLinkStanje: "izklopljen", samodejniAgenti: true, zagonClaude: "", ocenaIzida: false, naslov: "192.168.77.7", vrata: 8446, naslovi: ["192.168.77.7"],
     tece: true, napaka: "", napakaKoda: "", samoGlobalLink: false, odtis: "ab".repeat(32), claudeCode: false, cakajo: [], ozjiKrog: [],
     sKodo: { odprto: true, koda: "123456", do: Date.now() + 60_000, cakajoKodo: [], zaprtoSe: 0, oglas: "" },
     naprave: [], openLine: { povezan: false, vrata: 0, odtis: "" }, opozoriloKlicev: "", klicevSePripravlja: false,

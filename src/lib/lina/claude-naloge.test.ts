@@ -368,6 +368,8 @@ describe("claude-naloge: locitev", () => {
       // 25. 11. 2026 (orkestrator): vidniZnaki za ovojnico podatkov, dodeli_pomocniku prek predlagajClaudeNalogo; pot klica ga ne uvaza
       "lib/lina/orkestrator.server.ts",
       "lib/lina/orkestrator.ts",
+      // 26. 11. 2026 (naloga 18): Lina sama odpre sejo Claude Code (terminal, okolje agenta); uvaza ga samo asistent-telefon, pot klica ne
+      "lib/lina/seja-claude.server.ts",
       "lib/lina/zagon.server.ts",
     ]);
   });

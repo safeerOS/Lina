@@ -359,6 +359,17 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
           {t("telGlobalLink")}
         </label>
         <p id="pt-global-namig" className="text-xs text-[var(--color-moss)]">{t("telGlobalLinkNamig")}</p>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={s.samodejniAgenti}
+            disabled={zaposlen}
+            aria-describedby="pt-samodejni-namig"
+            onChange={(e) => void izvedi(async () => prevzemi(await shraniAsistentaFn({ data: { samodejniAgenti: e.target.checked } })))}
+          />
+          {t("telSamodejniAgenti")}
+        </label>
+        <p id="pt-samodejni-namig" className="text-xs text-[var(--color-moss)]">{t("telSamodejniAgentiNamig")}</p>
         {s.globalLink && (
           <p className="text-xs" role="status">{t("telGlobalLinkStanje")}{t(`telGlobalLink_${s.globalLinkStanje}`)}</p>
         )}
@@ -380,7 +391,9 @@ export function PoveziTelefon({ onError }: { onError: (m: string) => void }) {
       {s.tece ? (
         <>
           <p className="text-sm">{t("telTece")} {s.naslov}:{s.vrata}</p>
-          <p className="text-sm">{s.claudeCode ? t("telClaudeOdprt") : t("telClaudeZaprt")}</p>
+          <p className="text-sm">{s.claudeCode ? t("telClaudeOdprt") : t(s.samodejniAgenti ? "telClaudeZaprtSamodejno" : "telClaudeZaprt")}</p>
+          {/* naloga 18: samodejni zagon seje ni uspel (ni terminala, ni claude, omejitev poskusov) */}
+          {!s.claudeCode && s.zagonClaude ? <p role="alert" className="text-sm text-[var(--color-signal)]">{t(`telZagonClaude_${s.zagonClaude}`)}</p> : null}
           {s.opozoriloKlicev ? <p role="alert" className="text-sm text-[var(--color-signal)]">{s.opozoriloKlicev}</p> : null}
         </>
       ) : (

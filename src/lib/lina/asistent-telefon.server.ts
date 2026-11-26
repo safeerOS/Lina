@@ -36,6 +36,7 @@ import { nastaviDodatekZaTelefon, opisStanjaDodatkov, stanjeDodatkovZaTelefon } 
 import { kanalSeznamN8n, kanalUstvariN8n, kanalZazeniN8n, telefonPotrdiN8n, telefonPredlogN8n, telefonStanjeN8n } from "./n8n.server.ts";
 import { apkZaTelefon, telefonPotrdi, telefonPredlog, telefonStanje } from "./gradnje-github.server.ts";
 import { telefonDodeli, telefonPreklici, telefonStanjeNalog } from "./claude-naloge.server.ts";
+import { odpriSejoClaude, zadnjiRazlogSeje, type RazlogSeje } from "./seja-claude.server.ts";
 import { telefonOdgovor, telefonVprasanja } from "./vprasanja-agentov.server.ts";
 import { najdiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { AgentReleja, dovoljeniIzKanala, kljucReleja, type MoznostiPovezave, type StanjeAgenta } from "./rele-lina.server.ts";
@@ -51,14 +52,19 @@ export const VAROVALKA_KODE = "koda-varovalka.json";
 
 /** ocenaIzida: izid Claude Code gre k ponudniku modela za pogovor v oceno cilja (S1, drugi pregled 0.2.10); privzeto vklopljeno (odlocitev vodje). */
 /** globalLink: Lina poslusa na releju link.safeer.si za seznanjene telefone zunaj doma (naloga 22); privzeto VKLOPLJENO (lastnik 25. 11. 2026 »da« po neodvisnem pregledu). */
-type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean; globalLink: boolean };
+/**
+ * samodejniAgenti (naloga 18, lastnik 25. 11. 2026 23:25 in 23:35 »Da«): Lina sama odpre sejo Claude Code in sama zazene agente za naloge,
+ * ki jih je lastnik potrdil (podpisal) na telefonu; privzeto VKLOPLJENO. Izklop: naloga za Claude Code dobi 503 kot prej, naloga agentu caka
+ * lastnikovo potrditev na racunalniku.
+ */
+type Nastavitve = { vklop: boolean; naslov: string; vrata: number; imena: Record<string, string>; ocenaIzida: boolean; globalLink: boolean; samodejniAgenti: boolean };
 
 function cisteNastavitve(n: Partial<Nastavitve> | null): Nastavitve {
   const vrata = Number.isInteger(n?.vrata) && (n!.vrata as number) >= 1024 && (n!.vrata as number) <= 65535 ? (n!.vrata as number) : PRIVZETA_VRATA_ASISTENTA;
   const naslov = typeof n?.naslov === "string" && zasebenNaslov(n.naslov) ? n.naslov : "127.0.0.1";
   const imena: Record<string, string> = {};
   for (const [id, ime] of Object.entries(n?.imena ?? {})) if (ID_NAPRAVE.test(id) && typeof ime === "string") imena[id] = ime.slice(0, 60);
-  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false, globalLink: n?.globalLink !== false };
+  return { vklop: n?.vklop === true, naslov, vrata, imena, ocenaIzida: n?.ocenaIzida !== false, globalLink: n?.globalLink !== false, samodejniAgenti: n?.samodejniAgenti !== false };
 }
 
 /**
@@ -416,7 +422,9 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       // Naloge agentov na racunalniku (24. 11. 2026): vrsta, dodelitev (= potrditev za en zagon) in preklic s podpisom naprave
       const agentiNaloge = {
         stanje: () => telefonStanjeNalog(root),
-        dodeli: (agent: string, mapa: string, besedilo: string, pogoj: string) => telefonDodeli(root, agent, mapa, besedilo, pogoj),
+        // naloga 18: stikalo se prebere ob vsaki dodelitvi (izklop: naloga caka potrditev na racunalniku)
+        dodeli: async (agent: string, mapa: string, besedilo: string, pogoj: string) =>
+          telefonDodeli(root, agent, mapa, besedilo, pogoj, {}, new Date(), { samodejno: (await preberiNastavitve(root)).samodejniAgenti }),
         preklici: (id: string) => telefonPreklici(root, id),
       };
       // Vprasanja agentov (naloga 23): odprta vprasanja in dnevnik dela; odgovor s podpisom naprave (streznik ga preveri)
@@ -426,7 +434,9 @@ export function uskladiAsistenta(dir?: string): Promise<void> {
       };
       const omrezje = odtisOmrezja(vmesniki());
       const novStreznik = (naslov: string, vrata: number) => new AsistentStreznik({ root, naslov, vrata, izvajalec: sCiljem, seznanitve, koda, dodatki, gradnje,
-        agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null });
+        agentiNaloge, vprasanjaAgentov, omogociOddaljeno: n.globalLink, rele: () => kljucR?.id ?? null,
+        // naloga 18: stikalo se prebere ob vsaki nalogi (izklop velja takoj); streznik klice samo po preverbi podpisa naprave
+        odpriSejoClaude: async () => ((await preberiNastavitve(root)).samodejniAgenti ? odpriSejoClaude(root) : { ok: false, razlog: "izklopljeno" }) });
       try {
         let rezerva: Tekoci["rezerva"] = null;
         let napakaLan: unknown = null;
@@ -479,6 +489,10 @@ export type StanjeAsistenta = {
   /** Global Link (naloga 22): nastavitev in dejansko stanje povezave z relejem (izklopljen, povezujem, povezan, napaka). */
   globalLink: boolean;
   globalLinkStanje: StanjeAgenta;
+  /** Naloga 18: Lina sama odpre Claude Code in zazene agente za naloge, potrjene na telefonu. */
+  samodejniAgenti: boolean;
+  /** Naloga 18: zadnji neuspel samodejni zagon seje Claude Code (ni-terminala, ni-claude, omejitev, napaka); prazno = brez napake. */
+  zagonClaude: RazlogSeje | "";
   /** Izid Claude Code gre k ponudniku modela v oceno (S1). */
   ocenaIzida: boolean;
   naslov: string;
@@ -517,7 +531,7 @@ export async function stanjeAsistenta(token: string | null, dir?: string): Promi
   const ozjiKrog: string[] = [];
   for (const [koda, p] of stanje().prijave) if (p.stanje === "caka" && p.naprava && await jeClanKroga(p.naprava.kljuc, p.naprava.id)) ozjiKrog.push(koda);
   return {
-    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t && !t.rezerva, napaka: stanje().napaka,
+    vklop: n.vklop, ocenaIzida: n.ocenaIzida, globalLink: n.globalLink, globalLinkStanje: t?.rele?.stanje ?? "izklopljen", samodejniAgenti: n.samodejniAgenti, zagonClaude: zadnjiRazlogSeje(root), naslov: n.naslov, vrata: n.vrata, naslovi: zasebniNaslovi(), tece: !!t && !t.rezerva, napaka: stanje().napaka,
     napakaKoda: stanje().napakaKoda ?? "", samoGlobalLink: !!t?.rezerva, odtis: t?.odtis ?? "",
     claudeCode: t ? await t.izvajalec.razpolozljiv().catch(() => false) : false,
     cakajo,
@@ -549,7 +563,7 @@ export async function telefonZaLinijo(token: string | null, dir?: string, telefo
 }
 
 /** Lastnik vklopi ali izklopi telefon in izbere zasebni naslov in vrata. */
-export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown }, dir?: string): Promise<StanjeAsistenta> {
+export async function shraniAsistenta(token: string | null, vnos: { vklop?: unknown; naslov?: unknown; vrata?: unknown; ocenaIzida?: unknown; globalLink?: unknown; samodejniAgenti?: unknown }, dir?: string): Promise<StanjeAsistenta> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
   if (typeof vnos.naslov === "string" && !zasebniNaslovi().includes(vnos.naslov)) throw new Error("Izberite naslov tega racunalnika v domacem omrezju.");
@@ -562,6 +576,7 @@ export async function shraniAsistenta(token: string | null, vnos: { vklop?: unkn
       ...n, vklop: vnos.vklop === undefined ? n.vklop : vnos.vklop === true, naslov: typeof vnos.naslov === "string" ? vnos.naslov : n.naslov, vrata,
       ocenaIzida: typeof vnos.ocenaIzida === "boolean" ? vnos.ocenaIzida : n.ocenaIzida,
       globalLink: typeof vnos.globalLink === "boolean" ? vnos.globalLink : n.globalLink,
+      samodejniAgenti: typeof vnos.samodejniAgenti === "boolean" ? vnos.samodejniAgenti : n.samodejniAgenti,
     } satisfies Nastavitve);
   });
   await uskladiAsistenta(root);
