@@ -785,7 +785,7 @@ class DialerActivity : Activity() {
         // Razdelek klicev iz /koda/potrdi: ista potrditev kot pri QR (gostitelj in odtis na zaslonu).
         asistent.vzemiKlice()?.let { confirmAndPair(GatewayPairing.Invite(it.serverUrl, it.code, it.certSha256)) }
         assistantForgetButton.visibility = if (p.pozabi) View.VISIBLE else View.GONE
-        racunalnikiPogled.osvezi()
+        if (::racunalnikiPogled.isInitialized) racunalnikiPogled.osvezi()  // renderAssistant se lahko poklice pred koncem onCreate
         assistantTaskInput.visibility = if (p.vnos) View.VISIBLE else View.GONE
         assistantSendButton.visibility = if (p.poslji) View.VISIBLE else View.GONE
         // naloga 23t: naloga, ki je racunalnik zaradi zagona Claude Code ni sprejel, je v vnosu za rocno ponovitev (en dotik Poslji)
