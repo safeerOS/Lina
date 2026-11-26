@@ -750,6 +750,7 @@ test("naloga 25 N4: dve socasni oddaji istega id - ena izvedba, druga 409 obstaj
     const [r1, r2] = await Promise.all([p1, p2]);
     assert.deepEqual([r1.status, r2.status].sort(), [202, 409]);
     assert.equal((r1.status === 409 ? r1 : r2).telo.napaka, "obstaja");
+    assert.equal(z.razp(), 1, "druga oddaja je cakala na izid prve, ni naredila svojega poskusa");
     assert.equal(z.klici.filter((k) => k.kaj === "zacni").length, 1);
   } finally {
     z.odpri();
@@ -868,6 +869,7 @@ test("naloga 25 (slepi pregled 1b): socasna oddaja istega id ob zaprti seji dobi
     const [r1, r2] = await Promise.all([p1, p2]);
     assert.equal(r1.status, 503);
     assert.equal(r2.status, 503, "druga oddaja ne sme reci obstaja za nalogo, ki je racunalnik ni sprejel");
+    assert.equal(z.razp(), 1, "druga oddaja je cakala na izid prve, ni naredila svojega poskusa");
     assert.equal(z.klici.filter((k) => k.kaj === "zacni").length, 0);
   } finally {
     z.odpri();
