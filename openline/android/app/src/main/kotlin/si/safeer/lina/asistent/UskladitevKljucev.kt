@@ -22,13 +22,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 object UskladitevKljucev {
     private val teka = AtomicBoolean(false)
 
-    fun shramba(context: Context) = ShrambaUskladitve(KeystoreShranjevalnik.zaKljuceMozganov(context.applicationContext))
+    fun shramba(context: Context): ShrambaUskladitve {
+        val k = KeystoreShranjevalnik.zaKljuceMozganov(context.applicationContext)
+        return ShrambaUskladitve(k) { k.imaZapis() }
+    }
 
     fun sloti(context: Context): SlotiKljucev = object : SlotiKljucev {
         private val c = context.applicationContext
         override fun preberi(): Map<String, String> = KljuciMozganov.PONUDNIKI.mapNotNull { id ->
             SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(id)).preberi()?.izpostavi()?.let { id to it }
         }.toMap()
+        override fun neznani(): Set<String> = KljuciMozganov.PONUDNIKI.filter { id ->
+            val s = SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(id))
+            (s as? KeystoreShranjevalnik)?.imaZapis() == true && s.preberi() == null
+        }.toSet()
         override fun zapisi(ponudnik: String, vrednost: String?) {
             val s = SkupniKljuci.shrambaZaPonudnika(c, Ponudnik.izId(ponudnik))
             if (vrednost == null) s.izbrisi() else s.shrani(KljucGemini(vrednost))

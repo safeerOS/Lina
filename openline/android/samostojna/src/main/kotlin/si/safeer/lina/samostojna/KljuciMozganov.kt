@@ -58,7 +58,9 @@ data class StanjeKljucev(
 )
 
 /** Kaj gre v slote telefona: vrednost = vpisi, null = odstrani (oddaljen izbris kljuca v uporabi). */
-data class UporabaKljucev(val sloti: Map<String, String?>, val aktivni: Map<String, String>, val odstranjeni: List<String>)
+data class UporabaKljucev(val sloti: Map<String, String?>, val aktivni: Map<String, String>, val odstranjeni: List<String>) {
+    override fun toString(): String = "UporabaKljucev(sloti=${sloti.keys}, odstranjeni=$odstranjeni)" // nikoli vrednost
+}
 
 @Serializable
 data class Ovojnica(val v: Int, val iv: String, val ct: String, val tag: String)
@@ -74,17 +76,20 @@ object KljuciMozganov {
     private const val NAMEN_OVOJNICE = "lina-kljuci-v1"
     const val SMER_TR = "telefon-racunalnik"
     const val SMER_RT = "racunalnik-telefon"
+    /** aktivni[p] = BREZ: kljuc v uporabi je bil odstranjen; prazno mesto se ne zapolni samo (kot BREZ v TS). */
+    const val BREZ = "-"
     private val ID = Regex("^[0-9a-f]{16}$")
     private val NAPRAVA = Regex("^[A-Za-z0-9._-]{1,80}$")
     private val PREJ = Regex("^$|^[0-9]{1,16}/[A-Za-z0-9._-]{1,80}$")
     private val NEDOVOLJENI_OZNAKA = Regex("[\\x00-\\x1F\\x7F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]")
-    private val NEDOVOLJENI_VREDNOST = Regex("[\\s\\x00-\\x1F\\x7F]")
+    // isti nabor kot JS \\s v kljuci-mozganov.ts (Unicode presledki), sicer telefon sprejme kljuc, ki ga racunalnik zavrne (slepi N3)
+    private val NEDOVOLJENI_VREDNOST = Regex("[\\s\\x00-\\x1F\\x7F\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]")
     private val POLJA = setOf("id", "ponudnik", "oznaka", "cas", "naprava", "izbrisan", "prej", "vrednost")
     private val nakljucje = SecureRandom()
     private val json = Json { ignoreUnknownKeys = false }
 
     fun jePonudnik(p: String): Boolean = p in PONUDNIKI
-    fun veljavnaOznaka(o: String): Boolean = o.isNotBlank() && o.length <= NAJVEC_OZNAKA && !NEDOVOLJENI_OZNAKA.containsMatchIn(o)
+    fun veljavnaOznaka(o: String): Boolean = o.trim { it.isWhitespace() || it == '\uFEFF' }.isNotEmpty() && o.length <= NAJVEC_OZNAKA && !NEDOVOLJENI_OZNAKA.containsMatchIn(o)
     fun veljavnaVrednost(v: String): Boolean = v.length in 8..400 && !NEDOVOLJENI_VREDNOST.containsMatchIn(v)
 
     fun novejsi(a: ZapisKljuca, b: ZapisKljuca): Boolean = when {
@@ -145,13 +150,14 @@ object KljuciMozganov {
     /** Kot lokalneSpremembe v TS: slot (kljuc v uporabi) proti aktivnemu zapisu; prazen slot ob zivem zapisu = lokalna odstranitev. */
     fun lokalneSpremembe(
         zapisi: List<ZapisKljuca>, aktivni: Map<String, String>, sloti: Map<String, String>, jaz: String, zdaj: Long, uvoz: Boolean,
-        privzetaOznaka: (String) -> String,
+        privzetaOznaka: (String) -> String, neznani: Set<String> = emptySet(),
     ): Lokalne {
         val m = LinkedHashMap<String, ZapisKljuca>()
         for (z in zapisi) m[z.id] = z
         val akt = aktivni.toMutableMap()
         val spremenjeni = ArrayList<String>()
         for (p in PONUDNIKI) {
+            if (p in neznani) continue // neberljiv slot (Keystore) ni ne sprememba ne izbris
             val v = sloti[p].orEmpty()
             val a = akt[p]?.let { m[it] }
             if (v.isNotEmpty()) {
@@ -178,16 +184,17 @@ object KljuciMozganov {
     }
 
     /** Kot zaUporabo v TS: prejet zapis nikoli ne izbere ponudnika (B9); spremeni kljuc aktivnega, ga odstrani ali zapolni PRAZNO mesto. */
-    fun zaUporabo(zapisi: List<ZapisKljuca>, aktivni: Map<String, String>, sloti: Map<String, String>): UporabaKljucev {
+    fun zaUporabo(zapisi: List<ZapisKljuca>, aktivni: Map<String, String>, sloti: Map<String, String>, neznani: Set<String> = emptySet()): UporabaKljucev {
         val m = zapisi.associateBy { it.id }
         val akt = aktivni.toMutableMap()
         val izhod = LinkedHashMap<String, String?>()
         val odstranjeni = ArrayList<String>()
         for (p in PONUDNIKI) {
+            if (p in neznani) continue
             val a = akt[p]?.let { m[it] }
             val v = sloti[p].orEmpty()
             if (a != null && a.izbrisan) {
-                akt.remove(p)
+                akt[p] = BREZ
                 if (v.isNotEmpty()) { izhod[p] = null; odstranjeni.add(p) }
                 continue
             }
@@ -196,6 +203,7 @@ object KljuciMozganov {
                 continue
             }
             if (v.isNotEmpty()) continue
+            if (akt[p] == BREZ) continue // po odstranitvi kljuca v uporabi lastnik izbere sam (slepi S1)
             val kandidat = m.values.filter { it.ponudnik == p && !it.izbrisan }.reduceOrNull { a, b -> if (novejsi(b, a)) b else a }
             if (kandidat != null) { akt[p] = kandidat.id; izhod[p] = kandidat.vrednost }
         }
@@ -203,9 +211,11 @@ object KljuciMozganov {
     }
 
     /** Pred zahtevo (pripraviTelefon v TS). Pred prvo izmenjavo nic ne uvaza in nic ne poslje. */
-    fun pripravi(st: StanjeKljucev, sloti: Map<String, String>, jaz: String, zdaj: Long, privzetaOznaka: (String) -> String): Pair<StanjeKljucev, List<ZapisKljuca>> {
+    fun pripravi(
+        st: StanjeKljucev, sloti: Map<String, String>, jaz: String, zdaj: Long, privzetaOznaka: (String) -> String, neznani: Set<String> = emptySet(),
+    ): Pair<StanjeKljucev, List<ZapisKljuca>> {
         if (!st.uvozeno) return st to emptyList()
-        val l = lokalneSpremembe(st.zapisi, st.aktivni, sloti, jaz, zdaj, false, privzetaOznaka)
+        val l = lokalneSpremembe(st.zapisi, st.aktivni, sloti, jaz, zdaj, false, privzetaOznaka, neznani)
         val neposlani = (st.neposlani + l.spremenjeni).distinct()
         val m = l.zapisi.associateBy { it.id }
         return st.copy(zapisi = l.zapisi, aktivni = l.aktivni, neposlani = neposlani) to neposlani.mapNotNull { m[it] }
@@ -216,14 +226,14 @@ object KljuciMozganov {
     /** Po odgovoru (poOdgovoruTelefona v TS): nabor racunalnika + lastne neposlane; kljuc, spremenjen MED izmenjavo, ostane lastnikov. */
     fun poOdgovoru(
         st: StanjeKljucev, poslani: List<ZapisKljuca>, odgovor: List<ZapisKljuca>, slotiPrej: Map<String, String>, slotiZdaj: Map<String, String>,
-        jaz: String, zdaj: Long, privzetaOznaka: (String) -> String,
+        jaz: String, zdaj: Long, privzetaOznaka: (String) -> String, neznani: Set<String> = emptySet(),
     ): PoOdgovoru {
         val nabor = zdruzi(emptyList(), odgovor, zdaj)
         val potrjeni = poslani.filter { p -> nabor.any { it.id == p.id && it.razlicica == p.razlicica && it.izbrisan == p.izbrisan } }.map { it.id }.toSet()
         val svoji = st.zapisi.filter { it.id in st.neposlani && it.id !in potrjeni }
         var zapisi = zdruzi(nabor, svoji, zdaj)
         var neposlani = svoji.filter { s -> zapisi.any { it.id == s.id && it.razlicica == s.razlicica } }.map { it.id }
-        val u = zaUporabo(zapisi, st.aktivni, slotiPrej)
+        val u = zaUporabo(zapisi, st.aktivni, slotiPrej, neznani)
         val sloti = u.sloti.toMutableMap()
         var odstranjeni = u.odstranjeni
         var aktivni = u.aktivni
@@ -237,18 +247,21 @@ object KljuciMozganov {
         if (!st.uvozeno) {
             val efektivni = slotiPrej.toMutableMap()
             for ((p, v) in sloti) if (v == null) efektivni.remove(p) else efektivni[p] = v
-            val l = lokalneSpremembe(zapisi, aktivni, efektivni, jaz, zdaj, true, privzetaOznaka)
+            val l = lokalneSpremembe(zapisi, aktivni, efektivni, jaz, zdaj, true, privzetaOznaka, neznani)
             zapisi = l.zapisi
             aktivni = l.aktivni
             neposlani = (neposlani + l.spremenjeni).distinct()
             znova = znova || l.spremenjeni.isNotEmpty()
         }
-        return PoOdgovoru(StanjeKljucev(zapisi, aktivni, true, neposlani), UporabaKljucev(sloti, aktivni, odstranjeni), znova)
+        // ob neberljivem slotu uvoz se ni koncan (kot korakRacunalnika v TS)
+        return PoOdgovoru(StanjeKljucev(zapisi, aktivni, st.uvozeno || neznani.isEmpty(), neposlani), UporabaKljucev(sloti, aktivni, odstranjeni), znova)
     }
 
     // ---- Ovoj para (ECDH P-256 + HKDF-SHA256 + AES-256-GCM), enako kot kljuci-sinhron.ts / kljuci-mozganov.ts ----------------
 
-    data class Par(val zasebni: String, val javni: String)
+    data class Par(val zasebni: String, val javni: String) {
+        override fun toString(): String = "Par(javni=$javni)" // nikoli zasebni kljuc
+    }
 
     fun noviPar(): Par {
         val g = KeyPairGenerator.getInstance("EC")

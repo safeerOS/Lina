@@ -214,4 +214,82 @@ class KljuciMozganovTest {
         val p = s.preberi()!!
         assertEquals(K3, p.stanje.zapisi.single().vrednost); assertEquals(v.par, p.par)
     }
+
+    // ---- slepi pregled 1 ----
+
+    @Test
+    fun t1DejanjeMedIzmenjavoSeNeIzgubi() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sloti.m["gemini"] = K1
+        a.sinhroniziraj(r)
+        var nit: Thread? = null
+        r.zdaj = 2000
+        // med cakanjem na omrezje lastnik doda drugi kljuc (druga nit); ta mora pocakati konec izmenjave, ne pa izgubiti zapisa
+        SinhronKljucev.izmenjaj(a.shramba, a.sloti, a.id, { 2000 }) { vsebina ->
+            nit = Thread { SinhronKljucev.dodaj(a.shramba, a.sloti, a.id, 2000, "gemini", "Drugi", K2) }.also { it.start(); it.join(300) }
+            r.zahteva(a.id, vsebina)
+        }
+        nit!!.join(5000)
+        assertTrue(SinhronKljucev.seznam(a.shramba, a.id).any { it.oznaka == "Drugi" }, "dodan kljuc ostane")
+    }
+
+    @Test
+    fun s1PoOdstranitviNiSamodejnegaPreklopa() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sloti.m["gemini"] = K1
+        a.sinhroniziraj(r)
+        assertNull(SinhronKljucev.dodaj(a.shramba, a.sloti, a.id, 2000, "gemini", "Drugi", K2))
+        val vUporabi = SinhronKljucev.seznam(a.shramba, a.id).first { it.vUporabi }
+        assertNull(SinhronKljucev.odstrani(a.shramba, a.sloti, a.id, 2100, vUporabi.id))
+        r.zdaj = 2200; a.sinhroniziraj(r); a.sinhroniziraj(r, 2300)
+        assertNull(a.sloti.m["gemini"], "drugi kljuc istega ponudnika ne pride sam v uporabo")
+    }
+
+    @Test
+    fun s2CasSpremembeJeCasUrejanjaTudiBrezPovezave() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sinhroniziraj(r)
+        a.sloti.m["openai"] = K3
+        assertFalse(SinhronKljucev.izmenjaj(a.shramba, a.sloti, a.id, { 1500 }) { null }, "brez povezave")
+        r.zdaj = 9000; a.sinhroniziraj(r, 9000)
+        assertEquals(1500L, r.zapisi.single { it.ponudnik == "openai" }.cas)
+    }
+
+    @Test
+    fun s4NeberljivaShrambaNiPrviZagon() {
+        val pokvarjen = object : ShranjevalnikKljuca {
+            override fun preberi(): KljucGemini? = null
+            override fun shrani(k: KljucGemini) = error("ne sme pisati")
+            override fun izbrisi() = error("ne sme brisati")
+        }
+        val s = ShrambaUskladitve(pokvarjen) { true }
+        assertNull(s.preberi())
+        val sloti = Sloti().also { it.m["gemini"] = K1 }
+        assertFalse(SinhronKljucev.izmenjaj(s, sloti, "n-aaaaaaaaaaaaaaaa", { 1000 }) { error("ne sme poslati") })
+        assertEquals("napaka", SinhronKljucev.dodaj(s, sloti, "n-aaaaaaaaaaaaaaaa", 1000, "gemini", "x", K2))
+    }
+
+    @Test
+    fun s4NeberljivSlotNiIzbris() {
+        val r = Racunalnik(); val a = Telefon("n-aaaaaaaaaaaaaaaa")
+        a.sloti.m["gemini"] = K1
+        a.sinhroniziraj(r)
+        val neberljiv = object : SlotiKljucev {
+            override fun preberi(): Map<String, String> = emptyMap()
+            override fun neznani(): Set<String> = setOf("gemini")
+            override fun zapisi(ponudnik: String, vrednost: String?) = error("ne sme pisati v neberljiv slot")
+        }
+        r.zdaj = 2000
+        assertTrue(SinhronKljucev.izmenjaj(a.shramba, neberljiv, a.id, { 2000 }) { r.zahteva(a.id, it) })
+        assertTrue(r.zapisi.single().let { !it.izbrisan && it.vrednost == K1 })
+    }
+
+    @Test
+    fun n3UnicodePresledekKotRacunalnik() {
+        assertFalse(KljuciMozganov.veljavnaVrednost("AIzaTEST\u00A0kljuc-1111"))
+        assertFalse(KljuciMozganov.veljavnaVrednost("\uFEFFAIzaTESTkljuc-1111"))
+        assertFalse(KljuciMozganov.veljavnaOznaka("\uFEFF"))
+        assertTrue(KljuciMozganov.veljavnaVrednost(K1))
+        assertFalse(KljuciMozganov.Par("zasebni-skrivnost", "javni").toString().contains("zasebni-skrivnost"))
+    }
 }

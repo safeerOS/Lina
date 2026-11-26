@@ -7,6 +7,8 @@ import kotlinx.serialization.json.Json
 /** Kljuc v uporabi za ponudnika na tem telefonu (obstojeca shramba v Keystore, ShranjevalnikKljuca na ponudnika). */
 interface SlotiKljucev {
     fun preberi(): Map<String, String>
+    /** Ponudniki, katerih kljuc ta hip ni berljiv (zapis obstaja, Keystore ga ne odpre): zanje ni ne spremembe ne izbrisa. */
+    fun neznani(): Set<String> = emptySet()
     /** null = odstrani */
     fun zapisi(ponudnik: String, vrednost: String?)
 }
@@ -14,7 +16,9 @@ interface SlotiKljucev {
 @Serializable
 private data class ZapisNaDisku(
     val id: String, val ponudnik: String, val oznaka: String, val cas: Long, val naprava: String, val izbrisan: Boolean, val prej: String, val vrednost: String,
-)
+) {
+    override fun toString(): String = "ZapisNaDisku($id)" // nikoli vrednost
+}
 
 @Serializable
 private data class ShranjenoNaDisku(
@@ -30,7 +34,7 @@ private data class ShranjenoNaDisku(
 )
 
 /** Stanje uskladitve kljucev (z vrednostmi in zasebnim kljucem para) kot EN sifriran zapis v [shramba] (Keystore na telefonu). */
-class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca) {
+class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca, private val obstaja: () -> Boolean = { false }) {
     data class Vse(val stanje: StanjeKljucev, val par: KljuciMozganov.Par, val javniRacunalnika: String?, val odstranjeni: List<String>)
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -38,7 +42,8 @@ class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca) {
     /** Ob prvem branju ustvari par; pokvarjen zapis = null (uskladitev se ne izvede, nic ne prepise). */
     @Synchronized fun preberi(): Vse? {
         val surovo = try { shramba.preberi()?.izpostavi() } catch (_: Exception) { return null }
-        if (surovo == null) return KljuciMozganov.noviPar().let { Vse(StanjeKljucev(), it, null, emptyList()) }
+        // zapis obstaja, a se ne odpre (Keystore): ni prvi zagon - brez uskladitve, nic se ne prepise (slepi S4)
+        if (surovo == null) return if (obstaja()) null else KljuciMozganov.noviPar().let { Vse(StanjeKljucev(), it, null, emptyList()) }
         val d = try { json.decodeFromString<ShranjenoNaDisku>(surovo) } catch (_: Exception) { return null }
         val zapisi = d.zapisi.map { ZapisKljuca(it.id, it.ponudnik, it.oznaka, it.cas, it.naprava, it.izbrisan, it.prej, it.vrednost) }
         return Vse(StanjeKljucev(zapisi, d.aktivni, d.uvozeno, d.neposlani), KljuciMozganov.Par(d.zasebni, d.javni), d.javniRacunalnika, d.odstranjeni)
@@ -60,16 +65,25 @@ class ShrambaUskladitve(private val shramba: ShranjevalnikKljuca) {
  */
 object SinhronKljucev {
     private const val NAJVEC_KROGOV = 3
+    /**
+     * Celotna izmenjava (branje - omrezje - zapis) in vsako dejanje vmesnika tecejo pod istim zaklepom (slepi pregled T1): sicer bi
+     * izmenjava z omrezja prepisala kljuc, ki ga je lastnik vmes dodal ali odstranil. Dejanje vmesnika (na niti v ozadju) pocaka.
+     */
+    private val zaklep = Any()
 
     fun privzetaOznaka(p: String): String = when (p) {
         "gemini" -> "Gemini"; "openai" -> "OpenAI"; "claude" -> "Claude"; "grok" -> "Grok"; "openrouter" -> "OpenRouter"; else -> p
     }
 
-    fun izmenjaj(shramba: ShrambaUskladitve, sloti: SlotiKljucev, jaz: String, zdaj: () -> Long, poslji: (String) -> String?): Boolean {
+    fun izmenjaj(shramba: ShrambaUskladitve, sloti: SlotiKljucev, jaz: String, zdaj: () -> Long, poslji: (String) -> String?): Boolean = synchronized(zaklep) {
         repeat(NAJVEC_KROGOV) {
-            val vse = shramba.preberi() ?: return false
+            val vse0 = shramba.preberi() ?: return false
             val slotiPrej = try { sloti.preberi() } catch (_: Exception) { return false }
-            val (st, poslani) = KljuciMozganov.pripravi(vse.stanje, slotiPrej, jaz, zdaj(), ::privzetaOznaka)
+            val neznani = try { sloti.neznani() } catch (_: Exception) { return false }
+            val (st, poslani) = KljuciMozganov.pripravi(vse0.stanje, slotiPrej, jaz, zdaj(), ::privzetaOznaka, neznani)
+            // lastna sprememba dobi cas zdaj in ostane zapisana tudi brez povezave (slepi S2: cas urejanja, ne cas naslednje izmenjave)
+            val vse = vse0.copy(stanje = st)
+            if (st != vse0.stanje) shramba.shrani(vse)
             val kljuc = vse.javniRacunalnika?.let { KljuciMozganov.javniKljuc(it) }?.let { KljuciMozganov.kljucPara(vse.par.zasebni, it, jaz) }
             // brez znanega kljuca racunalnika (prva izmenjava) gre samo javni kljuc para; zapisi sledijo v naslednjem krogu
             val naZici = if (kljuc == null) emptyList() else poslani.map { KljuciMozganov.zaZico(it, kljuc, KljuciMozganov.SMER_TR) }
@@ -79,14 +93,14 @@ object SinhronKljucev {
             val k = KljuciMozganov.kljucPara(vse.par.zasebni, javniR, jaz)
             val prejeti = odg.zapisi.mapNotNull { KljuciMozganov.zZice(it, k, KljuciMozganov.SMER_RT) }
             val slotiZdaj = try { sloti.preberi() } catch (_: Exception) { return false }
-            val po = KljuciMozganov.poOdgovoru(st, if (kljuc == null) emptyList() else poslani, prejeti, slotiPrej, slotiZdaj, jaz, zdaj(), ::privzetaOznaka)
+            val po = KljuciMozganov.poOdgovoru(st, if (kljuc == null) emptyList() else poslani, prejeti, slotiPrej, slotiZdaj, jaz, zdaj(), ::privzetaOznaka, neznani)
             try {
                 for ((p, v) in po.uporaba.sloti) sloti.zapisi(p, v)
             } catch (_: Exception) { return false }
             shramba.shrani(ShrambaUskladitve.Vse(po.stanje, vse.par, odg.javni, (vse.odstranjeni + po.uporaba.odstranjeni).distinct()))
             if (!po.znova) return true
         }
-        return true
+        true
     }
 
     // ---- Vmesnik na telefonu (Nastavitve > Kljuci): seznam brez vrednosti, dodaj z oznako, uporabi, odstrani -------------------
@@ -107,15 +121,15 @@ object SinhronKljucev {
     private fun dejanje(
         shramba: ShrambaUskladitve, sloti: SlotiKljucev, jaz: String, zdaj: Long,
         f: (StanjeKljucev, Map<String, String>) -> Pair<StanjeKljucev, Map<String, String?>>?,
-    ): String? {
+    ): String? = synchronized(zaklep) {
         val v = shramba.preberi() ?: return "napaka"
         val zdajSloti = sloti.preberi()
         // pred prvo izmenjavo ni uvoza (prvi odgovor racunalnika pove, kateri kljuci ze obstajajo - brez dvojnikov)
-        val st0 = if (v.stanje.uvozeno) KljuciMozganov.pripravi(v.stanje, zdajSloti, jaz, zdaj, ::privzetaOznaka).first else v.stanje
+        val st0 = if (v.stanje.uvozeno) KljuciMozganov.pripravi(v.stanje, zdajSloti, jaz, zdaj, ::privzetaOznaka, sloti.neznani()).first else v.stanje
         val (st, pisi) = f(st0, zdajSloti) ?: return "ni"
         for ((p, vr) in pisi) sloti.zapisi(p, vr)
         shramba.shrani(v.copy(stanje = st))
-        return null
+        null
     }
 
     private fun spremeni(st: StanjeKljucev, z: ZapisKljuca, nov: ZapisKljuca, jaz: String, zdaj: Long): StanjeKljucev {
@@ -151,7 +165,7 @@ object SinhronKljucev {
             val z = st.zapisi.firstOrNull { it.id == id && !it.izbrisan } ?: return@dejanje null
             val s1 = spremeni(st, z, z.copy(izbrisan = true, vrednost = ""), jaz, zdaj)
             if (st.aktivni[z.ponudnik] != z.id) s1 to emptyMap()
-            else s1.copy(aktivni = s1.aktivni - z.ponudnik) to mapOf(z.ponudnik to null)
+            else s1.copy(aktivni = s1.aktivni + (z.ponudnik to KljuciMozganov.BREZ)) to mapOf(z.ponudnik to null)
         }
 
     fun preimenuj(shramba: ShrambaUskladitve, sloti: SlotiKljucev, jaz: String, zdaj: Long, id: String, oznaka: String): String? {
@@ -165,5 +179,5 @@ object SinhronKljucev {
 
     /** Ponudniki, katerih kljuc v uporabi je bil odstranjen na drugi napravi (obvestilo), in potrditev obvestila. */
     fun odstranjeni(shramba: ShrambaUskladitve): List<String> = shramba.preberi()?.odstranjeni.orEmpty()
-    fun potrdiObvestilo(shramba: ShrambaUskladitve) { shramba.preberi()?.let { shramba.shrani(it.copy(odstranjeni = emptyList())) } }
+    fun potrdiObvestilo(shramba: ShrambaUskladitve) = synchronized(zaklep) { shramba.preberi()?.let { shramba.shrani(it.copy(odstranjeni = emptyList())) } }
 }

@@ -121,6 +121,9 @@ class KeystoreShranjevalnik private constructor(
         prefs().edit().putString(KLJUC, Base64.encodeToString(c.iv + tajnopis, Base64.NO_WRAP)).apply()
     }
 
+    /** Zapis obstaja (tudi ce ga Keystore ta hip ne odpre) - loci »ni kljuca« od »neberljiv« (NALOGA-35, slepi S4). */
+    fun imaZapis(): Boolean = prefs().contains(KLJUC)
+
     override fun izbrisi() {
         prefs().edit().remove(KLJUC).apply()
         try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) } catch (_: Exception) {}
