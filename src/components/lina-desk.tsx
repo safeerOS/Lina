@@ -35,8 +35,10 @@ import { NarocilaNastavitve } from "@/components/narocila-nastavitve.tsx";
 import type { IzidPosodobitve, RazlogZavrnitve, StanjePaketa, StanjePosodobitve } from "@/lib/lina/posodobitev.server.ts";
 import { GOVOR_MODELI } from "@/lib/lina/govor-model.ts";
 import { razvrstiKlice } from "@/lib/lina/tajnica.ts";
-import { OMNIROUTE_PRIVZETI_NASLOV } from "@/lib/lina/omniroute.ts";
-import { stanjeOmnirouteFn, shraniOmnirouteFn, pozabiOmnirouteFn, logoutFn, setupOwnerFn, phoneTurn, publishLine, speak, saveBrainFn, checkBrainFn, chooseStorageFn, savePravilaFn, dodajVrzelFn, vajaKlicaFn, preberiSpletFn, preberiPredlogFn, potekSpletaFn, potrdiPredlogFn, zavrziPredlogFn, pogledMapeZapiskovFn, izberiMapoZapiskovFn, odpriMapoZapiskovFn, seznamZapiskovFn, preberiZapisekFn, preberiPosnetekFn, zdruziZapiskeFn, povzetekKlicateljaFn } from "@/lib/lina/functions.ts";
+import { OMNIROUTE_NE_TECE, OMNIROUTE_PRIVZETI_NASLOV } from "@/lib/lina/omniroute.ts";
+import type { StanjeNamestitve } from "@/lib/lina/omniroute-namestitev.server.ts";
+import { OmniRouteNamestitev } from "@/components/omniroute-namestitev.tsx";
+import { stanjeOmnirouteFn, shraniOmnirouteFn, pozabiOmnirouteFn, stanjeNamestitveOmnirouteFn, namestiOmnirouteFn, odstraniOmnirouteFn, preveriOmnirouteFn, readBrainFn, logoutFn, setupOwnerFn, phoneTurn, publishLine, speak, saveBrainFn, checkBrainFn, chooseStorageFn, savePravilaFn, dodajVrzelFn, vajaKlicaFn, preberiSpletFn, preberiPredlogFn, potekSpletaFn, potrdiPredlogFn, zavrziPredlogFn, pogledMapeZapiskovFn, izberiMapoZapiskovFn, odpriMapoZapiskovFn, seznamZapiskovFn, preberiZapisekFn, preberiPosnetekFn, zdruziZapiskeFn, povzetekKlicateljaFn } from "@/lib/lina/functions.ts";
 import type { MapaZapiskov, Zapisek, ZapisekVsebina } from "@/lib/lina/zapiski.ts";
 import { delezKratkih } from "@/lib/lina/povzetek.ts";
 import { DEFAULT_BRAIN_MODELS, DEFAULT_VERTEX_LOCATION, IME_PONUDNIKA, type BrainProvider, type BrainPublic, type CallSession, type Catalog, type LinijaZGlasom, type Material, type Pravila, type Predlog, type Product, type StorageView, type Vrzel, type ZapisVaje } from "@/lib/lina/types.ts";
@@ -939,6 +941,71 @@ function Settings({
     if (omZapis?.naslov) setOmNaslovVnos(omZapis.naslov);
     // Odvisnost so VREDNOSTI, ne predmet: osvezitev nalagalnika (vsake 3 s med pripravo glasu) ne sme pobrisati izbire v teku.
   }, [brain.provider, brain.model, brain.projekt, brain.lokacija, omZapis?.naslov]);
+  // Naloga 31: ob izbiri OmniRoute, ki ne tece, Lina vpraša za namestitev (ali zagon) in pokaze korake; uporabnik ne vpisuje nicesar.
+  const [omStanje, setOmStanje] = useState<StanjeNamestitve | null>(null);
+  const [omVprasaj, setOmVprasaj] = useState(false);
+  async function osveziOm(): Promise<StanjeNamestitve | null> {
+    try {
+      const s = await stanjeNamestitveOmnirouteFn();
+      setOmStanje(s);
+      return s;
+    } catch {
+      return null;
+    }
+  }
+  useEffect(() => {
+    if (!omniroute) {
+      setOmVprasaj(false);
+      return;
+    }
+    let konec = false;
+    void (async () => {
+      const s = await osveziOm();
+      if (konec || s?.vTeku) return;
+      const r = await preveriOmnirouteFn({ data: { naslov: omNaslovVnos } }).catch(() => ({ tece: false }));
+      if (!konec) setOmVprasaj(!r.tece);
+    })();
+    return () => {
+      konec = true;
+    };
+    // Samo ob izbiri ponudnika (ne ob vsakem znaku naslova).
+  }, [omniroute]);
+  useEffect(() => {
+    if (!omStanje?.vTeku) return;
+    const id = setInterval(() => {
+      void osveziOm().then(async (s) => {
+        if (!s || s.vTeku || !s.pripravljeno) return;
+        setOmVprasaj(false);
+        if (s.naslov) setOmNaslovVnos(s.naslov);
+        setNote(t("omPripravljeno"));
+        await readBrainFn().then(onBrain).catch(() => undefined);
+      });
+    }, 1500);
+    return () => clearInterval(id);
+  }, [omStanje?.vTeku]);
+  async function namestiOm() {
+    onError("");
+    setNote("");
+    try {
+      setOmStanje(await namestiOmnirouteFn());
+    } catch (cause) {
+      onError(fault(cause));
+    }
+  }
+  function neNamestiOm() {
+    setOmVprasaj(false);
+    setNote(t("omNeNamestim"));
+  }
+  async function odstraniOm() {
+    onError("");
+    setNote("");
+    try {
+      setOmStanje(await odstraniOmnirouteFn());
+      setNote(t("omOdstranjeno"));
+    } catch (cause) {
+      onError(fault(cause));
+    }
+  }
   async function save(samodejniProjekt?: string) {
     onBusy(true);
     setDela("shrani");
@@ -962,7 +1029,11 @@ function Settings({
       const shranjeno = samodejniProjekt ? t("gpProjektSam") : vertex ? t("uiShranjenoVertex") : next.nastavljen ? t("uiShranjenoKljuc") : t("uiShranjenoBrezKljuca");
       setNote(next.sporociloModela ? `${shranjeno} ${next.sporociloModela}` : shranjeno);
     } catch (cause) {
-      onError(fault(cause));
+      // Naloga 31: OmniRoute ne tece -> vprasanje za namestitev namesto napake (ni shranjen, klici ostanejo na prejsnjem ponudniku).
+      if (omniroute && cause instanceof Error && cause.message === OMNIROUTE_NE_TECE) {
+        setOmVprasaj(true);
+        void osveziOm();
+      } else onError(fault(cause));
     } finally {
       onBusy(false);
       setDela("");
@@ -1077,6 +1148,7 @@ function Settings({
         </details>
         {omniroute ? (
           <>
+            <OmniRouteNamestitev stanje={omStanje} vprasaj={omVprasaj} busy={busy} onDa={() => void namestiOm()} onNe={neNamestiOm} onOdstrani={() => void odstraniOm()} />
             <label className={`${OZNAKA_POLJA} sm:col-span-2`} htmlFor="omniroute-naslov">
               {t("omPonudnikNaslov")}
               <input

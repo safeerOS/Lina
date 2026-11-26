@@ -73,6 +73,8 @@ export async function handleZagonRequest(request: Request, dir?: string): Promis
   void loadPravila(dir)
     .then((p) => (p.dodatki?.slovenski === true ? uskladiRsdo(true) : undefined))
     .catch(() => undefined);
+  // naloga 31: OmniRoute, ki ga je namestila Lina in je v Mozganih, se zazene v ozadju (samo 127.0.0.1; ob koncu Line se ustavi)
+  void import("./omniroute-namestitev.server.ts").then((m) => m.zazeniObZagonu(dir)).catch(() => undefined);
   // urnik samostojnih opravil (pravila avtonomije): sam nic ne vklopi; brez vklopljenih pravil obhod ne naredi nicesar
   zazeniAvtonomijo(resolveDataDir(dir));
   // naloga 28: samodejna preverba posodobitev (2 min po zagonu, nato 6 h); samo namescena lupina, stikalo privzeto vklopljeno

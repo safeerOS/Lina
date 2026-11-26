@@ -1624,7 +1624,7 @@ Lastnik: »OmniRoute ponuja več brezplacbih modelov zato kot ponudnika pri mož
 - Velja tudi za rezervni ponudnik (razdelek iz orodij lastnika): OmniRoute je lahko na seznamu rezervnih.
 - Namestitev OmniRoute (lastnik 26. 11. 2026 18:36, nadomesti »ni del Line«): Lina vpraša »OmniRoute še ni nameščen. Ga namestim?«
   in ga na »Da« namesti in zažene SAMA (omniroute-namestitev.server.ts): pripet npm in zaklepna datoteka z integriteto vseh paketov
-  (vendor/omniroute), `npm ci --ignore-scripts`, Electron kot Node, mapa <podatki Line>/omniroute, poslušanje samo 127.0.0.1,
+  (src/lib/lina/omniroute-zaklep.json), `npm ci --ignore-scripts`, Electron kot Node, mapa <podatki Line>/omniroute, poslušanje samo 127.0.0.1,
   okolje samo z dovoljenega seznama (nikoli ključi Line), geslo in ključ API ustvari Lina (šifrirano), ob koncu Line se ustavi,
   »Odstrani OmniRoute« odstrani samo mapo z oznako Line. Nedosegljiv naslov se ne shrani (klici ostanejo na prejšnjem ponudniku).
   Novejšo različico prinese nova Lina (nova zaklepna datoteka), nikoli »latest« ob namestitvi.

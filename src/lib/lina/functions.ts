@@ -770,6 +770,41 @@ export const pozabiOmnirouteFn = createServerFn({ method: "POST" }).handler(asyn
   return pozabiOmniroute(await sessionToken());
 });
 
+/** Naloga 31: Lina sama namesti, zazene in odstrani OmniRoute (samo na tem racunalniku, samo lastnik; ni v POTI_ODDALJENO). */
+export const stanjeNamestitveOmnirouteFn = createServerFn({ method: "GET" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { stanjeNamestitve } = await import("./omniroute-namestitev.server.ts");
+  return stanjeNamestitve(await sessionToken());
+});
+
+/** Ob izbiri OmniRoute: ali na naslovu kaj tece (GET <naslov>/models, rok 2 s; naslov samo zanka ali https). */
+export const preveriOmnirouteFn = createServerFn({ method: "POST" })
+  .validator((data: { naslov?: unknown }) => ({ naslov: typeof data?.naslov === "string" ? data.naslov : "" }))
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    await requireOwner(await sessionToken(), resolveDataDir());
+    const { teceOmniroute } = await import("./keys.server.ts");
+    const { veljavenNaslovOmniroute } = await import("./omniroute.ts");
+    const naslov = veljavenNaslovOmniroute(data.naslov);
+    return { tece: naslov ? await teceOmniroute(naslov) : false };
+  });
+
+export const namestiOmnirouteFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { namestiOmniroute } = await import("./omniroute-namestitev.server.ts");
+  return namestiOmniroute(await sessionToken());
+});
+
+export const odstraniOmnirouteFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  const { odstraniOmniroute } = await import("./omniroute-namestitev.server.ts");
+  return odstraniOmniroute(await sessionToken());
+});
+
 /** Soglasje ob prvem zagonu: racunalnik postane lokalni streznik za Lino; brez soglasja uporaba ni mogoca. Dati ga je mogoce samo na tem racunalniku. */
 export const soglasjeFn = createServerFn({ method: "GET" }).handler(async () => {
   noStore();
