@@ -140,6 +140,14 @@ export function zdruzi(lokalni: readonly ZapisKljuca[], prejeti: readonly unknow
 }
 
 export const novCas = (zdaj: number, prejsnji: number): number => Math.max(zdaj, prejsnji + 1);
+
+/**
+ * Kaj racunalnik sprejme od telefona: spremembe telefona (naprava = posiljatelj) in zapise, ki jih se NIMA (telefon jih ohrani in poslje
+ * novemu ali obnovljenemu racunalniku z izvirno napravo). Obstojecega zapisa telefon ne more spremeniti v imenu druge naprave.
+ */
+export function odTelefona(prejeti: readonly ZapisKljuca[], idTelefona: string, znani: ReadonlySet<string>): ZapisKljuca[] {
+  return prejeti.filter((z) => z.naprava === idTelefona || !znani.has(z.id));
+}
 export const novId = (): string => randomBytes(8).toString("hex");
 
 export type Sloti = Partial<Record<PonudnikKljuca, string>>;
@@ -217,6 +225,8 @@ export function zaUporabo(zapisi: readonly ZapisKljuca[], aktivni: Aktivni, slot
     if (neznani.has(p)) continue;
     const a = akt[p] !== undefined ? m.get(akt[p] as string) : undefined;
     const v = sloti[p] ?? "";
+    // lastnikov vnos, ki ga uskladitev ne sprejme (presledek, ne-ASCII), ostane, kot je - ne prepise se s staro vrednostjo
+    if (v !== "" && !veljavnaVrednost(v)) continue;
     if (a && a.izbrisan) {
       akt[p] = BREZ;
       if (v !== "") {

@@ -4,6 +4,7 @@ import {
   BREZ,
   NAJVEC_ZIVIH,
   jePonudnikKljuca,
+  odTelefona,
   javniKljucPara,
   korakRacunalnika,
   kljucPara,
@@ -160,11 +161,12 @@ export function izmenjajKljuce(
     const zdaj = (odv.zdaj ?? Date.now)();
     let s = await preberi(root);
     const kljuc = kljucPara(s.zasebni, javni, idTelefona);
-    // telefon poslje samo SVOJE spremembe (Safeer: izvor = posiljatelj); zapis z drugo napravo se prezre (slepi pregled N2)
-    const prejeti = zapisiNaZici
+    // telefon poslje svoje spremembe (Safeer: izvor = posiljatelj) in zapise, ki jih racunalnik se nima (slepi pregled N2 in 2)
+    const odprti = zapisiNaZici
       .slice(0, 2 * NAJVEC_ZIVIH)
       .map((z) => zZice(z, kljuc, "telefon-racunalnik"))
-      .filter((z): z is ZapisKljuca => z !== null && z.naprava === idTelefona);
+      .filter((z): z is ZapisKljuca => z !== null);
+    const prejeti = odTelefona(odprti, idTelefona, new Set(s.st.zapisi.map((z) => z.id)));
     s = await korak(root, s, prejeti, zdaj, true);
     const telefoni = Object.fromEntries(Object.entries({ ...s.d.telefoni, [idTelefona]: javniTelefona as string }).filter(([id]) => dovoljene.has(id)));
     s = { ...s, d: { ...s.d, telefoni } };
@@ -240,7 +242,8 @@ export function dodajKljucMozganov(vhod: { ponudnik?: unknown; oznaka?: unknown;
     if (s.st.zapisi.some((z) => z.ponudnik === p && !z.izbrisan && z.vrednost === kljuc)) throw new Error("Ta ključ je že shranjen.");
     if (s.st.zapisi.filter((z) => !z.izbrisan).length >= NAJVEC_ZIVIH) throw new Error(`Shranjenih je že ${NAJVEC_ZIVIH} ključev.`);
     const z: ZapisKljuca = { id: novId(), ponudnik: p, oznaka, cas: zdaj, naprava: s.d.jaz, izbrisan: false, prej: "", vrednost: kljuc };
-    const prazen = s.st.aktivni[p] === undefined;
+    // prazno mesto tudi po odstranitvi kljuca v uporabi (BREZ): izrecno dodajanje ni samodejni preklop
+    const prazen = s.st.aktivni[p] === undefined || s.st.aktivni[p] === BREZ;
     return {
       s: { ...s, st: { ...s.st, zapisi: [...s.st.zapisi, z], aktivni: prazen ? { ...s.st.aktivni, [p]: z.id } : s.st.aktivni } },
       pisi: prazen ? { [p]: kljuc } : undefined,

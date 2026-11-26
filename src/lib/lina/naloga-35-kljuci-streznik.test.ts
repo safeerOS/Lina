@@ -198,14 +198,16 @@ test("naloga 35 (slepi S1): po odstranitvi kljuca v uporabi Lina ne preklopi sam
   assert.deepEqual((await pregledKljucev(dir2)).odstranjeni, ["gemini"]);
 });
 
-test("naloga 35 (slepi N2): telefon ne more poslati zapisa v imenu druge naprave", async () => {
+test("naloga 35 (slepi N2): telefon ne more spremeniti obstojecega zapisa v imenu druge naprave", async () => {
   const { dir, token } = await nova();
   await saveBrain({ provider: "gemini", key: K1 }, token, dir);
   const t = telefon();
   const prvi = await t.izmenjaj(dir, [], null);
-  const tuj: ZapisKljuca = { id: "dddddddddddddddd", ponudnik: "openai", oznaka: "Tuj", cas: Date.now(), naprava: "n-ffffffffffffffff", izbrisan: false, prej: "", vrednost: K3 };
+  const g = prvi.zapisi[0];
+  const tuj: ZapisKljuca = { ...g, cas: Date.now(), naprava: "n-ffffffffffffffff", prej: `${g.cas}/${g.naprava}`, vrednost: K3 };
   const drugi = await t.izmenjaj(dir, [tuj], prvi.odg.javni);
-  assert.ok(!drugi.zapisi.some((z) => z.id === tuj.id));
+  assert.equal(drugi.zapisi.find((z) => z.id === g.id)?.vrednost, K1);
+  assert.equal((await activeBrain(dir))?.key, K1);
 });
 
 test("naloga 35 (slepi S4/S5): neberljiv kljuc v slotu ni izbris; pokvarjena datoteka nabora se ne prepise", async () => {
@@ -244,4 +246,36 @@ test("naloga 35 (slepi 2): oddaljen izbris ohrani model ponudnika; »Uporabi« d
   const m = await activeBrain(dir);
   assert.equal(m?.key, K2, "klici spet imajo mozgane");
   assert.equal(m?.model, "gemini-test-model");
+});
+
+// ---- svetovalec: pravi izmenjajKljuce ----
+
+test("naloga 35: nov racunalnik sprejme zapis druge naprave, ki ga se nima; obstojecega telefon ne spremeni v imenu druge naprave", async () => {
+  const { dir } = await nova();
+  const t = telefon();
+  const prvi = await t.izmenjaj(dir, [], null);
+  const tuj: ZapisKljuca = { id: "eeeeeeeeeeeeeeee", ponudnik: "claude", oznaka: "S starega racunalnika", cas: 5000, naprava: "r-0011223344556677", izbrisan: false, prej: "", vrednost: K3 };
+  const drugi = await t.izmenjaj(dir, [tuj], prvi.odg.javni);
+  assert.ok(drugi.zapisi.some((z) => z.id === tuj.id && z.vrednost === K3), "zapis, ki ga racunalnik nima, pride");
+  const ponaredek: ZapisKljuca = { ...tuj, cas: Date.now(), prej: "5000/r-0011223344556677", vrednost: K2 };
+  const tretji = await t.izmenjaj(dir, [ponaredek], prvi.odg.javni);
+  assert.equal(tretji.zapisi.find((z) => z.id === tuj.id)?.vrednost, K3, "obstojecega ne spremeni v imenu druge naprave");
+});
+
+test("naloga 35: neveljaven kljuc v slotu se ne prepise s staro vrednostjo; dodan kljuc po odstranitvi gre v uporabo", async () => {
+  const { dir, token } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, token, dir);
+  await pregledKljucev(dir);
+  const SLAB = "AIza z presledkom-1111";
+  await saveBrain({ provider: "gemini", key: SLAB }, token, dir).catch(() => undefined);
+  const zdaj = (await activeBrain(dir))?.key;
+  await pregledKljucev(dir);
+  assert.equal((await activeBrain(dir))?.key, zdaj, "uskladitev ne prepise lastnikovega vnosa");
+  // po odstranitvi kljuca v uporabi: izrecno dodan kljuc istega ponudnika gre v uporabo
+  const { dir: d2, token: t2 } = await nova();
+  await saveBrain({ provider: "gemini", key: K1 }, t2, d2);
+  const p = await pregledKljucev(d2);
+  await odstraniKljucMozganov(p.kljuci[0].id, d2);
+  await dodajKljucMozganov({ ponudnik: "gemini", oznaka: "Nov", kljuc: K2 }, d2);
+  assert.equal((await activeBrain(d2))?.key, K2);
 });

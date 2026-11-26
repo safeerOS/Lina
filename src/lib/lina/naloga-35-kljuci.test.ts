@@ -8,6 +8,7 @@ import {
   korakRacunalnika,
   kljucPara,
   noviParKljucev,
+  odTelefona,
   poOdgovoruTelefona,
   pripraviTelefon,
   veljavenZapis,
@@ -53,7 +54,9 @@ class Racunalnik {
     const javni = javniKljucPara(v.javni);
     assert.ok(javni);
     const k = kljucPara(this.par.zasebni, javni, v.id);
-    const prejeti = v.zapisi.map((z) => zZice(z, k, "telefon-racunalnik")).filter((z): z is ZapisKljuca => z !== null);
+    const odprti = v.zapisi.map((z) => zZice(z, k, "telefon-racunalnik")).filter((z): z is ZapisKljuca => z !== null);
+    // isto pravilo kot izmenjajKljuce (kljuci-mozganov.server.ts)
+    const prejeti = odTelefona(odprti, v.id, new Set(this.st.zapisi.map((z) => z.id)));
     const korak = korakRacunalnika(this.st, this.sloti, prejeti, this.jaz, zdaj, oznaka);
     this.uporabi(korak.stanje, korak.uporaba.sloti);
     const odg = JSON.stringify({ javni: this.par.javni, zapisi: this.st.zapisi.map((z) => zaZico(z, k, "racunalnik-telefon")) });
