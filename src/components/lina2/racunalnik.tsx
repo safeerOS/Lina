@@ -817,8 +817,8 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
         </label>
         <button type="submit" disabled={zaposlen} className="lina-gumb-majhen self-start">{t("agShraniPrepovedane")}</button>
       </form>
-      {/* brez gesla ukazov z geslom ni (tudi ne map in dodelitev), seznama nihce ne uporabi - zavihek ze kaze rcBrezGesla */}
-      {stanje.prepovedaneNepotrjene && stanje.geslo ? (
+      {/* vedno vidno, tudi brez gesla (geslo doloca datoteka v mapi podatkov - skrivanje bi lahko izzval pisalec datotek); gumb brez gesla onemogocen, razlog je rcBrezGesla */}
+      {stanje.prepovedaneNepotrjene ? (
         <div className="flex flex-col gap-2 text-sm">
           <p role="alert" className="font-semibold text-[var(--color-signal)]">{t("agPrepovedaneNepotrjene")}</p>
           <p>{t("agPrepovedaneNepotrjeneNamig")}</p>
@@ -827,7 +827,7 @@ export function AgentiKartica({ stanje, zaposlen, onUkaz }: { stanje: JavnoStanj
           ) : (
             <p className="text-xs">{t("agPrepovedanePrazen")}</p>
           )}
-          <button type="button" disabled={zaposlen} onClick={() => void onUkaz(ukazPotrdiPrepovedane(stanje))} className="lina-gumb-majhen self-start">
+          <button type="button" disabled={zaposlen || !stanje.geslo} onClick={() => void onUkaz(ukazPotrdiPrepovedane(stanje))} className="lina-gumb-majhen self-start">
             {t("agPotrdiSeznam")}
           </button>
         </div>
