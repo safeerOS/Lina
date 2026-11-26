@@ -27,6 +27,8 @@ export type OdvisnostiOrodij = {
   splet?: Pick<SpletOdv, "razresi" | "povezava">;
   /** Spletno iskanje; privzeto iskanjeBrave z lastnikovim kljucem. */
   isci?: (poizvedba: string) => Promise<Vir[] | null>;
+  /** Naloga 32 (preizkus): omrezje in kljuc Brave za preberi_novice. */
+  novice?: import("./novice.server.ts").NovicePogovorOdv;
   /** Branje strani brez vidnega besedila; privzeto TinyFish z lastnikovim kljucem. */
   tinyfish?: (naslov: string) => Promise<string | null>;
   /** Naloga 20 (preizkus): nastavitev mozganov za izbiro generatorja in odvisnosti generatorja slik. */
@@ -234,6 +236,24 @@ export function orodjaLine(dir?: string, odv: OdvisnostiOrodij = {}): OrodjeOrke
           if (!besedilo) return napaka("Stran nima vidnega besedila (JavaScript); TinyFish ni na voljo ali ni uspel.");
         }
         return { ok: true, rezultat: `Stran ${s.url}${s.naslov ? ` (${s.naslov})` : ""}:\n${besedilo.slice(0, 20_000)}` };
+      },
+    },
+    {
+      // Naloga 32: novice z zaslona Novice ali iz javnih virov RSS (brez kljuca); za temo brez zadetkov Brave (ven gre samo tema)
+      razred: "zunanje",
+      potrditev: false,
+      potrditevPoZasebnih: true,
+      rokMs: ROK_SPLETA_MS,
+      definicija: {
+        ime: "preberi_novice",
+        opis: "Sveze novice: lastnikovi viri z zaslona Novice ali javni viri (RTV SLO, STA). Tema »danes« = novice dneva; druga tema = novice o njej (ce jih v virih ni, iskanje Brave, ce je kljuc). Vrne naslove, vire in povezave. Tema ne sme vsebovati zasebnih podatkov.",
+        parametri: { type: "object", properties: { tema: { type: "string", minLength: 2, maxLength: 80 } }, required: ["tema"] },
+      },
+      izvedi: async (a) => {
+        const t = String(a.tema ?? "").trim().slice(0, 80);
+        const tema = !t || /^(danes|dneva|novice dneva|vse)$/i.test(t) ? null : t;
+        const { noviceZaPogovor } = await import("./novice.server.ts");
+        return { ok: true, rezultat: await noviceZaPogovor(tema, root, { ...(odv.novice ?? {}), ...(odv.isci ? { isci: odv.isci } : {}) }) };
       },
     },
     {

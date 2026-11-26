@@ -38,6 +38,7 @@ import {
   type Postavka,
   type Vir,
 } from "./novice.ts";
+import { NOVIC_V_ODGOVORU, PRIVZETI_VIRI_NOVIC, izmenicnoPoVirih, odgovorNovic, poTemi, type NovicaOdgovora } from "./novice-pogovor.ts";
 import { callProvider, hideSecret } from "./providers.ts";
 import { MEJA_BAJTOV, MEJA_SKOKOV, jeZasebniIp, razberiNaslov, type SpletOdgovor, type SpletPovezava, type SpletZahteva } from "./splet.ts";
 import { poveziHttps, razresiDns } from "./splet.server.ts";
@@ -418,11 +419,84 @@ async function osveziNotranje(root: string, sila: boolean, odv: NoviceOdv): Prom
 export async function noviceOsvezi(sila: boolean, token: string | null, dir?: string, odv?: Partial<NoviceOdv>): Promise<NovicePogled> {
   const root = resolveDataDir(dir);
   await requireOwner(token, root);
+  return osveziEnkrat(root, sila, odvPrivzeto(odv));
+}
+
+function osveziEnkrat(root: string, sila: boolean, odv: NoviceOdv): Promise<NovicePogled> {
   const obstojece = letece.get(root);
   if (obstojece) return obstojece;
-  const delo = osveziNotranje(root, sila, odvPrivzeto(odv)).finally(() => letece.delete(root));
+  const delo = osveziNotranje(root, sila, odv).finally(() => letece.delete(root));
   letece.set(root, delo);
   return delo;
+}
+
+/* ------------------------------------------------------------------ novice v pogovoru (naloga 32) */
+
+export type NovicePogovorOdv = Partial<NoviceOdv> & {
+  /** Iskanje Brave za »novice o X« (preizkus); privzeto iskanjeBrave z lastnikovim kljucem. */
+  isci?: (poizvedba: string) => Promise<{ url: string; naslov: string; izvlecki: string[] }[] | null>;
+  imaBrave?: () => Promise<boolean>;
+};
+
+/** Privzeti javni viri: en prenos na 10 min za cel proces (vsebina je javna, enaka za vse); shrani se samo uspeh vsaj enega vira. */
+let privzetePostavke: { cas: number; postavke: Postavka[]; viri: string[] } | null = null;
+let privzetoLeti: Promise<{ postavke: Postavka[]; viri: string[] }> | null = null;
+
+/** Za preizkuse: pozabi predpomnilnik privzetih virov. */
+export function pozabiPrivzeteNovice(): void {
+  privzetePostavke = null;
+  privzetoLeti = null;
+}
+
+async function preberiPrivzete(odv: NoviceOdv): Promise<{ postavke: Postavka[]; viri: string[] }> {
+  const zdaj = odv.zdaj!();
+  if (privzetePostavke && zdaj.getTime() - privzetePostavke.cas < ROK_PREDPOMNILNIKA_MS) return privzetePostavke;
+  if (privzetoLeti) return privzetoLeti;
+  privzetoLeti = (async () => {
+    const izidi = await Promise.all(PRIVZETI_VIRI_NOVIC.map((v) => preberiVir(v, odv, zdaj).then((p) => ({ vir: v.ime, p }), () => null)));
+    const uspeli = izidi.filter((x): x is { vir: string; p: Postavka[] } => x !== null && x.p.length > 0);
+    const izid = { postavke: zdruzi(uspeli.flatMap((x) => x.p)).sort(poCasu), viri: uspeli.map((x) => x.vir) };
+    if (uspeli.length) privzetePostavke = { cas: zdaj.getTime(), ...izid };
+    return izid;
+  })().finally(() => {
+    privzetoLeti = null;
+  });
+  return privzetoLeti;
+}
+
+/**
+ * Odgovor na vprasanje o novicah v pogovoru (asistentPogovor po requireOwner, orodje orkestratorja preberi_novice). Lastnikovi viri
+ * (zaslon Novice, predpomnilnik 10 min) ali privzeti javni viri; za temo brez zadetkov iskanje Brave, ce ima lastnik kljuc (ven gre samo
+ * tema, B9). Besedilo sestavi koda (novice-pogovor.ts), model ga ne vidi.
+ */
+export async function noviceZaPogovor(tema: string | null, dir?: string, odv: NovicePogovorOdv = {}): Promise<string> {
+  const root = resolveDataDir(dir);
+  const o = odvPrivzeto(odv);
+  const shranjeno = await preberiShranjeno(root);
+  let vse: NovicaOdgovora[];
+  let viri: string[];
+  const privzeti = !shranjeno.viri.length;
+  if (privzeti) {
+    const p = await preberiPrivzete(o);
+    vse = p.postavke;
+    viri = p.viri.length ? p.viri : PRIVZETI_VIRI_NOVIC.map((v) => v.ime);
+  } else {
+    const pogled = await osveziEnkrat(root, false, o);
+    // dnevni pregled (ocene, zanimanja) ima prednost; brez ocen ostanejo najnovejse
+    vse = tema ? pogled.postavke : pogled.pregled.length ? pogled.pregled : pogled.postavke;
+    viri = shranjeno.viri.map((v) => v.ime);
+  }
+  const splosne = izmenicnoPoVirih(vse);
+  let postavke: NovicaOdgovora[] = tema ? izmenicnoPoVirih(poTemi(vse, tema)) : splosne;
+  let izIskanja = false;
+  const brave = await (odv.imaBrave ?? (async () => (await import("./brave.server.ts")).imaKljucBrave(root)))().catch(() => false);
+  if (tema && !postavke.length && brave) {
+    const isci = odv.isci ?? (async (q: string) => (await import("./brave.server.ts")).iskanjeBrave(q, root));
+    const zadetki = (await isci(`novice ${tema}`).catch(() => null)) ?? [];
+    postavke = zadetki.slice(0, NOVIC_V_ODGOVORU).map((z) => ({ naslov: z.naslov, povezava: z.url, vir: "splet" }));
+    izIskanja = postavke.length > 0;
+  }
+  return odgovorNovic({ tema, postavke, splosne, viri, privzeti, izIskanja, brave });
 }
 
 export async function noviceDodajVir(

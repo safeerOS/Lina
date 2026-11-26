@@ -22,7 +22,7 @@ import { odgovoriNaVprasanje, stanjeVprasanjZaRoot, telefonVprasanja } from "./v
 import * as vrataLH from "./ucenje-lh-vrata.server.ts";
 
 // naloga 20: ustvari_sliko (generator slik, brez potrditve, meja na nalogo) - preizkusi v naloga-20-slike.test.ts
-const F2 = ["seznam_mape", "preberi_datoteko", "isci_splet", "preberi_stran", "poisci_v_znanju", "zapisi_datoteko", "ustvari_opomnik", "ustvari_sliko"];
+const F2 = ["seznam_mape", "preberi_datoteko", "isci_splet", "preberi_stran", "poisci_v_znanju", "zapisi_datoteko", "ustvari_opomnik", "ustvari_sliko", "preberi_novice"];
 
 /** Mapa podatkov Line in projektna mapa (dovoljena v claude-naloge.json), loceni. */
 async function okolje() {
@@ -126,7 +126,7 @@ describe("naloga 19: register orodij", () => {
       assert.equal(zahtevaPotrditev(o.get(i)!, false, true), false, i);
     }
     // splet: brez potrditve, a po zaznanem vbrizgu (okuzeno) caka lastnika
-    for (const i of ["isci_splet", "preberi_stran"]) {
+    for (const i of ["isci_splet", "preberi_stran", "preberi_novice"]) {
       assert.equal(zahtevaPotrditev(o.get(i)!, false, true), false, i);
       assert.equal(zahtevaPotrditev(o.get(i)!, true, true), true, i);
     }

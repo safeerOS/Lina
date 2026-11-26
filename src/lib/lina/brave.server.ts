@@ -64,6 +64,11 @@ async function preberiKljuc(root: string): Promise<string | null> {
   return odsifrirajSkrivnost(f, root);
 }
 
+/** Naloga 32: ali je kljuc shranjen (samo da/ne; kljuc ne zapusti modula). Klicatelj je ze preveril lastnika. */
+export async function imaKljucBrave(dir?: string): Promise<boolean> {
+  return Boolean((await readJsonFile<Shranjeno>(resolveDataDir(dir), DATOTEKA))?.ciphertext);
+}
+
 function tekociMesec(zdaj: Date): string {
   return zdaj.toISOString().slice(0, 7);
 }

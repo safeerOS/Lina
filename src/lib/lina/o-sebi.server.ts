@@ -16,6 +16,7 @@ export const FUNKCIJE_LINE: readonly { ime: string; modul: string }[] = [
   { ime: "gradnje na GitHubu", modul: "gradnje-github.server.ts" },
   { ime: "n8n tokovi", modul: "n8n.server.ts" },
   { ime: "iskanje po spletu (Brave) in branje strani (TinyFish)", modul: "splet.server.ts" },
+  { ime: "novice dneva in novice o temi v pogovoru (zaslon Novice ali javni viri RTV SLO in STA, brez ključa)", modul: "novice-pogovor.ts" },
   { ime: "Znanje podjetja iz datotek", modul: "znanje-viri.server.ts" },
   { ime: "spomin pogovorov", modul: "spomin-pogovor.server.ts" },
   { ime: "samoučenje tem (Learn Anything)", modul: "samoucenje-pogovor.server.ts" },
