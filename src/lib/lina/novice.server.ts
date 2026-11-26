@@ -450,7 +450,9 @@ export function pozabiPrivzeteNovice(): void {
 
 async function preberiPrivzete(odv: NoviceOdv): Promise<{ postavke: Postavka[]; viri: string[] }> {
   const zdaj = odv.zdaj!();
-  if (privzetePostavke && zdaj.getTime() - privzetePostavke.cas < ROK_PREDPOMNILNIKA_MS) return privzetePostavke;
+  const starost = privzetePostavke ? zdaj.getTime() - privzetePostavke.cas : -1;
+  // slepi pregled N3: ura nazaj (negativna starost) ni svez predpomnilnik
+  if (privzetePostavke && starost >= 0 && starost < ROK_PREDPOMNILNIKA_MS) return privzetePostavke;
   if (privzetoLeti) return privzetoLeti;
   privzetoLeti = (async () => {
     const izidi = await Promise.all(PRIVZETI_VIRI_NOVIC.map((v) => preberiVir(v, odv, zdaj).then((p) => ({ vir: v.ime, p }), () => null)));

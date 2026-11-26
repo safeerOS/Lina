@@ -192,7 +192,8 @@ export function odkodiEntitete(s: string): string {
 
 /** Besedilo oznake: razveljavi CDATA, odstrani HTML, odkodira entitete, stisne presledke. */
 export function pocistiBesedilo(surovo: string): string {
-  const deli = surovo.split(/(<!\[CDATA\[[\s\S]*?\]\]>)/g);
+  // naloga 32 (S2): meja vhoda (naslov 200, odlomek 300 znakov); nezaprt CDATA in < brez > na 1 MB bi bila kvadratna
+  const deli = surovo.slice(0, 8000).split(/(<!\[CDATA\[[\s\S]*?\]\]>)/g);
   const prvi = deli
     .map((d) => (d.startsWith("<![CDATA[") ? d.slice(9, -3) : odkodiEntitete(d)))
     .join("");
@@ -201,9 +202,17 @@ export function pocistiBesedilo(surovo: string): string {
 }
 
 function izrezi(blok: string, imena: readonly string[]): string | null {
+  // naloga 32 (S2): vsak korak je eno linearno iskanje (lenivi regex z [^>]* je bil na zlonamernem bloku kvadraten)
   for (const ime of imena) {
-    const m = blok.match(new RegExp(`<${ime}(?:\\s[^>]*)?>([\\s\\S]*?)</${ime}>`, "i"));
-    if (m) return m[1];
+    const z = new RegExp(`<${ime}(?=[\\s>/])`, "i").exec(blok);
+    if (!z) continue;
+    const gt = blok.indexOf(">", z.index);
+    if (gt < 0) continue;
+    if (blok[gt - 1] === "/") continue;
+    const konec = new RegExp(`</${ime}>`, "gi");
+    konec.lastIndex = gt + 1;
+    const k = konec.exec(blok);
+    if (k) return blok.slice(gt + 1, k.index);
   }
   return null;
 }
@@ -219,7 +228,7 @@ function povezavaBloka(blok: string, osnova?: string): string | null {
     const p = varnaPovezava(pocistiBesedilo(rss), osnova);
     if (p) return p;
   }
-  const oznake = blok.match(/<link\b[^>]*>/gi) ?? [];
+  const oznake = blok.match(/<link\b[^<>]*>/gi) ?? [];
   let prva: string | null = null;
   for (const o of oznake) {
     const href = atribut(o, "href");
@@ -267,14 +276,44 @@ function ustvari(
 const NAJVEC_BLOKOV = 200;
 const NAJVEC_XML = 2_000_000;
 
+/** Naloga 32 (slepi pregled S2): komentarji v linearnem casu (lenivi regex na nezaprtem komentarju je kvadraten); nezaprt odreze rep. */
+function brezKomentarjev(s: string): string {
+  let ven = "";
+  let i = 0;
+  for (;;) {
+    const z = s.indexOf("<!--", i);
+    if (z < 0) return ven + s.slice(i);
+    ven += s.slice(i, z);
+    const k = s.indexOf("-->", z + 4);
+    if (k < 0) return ven;
+    i = k + 3;
+  }
+}
+
+/** Bloki <ime ...>...</ime> v linearnem casu: brez zakljucne znacke se iskanje konca (napadalcev vir z 1 MB nezaprtih <item>). */
+function izreziBloke(s: string, ime: string): string[] {
+  const zacetek = new RegExp(`<${ime}\\b`, "gi");
+  const konec = new RegExp(`</${ime}>`, "gi");
+  const ven: string[] = [];
+  while (ven.length < NAJVEC_BLOKOV) {
+    const z = zacetek.exec(s);
+    if (!z) break;
+    konec.lastIndex = z.index;
+    const k = konec.exec(s);
+    if (!k) break;
+    ven.push(s.slice(z.index, k.index + k[0].length));
+    zacetek.lastIndex = k.index + k[0].length;
+  }
+  return ven;
+}
+
 /** RSS 2.0, RSS 1.0 (RDF) in Atom (tudi YouTube in Reddit). Neveljavne vnose preskoci. */
 export function razberiFeed(xml: string, vir: Pick<Vir, "id" | "ime" | "kategorija">, zdaj: Date, osnova?: string): Postavka[] {
-  const vsebina = (xml.length > NAJVEC_XML ? xml.slice(0, NAJVEC_XML) : xml).replace(/<!--[\s\S]*?-->/g, "");
-  let bloki = vsebina.match(/<item\b[\s\S]*?<\/item>/gi);
-  if (!bloki || !bloki.length) bloki = vsebina.match(/<entry\b[\s\S]*?<\/entry>/gi);
-  if (!bloki) return [];
+  const vsebina = brezKomentarjev(xml.length > NAJVEC_XML ? xml.slice(0, NAJVEC_XML) : xml);
+  let bloki = izreziBloke(vsebina, "item");
+  if (!bloki.length) bloki = izreziBloke(vsebina, "entry");
   const ven: Postavka[] = [];
-  for (const blok of bloki.slice(0, NAJVEC_BLOKOV)) {
+  for (const blok of bloki) {
     const naslovSurovo = izrezi(blok, ["title"]);
     const naslov = naslovSurovo === null ? "" : pocistiBesedilo(naslovSurovo);
     const povezava = povezavaBloka(blok, osnova);

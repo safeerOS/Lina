@@ -14,6 +14,7 @@ import { normalizePravila } from "./pravila.server.ts";
 import type { CallSession, Pravila } from "./types.ts";
 import { vsebinaZapiska } from "./zapiski.ts";
 import { ZAPISEK_V_MAPI, izbrisiMapoKlica, mapaKlicaZaPosnetek, mapaZaPisanje, zapisiZapisekKlica } from "./zapiski.server.ts";
+import { jeOdgovorNovic } from "./novice-pogovor.ts";
 
 /**
  * Sinhronizacija telefona z racunalnikom (lastnik 20. 11. 2026): zapisi klicev (ime, stevilka, podjetje, sporocilo; od 0.2.14 tudi
@@ -499,7 +500,9 @@ export function izmenjajSinhron(zahteva: ZahtevaSinhron, dir?: string, odv: { zd
     await zapisiMapeKlicev(root, st).catch(() => undefined);
     for (const p of noviIzTelefona) {
       try {
-        await zapisiObrat({ seja: SEJA_ASISTENTA, vloga: p.vloga === "lina" ? "lina" : "uporabnik", besedilo: p.besedilo, cas: p.cas }, { dir: root });
+        // naloga 32 (slepi pregled V1): naslovi novic so podatek tretjih - v spomin (priklic kot Linina beseda) gre samo zapis
+        const besedilo = p.vloga === "lina" && jeOdgovorNovic(p.besedilo) ? "Prebrala sem novice (naslovi so bili prikazani lastniku)." : p.besedilo;
+        await zapisiObrat({ seja: SEJA_ASISTENTA, vloga: p.vloga === "lina" ? "lina" : "uporabnik", besedilo, cas: p.cas }, { dir: root });
       } catch {
         // napaka spomina ne podre sinhronizacije
       }

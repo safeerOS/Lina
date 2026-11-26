@@ -31,9 +31,10 @@ const brezSumnikov = (s: string) =>
 const UVOD = String.raw`(?:(?:lina|prosim|hej|zivjo)[,!]? )?(?:(?:kaj|katere|kaksne) so (?:danes )?|povej(?: mi)? |preberi(?: mi)? |pokazi(?: mi)? |daj(?: mi)? |imas |zanimajo me |kje so )?`;
 const PRIDEVNIK = String.raw`(?:(?:danasnje|dnevne|zadnje|najnovejse|glavne|sveze|aktualne|jutranje|vecerne|pomembne) )?`;
 const OKVIR = String.raw`(?: (?:dneva|danes|za danes|iz slovenije|v sloveniji|iz sveta|po svetu|doma))?`;
-const TEMA = String.raw`(?: (?:o temi|na temo|v zvezi z|glede|o) (.{2,80}))?`;
+// slepi pregled S4: tema samo z »o« / »o temi« / »na temo« (»kaj je novega pri nalogi«, »glede ponudbe za stranko« niso novice)
+const TEMA = String.raw`(?: (?:o temi|na temo|o) (.{2,80}))?`;
 const RE_NOVICE = new RegExp(String.raw`^${UVOD}${PRIDEVNIK}(?:novice|novic|novica|novosti)${OKVIR}${TEMA}$`);
-const RE_NOVEGA = new RegExp(String.raw`^${UVOD}kaj je (?:danes )?novega(?: (?:v svetu|po svetu|doma|v sloveniji|danes))?(?: (?:o|pri|glede|v zvezi z) (.{2,80}))?$`);
+const RE_NOVEGA = new RegExp(String.raw`^${UVOD}kaj je (?:danes )?novega(?: (?:v svetu|po svetu|doma|v sloveniji|danes))?(?: o (.{2,80}))?$`);
 
 /**
  * Ali lastnik sprasuje po novicah; tema = »novice o X« (sicer null). Samo kratka vprasanja brez povezave (»preberi novice iz https://…«
@@ -107,7 +108,8 @@ export function cistaPovezava(s: string): string | null {
   try {
     const u = new URL(s.trim());
     if (u.protocol !== "https:" || u.username || u.password || u.href.length > 500) return null;
-    return u.href;
+    // slepi pregled N1: URL oglatih oklepajev ne kodira; [[ v povezavi ne sme postati oznaka v zgodovini
+    return u.href.replace(/\[/g, "%5B").replace(/\]/g, "%5D");
   } catch {
     return null;
   }
@@ -155,6 +157,15 @@ export function odgovorNovic(i: IzidNovicZaOdgovor): string {
     return `O temi »${cistNaslov(i.tema)}« v virih (${viri}) zdaj ni novic.${namig} Najnovejše:\n${splosne.join("\n")}${opomba}`;
   }
   return `Virov novic (${viri || "RTV SLO, STA"}) trenutno ne morem doseči. Poskusite čez nekaj minut ali na zaslonu Novice dodajte svoje vire.`;
+}
+
+/**
+ * Odgovor z novicami po vsebini (glava, ki jo sestavi koda na racunalniku in telefonu). Slepi pregled V1: sinhronizacija s telefonom
+ * zastavice izVirov ne nese, zato zgodovina, povzetek in spomin prepoznajo podatek tudi po glavi. Lazni zadetek (model napise isto
+ * glavo) samo zmanjsa zaupanje temu besedilu.
+ */
+export function jeOdgovorNovic(besedilo: string): boolean {
+  return /^(?:Novice dneva \(|Novice o temi »|O temi »[^\n]{1,200}« v virih \()/.test(besedilo);
 }
 
 /** Navodilo modelu (naloga 32, tocka 4): za novice ne trdi, da nimas dostopa. */
