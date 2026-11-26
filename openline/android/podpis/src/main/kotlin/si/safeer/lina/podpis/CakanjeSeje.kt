@@ -55,12 +55,20 @@ object CakanjeSeje {
     fun ustaviPoPreklicu(izid: Izid): String? =
         (izid as? Izid.Oddana)?.takeIf { sprejeta(it.odgovor) || IzidOddaje.jeNeznan(it.odgovor) }?.naloga?.id
 
+    /** Najvec zapomnjenih preklicanih id (trajna oznaka v shrambi kontrolerja). */
+    const val NAJVEC_PREKLICEV = 20
+
+    /** Seznam preklicanih id (vejice; id je [A-Za-z0-9_-]) z dodanim [id], najvec [NAJVEC_PREKLICEV] zadnjih. */
+    fun dodajPreklic(seznam: String?, id: String): String =
+        (seznam.orEmpty().split(',').filter { it.isNotEmpty() && it != id } + id).takeLast(NAJVEC_PREKLICEV).joinToString(",")
+
     /**
-     * Naloga 24 (CR3, CR6): zaslon, ki je oddajo zacel, je zaprt (njegov izid se ne obdela), lastnik pa je to nalogo medtem preklical
-     * (trajna oznaka preklica [preklicanId], tudi z novega zaslona). /ustavi preklica je lahko prisel pred sprejemom zadrzane oddaje
-     * (404), zato jo po odgovoru ustavi nit oddaje sama. null = ni preklica te naloge ali racunalnik je ni sprejel.
+     * Naloga 24 (CR3, CR6, slepi pregled 24 N2, N3): nit oddaje po odgovoru ustavi nalogo, ki jo je lastnik medtem preklical
+     * (trajni seznam [preklicani], tudi z drugega zaslona). /ustavi ob preklicu je lahko prisel pred sprejemom zadrzane oddaje (403),
+     * zaslon pa je lahko ze zaprt (izida ne obdela). null = naloga ni preklicana ali je racunalnik ni sprejel.
      */
-    fun ustaviPoZaprtju(izid: Izid, preklicanId: String?): String? = ustaviPoPreklicu(izid)?.takeIf { it == preklicanId }
+    fun ustaviPoZaprtju(izid: Izid, preklicani: String?): String? =
+        ustaviPoPreklicu(izid)?.takeIf { it in preklicani.orEmpty().split(',') }
 
     /** Blokira (najvec ROK_MS + en razmik + cas zahtev, do ~35 s na pot); klici samo v ozadju. */
     fun pocakajInOddaj(o: Odvisnosti): Izid {

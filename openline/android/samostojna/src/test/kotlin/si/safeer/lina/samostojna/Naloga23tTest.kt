@@ -84,11 +84,12 @@ class Naloga23tTest {
         assertFalse(Regex("""private fun posljiShranjeno\(\)[\s\S]{0,2000}shrambaCakajoce\.edit\(\)\.clear\(\)""").containsMatchIn(k), "posljiShranjeno brise vse")
         assertTrue(k.contains("const val Z_BESEDILO = \"z_besedilo\""))
         // krog 2 svetovalec: oznaka oddaje je id naloge (preklic tik pred oznako ne pusti oznake za NASLEDNJO nalogo)
-        assertTrue(k.contains("putString(Z_ODDANO, id)") && Regex("oddanoZa\\(").findAll(k).count() == 4, "oznaka oddaje = id")
+        assertTrue(k.contains("putString(Z_ODDANO, id)") && Regex("oddanoZa\\(").findAll(k).count() == 3, "oznaka oddaje = id") // naloga 24: oznakaObZacetku odstranjena
         // krog 3 N1/N1b: oznaka iz prejsnjega zaslona ali procesa - preklic poslje /ustavi, rok ali brez podpisa = izid neznan (brez ponovitve)
-        assertTrue(k.contains("(!nasaNit || oznakaObZacetku)") && k.contains("if (bilaOddana && (izid is CakanjeSeje.Izid.Rok"), "obnova z oznako")
+        // naloga 24 (slepi pregled 24 N2): preklic z oznako oddaje poslje /ustavi vedno (ne glede na nit, ki je oddajala)
+        assertTrue(k.contains("if (oddana && zapisanId != null) {") && k.contains("if (bilaOddana && (izid is CakanjeSeje.Izid.Rok"), "obnova z oznako")
         assertTrue(k.contains("val id = nalogaId ?: run { prekliciCakanje(); return }"), "Ustavi preklice cakanje")
-        assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(ohraniRocno = samodejno\)""").containsMatchIn(k), "nova naloga preklice staro")
+        assertTrue(Regex("""fun poslji\(vnos: String[^\n]*\n(.*\n){0,4}\s+prekliciCakanje\(\)""").containsMatchIn(k), "nova naloga preklice staro")
         // vmesni izid ne porabi enkratnega klica klepeta za shranjeno nalogo
         assertTrue(k.contains("if (izid != IzidPredaje.NEDOSEGLJIV && izid != IzidPredaje.ODPIRA) obIzidShranjene"), "posljiShranjeno ODPIRA")
     }

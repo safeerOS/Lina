@@ -48,6 +48,19 @@ class Naloga24Test {
         assertFalse(shramba.preberi()!!.contains("klic-podjetje-1"), "potekel klic je ostal v shrambi")
     }
 
+    // slepi pregled 24 N12: izhodni posnetek sam (brez izmenjave, ki bi ocistila ob sprejemu) izbrise potekel klic iz shrambe
+    @Test
+    fun `CR7 - izhodni posnetek uveljavi rok in ga zapise v shrambo`() {
+        var zdaj = zacetek
+        val shramba = PomnilniskaShramba()
+        val d = DnevnikKlicev(shramba, ura = { zdaj })
+        assertTrue(d.dodaj(podjetniski("klic-podjetje-1", zacetek - 89 * DAN)))
+        zdaj += 2 * DAN
+        assertTrue(d.cakajociZaSinhronizacijo().none { it.id == "klic-podjetje-1" }, "potekel klic je v izhodnem posnetku")
+        assertFalse(shramba.preberi()!!.contains("klic-podjetje-1"), "potekel klic je ostal v shrambi po izhodnem posnetku")
+        assertTrue(d.seznam().none { it.id == "klic-podjetje-1" }, "potekel klic je ostal v dnevniku")
+    }
+
     @Test
     fun `CR7 - ce zapis ciscenja ne uspe, potekel klic vseeno ne odide`() {
         var zdaj = zacetek
@@ -107,14 +120,15 @@ class Naloga24Test {
     @Test
     fun `CR1 CR2 CR3 - kontroler in zaslon (besedilo kode)`() {
         val k = app("asistent/AsistentKontroler.kt")
-        // CR1: samodejna oddaja shranjene naloge ne zbrise naloge za rocno ponovitev
-        assertTrue(Regex("""private fun posljiShranjeno\(\)[\s\S]{0,2500}poslji\(b, samodejno = true""").containsMatchIn(k), "CR1 posljiShranjeno")
-        assertTrue(k.contains("if (!ohraniRocno) zaPonovitev = null"), "CR1 prekliciCakanje")
-        // CR3/CR6: oznaka preklica pred /ustavi; nit zaprtega zaslona po odgovoru ustavi preklicano nalogo
-        assertTrue(Regex("""putString\(Z_PREKLIC, it\)[\s\S]{0,600}posljiUstavitev\(zapisanId\)""").containsMatchIn(k), "CR3 oznaka preklica")
-        assertTrue(k.contains("if (ustavljen && !obdelano.get()) CakanjeSeje.ustaviPoZaprtju(izid, shrambaCakajoce.getString(Z_PREKLIC, null))"), "CR3 nit")
-        assertTrue(k.contains("naGlavni { obdelano.set(true); koncajCakanje("), "CR3 obdelano")
-        assertFalse(Regex("""fun pocistiCakanje\(\) \{[^\n]*Z_PREKLIC""").containsMatchIn(k), "CR3 oznako brise ciscenje")
+        // CR1 (+ slepi pregled 24 N5, N6): Z_ROCNO brise samo lastnikov vzem; samodejna oddaja shranjene caka, dokler je mesto zasedeno
+        assertTrue(Regex("""private fun posljiShranjeno\(\) \{\s+if \(cakaSejo != null\) return[^\n]*\n\s+if \(obnoviCakanje\(\)\) return\n(\s*//[^\n]*\n)*\s+if \(zaPonovitev != null\) return""").containsMatchIn(k), "CR1 posljiShranjeno")
+        assertEquals(1, Regex("""zaPonovitev = null""").findAll(k).count(), "CR1 Z_ROCNO brise se kaj drugega kot vzemiZaPonovitev")
+        // CR3/CR6: seznam preklicev pred /ustavi; nit oddaje po odgovoru (ne glede na zaslon) ustavi preklicano nalogo
+        assertTrue(Regex("""putString\(Z_PREKLIC, CakanjeSeje\.dodajPreklic\([\s\S]{0,700}if \(oddana && zapisanId != null\) \{\s+posljiUstavitev\(zapisanId\)""").containsMatchIn(k), "CR3 oznaka preklica")
+        assertTrue(Regex("""\n\s+CakanjeSeje\.ustaviPoZaprtju\(izid, shrambaCakajoce\.getString\(Z_PREKLIC, null\)\)\?\.let \{ posljiUstavitev\(it\) \}[^\n]*\n(\s*//[^\n]*\n)*\s+naGlavni \{ koncajCakanje""").containsMatchIn(k), "CR3 nit")
+        assertFalse(Regex("""fun pocistiCakanje\(\) \{[^\n]*\n[^\n]*Z_PREKLIC""").containsMatchIn(k), "CR3 oznako brise ciscenje")
+        // slepi pregled 24 N1: preklic na drugem zaslonu (Z_ID) ustavi tudi to nit
+        assertTrue(k.contains("preklicano = { ustavljen || generacija.get() != gen || shrambaCakajoce.getString(Z_ID, null) != id ||"), "N1")
         // CR2: naloga za ponovitev se vzame sele po obnovi stanja pogleda (post), ne neposredno v renderAssistant
         val a = app("DialerActivity.kt")
         assertTrue(Regex("""assistantTaskInput\.post \{\s+if \(!isDestroyed && assistantTaskInput\.text\.isNullOrEmpty\(\)\) asistent\.vzemiZaPonovitev\(\)""").containsMatchIn(a), "CR2 post")

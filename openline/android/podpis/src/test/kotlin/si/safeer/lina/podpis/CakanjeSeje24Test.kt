@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Naloga 24 (najdbe CodeRabbit CR3, CR5, CR6 na 0.2.14): vsak preizkus brez popravka pade. */
 class CakanjeSeje24Test {
@@ -81,13 +82,26 @@ class CakanjeSeje24Test {
         val n = PodpisanaNaloga(id, "n-00112233aabbccdd", "Naredi X", 1L, "e".repeat(32), "pn")
         val sprejeta = CakanjeSeje.Izid.Oddana(n, OdgovorLine.Ok("""{"id":"$id"}"""))
         val obstaja = CakanjeSeje.Izid.Oddana(n, OdgovorLine.Napaka(409, "obstaja", null))
-        val neznan = CakanjeSeje.Izid.Oddana(n, OdgovorLine.Nedosegljiva)
+        // slepi pregled 24 N12: pravi neznan izid (oddano, brez odgovora), ne Nedosegljiva
+        val neznanOdg = IzidOddaje.poNapaki(oddano = true, spreminja = true)
+        assertTrue(IzidOddaje.jeNeznan(neznanOdg), "kontrola: odgovor je neznan izid")
+        val neznan = CakanjeSeje.Izid.Oddana(n, neznanOdg)
         assertEquals(id, CakanjeSeje.ustaviPoZaprtju(sprejeta, id))
         assertEquals(id, CakanjeSeje.ustaviPoZaprtju(obstaja, id))
-        assertEquals(IzidOddaje.jeNeznan(OdgovorLine.Nedosegljiva), CakanjeSeje.ustaviPoZaprtju(neznan, id) == id)
+        assertEquals(id, CakanjeSeje.ustaviPoZaprtju(neznan, id))
+        assertNull(CakanjeSeje.ustaviPoZaprtju(CakanjeSeje.Izid.Oddana(n, OdgovorLine.Nedosegljiva), id), "neoddana (nedosegljiv) se ne ustavlja")
         // ni preklica ali preklic druge naloge: naloga tece naprej (novi zaslon jo spremlja prek 409)
         assertNull(CakanjeSeje.ustaviPoZaprtju(sprejeta, null))
         assertNull(CakanjeSeje.ustaviPoZaprtju(sprejeta, "druga-naloga-24-abcdefghijk"))
+        // seznam preklicev (24 N3a): kasnejsi preklic druge naloge ne izbrise prejsnjega; meja zadnjih NAJVEC_PREKLICEV
+        var s: String? = null
+        s = CakanjeSeje.dodajPreklic(s, id)
+        s = CakanjeSeje.dodajPreklic(s, "druga-naloga-24-abcdefghijk")
+        assertEquals(id, CakanjeSeje.ustaviPoZaprtju(sprejeta, s))
+        assertNull(CakanjeSeje.ustaviPoZaprtju(sprejeta, id.dropLast(1)), "delni id ni preklican")
+        for (i in 1 until CakanjeSeje.NAJVEC_PREKLICEV) s = CakanjeSeje.dodajPreklic(s, "naloga-$i-abcdefghijklmnopq")
+        assertNull(CakanjeSeje.ustaviPoZaprtju(sprejeta, s), "seznam ni omejen")
+        assertEquals(CakanjeSeje.NAJVEC_PREKLICEV, s!!.split(',').size)
         // racunalnik je ni sprejel (503) ali ni bilo oddaje
         assertNull(CakanjeSeje.ustaviPoZaprtju(CakanjeSeje.Izid.Oddana(n, OdgovorLine.Napaka(503, "claude-code-ni", null)), id))
         assertNull(CakanjeSeje.ustaviPoZaprtju(CakanjeSeje.Izid.Rok(null), id))
