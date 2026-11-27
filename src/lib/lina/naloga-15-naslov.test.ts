@@ -63,9 +63,9 @@ test("izberiLanNaslov: vmesnik privzete poti, nikoli docker/br-/veth/lo/notranji
     veth12ab: [v4("10.0.5.1")],
     lo0: [v4("10.9.9.9")],
     wlp2s0: [v4("192.168.1.20")],
-    enp1s0: [v4("192.168.0.135"), v6("fd12:3456::1")],
+    enp1s0: [v4("192.168.3.135"), v6("fd12:3456::1")],
   };
-  assert.equal(izberiLanNaslov(vmesniki, "192.168.0.135"), "192.168.0.135", "vmesnik privzete poti");
+  assert.equal(izberiLanNaslov(vmesniki, "192.168.3.135"), "192.168.3.135", "vmesnik privzete poti");
   assert.equal(izberiLanNaslov(vmesniki, null), "192.168.1.20", "brez privzete poti: prvi zasebni na pravem vmesniku");
   assert.equal(izberiLanNaslov(vmesniki, "172.17.0.1"), "192.168.1.20", "privzeta pot prek dockerja se ne uporabi");
   assert.equal(izberiLanNaslov({ docker0: [v4("172.17.0.1")], lo: [v4("127.0.0.1", true)] }, null), null);
