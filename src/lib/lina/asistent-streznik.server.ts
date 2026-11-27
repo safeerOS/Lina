@@ -12,6 +12,7 @@
  * zagonom; enkratni niz. Dogodke bere samo, kdor pozna id naloge (vsaj 128 bitov, poslan samo prek pripetega TLS) - telefon,
  * ki jo je dal. Pogodba (poti, JSON, napake) je v AGENTS.md (»Koncna tocka asistentke za telefon«).
  */
+import { obremenitevRacunalnika, type ObremenitevRacunalnika } from "./obremenitev.server.ts";
 import { createHash, generateKeyPairSync, randomBytes, sign, timingSafeEqual, X509Certificate, createPrivateKey } from "node:crypto";
 import { constants as fsKonstante } from "node:fs";
 import { chmod, lstat, mkdir, open, readFile, writeFile } from "node:fs/promises";
@@ -354,6 +355,8 @@ export type MoznostiStreznika = {
   omogociOddaljeno?: boolean;
   /** Id Line na releju (rele-lina.server.ts); telefon ga dobi v podpisanem odgovoru /stanje. null = rele izklopljen. */
   rele?: () => string | null;
+  /** Naloga 34: obremenitev in ime racunalnika v podpisanem /stanje (telefon razdeli naloge); privzeto obremenitev.server.ts. */
+  obremenitev?: () => ObremenitevRacunalnika;
   /** Dodatki na racunalniku (dodatki-telefon.server.ts + n8n.server.ts); brez njih poti /dodatki, /dodatek in /dodatki/n8n* odgovorijo 404. */
   dodatki?: {
     stanje(): Promise<unknown>;
@@ -1144,7 +1147,10 @@ export class AsistentStreznik {
     const odprta = await this.m.izvajalec.razpolozljiv().catch(() => false);
     // id Line na releju samo podpisani napravi in samo, ce je Global Link vklopljen (telefon ga shrani za pot od zunaj)
     const rele = this.m.omogociOddaljeno ? this.m.rele?.() ?? null : null;
-    return { claudeCode: odprta ? "odprta" : "zaprta", ...(rele ? { rele } : {}) };
+    // naloga 34: obremenitev za razdelitev nalog; napaka pri branju ne podre /stanje (polje se izpusti = telefon: neznano)
+    let racunalnik: ObremenitevRacunalnika | undefined;
+    try { racunalnik = (this.m.obremenitev ?? obremenitevRacunalnika)(); } catch { racunalnik = undefined; }
+    return { claudeCode: odprta ? "odprta" : "zaprta", ...(rele ? { rele } : {}), ...(racunalnik ? { racunalnik } : {}) };
   }
 
   private dodatkiStreznika() {
