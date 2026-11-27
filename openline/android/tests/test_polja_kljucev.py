@@ -37,10 +37,12 @@ def test_pot_nazaj_na_asistenta_po_vnosu_kljucev():
 def test_pozabi_racunalnik_ne_zbrise_kljucev():
     """Lastnik 19. 11. 2026: kljuci Brave/TinyFish so izginili. AsistentShramba hrani seznanitev v isti datoteki kot tajnopise kljucev."""
     sh = (KOT / "asistent/AsistentShramba.kt").read_text(encoding="utf-8")
-    telo = re.search(r"fun pozabi\(context: Context\): Boolean =(.*?)\n\n|fun pozabi\(context: Context\): Boolean =(.*)$", sh, re.S)
+    # naloga 34 (slepi pregled): prej je regex iskal samo »Boolean =«, telo je blok »{« - preizkus ni nasel nicesar in ni varoval
+    telo = re.search(r"fun pozabi\(context: Context\): Boolean [={](.*?)\n\n|fun pozabi\(context: Context\): Boolean [={](.*)$", sh, re.S)
     assert telo, "funkcija pozabi ni najdena"
     koda = telo.group(0)
-    assert ".clear()" not in koda, "clear() bi zbrisal tudi tajnopise kljucev v isti datoteki"
+    # clear() sme samo na loceni datoteki CAKAJOCA (shranjena naloga), nikoli na lina_asistent
+    assert all("CAKAJOCA" in v for v in koda.splitlines() if ".clear()" in v), "clear() bi zbrisal tudi tajnopise kljucev v isti datoteki"
     for k in ("naslov", "vrata", "odtis"):
         assert f'.remove("{k}")' in koda, k
     # datoteka nastavitev je ista kot pri kljucih: razlog za prepoved clear()

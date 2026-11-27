@@ -255,9 +255,17 @@ class NalogaRacunalnika(private val io: ShrambaNalogeIo) {
     }.first
 
     /** Po zasuku ali ponovnem zagonu (NalogaCakaSejo.obZagonu): nadaljuj, rok, neznan ali ne odide. */
-    fun obnovi(zdajOdtis: String?, zdaj: Long, rokMs: Long): Obnova = spremeni { s ->
+    fun obnovi(zdajOdtis: String?, zdaj: Long, rokMs: Long): Obnova = obnoviZa({ it == zdajOdtis }, zdaj, rokMs)
+
+    /**
+     * Naloga 34 (slepi pregled 34 krog 2 N2): cakanje se obnovi za racunalnik, kateremu je bila naloga potrjena, ce je se seznanjen
+     * ([seznanjen]) - ne glede na to, kateri racunalnik je zdaj izbran v zavihku. Sicer bi se naloga z oznako oddaje (NEZNAN) tiho
+     * oznacila kot potekla in lastnik bi jo poslal znova (dvojna izvedba).
+     */
+    fun obnoviZa(seznanjen: (String) -> Boolean, zdaj: Long, rokMs: Long): Obnova = spremeni { s ->
         val c = s.cakajoca ?: return@spremeni s to Obnova.Prazno
         val brez = s.copy(cakajoca = null)
+        val zdajOdtis = c.odtis?.takeIf(seznanjen)
         when (NalogaCakaSejo.obZagonu(true, c.id, c.odtis, zdajOdtis, c.zacetek, zdaj, rokMs, oddano = c.oddaj > 0)) {
             NalogaCakaSejo.Ob.OBNOVI -> s to Obnova.Nadaljuj(c)
             NalogaCakaSejo.Ob.ROK -> brez.copy(rocno = c.besedilo) to Obnova.Rok

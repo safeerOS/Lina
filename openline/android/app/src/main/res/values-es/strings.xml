@@ -673,4 +673,22 @@
     <string name="install_checking">Comprobando suma, paquete y firma…</string>
     <string name="install_err_paket">Este no es el paquete de Lina. No instalado.</string>
     <string name="install_confirm_system">Confirme la instalación en la ventana del sistema.</string>
+    <!-- naloga 34: vec racunalnikov -->
+    <string name="local_task_racunalnik">La tarea se ejecuta en el ordenador: %1$s</string>
+    <string name="computers_title">Mis ordenadores</string>
+    <string name="computers_auto_on">Las tareas van al ordenador menos cargado (automático)</string>
+    <string name="computers_auto_off">Las tareas van solo al ordenador seleccionado</string>
+    <string name="computer_use_only">Usar solo este</string>
+    <string name="computer_rename">Renombrar</string>
+    <string name="computer_exclude">Excluir del reparto automático</string>
+    <string name="computer_include">Incluir en el reparto automático</string>
+    <string name="computer_remove">Quitar</string>
+    <string name="computer_remove_confirm">¿Quitar el ordenador »%1$s« de este teléfono? Los demás emparejamientos se mantienen.</string>
+    <string name="computer_reachable">accesible</string>
+    <string name="computer_unreachable">no accesible</string>
+    <string name="computer_unmeasured">aún sin medir</string>
+    <string name="computer_load">carga %1$s por núcleo, %2$d MB libres</string>
+    <string name="computer_selected">seleccionado</string>
+    <string name="computer_task_running">tarea en curso</string>
+    <string name="computer_excluded">excluido</string>
 </resources>

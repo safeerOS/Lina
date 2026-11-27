@@ -831,4 +831,22 @@
     <string name="set_menu_update">Update</string>
     <string name="set_menu_update_desc">New Lina version from GitHub</string>
     <string name="update_downloading">Downloading the update from GitHub…</string>
+    <!-- naloga 34: vec racunalnikov -->
+    <string name="local_task_racunalnik">Task is running on computer: %1$s</string>
+    <string name="computers_title">My computers</string>
+    <string name="computers_auto_on">Tasks go to the least loaded computer (automatic)</string>
+    <string name="computers_auto_off">Tasks go only to the selected computer</string>
+    <string name="computer_use_only">Use only this one</string>
+    <string name="computer_rename">Rename</string>
+    <string name="computer_exclude">Exclude from automatic distribution</string>
+    <string name="computer_include">Include in automatic distribution</string>
+    <string name="computer_remove">Remove</string>
+    <string name="computer_remove_confirm">Remove computer »%1$s« from this phone? Other pairings stay.</string>
+    <string name="computer_reachable">reachable</string>
+    <string name="computer_unreachable">not reachable</string>
+    <string name="computer_unmeasured">not measured yet</string>
+    <string name="computer_load">load %1$s per core, %2$d MB free</string>
+    <string name="computer_selected">selected</string>
+    <string name="computer_task_running">task running</string>
+    <string name="computer_excluded">excluded</string>
 </resources>

@@ -136,7 +136,7 @@ class Naloga24Test {
     fun `CR1 CR2 CR3 - kontroler in zaslon (besedilo kode)`() {
         val k = app("asistent/AsistentKontroler.kt")
         // naloga 26t: CR1, krog 2 N1/N1b/N3/N5 so vedenje stroja (Naloga26tTest); tu samo, da kontroler klice prehode
-        assertTrue(k.contains("val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null, seznanjen = AsistentShramba.beri(context) != null) ?: return"), "koncaj prek stroja (krog 2 N7: seznanitev)")
+        assertTrue(k.contains("val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null, seznanjen = nalogaSeznanjena()) ?: return"), "koncaj prek stroja (krog 2 N7: seznanitev; naloga 34: racunalnik naloge)")
         assertEquals(1, Regex("""shrambaNaloge\.vzemiRocno\(\)""").findAll(k).count(), "rocno vzame samo lastnikov vzem")
         assertTrue(k.contains("shrambaNaloge.porabiRocno(vnos)"), "krog 2 N3")
         // CR3/CR6, 26t: nit po odgovoru (ne glede na zaslon) poslje dolgovan /ustavi; dolg se poravna samo s 202

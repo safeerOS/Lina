@@ -830,4 +830,22 @@
     <string name="set_menu_update">Posodobitev</string>
     <string name="set_menu_update_desc">Nova različica Line z GitHuba</string>
     <string name="update_downloading">Prenašam posodobitev z GitHuba …</string>
+    <!-- naloga 34: vec racunalnikov -->
+    <string name="local_task_racunalnik">Naloga teče na računalniku: %1$s</string>
+    <string name="computers_title">Moji računalniki</string>
+    <string name="computers_auto_on">Naloge gredo na najmanj obremenjen računalnik (samodejno)</string>
+    <string name="computers_auto_off">Naloge gredo samo na izbrani računalnik</string>
+    <string name="computer_use_only">Uporabi samo tega</string>
+    <string name="computer_rename">Preimenuj</string>
+    <string name="computer_exclude">Izključi iz samodejne razdelitve</string>
+    <string name="computer_include">Vključi v samodejno razdelitev</string>
+    <string name="computer_remove">Odstrani</string>
+    <string name="computer_remove_confirm">Odstranim računalnik »%1$s« s tega telefona? Druge seznanitve ostanejo.</string>
+    <string name="computer_reachable">dosegljiv</string>
+    <string name="computer_unreachable">ni dosegljiv</string>
+    <string name="computer_unmeasured">še ni izmerjeno</string>
+    <string name="computer_load">obremenitev %1$s na jedro, %2$d MB prostega</string>
+    <string name="computer_selected">izbran</string>
+    <string name="computer_task_running">teče naloga</string>
+    <string name="computer_excluded">izključen</string>
 </resources>

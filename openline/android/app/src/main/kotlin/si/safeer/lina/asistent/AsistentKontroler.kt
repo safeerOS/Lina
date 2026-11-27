@@ -33,6 +33,8 @@ import si.safeer.lina.podpis.TokKode
  * naprave (NapravaKljuc, Podpisnik). Stanje se spreminja samo na glavni niti; omrezje in KeyStore samo v ozadju.
  */
 private const val VELJAVNOST_DOSEGLJIVOSTI_MS = 30_000L
+/** Naloga 34: vsi racunalniki se izmerijo hkrati; kdor v tem roku ne odgovori, ne dobi naloge (domace omrezje + rele). */
+private const val ROK_MERITVE_MS = 8_000L
 
 class AsistentKontroler(private val context: Context, private val obSpremembi: () -> Unit) {
     data class Vrstica(val besedilo: String, val napaka: Boolean = false)
@@ -293,7 +295,9 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     /** GET /stanje (podpisano): ali je seja Claude Code na racunalniku odprta. */
     fun preveriSejo() {
-        val pov = povezava() ?: return
+        // naloga 34: odgovor (rele, obremenitev) velja za racunalnik, ki mu je poizvedba sla, ne za izbranega ob odgovoru
+        val r = AsistentShramba.izbrani(context) ?: return
+        val pov = ustvari(r) ?: return
         Thread {
             val cas = System.currentTimeMillis()
             val enkratni = NalogaLine.nakljucno(32)
@@ -303,7 +307,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             pov.zapri()
             val s = when (odg) {
                 // id Line na releju samo iz podpisanega odgovora prek pripete povezave; brez njega rele izklopljen (naloga 22)
-                is OdgovorLine.Ok -> AsistentProtokol.razberiSejo(odg.telo).also { AsistentShramba.shraniRele(context, AsistentProtokol.razberiRele(odg.telo)) }
+                is OdgovorLine.Ok -> AsistentProtokol.razberiSejo(odg.telo).also { zapisiStanje(r, odg.telo) }
                 is OdgovorLine.Napaka -> if (odg.koda == "claude-code-ni") false else null
                 else -> null
             }
@@ -312,7 +316,80 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         }.start()
     }
 
-    private val prenosPoPoti = si.safeer.lina.samostojna.PrenosPoPoti()
+    /** Spomin poti (domace omrezje / rele) je po racunalniku: neuspeh LAN pri enem ne preusmeri drugega na rele (slepi pregled 34 krog 2 N4). */
+    private val prenosi = java.util.concurrent.ConcurrentHashMap<String, si.safeer.lina.samostojna.PrenosPoPoti>()
+    private fun prenos(r: si.safeer.lina.samostojna.Racunalnik?): si.safeer.lina.samostojna.PrenosPoPoti =
+        prenosi.computeIfAbsent(r?.odtis ?: "") { si.safeer.lina.samostojna.PrenosPoPoti() }
+    private fun ustvari(r: si.safeer.lina.samostojna.Racunalnik?): IzbirnaPovezava? = PovezavaLine.ustvari(context, prenos(r), r)
+
+    /** Naloga 34: zadnja izmerjena obremenitev po racunalniku (odtis -> meritev, cas ms) za seznam v zavihku Racunalnik. */
+    val obremenitve = java.util.concurrent.ConcurrentHashMap<String, Pair<si.safeer.lina.samostojna.Kandidat, Long>>()
+
+    /**
+     * Odtis racunalnika, ki mu je sla zadnja naloga (slepi pregled 34): VSE poti te naloge (poizvedbe, cakanje seje, odgovori, nadaljevanje,
+     * ustavitev) gredo njemu prek [povezava] (Racunalniki.zaNalogo), tudi ce uporabnik vmes izbere ali seznani drug racunalnik.
+     */
+    @Volatile var ciljNaloge: String? = null
+        private set
+
+    @Volatile private var zadnjaMeritev = 0L
+
+    /** Naloga 34: izmeri vse racunalnike v ozadju (odprt zavihek Racunalnik), najvec vsakih 15 s, nato osvezi zaslon. */
+    fun osveziObremenitve() {
+        val vsi = AsistentShramba.seznam(context).racunalniki
+        val zdaj = System.currentTimeMillis()
+        if (vsi.isEmpty() || zdaj - zadnjaMeritev < 15_000L) return
+        zadnjaMeritev = zdaj
+        Thread({ izmeriVse(vsi); naGlavni {} }, "lina-meritve").start()
+    }
+
+    /** Racunalnik naloge je se na seznamu (T13: po »Pozabi« ali »Odstrani« tega racunalnika se naloga ne spremlja vec). */
+    private fun nalogaSeznanjena(): Boolean = si.safeer.lina.samostojna.Racunalniki.zaNalogo(AsistentShramba.seznam(context), ciljNaloge) != null
+
+    /** true, ko telefon oddaja, spremlja ali caka nalogo: takrat se izbrani racunalnik ne menja (vse poti naloge gredo na isti). */
+    fun zaseden(): Boolean = posiljam || nalogaId != null || cakaSejo != null
+
+    /** Iz podpisanega /stanje racunalnika [r]: rele (samo njemu), obremenitev, ime racunalnika, ce ga uporabnik ni preimenoval. */
+    private fun zapisiStanje(r: si.safeer.lina.samostojna.Racunalnik, telo: String): si.safeer.lina.samostojna.Obremenitev? {
+        AsistentShramba.shraniRele(context, r.odtis, AsistentProtokol.razberiRele(telo))
+        val o = si.safeer.lina.samostojna.Obremenitev.izStanja(telo)
+        // ime gostitelja samo namesto privzetega imena; preveri se pod zaklepom shrambe (uporabnik ga je lahko ravno preimenoval)
+        o?.ime?.let { AsistentShramba.imeIzStanja(context, r.odtis, it) }
+        return o
+    }
+
+    /** Podpisan GET /stanje enega racunalnika (ne na glavni niti): dosegljiv samo ob 200 (403 = telefon tam ni vec seznanjen). */
+    private fun izmeri(r: si.safeer.lina.samostojna.Racunalnik): si.safeer.lina.samostojna.Kandidat {
+        val k = run {
+            val pov = ustvari(r) ?: return@run si.safeer.lina.samostojna.Kandidat(r, false)
+            val cas = System.currentTimeMillis()
+            val enkratni = NalogaLine.nakljucno(32)
+            val podpis = runCatching { NapravaKljuc.podpisiStanje(cas, enkratni) }.getOrNull()
+            val id = runCatching { NapravaKljuc.id() }.getOrNull()
+            val odg = try { if (podpis == null || id == null) OdgovorLine.Nedosegljiva else pov.stanjeSeje(id, cas, enkratni, podpis) } finally { pov.zapri() }
+            if (odg is OdgovorLine.Ok) si.safeer.lina.samostojna.Kandidat(r, true, zapisiStanje(r, odg.telo)) else si.safeer.lina.samostojna.Kandidat(r, false)
+        }
+        obremenitve[r.odtis] = k to System.currentTimeMillis()
+        return k
+    }
+
+    /** Vsi racunalniki hkrati, skupaj najvec [ROK_MERITVE_MS]; kdor ne odgovori v roku, je nedosegljiv. */
+    private fun izmeriVse(vsi: List<si.safeer.lina.samostojna.Racunalnik>): List<si.safeer.lina.samostojna.Kandidat> {
+        val rez = java.util.concurrent.atomic.AtomicReferenceArray<si.safeer.lina.samostojna.Kandidat>(vsi.size)
+        val niti = vsi.mapIndexed { i, r -> Thread({ runCatching { rez.set(i, izmeri(r)) } }, "lina-meritev").apply { isDaemon = true; start() } }
+        val konec = System.currentTimeMillis() + ROK_MERITVE_MS
+        for (n in niti) n.join(maxOf(1, konec - System.currentTimeMillis()))
+        return vsi.mapIndexed { i, r -> rez.get(i) ?: si.safeer.lina.samostojna.Kandidat(r, false) }
+    }
+
+    /**
+     * Naloga 34, zahteva 3: racunalnik za novo nalogo (ne na glavni niti). En racunalnik: brez meritve (kot prej). Vec: izmeri vse in izberi
+     * (RazdelitevDela.cilj: najmanj obremenjen dosegljiv, rocna izbira, shranjena samo svojemu [naRacunalnik]). Izbira v zavihkih se ne spremeni.
+     */
+    private fun izberiZaNalogo(naRacunalnik: String?): si.safeer.lina.samostojna.Racunalnik? {
+        val s = AsistentShramba.seznam(context)
+        return si.safeer.lina.samostojna.RazdelitevDela.cilj(s, if (s.racunalniki.size > 1) izmeriVse(s.racunalniki) else null, naRacunalnik)
+    }
 
     /** Zadnja izmerjena dosegljivost (vrednost, cas ms); seznanitev ni dosegljivost (naloga 11, 06:49 na 5G). */
     @Volatile private var zadnjaDosegljivost: Pair<Boolean, Long>? = null
@@ -323,7 +400,17 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
      */
     fun dosegljivZdaj(): Boolean {
         zadnjaDosegljivost?.let { (v, t) -> if (System.currentTimeMillis() - t < VELJAVNOST_DOSEGLJIVOSTI_MS) return v }
-        val pov = povezava() ?: return false
+        // naloga 34: z vec racunalniki je Lina dosegljiva, ce odgovori katerikoli (naloga gre potem nanj, izberiZaNalogo)
+        val sez = AsistentShramba.seznam(context)
+        val vsi = sez.racunalniki
+        if (vsi.size > 1 && sez.samodejno) {
+            val dosegljiv = izmeriVse(vsi).any { it.dosegljiv && !it.r.prepovedan }
+            zadnjaDosegljivost = dosegljiv to System.currentTimeMillis()
+            if (dosegljiv) naGlavni { posljiShranjeno() }
+            return dosegljiv
+        }
+        // en racunalnik ali rocna izbira: nova naloga gre na izbranega - meri se on (ne racunalnik prejsnje naloge)
+        val pov = ustvari(sez.izbrani()) ?: return false
         val cas = System.currentTimeMillis()
         val enkratni = NalogaLine.nakljucno(32)
         val podpis = runCatching { NapravaKljuc.podpisiStanje(cas, enkratni) }.getOrNull()
@@ -358,13 +445,15 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         val b = z.besedilo
         val odtis = z.odtis
         val cas = z.cas
-        // T3 (pregled 0213): drug (ali pozabljen) racunalnik ali potekel rok - ne poslje se sama, lastnik jo poslje znova
-        if (!si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, AsistentShramba.beri(context)?.odtis, cas, System.currentTimeMillis())) {
+        // T3 (pregled 0213): drug (ali pozabljen) racunalnik ali potekel rok - ne poslje se sama, lastnik jo poslje znova.
+        // naloga 34: racunalnik, za katerega je bila potrjena, je lahko se na seznamu, ceprav je zdaj izbran drug - gre njemu
+        val zanj = si.safeer.lina.samostojna.Racunalniki.seznanjen(AsistentShramba.seznam(context), odtis)
+        if (!si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, zanj, cas, System.currentTimeMillis())) {
             dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_potekla, b.take(120)))
             return
         }
         // nazaj v shrambo samo ob nedosegljivem (403/429/napaka bi se sicer ponavljali v nedogled); izid gre v dnevnik zavihka Racunalnik
-        poslji(b) { izid, id ->
+        poslji(b, naRacunalnik = zanj, obIzidu = { izid, id ->
             if (izid != IzidPredaje.NEDOSEGLJIV && izid != IzidPredaje.ODPIRA) obIzidShranjene?.also { obIzidShranjene = null }?.invoke(izid, id)
             when (izid) {
                 IzidPredaje.SPREJETA -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_poslana, b.take(120)))
@@ -376,11 +465,12 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                 IzidPredaje.NEZNAN -> dodaj(context.getString(si.safeer.lina.R.string.local_task_neznan))
                 else -> dodaj(context.getString(si.safeer.lina.R.string.local_task_shranjena_ni, b.take(120)))
             }
-        }
+        })
     }
 
     /** Samodejna izbira poti (domace omrezje, nato Global Link) kot v Safeer OS; ena tovarna za vse klicatelje (PovezavaLine). */
-    private fun povezava(): IzbirnaPovezava? = PovezavaLine.ustvari(context, prenosPoPoti)
+    private fun povezava(): IzbirnaPovezava? =
+        ustvari(si.safeer.lina.samostojna.Racunalniki.zaNalogo(AsistentShramba.seznam(context), ciljNaloge))
 
     private fun naGlavni(delo: () -> Unit) = glavna.post { if (!ustavljen) { delo(); obSpremembi() } }
 
@@ -395,7 +485,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
      * true, ce je bila naloga sprejeta v obdelavo (ne pomeni, da jo je Lina sprejela). [obIzidu] (glavna nit) dobi dejanski izid:
      * SPREJETA z id-jem sele po odgovoru racunalnika (naloga 11), sicer razlog; ob zavrnitvi takoj ZASEDENO ali NAPAKA.
      */
-    fun poslji(vnos: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null): Boolean {
+    fun poslji(vnos: String, obIzidu: ((IzidPredaje, String?) -> Unit)? = null, naRacunalnik: String? = null): Boolean {
         // izid vedno asinhrono (glavna nit), da pride za klicateljevim »Preverjam …«
         if (posiljam || nalogaId != null) { obIzidu?.let { glavna.post { it(IzidPredaje.ZASEDENO, null) } }; return false }
         if (NalogaLine.besedilo(vnos) == null) { obIzidu?.let { glavna.post { it(IzidPredaje.NAPAKA, null) } }; return false }
@@ -405,10 +495,13 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         // slepi pregled 24 krog 2 N3: isto besedilo kot naloga za ponovitev (npr. iz klepeta) jo porabi - ne ponudi se znova (dvojna izvedba)
         shrambaNaloge.porabiRocno(vnos)
         obSpremembi()
-        // T3 / slepi pregled 23t N9: racunalnik, kateremu je lastnik nalogo potrdil, se zapomni ob potrditvi (ne sele po odgovoru)
-        val odtisOb = AsistentShramba.beri(context)?.odtis
         Thread {
-            val pov = povezava()
+            // naloga 34: racunalnik se izbere enkrat ob oddaji (obremenitev) in je pripet za celo nalogo; T3 / slepi pregled 23t N9:
+            // racunalnik, kateremu je lastnik nalogo potrdil, se zapomni ob oddaji (ne sele po odgovoru)
+            val cilj = izberiZaNalogo(naRacunalnik)
+            val odtisOb = cilj?.odtis
+            ciljNaloge = odtisOb
+            val pov = cilj?.let { ustvari(it) }
             val naloga = runCatching {
                 NapravaKljuc.podpisiNalogo(NalogaLine.nakljucno(32), vnos, System.currentTimeMillis(), NalogaLine.nakljucno(32))
             }.getOrNull()
@@ -418,6 +511,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             naGlavni {
                 // naloga 23t: 503 claude-code-ni z zagon == "odpira" - Lina odpira sejo, telefon pocaka in poslje sam (vmesni izid ODPIRA)
                 val caka = naloga != null && CakanjeSeje.cakaj(odg)
+                // naloga 34, zahteva 5: izid pove, na katerem racunalniku tece (ali caka) naloga
+                if (naloga != null && (odg is OdgovorLine.Ok || caka)) cilj?.let { dodaj(context.getString(si.safeer.lina.R.string.local_task_racunalnik, AsistentShramba.seznam(context).po(it.odtis)?.ime ?: it.ime)) }
                 // napaka podpisa (KeyStore) ni nedosegljiv racunalnik
                 val izidOddaje = if (pov != null && naloga == null) IzidPredaje.NAPAKA
                     else PredajaNaloge.izidPrve(odg is OdgovorLine.Ok, odg is OdgovorLine.Nedosegljiva, (odg as? OdgovorLine.Napaka)?.status,
@@ -452,7 +547,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     /** Ob prvem dosegljivem racunalniku po zasuku ali ponovnem zagonu: cakanje na sejo se nadaljuje (true) ali se konca. */
     private fun obnoviCakanje(): Boolean =
-        when (val o = shrambaNaloge.obnovi(AsistentShramba.beri(context)?.odtis, System.currentTimeMillis(), CakanjeSeje.ROK_MS)) {
+        when (val o = shrambaNaloge.obnoviZa({ AsistentShramba.seznam(context).po(it) != null }, System.currentTimeMillis(), CakanjeSeje.ROK_MS)) {
             si.safeer.lina.samostojna.NalogaRacunalnika.Obnova.Prazno -> false
             // isti id: ce jo racunalnik ze ima (zasuk med oddajo), vrne 409 obstaja in telefon jo spremlja; klic klepeta je bil od starega zaslona
             is si.safeer.lina.samostojna.NalogaRacunalnika.Obnova.Nadaljuj -> {
@@ -511,6 +606,8 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
 
     /** Glavna nit. Poizvedovanje in ena ponovna oddaja v ozadju (CakanjeSeje, preizkusi v modulu podpis); izid na glavni niti. */
     private fun cakajNaSejo(id: String, besedilo: String, odtis: String?, shranjeno: Long, obIzidu: ((IzidPredaje, String?) -> Unit)?) {
+        // naloga 34: cakanje (tudi obnovljeno po zagonu) gre racunalniku, kateremu je bila naloga potrjena
+        ciljNaloge = odtis
         val gen = zaslon.zacni(id, besedilo, odtis, shranjeno)
         dodaj(context.getString(si.safeer.lina.R.string.local_task_odpira))
         Thread {
@@ -534,7 +631,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
                     // T3: samo ta racunalnik in v roku shranjene naloge; »Pozabi racunalnik« jo ustavi. Preklic ali nova naloga na drugem
                     // zivem zaslonu (slepi pregled 24 N1) zamenja mesto v skupni shrambi - nitVelja je potem false
                     preklicano = { ustavljen || oznaka == false || !zaslon.nitVelja(gen, id) ||
-                        !si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, AsistentShramba.beri(context)?.odtis, shranjeno, System.currentTimeMillis()) },
+                        !si.safeer.lina.samostojna.CakajocaNaloga.smePoslati(odtis, si.safeer.lina.samostojna.Racunalniki.seznanjen(AsistentShramba.seznam(context), odtis), shranjeno, System.currentTimeMillis()) },
                 ))
             } catch (_: InterruptedException) { CakanjeSeje.Izid.Preklicano } finally { pov?.zapri() }
             // naloga 24 CR3/CR6, 26t: po odgovoru, NE glede na zaslon (lahko je ze zaprt), nit poslje dolgovan /ustavi za nalogo, ki jo je
@@ -560,7 +657,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
         }
         // preklic ali nova naloga v tej instanci: nit je zastarela, nic vec (slepi pregled N1, 24 N2)
         // slepi 26t krog 2 N7: po »Pozabi racunalnik« (ni seznanitve) ta zaslon naloge ne prevzame v spremljanje
-        val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null, seznanjen = AsistentShramba.beri(context) != null) ?: return
+        val u = zaslon.koncaj(gen, id, konec, sKlepetom = obIzidu != null, seznanjen = nalogaSeznanjena()) ?: return
         val napakaIzida = if (odg != null) NapakaLine.sporocilo(odg) ?: SporociloNapake.NAPAKA
             else if (izid is CakanjeSeje.Izid.Rok) SporociloNapake.CLAUDE_CODE_NI else SporociloNapake.NAPAKA
         when (u) {
@@ -598,7 +695,7 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
             try {
                 // koncana naloga se spremlja naprej (redkeje), dokler je Lina ne pozabi (1 h, 404) ali telefon ne da nove
                 // T13 (pregled 0213): po »Pozabi racunalnik« se spremljanje ustavi (ne tece naprej po stari povezavi)
-                while (!ustavljen && (nalogaId == id || spremljana == id) && AsistentShramba.beri(context) != null) {
+                while (!ustavljen && (nalogaId == id || spremljana == id) && nalogaSeznanjena()) {
                     val cas = System.currentTimeMillis()
                     val enkratni = NalogaLine.nakljucno(32)
                     val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()
@@ -734,14 +831,18 @@ class AsistentKontroler(private val context: Context, private val obSpremembi: (
     /** Podpisan POST /ustavi za nalogo [id] (tudi naloga, ki je bila oddana tik pred preklicem cakanja - slepi pregled 23t N1). */
     private fun posljiUstavitev(id: String, izPreklica: Boolean = false) {
         Thread {
-            val pov = povezava()
-            val cas = System.currentTimeMillis()
-            val enkratni = NalogaLine.nakljucno(32)
-            val podpis = runCatching { NapravaKljuc.podpisiUstavitev(id, cas, enkratni) }.getOrNull()
-            val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()
-            val odg = if (pov == null || podpis == null || posiljatelj == null) OdgovorLine.Nedosegljiva
-                else pov.ustavi(AsistentProtokol.teloUstavitve(id, posiljatelj, cas, enkratni, podpis))
-            pov?.zapri()
+            // naloga 34: dolg (izPreklica) ne ve, kam je bila naloga morda oddana - gre vsem racunalnikom, poravnan samo, ce so ga sprejeli vsi
+            val cilji = if (izPreklica) AsistentShramba.seznam(context).racunalniki.map { ustvari(it) } else listOf(povezava())
+            val odgovori = cilji.map { pov ->
+                val cas = System.currentTimeMillis()
+                val enkratni = NalogaLine.nakljucno(32)
+                val podpis = runCatching { NapravaKljuc.podpisiUstavitev(id, cas, enkratni) }.getOrNull()
+                val posiljatelj = runCatching { NapravaKljuc.id() }.getOrNull()
+                (if (pov == null || podpis == null || posiljatelj == null) OdgovorLine.Nedosegljiva
+                    else pov.ustavi(AsistentProtokol.teloUstavitve(id, posiljatelj, cas, enkratni, podpis))).also { pov?.zapri() }
+            }
+            val odg = if (izPreklica) (if (si.safeer.lina.samostojna.RazdelitevDela.ustavitevPoravnana(odgovori.map { it is OdgovorLine.Ok })) odgovori.first() else OdgovorLine.Nedosegljiva)
+                else odgovori.first()
             // naloga 26t: dolgovan /ustavi je poravnan SAMO, ko ga racunalnik sprejme (202; za id, ki ga se nima, ga zapise v grob).
             // 403 (starejsa Lina pred sprejemom), 404, nedosegljiv ali neznan izid ostane za naslednji poskus (TLS je pripet na Lino tudi prek releja)
             if (izPreklica && odg is OdgovorLine.Ok) shrambaNaloge.ustavitevPotrjena(id)
