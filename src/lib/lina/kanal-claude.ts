@@ -150,6 +150,11 @@ export function nizSinhron(posiljatelj: string, cas: number, enkratni: string, z
   return `safeer-lina-sinhron-v1\n${posiljatelj}\n${cas}\n${enkratni}\n${zgostitev}`;
 }
 
+/** NALOGA-35: izmenjava kljucev za mozgane (POST /kljuci); locen namen od sinhronizacije, da podpis ene ne velja za drugo. */
+export function nizKljucev(posiljatelj: string, cas: number, enkratni: string, zgostitev: string): string {
+  return `safeer-lina-kljuci-v1\n${posiljatelj}\n${cas}\n${enkratni}\n${zgostitev}`;
+}
+
 /** Fotografija za kontrolo tiska s telefona (24. 11. 2026): podpis pokriva sha256 (hex) surovih bajtov slike. */
 export function nizSlikeKontrole(posiljatelj: string, cas: number, enkratni: string, zgostitev: string): string {
   return `safeer-lina-kontrola-slika-v1\n${posiljatelj}\n${cas}\n${enkratni}\n${zgostitev}`;

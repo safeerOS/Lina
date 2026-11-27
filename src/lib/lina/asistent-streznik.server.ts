@@ -38,6 +38,7 @@ import {
   nizNaloge,
   nizOdobritve,
   nizSeznanitve,
+  nizKljucev,
   nizSinhron,
   nizSlikeKontrole,
   nizStanja,
@@ -74,6 +75,7 @@ import { nizDovoljenjaOdobritve } from "./dovoljenja-podobne.ts";
 import { obsegIzPrikaza, zapisiDovoljenje } from "./dovoljenja-podobne.server.ts";
 import { NapakaKode, PAIR_ID, type SeznanitevSKodo } from "./koda-seznanitev.ts";
 import { NapakaSinhron, izmenjajSinhron, preveriZahtevo } from "./sinhron-telefon.server.ts";
+import { izmenjajKljuce } from "./kljuci-mozganov.server.ts";
 
 // ------------------------------------------------------------------ naslov poslusanja (prepis openline/server/src/lan.ts)
 
@@ -214,6 +216,8 @@ export const ID_NALOGE_TELEFONA = /^[A-Za-z0-9_-]{22,64}$/;
 export const NAJVEC_TELO = 16 * 1024;
 /** Sinhronizacija: telefon poslje do 400 000 B zapisov klicev (SinhronLine.NAJVEC_BAJTOV_KLICEV) + pogovor + navodila, JSON-niz v JSON-u. */
 export const NAJVEC_TELO_SINHRON = 768 * 1024;
+/** NALOGA-35: neposlane spremembe telefona (do NAJVEC_ZIVIH + NAJVEC_GROBOV zapisov po ~500 B z ovojnico) in javni kljuc para. */
+export const NAJVEC_TELO_KLJUCEV = 128 * 1024;
 /**
  * Fotografija za kontrolo tiska: telo so SUROVI bajti slike (image/jpeg ali image/png) do 16 MiB; podpis je v glavah in se
  * preveri PRED branjem telesa (neodvisni pregled 24. 11. 2026, N1), zgostitev telesa se primerja po branju.
@@ -289,6 +293,8 @@ export const POTI_ODDALJENO: ReadonlyMap<string, string> = new Map([
   [`${POT}/gradnje`, "GET"], [`${POT}/gradnja/apk`, "GET"], [`${POT}/gradnja/predlog`, "POST"], [`${POT}/gradnja/potrdi`, "POST"],
   // Pregled 0213 A10: naloga, dodeljena od zunaj, caka na vprasanja agenta - brez teh poti bi jo rok (10 min) zavrnil; isti podpis naprave.
   [`${POT}/agent-vprasanja`, "GET"], [`${POT}/agent-vprasanje/odgovor`, "POST"],
+  // NALOGA-35 (lastnik 26. 11. 2026: kljuc z ene naprave na vse, »rele vidi samo sifrat«): vrednosti v ovojnici para, podpis naprave.
+  [`${POT}/kljuci`, "POST"],
 ]);
 
 type DogodekTelefona = Dogodek & { st: number };
@@ -624,7 +630,7 @@ export class AsistentStreznik {
       if (req.method === "GET" && url.pathname === `${POT}/agent-vprasanja`) return this.poslji(res, 200, await this.stanjeVprasanjAgentov(url));
       if (req.method !== "POST") throw new Napaka(url.pathname.startsWith(POT) ? 405 : 404, "ni", "Ni take poti.");
       if (url.pathname === POT_SLIKA_KONTROLE) return this.poslji(res, 200, await this.slikaKontrole(req));
-      const telo = await this.telo(req, url.pathname === `${POT}/sinhron` ? NAJVEC_TELO_SINHRON : NAJVEC_TELO);
+      const telo = await this.telo(req, url.pathname === `${POT}/sinhron` ? NAJVEC_TELO_SINHRON : url.pathname === `${POT}/kljuci` ? NAJVEC_TELO_KLJUCEV : NAJVEC_TELO);
       const izid = url.pathname === `${POT}/naloga` ? await this.naloga(telo)
         : url.pathname === `${POT}/odobritev` ? await this.odobritev(telo)
           : url.pathname === `${POT}/ustavi` ? await this.ustavitev(telo)
@@ -636,6 +642,7 @@ export class AsistentStreznik {
                     : url.pathname === `${POT}/koda/odpovej` ? this.kodaOdpovej(telo)
                       : url.pathname === `${POT}/seznani/klici` ? await this.klici(telo)
                         : url.pathname === `${POT}/sinhron` ? await this.sinhron(telo)
+                        : url.pathname === `${POT}/kljuci` ? await this.kljuciMozganov(telo)
                           : url.pathname === `${POT}/dodatek` ? await this.dodatek(telo)
                             : url.pathname === `${POT}/dodatki/n8n/predlog` ? await this.predlogN8n(telo)
                               : url.pathname === `${POT}/dodatki/n8n/potrdi` ? await this.potrdiN8n(telo)
@@ -1079,6 +1086,33 @@ export class AsistentStreznik {
     // samo stevilo: id, stevilka in ime klica ne gredo v dnevnik (21t A8)
     if (zahteva.preskoceniPrihodnost) this.dnevnik(`sinhronizacija: preskocenih zapisov klicev s casom vec kot dan v prihodnosti: ${zahteva.preskoceniPrihodnost}`);
     return { status: 200, telo: await izmenjajSinhron(zahteva, this.m.root, { zdaj: this.zdaj }) };
+  }
+
+  /**
+   * NALOGA-35: kljuci za mozgane med seznanjenimi napravami. Podpis (nizKljucev) pokriva SHA-256 vsebine (javni kljuc para in zapisi);
+   * vrednosti so v ovojnici para, zato jih rele ali posrednik ne vidi. V dnevnik samo stevilo zapisov.
+   */
+  private async kljuciMozganov(t: Record<string, unknown>) {
+    const { posiljatelj, vsebina } = t;
+    if (typeof vsebina !== "string" || !praviUnicode(vsebina)) throw new Napaka(400, "oblika", "Manjka vsebina kljucev.");
+    await this.preveri(posiljatelj, t, (c, e) => nizKljucev(posiljatelj as string, c, e, zgostitevSinhron(vsebina)));
+    let v: { v?: unknown; javni?: unknown; zapisi?: unknown };
+    try {
+      v = JSON.parse(vsebina);
+    } catch {
+      throw new Napaka(400, "oblika", "Vsebina kljucev ni veljavna.");
+    }
+    if (!v || typeof v !== "object" || v.v !== 1 || !Array.isArray(v.zapisi)) throw new Napaka(400, "oblika", "Vsebina kljucev ni veljavna.");
+    const dovoljene = new Set((await this.kanal()).dovoljene.keys());
+    try {
+      const odg = await izmenjajKljuce(posiljatelj as string, v.javni, v.zapisi, dovoljene, this.m.root, { zdaj: this.zdaj });
+      if (v.zapisi.length) this.dnevnik(`kljuci za mozgane: prejetih zapisov ${v.zapisi.length}`);
+      return { status: 200, telo: odg };
+    } catch (e) {
+      if ((e as Error).message === "oblika") throw new Napaka(400, "oblika", "Javni kljuc para ni veljaven.");
+      if ((e as Error).message === "ni-dovoljen") throw zavrnjeno();
+      throw e;
+    }
   }
 
   private sprejemSlike = false;

@@ -26,6 +26,7 @@ import { NujniKlici } from "@/components/nujni-klici.tsx";
 import { PrepisKlica, ZnackaTelefon } from "@/components/klic-telefon.tsx";
 import { Avtonomija } from "@/components/avtonomija.tsx";
 import { ModelAsistentke } from "@/components/model-asistentke.tsx";
+import { KljuciNaprav } from "@/components/kljuci-naprav.tsx";
 import { tM } from "@/lib/lina/besedila-mozgani.ts";
 import { SonioxNastavitve } from "@/components/soniox-nastavitve.tsx";
 import { nastaviSamodejnoPosodobitevFn, obvestiloPosodobitveFn, posodobiLinoFn, posodobiPaketFn, stanjeDodatkovFn, stanjeDrugihPaketovFn, stanjePosodobitveFn } from "@/lib/lina/functions.ts";
@@ -3333,6 +3334,7 @@ export function NastavitveVsebina({
           <div className="grid gap-6">
             <Settings brain={mind} busy={busy} onBrain={onBrain} onError={onError} onBusy={onBusy} />
             <ModelAsistentke brain={mind} busy={busy} onBrain={onBrain} onError={onError} onBusy={onBusy} />
+            <KljuciNaprav busy={busy} onBrain={onBrain} onError={onError} onBusy={onBusy} />
           </div>
         ),
         "nast-shranjevanje": <StoragePanel place={place} busy={busy} onPlace={onPlace} onError={onError} onBusy={onBusy} />,

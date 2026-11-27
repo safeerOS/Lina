@@ -249,7 +249,9 @@ export const saveBrainFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
-    return saveBrain(data, await sessionToken());
+    const izid = await saveBrain(data, await sessionToken());
+    await zabeleziKljuce();
+    return izid;
   });
 
 export const izberiModelFn = createServerFn({ method: "POST" })
@@ -266,14 +268,62 @@ export const shraniKljucAsistentkeFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     noStore();
     clearLegacyCookie();
-    return shraniKljucAsistentke(data, await sessionToken());
+    const izid = await shraniKljucAsistentke(data, await sessionToken());
+    await zabeleziKljuce();
+    return izid;
   });
 
 export const odstraniKljucAsistentkeFn = createServerFn({ method: "POST" }).handler(async () => {
   noStore();
   clearLegacyCookie();
-  return odstraniKljucAsistentke(await sessionToken());
+  const izid = await odstraniKljucAsistentke(await sessionToken());
+  await zabeleziKljuce();
+  return izid;
 });
+
+/**
+ * NALOGA-35 (slepi pregled S2): sprememba kljuca v Mozganih dobi cas TAKRAT (ne ob naslednji izmenjavi s telefonom), sicer bi starejsa
+ * sprememba racunalnika preglasila novejso s telefona. Napaka uskladitve ne podre shranjevanja.
+ */
+async function zabeleziKljuce(): Promise<void> {
+  const { pregledKljucev } = await import("./kljuci-mozganov.server.ts");
+  await pregledKljucev().catch(() => undefined);
+}
+
+// ---- NALOGA-35: kljuci za mozgane na vseh seznanjenih napravah (samo lastnik; vmesnik nikoli ne dobi celega kljuca) ----
+
+// POST: pregled zapise lastne spremembe (slepi pregled N7 - GET brez stranskih ucinkov)
+export const pregledKljucevFn = createServerFn({ method: "POST" }).handler(async () => {
+  noStore();
+  clearLegacyCookie();
+  await requireOwner(await sessionToken(), resolveDataDir());
+  const { pregledKljucev } = await import("./kljuci-mozganov.server.ts");
+  return pregledKljucev();
+});
+
+export const dodajKljucMozganovFn = createServerFn({ method: "POST" })
+  .validator((data: { ponudnik?: unknown; oznaka?: unknown; kljuc?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    await requireOwner(await sessionToken(), resolveDataDir());
+    const { dodajKljucMozganov } = await import("./kljuci-mozganov.server.ts");
+    return dodajKljucMozganov(data);
+  });
+
+export const urediKljucMozganovFn = createServerFn({ method: "POST" })
+  .validator((data: { dejanje?: unknown; id?: unknown; oznaka?: unknown }) => data)
+  .handler(async ({ data }) => {
+    noStore();
+    clearLegacyCookie();
+    await requireOwner(await sessionToken(), resolveDataDir());
+    const k = await import("./kljuci-mozganov.server.ts");
+    if (data.dejanje === "uporabi") return k.uporabiKljucMozganov(data.id);
+    if (data.dejanje === "odstrani") return k.odstraniKljucMozganov(data.id);
+    if (data.dejanje === "preimenuj") return k.preimenujKljucMozganov(data.id, data.oznaka);
+    if (data.dejanje === "potrdi") return k.potrdiObvestiloKljucev();
+    throw new Error("Neznano dejanje.");
+  });
 
 export const nastaviBrezplacneFn = createServerFn({ method: "POST" })
   .validator((data: { vklop?: unknown }) => data)

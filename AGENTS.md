@@ -581,6 +581,14 @@ povprasevanju manjka rok, telefon, e-posta ali cas povratnega klica v zapisniku;
 - Kljuci API (Gemini, OpenAI, Claude, Grok) in nastavitve Line se uskladijo med napravami uporabnika enako kot v Safeerju:
   samo v ozjem krogu (naprave, ki jih je uporabnik sam dodal), sifrirano od naprave do naprave, brez ponovne potrditve na
   vsaki napravi; zunaj ozjega kroga nic. Kljuc nikoli v dnevnik, URL ali odgovor API. Vzor: Safeer core/uskladitev_kljucev*.py.
+- Lastnik 26. 11. 2026 18:50 (NALOGA-35): »API, ki ga vnese Lina na katerem koli racunalniku ali Android napravi, se more
+  sinhronizirati, ko se zazna sprememba na katerikoli napravi, in Lina lahko ima vnesenih vec API za mozgane.« V KODI (veji
+  lina-0214-n35 / lina-android-0214-n35): nabor kljucev z oznako (tudi vec istega ponudnika; gemini, openai, claude, grok, openrouter),
+  velja novejsi po (cas, naprava), izbris je grob, hkratna sprememba ohrani drugo vrednost kot »(spor)«; racunalnik je zvezdisce
+  (POST /kljuci, podpis naprave safeer-lina-kljuci-v1, vrednosti v ovojnici para ECDH P-256 + HKDF + AES-GCM, tudi prek Global Linka);
+  izbira ponudnika za klice in asistentko ostane lokalna, prejet kljuc zapolni samo prazno mesto, po odstranitvi kljuca v uporabi ni
+  samodejnega preklopa (obvestilo). Kljuc API samo natisljiv ASCII. SE NI: racunalnik z racunalnikom (NALOGA-34), potisk z
+  racunalnika na telefon (telefon uskladi ob odprtju, odgovoru, klicu, lokalni spremembi), dokaz na napravah.
 
 ## Global Link (lastnik 9. 11. 2026)
 - Lina dela tudi prek Safeer Global Link: ko telefon (klicna linija) ni v domacem omrezju, gre povezava telefon <-> Lina

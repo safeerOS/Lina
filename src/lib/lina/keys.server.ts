@@ -5,6 +5,7 @@ import path from "node:path";
 import { obnoviOsvezevanjePoMenjavi, pozabiZeton } from "./adc.server.ts";
 import { requireOwner } from "./auth.server.ts";
 import { callProvider, gcpLocation, gcpProject, hideSecret, PRAZEN_ODGOVOR, razlogVzroka, type RezultatPonudnika } from "./providers.ts";
+import { PONUDNIKI_KLJUCEV, type PonudnikKljuca, type Sloti } from "./kljuci-mozganov.ts";
 import { normirajNaslov } from "./lastni-streznik.ts";
 import { OMNIROUTE_NE_TECE, OMNIROUTE_PRIVZETI_NASLOV, veljavenNaslovOmniroute } from "./omniroute.ts";
 import { imaPosixDovoljenja } from "./platforma.server.ts";
@@ -696,6 +697,77 @@ export async function naslovOmniroute(dir?: string): Promise<string | null> {
   const saved = await readFileState(root);
   if (saved?.provider === "omniroute" && saved.klici === true) return veljavenNaslovOmniroute(saved.naslov);
   return veljavenNaslovOmniroute((await preberiPonudnike(root)).ponudniki.omniroute?.naslov);
+}
+
+/**
+ * NALOGA-35: kljuci za mozgane, kot jih vidi uskladitev med napravami (en »slot« na ponudnika = zapis v ponudniki.json oz. kljuci.json).
+ * Samo ponudniki s kljucem API (PONUDNIKI_KLJUCEV); naslov, projekt in OmniRoute ostanejo lokalni.
+ */
+export async function slotiKljucev(dir?: string): Promise<{ sloti: Sloti; neznani: Set<PonudnikKljuca> }> {
+  const root = resolveDataDir(dir);
+  return zaporedno(root, async () => {
+    const { ponudniki } = await preberiPonudnike(root);
+    const kljuc = await masterKey(root);
+    const sloti: Sloti = {};
+    // zapis s sifro, ki se ne odpre (zamenjan .kljuc): »neznan«, ne prazen - sicer bi uskladitev kljuc izbrisala na vseh napravah
+    const neznani = new Set<PonudnikKljuca>();
+    for (const p of PONUDNIKI_KLJUCEV) {
+      const z = ponudniki[p];
+      const v = z ? skrivnostZapisa(p, z, kljuc) : null;
+      if (v) sloti[p] = v;
+      else if (z?.ciphertext) neznani.add(p);
+    }
+    return { sloti, neznani };
+  });
+}
+
+/**
+ * Prejet kljuc v slot (NALOGA-35). Pise SAMO, ce je v slotu se vedno [prej] (lastnik ga medtem ni spremenil); vrne ponudnike, ki
+ * niso bili zapisani. Nov ponudnik dobi privzeti model; izbira za klice in asistentko (kljuci.json, pogovor) se ne spremeni - kljuci.json
+ * dobi nov kljuc samo, ce je imel ravno [prej]. null = odstrani (oddaljen izbris): asistentka/klici s tem kljucem ostanejo brez kljuca.
+ */
+export async function uporabiSlote(spremembe: Partial<Record<PonudnikKljuca, { prej: string; novo: string | null }>>, dir?: string): Promise<PonudnikKljuca[]> {
+  const root = resolveDataDir(dir);
+  return zaporedno(root, async () => {
+    const kljuc = await masterKey(root);
+    const trenutno = await preberiPonudnike(root);
+    const ponudniki = { ...trenutno.ponudniki };
+    const zaKlice = await readFileState(root);
+    let noviKlici: KeyFile | null = null;
+    const preskoceni: PonudnikKljuca[] = [];
+    for (const [p, s] of Object.entries(spremembe) as Array<[PonudnikKljuca, { prej: string; novo: string | null }]>) {
+      const z = ponudniki[p];
+      const zdaj = (z ? skrivnostZapisa(p, z, kljuc) : null) ?? "";
+      if (zdaj !== s.prej) {
+        preskoceni.push(p);
+        continue;
+      }
+      // klici z istim kljucem: ob praznem slotu tudi klici brez kljuca istega ponudnika (»Uporabi« po oddaljenem izbrisu vrne mozgane)
+      const klicSTem = zaKlice && zaKlice.provider === p && (s.prej !== "" ? decrypt(zaKlice, kljuc) === s.prej : !zaKlice.ciphertext);
+      if (s.novo === null) {
+        // samo sifra: model, seznam modelov in izbira asistentke ostanejo za ponovno uporabo
+        if (z) {
+          const { iv: _i, tag: _t, ciphertext: _c, ...brezSifre } = z;
+          ponudniki[p] = brezSifre;
+        }
+        if (klicSTem) {
+          const { iv: _i, tag: _t, ciphertext: _c, ...brez } = zaKlice;
+          noviKlici = brez;
+        }
+        continue;
+      }
+      const sifra = encrypt(s.novo, kljuc);
+      ponudniki[p] = z ? { ...z, ...sifra } : { model: DEFAULT_BRAIN_MODELS[p], ...(p === "openrouter" ? { samoAsistentka: true } : {}), ...sifra };
+      if (klicSTem) noviKlici = { ...zaKlice, ...sifra };
+    }
+    if (preskoceni.length === Object.keys(spremembe).length) return preskoceni;
+    if (noviKlici) {
+      await writeJson(root, "kljuci.json", noviKlici);
+      await lock(path.join(root, "kljuci.json"));
+    }
+    await zapisiPonudnike(root, { ponudniki, pogovor: trenutno.pogovor });
+    return preskoceni;
+  });
 }
 
 /** Rezerva, če lastnik ključa ni vpisal. Vrednosti ne zapisuje. Vertex nima ključa v okolju. */
