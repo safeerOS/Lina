@@ -81,6 +81,7 @@ object NapravaKljuc {
 
     /** Sinhronizacija klicev, pogovora in navodil (podpis zgostitve vsebine). */
     fun podpisiSinhron(vsebina: String, cas: Long, enkratni: String): String? = podpisnik.podpisiSinhron(vsebina, cas, enkratni)
+    fun podpisiKljuce(vsebina: String, cas: Long, enkratni: String): String? = podpisnik.podpisiKljuce(vsebina, cas, enkratni)
 
     /** Naloga za Claude Code; null, ce vnos ni veljaven. */
     fun podpisiNalogo(id: String, vnos: String, cas: Long, enkratni: String): PodpisanaNaloga? =

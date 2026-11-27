@@ -85,6 +85,11 @@ class KeystoreShranjevalnik private constructor(
 
     private fun prefs() = context.getSharedPreferences(SHRAMBA, Context.MODE_PRIVATE)
 
+    companion object {
+        /** NALOGA-35: stanje uskladitve kljucev za mozgane (z vrednostmi in kljucem para) - svoj AES kljuc in zapis. */
+        fun zaKljuceMozganov(context: Context) = KeystoreShranjevalnik(context, "lina_kljuci_mozganov", "kljuci_mozganov_stanje")
+    }
+
     private fun kljucAes(ustvari: Boolean): SecretKey? {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
@@ -115,6 +120,9 @@ class KeystoreShranjevalnik private constructor(
         val tajnopis = c.doFinal(k.izpostavi().toByteArray(Charsets.UTF_8))
         prefs().edit().putString(KLJUC, Base64.encodeToString(c.iv + tajnopis, Base64.NO_WRAP)).apply()
     }
+
+    /** Zapis obstaja (tudi ce ga Keystore ta hip ne odpre) - loci »ni kljuca« od »neberljiv« (NALOGA-35, slepi S4). */
+    fun imaZapis(): Boolean = prefs().contains(KLJUC)
 
     override fun izbrisi() {
         prefs().edit().remove(KLJUC).apply()

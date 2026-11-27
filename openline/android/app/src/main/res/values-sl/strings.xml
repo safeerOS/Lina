@@ -848,4 +848,23 @@
     <string name="computer_selected">izbran</string>
     <string name="computer_task_running">teče naloga</string>
     <string name="computer_excluded">izključen</string>
+    <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
+    <string name="keys_sync_title">Ključi za možgane na vseh napravah</string>
+    <string name="keys_sync_note">Ključ, ki ga dodate, spremenite ali odstranite na tej ali drugi seznanjeni napravi z Lino, se šifrirano prenese na vse vaše naprave. Prikazana sta samo oznaka in zadnji 4 znaki.</string>
+    <string name="keys_sync_label_title">Oznaka</string>
+    <string name="keys_sync_key_title">Ključ API</string>
+    <string name="keys_sync_ok">V redu</string>
+    <string name="keys_sync_label_hint">Oznaka (npr. Gemini služba)</string>
+    <string name="keys_sync_add_fmt">Dodaj ključ za %1$s</string>
+    <string name="keys_sync_err_key">Ključ mora imeti 8–400 znakov brez presledkov.</string>
+    <string name="keys_sync_err_label">Vpišite oznako (do 40 znakov).</string>
+    <string name="keys_sync_err_exists">Ta ključ je že shranjen ali ga ni več.</string>
+    <string name="keys_sync_err">Ključa ni bilo mogoče shraniti. Poskusite znova.</string>
+    <string name="keys_sync_removed_fmt">Ključ za %1$s je bil odstranjen na drugi napravi. Lina zanj nima več ključa: dodajte novega ali uporabite drugega s seznama.</string>
+    <string name="keys_sync_empty">Ni shranjenih ključev.</string>
+    <string name="keys_sync_row_fmt">%1$s · %2$s · %3$s</string>
+    <string name="keys_sync_row_used_fmt">%1$s · %2$s · %3$s (v uporabi na tem telefonu)</string>
+    <string name="keys_sync_use">Uporabi na tem telefonu</string>
+    <string name="keys_sync_remove">Odstrani</string>
+    <string name="keys_sync_remove_confirm_fmt">Odstranim ključ »%1$s« na vseh vaših napravah?</string>
 </resources>

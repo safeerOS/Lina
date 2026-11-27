@@ -849,4 +849,23 @@
     <string name="computer_selected">selected</string>
     <string name="computer_task_running">task running</string>
     <string name="computer_excluded">excluded</string>
+    <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
+    <string name="keys_sync_title">Brain keys on all devices</string>
+    <string name="keys_sync_note">A key you add, change or remove on this or another paired device with Lina is sent encrypted to all your devices. Only the label and the last 4 characters are shown.</string>
+    <string name="keys_sync_label_title">Label</string>
+    <string name="keys_sync_key_title">API key</string>
+    <string name="keys_sync_ok">OK</string>
+    <string name="keys_sync_label_hint">Label (e.g. Gemini work)</string>
+    <string name="keys_sync_add_fmt">Add key for %1$s</string>
+    <string name="keys_sync_err_key">The key must have 8–400 characters without spaces.</string>
+    <string name="keys_sync_err_label">Enter a label (up to 40 characters).</string>
+    <string name="keys_sync_err_exists">This key is already saved or no longer exists.</string>
+    <string name="keys_sync_err">The key could not be saved. Please try again.</string>
+    <string name="keys_sync_removed_fmt">The key for %1$s was removed on another device. Lina no longer has a key for it: add a new one or use another one from the list.</string>
+    <string name="keys_sync_empty">No saved keys.</string>
+    <string name="keys_sync_row_fmt">%1$s · %2$s · %3$s</string>
+    <string name="keys_sync_row_used_fmt">%1$s · %2$s · %3$s (in use on this phone)</string>
+    <string name="keys_sync_use">Use on this phone</string>
+    <string name="keys_sync_remove">Remove</string>
+    <string name="keys_sync_remove_confirm_fmt">Remove the key “%1$s” on all your devices?</string>
 </resources>

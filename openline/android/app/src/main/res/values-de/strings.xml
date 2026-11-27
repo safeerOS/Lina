@@ -691,4 +691,23 @@
     <string name="computer_selected">ausgewählt</string>
     <string name="computer_task_running">Aufgabe läuft</string>
     <string name="computer_excluded">ausgeschlossen</string>
+    <!-- NALOGA-35: kljuci za mozgane na vseh napravah -->
+    <string name="keys_sync_title">KI-Schlüssel auf allen Geräten</string>
+    <string name="keys_sync_note">Ein Schlüssel, den Sie auf diesem oder einem anderen gekoppelten Gerät mit Lina hinzufügen, ändern oder entfernen, wird verschlüsselt an alle Ihre Geräte übertragen. Angezeigt werden nur die Bezeichnung und die letzten 4 Zeichen.</string>
+    <string name="keys_sync_label_title">Bezeichnung</string>
+    <string name="keys_sync_key_title">API-Schlüssel</string>
+    <string name="keys_sync_ok">OK</string>
+    <string name="keys_sync_label_hint">Bezeichnung (z. B. Gemini Arbeit)</string>
+    <string name="keys_sync_add_fmt">Schlüssel für %1$s hinzufügen</string>
+    <string name="keys_sync_err_key">Der Schlüssel muss 8–400 Zeichen ohne Leerzeichen haben.</string>
+    <string name="keys_sync_err_label">Geben Sie eine Bezeichnung ein (bis 40 Zeichen).</string>
+    <string name="keys_sync_err_exists">Dieser Schlüssel ist bereits gespeichert oder existiert nicht mehr.</string>
+    <string name="keys_sync_err">Der Schlüssel konnte nicht gespeichert werden. Bitte erneut versuchen.</string>
+    <string name="keys_sync_removed_fmt">Der Schlüssel für %1$s wurde auf einem anderen Gerät entfernt. Lina hat dafür keinen Schlüssel mehr: Fügen Sie einen neuen hinzu oder verwenden Sie einen anderen aus der Liste.</string>
+    <string name="keys_sync_empty">Keine gespeicherten Schlüssel.</string>
+    <string name="keys_sync_row_fmt">%1$s · %2$s · %3$s</string>
+    <string name="keys_sync_row_used_fmt">%1$s · %2$s · %3$s (auf diesem Telefon verwendet)</string>
+    <string name="keys_sync_use">Auf diesem Telefon verwenden</string>
+    <string name="keys_sync_remove">Entfernen</string>
+    <string name="keys_sync_remove_confirm_fmt">Schlüssel „%1$s“ auf allen Ihren Geräten entfernen?</string>
 </resources>

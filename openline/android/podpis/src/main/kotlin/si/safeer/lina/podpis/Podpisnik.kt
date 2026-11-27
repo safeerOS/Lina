@@ -48,6 +48,13 @@ class Podpisnik(
         return podpisi(niz.toByteArray(Charsets.UTF_8))
     }
 
+    /** NALOGA-35: izmenjava kljucev za mozgane; kot sinhronizacija (brez »Razumem«: samo uskladitev, nic se ne zazene). */
+    fun podpisiKljuce(vsebina: String, cas: Long, enkratni: String): String? {
+        if (!NiziLine.praviUnicode(vsebina)) return null
+        val niz = NiziLine.nizKljucev(idNaprave(), cas, enkratni, NiziLine.zgostitevSinhron(vsebina)) ?: return null
+        return podpisi(niz.toByteArray(Charsets.UTF_8))
+    }
+
     fun podpisiStanjeDodatkov(cas: Long, enkratni: String): String? {
         val niz = NiziLine.nizStanjaDodatkov(idNaprave(), cas, enkratni) ?: return null
         return podpisi(niz.toByteArray(Charsets.UTF_8))

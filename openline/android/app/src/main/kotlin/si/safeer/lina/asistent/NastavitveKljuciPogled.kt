@@ -86,6 +86,8 @@ class NastavitveKljuciPogled(
             if (p == Ponudnik.VERTEX) { google.odjava(); googleShramba.shraniProjekt(null); googleSporocilo = null } else SkupniKljuci.shrambaZaPonudnika(a, p).izbrisi()
             obSpremembi()
             osvezi()
+            // NALOGA-35: odstranitev kljuca gre na vse seznanjene naprave (zazna jo uskladitev, brez gumba)
+            if (p != Ponudnik.VERTEX) UskladitevKljucev.zazeni(a) { glavna.post { if (!a.isFinishing) osvezi() } }
         }
 
         for (p in Ponudnik.entries) {
@@ -96,6 +98,9 @@ class NastavitveKljuciPogled(
             )
         }
 
+        // NALOGA-35: kljuci za mozgane na vseh seznanjenih napravah (oznake, uporabi, odstrani)
+        val naNapravah = KljuciNaNapravahPogled(a, vsebnik, nit, glavna) { obSpremembi(); osvezi() }
+        osveziVse.add(naNapravah::narisi)
         razdelekAsistentke()
         razdelek(
             naslov = R.string.tool_brave_title, opomba = R.string.tool_brave_note,
@@ -172,6 +177,7 @@ class NastavitveKljuciPogled(
                 kljucVnos.setText("")
                 obSpremembi()
                 osvezi()
+                UskladitevKljucev.zazeni(a) { glavna.post { if (!a.isFinishing) osvezi() } }
             }
         }
     }
